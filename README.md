@@ -15,9 +15,11 @@ telemetri yok. Öğrenci/öğretmen verisi e-Okul raporlarından (xlsx/pano) iç
 aktarılır; ders havuzu MEB ders çizelgesinden okul türü ve kademeye göre
 tohumlanır. Opsiyonel uygulama parolası ile alan şifrelemesi ve şifreli yedek.
 
-**Durum:** F0 (iskelet) tamamlandı — masaüstü kabuk, paketleme hattı, M3
-arayüz kiti ve kalite kapıları (gates.sh) yeşil; iş modülleri F1'den itibaren
-geliyor. Plan: [docs/tasarim/2026-08-29-genel-tasarim.md](docs/tasarim/2026-08-29-genel-tasarim.md)
+**Durum:** F1 (çekirdek veri) tamamlandı — kurulum sihirbazı, öğrenci/öğretmen
+sicili + e-Okul içe aktarma (xlsx/pano, önizle→aktar), MEB ders havuzu tohumu,
+şube kataloğu ve uygulama parolası + alan şifrelemesi çalışıyor; paketleme CI'ı
+uçtan uca yeşil. Sırada F2: salon şablonları + kelebek dağıtım motoru.
+Plan: [docs/tasarim/2026-08-29-genel-tasarim.md](docs/tasarim/2026-08-29-genel-tasarim.md)
 
 ## Köken
 

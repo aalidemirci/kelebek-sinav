@@ -69,6 +69,13 @@ trees = [
     Tree(str(REPO / "backend" / "apps"), prefix="backend/apps", excludes=_TREE_EXCLUDES),
     Tree(str(REPO / "backend" / "shared"), prefix="backend/shared", excludes=_TREE_EXCLUDES),
     Tree(str(REPO / "backend" / "templates"), prefix="backend/templates", excludes=_TREE_EXCLUDES),
+    # MEB ders çizelgesi verisi (K5): settings.CATALOG_DIR paketli kipte
+    # backend ağacının YANINDAKİ data/ klasörünü arar — tembel tohum buradan okur.
+    Tree(
+        str(REPO / "data" / "ders-cizelgeleri"),
+        prefix="data/ders-cizelgeleri",
+        excludes=_TREE_EXCLUDES,
+    ),
     # Derlenmiş SPA — `frontend/dist` boşsa paket açılır ama beyaz ekran verir;
     # `packaging/linux/build.sh` bunu derleme öncesi denetler.
     Tree(str(REPO / "frontend" / "dist"), prefix="frontend/dist", excludes=_TREE_EXCLUDES),

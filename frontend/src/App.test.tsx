@@ -1,7 +1,7 @@
-// Kabuk + yönlendirme testi (F0 iskeleti — DD App.test.tsx kalıbından).
+// Kabuk + yönlendirme testi (DD App.test.tsx kalıbından).
 // Pinlenen davranışlar: (1) kurulum kapısı — `setup_completed=false` iken her rota
 // sihirbaza düşer, `true` iken panel açılır, durum okunamazsa kapı FAIL-OPEN;
-// (2) kabuk gezinmesi (F0'da yalnız Panel + Hakkında); (3) M3 token bütünlüğü —
+// (2) kabuk gezinmesi (Panel/Kişiler/Ders Havuzu/Ayarlar); (3) M3 token bütünlüğü —
 // kaynakta kullanılan şekil/opaklık sınıflarının Tailwind çıktısında gerçekten
 // üretildiği (DD F4-D5 bulgu 14/15 dersi).
 // Auth yok: rol/oturum senaryosu YOKTUR (tek kullanıcılı masaüstü).
@@ -22,6 +22,15 @@ import type { SetupStatus } from "./modules/okul/api";
 
 const okulApiMock = vi.hoisted(() => ({
   getSetupStatus: vi.fn(),
+  getSchoolConfig: vi.fn(),
+  updateSchoolConfig: vi.fn(),
+  completeSetup: vi.fn(),
+  getGradeLevels: vi.fn(),
+  listSchoolYears: vi.fn(),
+  listSchoolTerms: vi.fn(),
+  listStudents: vi.fn(),
+  listPersonnel: vi.fn(),
+  listClassSections: vi.fn(),
 }));
 
 vi.mock("./modules/okul/api", async (importOriginal) => {
@@ -37,6 +46,7 @@ const KURULU: SetupStatus = {
   has_active_school_year: true,
   student_count: 482,
   personnel_count: 37,
+  class_section_count: 18,
 };
 
 const KURULMAMIS: SetupStatus = {
@@ -64,6 +74,28 @@ function ekranaBas(yol = "/") {
 beforeEach(() => {
   vi.clearAllMocks();
   okulApiMock.getSetupStatus.mockResolvedValue(KURULU);
+  okulApiMock.getSchoolConfig.mockResolvedValue({
+    school_name: "Örnek Anadolu Lisesi",
+    province: "İstanbul",
+    district: "Örnek",
+    principal_name: "",
+    school_type: "ANADOLU_LISESI",
+    has_prep_class: false,
+    setup_completed: true,
+  });
+  okulApiMock.getGradeLevels.mockResolvedValue({
+    levels: [
+      { value: 9, label: "9" },
+      { value: 10, label: "10" },
+    ],
+    prep_enabled: false,
+  });
+  okulApiMock.listSchoolYears.mockResolvedValue([]);
+  okulApiMock.listSchoolTerms.mockResolvedValue([]);
+  okulApiMock.listClassSections.mockResolvedValue([]);
+  const bosSayfa = { count: 0, next: null, previous: null, results: [] };
+  okulApiMock.listStudents.mockResolvedValue(bosSayfa);
+  okulApiMock.listPersonnel.mockResolvedValue(bosSayfa);
 });
 
 describe("App — kurulum kapısı", () => {
@@ -76,9 +108,9 @@ describe("App — kurulum kapısı", () => {
 
   it("kurulum tamamlanmadıysa iç rotalardan da sihirbaza yönlendirir", async () => {
     okulApiMock.getSetupStatus.mockResolvedValue(KURULMAMIS);
-    ekranaBas("/hakkinda");
+    ekranaBas("/kisiler");
     expect(await screen.findByRole("heading", { name: "Kurulum sihirbazı" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Hakkında ve Lisans" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Kişiler" })).not.toBeInTheDocument();
   });
 
   it("kurulum tamamlandıysa kök rotada panel açılır", async () => {
@@ -98,15 +130,24 @@ describe("App — kurulum kapısı", () => {
   });
 });
 
-describe("App — kabuk gezinmesi (F0)", () => {
-  it("Panel bağlantısını ve Hakkında bağlantısını gösterir", async () => {
+describe("App — kabuk gezinmesi", () => {
+  it("ana bölüm bağlantılarını gösterir", async () => {
     ekranaBas("/");
     await screen.findByRole("heading", { name: "Panel" });
-    expect(screen.getByRole("link", { name: "Panel" })).toBeInTheDocument();
+    for (const ad of ["Panel", "Kişiler", "Ders Havuzu", "Ayarlar"]) {
+      expect(screen.getByRole("link", { name: ad })).toBeInTheDocument();
+    }
     expect(screen.getByRole("link", { name: "Hakkında ve Lisans" })).toHaveAttribute(
       "href",
       "/hakkinda",
     );
+  });
+
+  it("Kişiler bağlantısına tıklayınca sicil sayfası açılır", async () => {
+    const user = userEvent.setup();
+    ekranaBas("/");
+    await user.click(await screen.findByRole("link", { name: "Kişiler" }));
+    expect(await screen.findByRole("heading", { name: "Kişiler" })).toBeInTheDocument();
   });
 
   it("Hakkında ve Lisans bağlantısı geliştirici ve kullanım koşullarını gösterir", async () => {

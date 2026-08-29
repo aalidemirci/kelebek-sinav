@@ -16,15 +16,13 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
   filtresiyle yazılamaz (DD F5-D5 dersi).
 - **TB4 — Gözetmen oto-atama yok (U2):** ders programı verisi olmadığından
   elle seçim; OYS'deki adil-yük sayacı alınmadı.
-- **TB5 — F0 paket ayağı yerelde doğrulanmadı:** PyInstaller + Inno + .deb
-  üretimi ve `--pdf-duman` yalnız CI'da koşar (DD deseni; host'a Python/Node
-  kurulmaz). GitHub remote kurulup `paketleme.yml` ilk kez koşana dek "exe
-  açılır/kapanır" kapısı bekliyor. DD'nin `packaging/windows/NOTLAR.md`
-  W1-W9 doğrulanmamış varsayımları burada da aynen geçerli.
 - **TB6 — Logo v1 geometrik yer tutucu:** `logo_uret.py` koltuk-karesi
   kelebeği üretiyor; markalaşmış bir çizim istenirse `kelebek-sinav-logo.png`
   değiştirilip `ikon_uret.py` yeniden koşulur (sözleşme hazır).
 
 ## Kapanan
 
-(henüz yok)
+- **TB5 — F0 paket kapısı (29.08.2026):** paketleme.yml ilk CI koşusu uçtan uca
+  YEŞİL — Windows setup.exe + portable.zip, Linux .deb + .tar.gz, debian 11/12
+  temiz kurulum provaları ve her iki platformda Türkçe PDF duman testi geçti
+  (run 33257833345). DD `NOTLAR.md` W1-W9 varsayımlarından W1/W5 fiilen doğrulandı.

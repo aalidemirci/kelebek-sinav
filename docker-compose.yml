@@ -21,6 +21,14 @@ services:
     environment:
       # DEBUG varsayılanı güvenli tarafta (False); geliştirme burada açar.
       KS_DEBUG: "1"
+      # `apps.okul.services.app_password` masaüstü yedek katmanını
+      # (`desktop.backup*`) import eder; paketli çalışmada desktop donmuş
+      # modüldür, geliştirmede /repo bağlamından çözülür. (DD'de bu satır
+      # yoktu ve backend API testleri konteynerde ModuleNotFoundError ile
+      # kırılıyordu — burada baştan düzeltildi.)
+      PYTHONPATH: /repo
+      # MEB çizelge veri dosyaları depo kökünde durur (K5 tembel tohum).
+      KS_CATALOG_DIR: /repo/data/ders-cizelgeleri
     command: sleep infinity
 
   frontend:

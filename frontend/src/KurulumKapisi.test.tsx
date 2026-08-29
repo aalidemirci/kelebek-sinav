@@ -26,6 +26,7 @@ const TAMAM: SetupStatus = {
   has_active_school_year: true,
   student_count: 1,
   personnel_count: 1,
+  class_section_count: 1,
 };
 
 const EKSIK: SetupStatus = { ...TAMAM, setup_completed: false };

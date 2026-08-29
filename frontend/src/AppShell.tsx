@@ -12,12 +12,19 @@ interface NavItem {
   icon: string;
 }
 
-// F0 iskeleti: yalnız Panel. Fazlar ilerledikçe OYS sinav-islemleri düzeni gelir:
-// Oturumlar (F3), Salonlar (F2), Ders Havuzu (F1), Takvimler (F6), Kişiler (F1),
-// Ayarlar (F1).
-const NAV_ITEMS: NavItem[] = [{ to: "/", label: "Panel", icon: "space_dashboard" }];
+// Fazlar ilerledikçe OYS sinav-islemleri düzeni tamamlanır: Oturumlar (F3),
+// Salonlar (F2), Takvimler (F6) buraya eklenecek.
+const NAV_ITEMS: NavItem[] = [
+  { to: "/", label: "Panel", icon: "space_dashboard" },
+  { to: "/kisiler", label: "Kişiler", icon: "group" },
+  { to: "/dersler", label: "Ders Havuzu", icon: "menu_book" },
+  { to: "/ayarlar", label: "Ayarlar", icon: "settings" },
+];
 
 const PAGE_TITLES: Array<[prefix: string, title: string]> = [
+  ["/kisiler", "Kişiler"],
+  ["/dersler", "Ders havuzu"],
+  ["/ayarlar", "Ayarlar"],
   ["/hakkinda", "Hakkında ve Lisans"],
   ["/kurulum", "Kurulum"],
   ["/", "Genel bakış"],

@@ -62,14 +62,30 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "apps.okul",
+    "apps.dersler",
 ]
+
+# ---------------------------------------------------------------------------
+# MEB ders çizelgesi verisi (K5 — pakete gömülü, tembel tohum)
+# ---------------------------------------------------------------------------
+# Paketli çalışmada `data/` klasörü backend ağacının YANINDA durur (PyInstaller
+# spec bunu kopyalar); geliştirme konteynerinde compose `KS_CATALOG_DIR` ile
+# /repo yolunu verir. Dosya yoksa tohum sessizce atlanır (TB2 — elle ekleme açık).
+CATALOG_DIR = Path(
+    os.environ.get("KS_CATALOG_DIR", str(BASE_DIR.parent / "data" / "ders-cizelgeleri"))
+)
+COURSE_ALIAS_FILE = Path(
+    os.environ.get("KS_COURSE_ALIAS_FILE", str(CATALOG_DIR / "ders-adi-takma-adlari.md"))
+)
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.common.CommonMiddleware",
-    # F1 NOTU: Opsiyonel uygulama parolası kapısı (AppLockMiddleware) şifreleme
-    # katmanıyla birlikte F1'de gelir (tasarım §5) — DD'deki gibi buraya eklenecek.
+    # Opsiyonel açılış parolası kapısı (tasarım §5): parola kuruluysa ve kilit
+    # açılmadıysa veri uçlarını 423 Locked ile keser. Parola kurulu değilse
+    # hiçbir şey yapmaz.
+    "apps.okul.lock_middleware.AppLockMiddleware",
 ]
 
 # Yerel oturum belirteci koruması (tasarım §5.3 son madde). Program authsuz
