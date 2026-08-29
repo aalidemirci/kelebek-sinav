@@ -40,7 +40,7 @@ Geliştirme yalnız Docker'da (host'a Python/Node kurulmaz); kapı zinciri
 | # | Karar | Seçim |
 |---|---|---|
 | U1 | Kapsam | **Tam kapsam, fazlı:** önce kelebek dağıtım + evrak (F1-F5), sonra sınav takvimi (F6), gözetmen (F7) |
-| U2 | Gözetmen | **Elle listeden seçim, ayara bağlı (varsayılan kapalı).** Oto-atama alınmaz (OYS'de bile ders programı verisi olmadan yanlış seçim yüzünden UI'dan kaldırılmıştı — Tur 242). Salon başına 1 gözetmen + 5 salona 1 yedek + R6 tebliğ korunur |
+| U2 | Gözetmen | **Elle listeden seçim, ayara bağlı (varsayılan kapalı).** Oto-atama alınmaz: OYS'de Tur 242'de program verisi eksikken askıya alınmış, Tur 459'da program+devamsızlık köprüleriyle yeniden açılmıştı — masaüstünde bu köprüler hiç olmayacağından aynı yanlış-seçim sorunu geri gelirdi. Salon başına 1 gözetmen + 5 salona 1 yedek + R6 tebliğ korunur |
 | U3 | Şifreleme | **Parola + alan şifrelemesi ALINIR** (öneri düz SQLite idi; kullanıcı şifreleme istedi — bkz. §5) |
 | U4 | Okul türü | **v1 yalnız Anadolu Lisesi çizelgesi gömülü**; seviye kümesi ve veri formatı okul türüne göre parametrik — diğer türler sonraki sürümlerde veri dosyasıyla gelir |
 
@@ -63,7 +63,7 @@ Geliştirme yalnız Docker'da (host'a Python/Node kurulmaz); kapı zinciri
 
 ### 2.3 Kimlik sabitleri (F0'da toplu — DD kalıntısı sıfır toleranslı)
 
-`KS_*` env öneki (DD'de 14 `DD_*` env) · veri dizini `kelebek-sinav`
+`KS_*` env öneki (DD'de 17 `DD_*` env: 13 çalışma zamanı + 4 derleme betiği) · veri dizini `kelebek-sinav`
 (%LOCALAPPDATA%, Roaming/OneDrive asla) · çerez `ks_oturum` · `X-KS-Token` ·
 yedek uzantısı `.ksbak` + yeni magic · AppUserModelID · **Inno AppId GUID
 mutlaka yeni üretilir** (yoksa Disiplin Defteri kurulumlarıyla çakışır) ·
@@ -74,8 +74,12 @@ AppMutex `KelebekSinav`.
 ## 3. Bağımlılık kesim listesi (OYS → tek kullanıcılı çevrimdışı)
 
 Doğrulanmış kritik gerçek: **hiçbir başka OYS app'i `sinav_islemleri`'nden
-import etmiyor** (tek dış referans `denetim/kvkk_media_scope.py`'daki 2 string
-kaydı) — modül temiz kesilir.
+Python import'u yapmıyor** — modül temiz kesilir. Dış referansların tümü string
+düzeyinde: denetim app'i (kvkk_media_scope 2, kvkk_scope 6, services 5,
+anonymize_database ~8 kayıt), core purge/reset yönetim komutları, bildirim
+takvim sinyal alıcıları ve config settings kayıtları. Ayrıca `ders_yapisi`
+selectors/services `ExamSessionCourse`'a `get_model` ile erişir (ters yönde
+çalışma zamanı bağı) — iki modül birlikte taşındığından kesimi engellemez.
 
 | # | Bağlanma noktası | Karar | Karşılık |
 |---|---|---|---|
