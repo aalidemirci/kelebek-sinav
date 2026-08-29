@@ -18,6 +18,8 @@ htmlcov/
 # Node / frontend
 node_modules/
 frontend/dist/
+# Kapı koşusunun geçici vitest raporu (scripts/gates.sh)
+frontend/vitest-sonuc.json
 
 # Paketleme çıktıları
 build/

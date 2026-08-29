@@ -7,6 +7,11 @@
 # =============================================================================
 set -euo pipefail
 
+# Git Bash (Windows) MSYS yol dönüşümü `-w /repo` gibi konteyner yollarını
+# Windows yoluna çevirip koşuyu kırar; bu değişken dönüşümü kapatır,
+# Linux'ta hiçbir etkisi yoktur.
+export MSYS_NO_PATHCONV=1
+
 echo "== pytest =="
 docker compose run --rm backend pytest
 
@@ -50,6 +55,19 @@ echo "== frontend: prettier --check =="
 docker compose run --rm frontend npx prettier --check src
 
 echo "== frontend: vitest =="
-docker compose run --rm frontend npm test -- --run
+# Kapı deliği önlemi (F4, 29.08.2026): tam takım koşusunda testler kırmızıyken
+# zincir (vitest kapanışı → npm → docker compose run --rm) bir kez 0 döndürdü;
+# yarış yeniden üretilemedi. Kapı artık çıkış koduna güvenmez: vitest JSON
+# raporu host'ta okunur ve `success:true` kanıtı aranır — rapor yoksa ya da
+# başarı doğrulanamazsa kapı kırmızıdır (fail-closed). npm sarmalayıcısı da
+# zincirden çıkarıldı (bir katman az).
+rm -f frontend/vitest-sonuc.json
+docker compose run --rm frontend npx vitest run \
+  --reporter=default --reporter=json --outputFile=vitest-sonuc.json
+if ! grep -Eq '"success": ?true' frontend/vitest-sonuc.json; then
+  echo "HATA: frontend test raporu başarı doğrulamadı (çıkış kodu yutulmuş olabilir)" >&2
+  exit 1
+fi
+rm -f frontend/vitest-sonuc.json
 
 echo "== Tüm kapılar yeşil =="
