@@ -1,0 +1,76 @@
+{% extends "sinav/reports/base.html" %}
+{% load l10n %}
+{% comment %}Sınav Salonu Yerleşim Planı (Tur 244, talep 7) — oturumdan BAĞIMSIZ
+boş kroki: sıra dizilimi, koltuk numaraları ve demirbaş (öğretmen masası/tahta/
+kapı). Amaç: sınav ÖNCESİ dersliğin fiziken bu düzene getirilmesi ve düzenin
+korunması (kapıya asılır). Geometri R1 ile aynı grid kimliğinden; öğrenci verisi
+İÇERMEZ (kişisel veri yok — SENSITIVE_READ gerekmez). _head.html KULLANILMAZ
+(oturum bandı yok); header dict'i base.html @page footer'ı için üç anahtarı
+taşımak zorundadır (school_name/generated_at/exam_name).{% endcomment %}
+{% block extra_style %}
+<style>
+  /* r1_kroki desenine paralel; Kurumsal Sade token'ları (--pr-*). */
+  .kroki { width: 100%; border-collapse: separate; border-spacing: 2.5pt;
+           table-layout: fixed; margin-top: 2pt; }
+  .kroki td { vertical-align: top; padding: 0; }
+  .cell-desk { border: var(--pr-border-outer) solid var(--pr-ink); }
+  .seat-row { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .seat-row td { border-left: var(--pr-border) solid var(--pr-line);
+                 text-align: center; padding: 7pt 2pt; height: 24pt; }
+  .seat-row td:first-child { border-left: none; }
+  .seat-no { font-weight: bold; font-size: 11pt; color: var(--pr-ink); }
+  .cell-furniture { border: var(--pr-border-outer) solid var(--pr-secondary);
+                    background: var(--pr-fill-head); text-align: center;
+                    font-size: 6.6pt; font-weight: bold; padding: 8pt 1pt;
+                    color: var(--pr-label); }
+  .cell-disabled { border: var(--pr-border) dashed var(--pr-faint);
+                   text-align: center; font-size: 6.2pt; color: var(--pr-muted);
+                   padding: 8pt 1pt; }
+  .front-label { text-align: center; font-size: 7pt; color: var(--pr-muted);
+                 letter-spacing: 2pt; margin-bottom: 2pt; }
+  .kroki-foot { margin-top: 5pt; font-size: 8pt; color: var(--pr-label); }
+  .layout-note { margin-top: 9pt; border: var(--pr-border-outer) solid var(--pr-ink);
+                 padding: 5pt 8pt; font-size: var(--pr-size-meta);
+                 break-inside: avoid; page-break-inside: avoid; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="sheet">
+  <div class="rpt-head">
+    <div class="school">{{ header.school_name }}</div>
+    <div class="title">SINAV SALONU YERLEŞİM PLANI</div>
+    <div class="scope">Salon: {{ room.room_name }}{% if room.block %} · {{ room.block }}{% endif %}</div>
+  </div>
+  <div class="rpt-rule"></div>
+
+  <div class="front-label">— ÖN CEPHE —</div>
+  <table class="kroki">
+    {% for row in room.grid %}
+    <tr>
+      {% for cell in row %}
+      {# Türkçe locale ondalığı virgülle basar (25,0%) — CSS bozulur; unlocalize şart. #}
+      <td style="width: {{ room.col_width_pct|unlocalize }}%;">
+        {% if cell.kind == "desk" %}
+        <table class="seat-row cell-desk"><tr>
+          {% for seat in cell.seats %}
+          <td><span class="seat-no">{{ seat.seat_no|default_if_none:"–" }}</span></td>
+          {% endfor %}
+        </tr></table>
+        {% elif cell.kind == "disabled_desk" %}
+        <div class="cell-disabled">KULLANIM DIŞI</div>
+        {% elif cell.kind == "furniture" %}
+        <div class="cell-furniture">{{ cell.label }}</div>
+        {% endif %}
+      </td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </table>
+  <div class="kroki-foot">Kapasite: {{ room.capacity }} koltuk · Numaralar koltuk sırasını gösterir.</div>
+  <div class="layout-note">
+    Sıraları ve demirbaşı bu plana göre düzenleyiniz; sınav süresince bu düzeni
+    koruyunuz. Plan oturumdan bağımsızdır — öğrenci yerleşimi salon oturma
+    planında (R1) basılır.
+  </div>
+</div>
+{% endblock %}

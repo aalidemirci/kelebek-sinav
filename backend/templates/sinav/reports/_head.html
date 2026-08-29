@@ -1,0 +1,11 @@
+{% comment %}Yaprak üst bandı — her .sheet'in başında yinelenir (madde 7 ortak
+üst bilgi). Bağlam: header (ReportHeader), title (rapor adı), scope_line
+(opsiyonel: "Salon: D-204" / "Şube: 9/A").{% endcomment %}
+<div class="rpt-head">
+  <div class="school">{{ header.school_name }}</div>
+  <div class="title">{{ title }}</div>
+  <div class="session">{{ header.exam_name }} · {{ header.exam_date }} {{ header.start_time }} ·
+    {{ header.year_label }} {{ header.semester_label }}</div>
+  {% if scope_line %}<div class="scope">{{ scope_line }}</div>{% endif %}
+</div>
+<div class="rpt-rule"></div>

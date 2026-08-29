@@ -1,7 +1,7 @@
 """Oturum durum makinesi testleri — onay/kilit/arşiv + koltuk takası (T9/T11 çekirdeği).
 
 OYS `test_session_lifecycle.py`'den KS'ye uyarlandı: RBAC/AccessLog düştü
-(authsuz tek kullanıcı), R7-R9/ZIP evrak testleri F4'te gelir (WeasyPrint);
+(authsuz tek kullanıcı), R1-R9/ZIP evrak testleri `test_reports.py`'de (F4);
 onay damgası kullanıcı yerine ad-snapshot'tır (B12). Kabul kriteri çekirdeği
 korunur: onaylı oturum değiştirilemez; onay yalnız İHLAL=0 yerleşimde.
 """
@@ -17,36 +17,15 @@ from apps.sinav import services
 from apps.sinav.models import (
     ExamSession,
     ExamSessionStatus,
-    ParticipantType,
     RuleScope,
     RuleType,
     SeatAssignment,
     SeatStatus,
 )
-from apps.sinav.tests.oturum_yardim import ders, oturum, salon, sube
+from apps.sinav.tests.oturum_yardim import dagitilmis_oturum as _dagitilmis_oturum
+from apps.sinav.tests.oturum_yardim import oturum
 
 pytestmark = pytest.mark.django_db
-
-
-def _dagitilmis_oturum(*, rooms: int = 1, per_level: int = 3, seed: int = 42) -> ExamSession:
-    """Dağıtılmış oturum: 9-10. seviyeden per_level öğrenci, `rooms` × 8 koltuk.
-
-    İki çakışma grubu (aynı dersin iki seviyesi) kurulur — kelebek geçerli
-    yerleşim üretebilsin; dönen oturum DAĞITILDI durumundadır ve İHLALSİZDİR.
-    """
-    sube(9, "A", students=per_level, start_no=101)
-    sube(10, "A", students=per_level, start_no=201)
-    course = ders("Coğrafya", levels=[9, 10])
-    session = oturum()
-    for level in (9, 10):
-        services.add_session_course(
-            session, course_id=course.pk, participant_type=ParticipantType.LEVEL, level=level
-        )
-    salonlar = [salon(f"D-20{i}") for i in range(1, rooms + 1)]
-    services.set_session_rooms(session, [{"room_id": s.pk} for s in salonlar])
-    session, _result, report = services.distribute_session(session, seed=seed)
-    assert report.is_valid, report.hard_violations
-    return session
 
 
 def _corrupt_with_violation(session: ExamSession) -> None:

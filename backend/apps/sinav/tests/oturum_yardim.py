@@ -14,7 +14,7 @@ from apps.dersler import services as ders_services
 from apps.dersler.models import Course
 from apps.okul.models import ClassSection, SchoolTerm, SchoolYear, Student
 from apps.sinav import services
-from apps.sinav.models import DeskType, ExamRoom, ExamSession
+from apps.sinav.models import DeskType, ExamRoom, ExamSession, ParticipantType
 
 #: 8 koltuklu (4 ikili sıra, 2x2 yerleşim) standart test planı.
 PLAN_8: dict[str, Any] = {
@@ -116,3 +116,27 @@ def oturum(**kwargs: Any) -> ExamSession:
     if "term_id" not in defaults:
         defaults["term_id"] = donem().pk
     return services.create_exam_session(**defaults)
+
+
+def dagitilmis_oturum(
+    *, rooms: int = 1, per_level: int = 3, seed: int = 42, **oturum_kwargs: Any
+) -> ExamSession:
+    """Dağıtılmış oturum: 9-10. seviyeden per_level öğrenci, `rooms` × 8 koltuk.
+
+    İki çakışma grubu (aynı dersin iki seviyesi) kurulur — kelebek geçerli
+    yerleşim üretebilsin; dönen oturum DAĞITILDI durumundadır ve İHLALSİZDİR.
+    (F3 yaşam döngüsü + F4 evrak testlerinin ortak kurucusu.)
+    """
+    sube(9, "A", students=per_level, start_no=101)
+    sube(10, "A", students=per_level, start_no=201)
+    course = ders("Coğrafya", levels=[9, 10])
+    session = oturum(**oturum_kwargs)
+    for level in (9, 10):
+        services.add_session_course(
+            session, course_id=course.pk, participant_type=ParticipantType.LEVEL, level=level
+        )
+    salonlar = [salon(f"D-20{i}") for i in range(1, rooms + 1)]
+    services.set_session_rooms(session, [{"room_id": s.pk} for s in salonlar])
+    session, _result, report = services.distribute_session(session, seed=seed)
+    assert report.is_valid, report.hard_violations
+    return session

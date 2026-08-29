@@ -1,0 +1,159 @@
+{% comment %}
+Kitapçık overlay sayfaları (T7; bant yeniden tasarımı Tur 646 — FAZ B1).
+Soru PDF'inin ÜZERİNE bindirilir. Her overlay sayfası: (öğrenci, sayfa) çifti.
+Başlık bandı yalnız header=True sayfalarda; "Sayfa x / y" her sayfada.
+Gövde ŞEFFAF — yalnız üst bant ve alt sayfa numarası boyanır. DejaVu Sans (Türkçe).
+
+BANT SÖZLEŞMESİ (Tur 236 invariantı KORUNUR): top 4mm + height 32mm ≤ 40mm —
+sayfanın üst 4 cm'i sisteme ayrılır (Word şablonu üst marjı 4 cm bırakır).
+Üç bölge (tablo düzeni — WeasyPrint'te en sağlam):
+  SOL  kurum kimliği: "T.C. · il · ilçe" (6.5pt) + okul adı + yıl/dönem +
+       sınav — ders + tarih.
+  ORTA öğrenci alanları: alt-çizgili hücreler (Adı Soyadı / Sınıfı / Numarası);
+       soru-tablolu modda altında soru puan tablosu.
+  SAĞ  çift çerçeveli PUAN kutusu (24×16mm; yalnız SINGLE_BOX modunda).
+Salt siyah (#000), dolgu yok, text-transform YOK (WeasyPrint TR "i" tuzağı).
+{% endcomment %}<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "DejaVu Sans", sans-serif; color: #000; }
+  .overlay-page {
+    position: relative;
+    width: 210mm;
+    height: 296mm; /* 297'de WeasyPrint taşma/boş sayfa üretebiliyor */
+    page-break-after: always;
+    overflow: hidden;
+  }
+  .band {
+    position: absolute;
+    top: 4mm; left: 8mm; right: 8mm;
+    height: 32mm;
+    overflow: hidden; /* sigorta — içerik taşarsa bant 32mm'de KESİLİR */
+    border: 0.4mm solid #000;
+    background: #fff;
+  }
+  table.band-grid { width: 100%; height: 100%; border-collapse: collapse; }
+  table.band-grid > tr > td { vertical-align: top; }
+
+  /* SOL — kurum kimliği */
+  td.ident {
+    width: 58mm;
+    border-right: 0.3mm solid #000;
+    padding: 1.4mm 1.8mm;
+    text-align: center;
+    line-height: 1.25;
+  }
+  .ident .tc { font-size: 6.5pt; letter-spacing: 0.3pt; }
+  .ident .school { font-weight: bold; font-size: 7.5pt; margin-top: 0.5mm; }
+  .ident .term { font-size: 6.5pt; margin-top: 0.5mm; }
+  .ident .exam { font-weight: bold; font-size: 7pt; margin-top: 0.7mm; }
+  .ident .date { font-size: 6.5pt; margin-top: 0.4mm; }
+
+  /* ORTA — öğrenci alanları (+ soru tablosu) */
+  td.main { padding: 1.6mm 2.4mm; }
+  table.who { width: 100%; border-collapse: collapse; }
+  table.who td { padding: 0 1.2mm; vertical-align: bottom; }
+  table.who td.w-name { width: 55%; }
+  .cell-label { font-size: 6.5pt; padding-bottom: 0.4mm; }
+  .cell-line {
+    border-bottom: 0.3mm solid #000;
+    min-height: 4.6mm;
+    font-size: 8.5pt;
+    padding: 0.3mm 0.6mm 0.5mm;
+  }
+  table.scores {
+    width: 100%; margin-top: 1.4mm; border-collapse: collapse;
+    font-size: 6.5pt; table-layout: fixed;
+  }
+  table.scores td, table.scores th {
+    border: 0.2mm solid #000; text-align: center; padding: 0.4mm 0; height: 4.2mm;
+    font-weight: normal;
+  }
+  table.scores th { font-weight: bold; }
+
+  /* SAĞ — çift çerçeveli PUAN kutusu (24×16mm) */
+  td.score-cell { width: 28mm; padding: 1.6mm; text-align: center; }
+  .score-outer {
+    border: 0.5mm solid #000;
+    width: 24mm; height: 16mm;
+    padding: 0.8mm;
+    margin: 0 auto;
+  }
+  .score-inner {
+    border: 0.25mm solid #000;
+    width: 100%; height: 100%;
+    font-size: 7pt;
+    padding-top: 0.8mm;
+  }
+
+  .pageno {
+    position: absolute;
+    bottom: 4mm; right: 8mm;
+    font-size: 8pt;
+    background: #fff;
+    padding: 0 1mm;
+  }
+</style>
+</head>
+<body>
+{% for ov in pages %}
+<div class="overlay-page">
+  {% if ov.header %}
+  <div class="band">
+    <table class="band-grid">
+      <tr>
+        <td class="ident">
+          <div class="tc">{{ identity_line }}</div>
+          <div class="school">{{ school_name }}</div>
+          <div class="term">{{ year_label }} · {{ semester_label }}</div>
+          <div class="exam">{{ exam_name }} — {{ ov.course_name }}</div>
+          <div class="date">{{ exam_date }}</div>
+        </td>
+        <td class="main">
+          <table class="who">
+            <tr>
+              <td class="w-name">
+                <div class="cell-label">Adı Soyadı</div>
+                <div class="cell-line">{{ ov.full_name }}</div>
+              </td>
+              <td>
+                <div class="cell-label">Sınıfı</div>
+                <div class="cell-line">{{ ov.class_label }}</div>
+              </td>
+              <td>
+                <div class="cell-label">Numarası</div>
+                <div class="cell-line">{{ ov.student_number }}</div>
+              </td>
+            </tr>
+          </table>
+          {% if ov.score_mode == "QUESTION_TABLE" and ov.question_count %}
+          <table class="scores">
+            <tr>
+              {% for q in ov.question_range %}<th>S{{ q }}</th>{% endfor %}
+              <th>TOPLAM</th>
+            </tr>
+            <tr>
+              {% for q in ov.question_range %}<td>&nbsp;</td>{% endfor %}
+              <td>&nbsp;</td>
+            </tr>
+          </table>
+          {% endif %}
+        </td>
+        {% if ov.score_mode == "SINGLE_BOX" %}
+        <td class="score-cell">
+          <div class="score-outer"><div class="score-inner">PUAN</div></div>
+        </td>
+        {% endif %}
+      </tr>
+    </table>
+  </div>
+  {% endif %}
+  <div class="pageno">Sayfa {{ ov.page_no }} / {{ ov.page_total }}</div>
+</div>
+{% endfor %}
+</body>
+</html>

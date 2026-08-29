@@ -1,0 +1,34 @@
+{% extends "sinav/reports/base.html" %}
+{% comment %}R4 — Şube Duyuru Listesi. Şube başına sayfa, okul no sırası:
+"hangi öğrenci → hangi salon, hangi koltuk". Sınıf panosuna asılır.{% endcomment %}
+{% block content %}
+{% for sheet in sheets %}
+<div class="sheet">
+  {% with scope_line="Şube: "|add:sheet.class_label %}
+    {% include "sinav/reports/_head.html" %}
+  {% endwith %}
+  <table class="rpt-table">
+    <thead>
+      <tr>
+        <th class="num">Okul No</th>
+        <th>Ad Soyad</th>
+        <th>Ders</th>
+        <th>Salon</th>
+        <th class="num">Koltuk No</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in sheet.rows %}
+      <tr>
+        <td class="num">{{ row.student_number }}</td>
+        <td>{{ row.full_name }}</td>
+        <td>{{ row.course_name }}</td>
+        <td class="center">{{ row.room_name }}</td>
+        <td class="num">{{ row.seat_no }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+{% endblock %}

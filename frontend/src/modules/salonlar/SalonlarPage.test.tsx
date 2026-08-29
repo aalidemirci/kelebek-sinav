@@ -17,7 +17,9 @@ const exam = vi.hoisted(() => ({
   update: vi.fn(),
   previewSeats: vi.fn(),
   generateSectionRooms: vi.fn(),
+  layoutPdfBlob: vi.fn(),
 }));
+const download = vi.hoisted(() => ({ saveBlob: vi.fn() }));
 
 const sections = vi.hoisted(() => ({
   listClassSections: vi.fn(() =>
@@ -38,6 +40,7 @@ vi.mock("./api", async (importActual) => {
   const actual = await importActual<typeof import("./api")>();
   return { ...actual, examRoomApi: exam };
 });
+vi.mock("../../lib/download", () => download);
 vi.mock("../okul/api", async (importActual) => {
   const actual = await importActual<typeof import("../okul/api")>();
   return { ...actual, okulApi: { ...actual.okulApi, ...sections } };
@@ -190,6 +193,21 @@ describe("SalonlarPage", () => {
     expect(payload.linked_section_id).toBe(7);
     expect(payload.layout_plan.desks).toEqual([{ row: 1, col: 0, type: "DOUBLE" }]);
     expect(await screen.findByText("Salon kaydedildi.")).toBeInTheDocument();
+  });
+
+  it("'Yerleşim planı (PDF)' kaydedilmiş planı indirir (F4 layout-pdf)", async () => {
+    const user = userEvent.setup();
+    exam.list.mockResolvedValue(paginated([makeRoom()]));
+    exam.previewSeats.mockResolvedValue({ capacity: 0, seats: [] });
+    const blob = new Blob(["pdf"]);
+    exam.layoutPdfBlob.mockResolvedValue(blob);
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: /D-204/ }));
+    await user.click(await screen.findByRole("button", { name: /Yerleşim planı \(PDF\)/ }));
+
+    await waitFor(() => expect(exam.layoutPdfBlob).toHaveBeenCalledWith(1));
+    expect(download.saveBlob).toHaveBeenCalledWith(blob, "salon_yerlesim_plani_1.pdf");
   });
 
   it("önizleme kapatılınca sayaç yerel toplama düşer ve uç çağrılmaz", async () => {

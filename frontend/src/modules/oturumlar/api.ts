@@ -88,6 +88,8 @@ export interface ExamSession {
   duration_minutes: number;
   session_type: ExamSessionTypeCode;
   layout_mode: LayoutModeCode;
+  /** Gözetmen ayarı (K2) — R6 yalnız açıkken kataloglanır; atama F7'de. */
+  proctors_enabled: boolean;
   term_id: number;
   term_label: string;
   status: ExamSessionStatusCode;
@@ -207,6 +209,20 @@ export interface DistributeResult {
   report: ValidationReport;
 }
 
+/** Evrak paneli katalog satırı — kodlar backend REPORT_CODES ile birebir (OYS AYNEN). */
+export const REPORT_CATALOG: { code: string; title: string; roomScoped: boolean }[] = [
+  { code: "r1", title: "Salon Oturma Planı (kroki)", roomScoped: true },
+  { code: "r2", title: "Salon Yoklama / İmza Listesi", roomScoped: true },
+  { code: "r2k", title: "Şube Yoklama Listesi", roomScoped: false },
+  { code: "r3", title: "Salon Kapı Listesi", roomScoped: true },
+  { code: "r4", title: "Şube Duyuru Listesi", roomScoped: false },
+  { code: "r5", title: "Toplu Dağıtım Çizelgesi (Excel)", roomScoped: false },
+  { code: "r6", title: "Gözetmen Görevlendirme / Tebliğ-Tebellüğ", roomScoped: false },
+  { code: "r7", title: "Sınav Evrak Zarfı Kapağı / Salon Tutanağı", roomScoped: true },
+  { code: "r8", title: "Dağıtım Doğrulama Raporu", roomScoped: false },
+  { code: "r9", title: "Evrak Teslim / Teslim Alma Tutanağı", roomScoped: false },
+];
+
 export const examSessionApi = {
   // Okul ölçeğinde oturum sayısı küçüktür; tek sayfada tümü (limit=100).
   list: (status?: ExamSessionStatusCode) =>
@@ -275,6 +291,11 @@ export const examSessionApi = {
     api.post<ExamSession>(`/exam-sessions/${id}/approve/`, payload),
   reopen: (id: number) => api.post<ExamSession>(`/exam-sessions/${id}/reopen/`),
   archive: (id: number) => api.post<ExamSession>(`/exam-sessions/${id}/archive/`),
+
+  // --- Evrak (F4) — blob indirme; dosya adı panelde kurulur ---
+  reportBlob: (id: number, code: string, roomId?: number) =>
+    api.getBlob(`/exam-sessions/${id}/reports/${code}/${roomId ? `?room_id=${roomId}` : ""}`),
+  reportsZipBlob: (id: number) => api.getBlob(`/exam-sessions/${id}/reports/zip/`),
 };
 
 // ---------------------------------------------------------------------------

@@ -1,9 +1,10 @@
-// Oturum detayı (F3): TASLAK'ta sihirbaz; sonrasında sekmeli paneller
-// (Yerleşim + koşullu Yoklama) + yaşam döngüsü eylemleri (onayla → kilit;
-// yeniden aç; arşivle → salt-okunur). Onay İHLAL=0 şartına bağlıdır
-// (backend approve guard'ı). OYS T11 OturumDetayPage'den UYARLANDI:
-// - Sorular/Gözetmenler/Rapor Merkezi sekmeleri DÜŞTÜ (F3 kapsamı dışı;
-//   rapor/evrak F4'te gelir — tasarım ALMA/ERTELEME sınıfı);
+// Oturum detayı (F3+F4): TASLAK'ta sihirbaz; sonrasında sekmeli paneller
+// (Yerleşim + Evrak + koşullu Yoklama) + yaşam döngüsü eylemleri (onayla →
+// kilit; yeniden aç; arşivle → salt-okunur, evrak yeniden basılabilir). Onay
+// İHLAL=0 şartına bağlıdır (backend approve guard'ı). OYS T11
+// OturumDetayPage'den UYARLANDI:
+// - Sorular/Gözetmenler sekmeleri DÜŞTÜ (F5/F7'de gelir);
+//   Rapor Merkezi'nin karşılığı Evrak sekmesidir (F4);
 // - dönem etiketi `term_label` (OYS `semester_label` değil);
 // - rota kökü `/oturumlar`. Yoklama yalnız ONAYLI/ARŞİV oturumda
 //   (yerleşim kesinleşmeden yoklama açılmaz — OYS Tur 245 kuralı korunur).
@@ -19,6 +20,7 @@ import ModuleHeader from "../../ui/ModuleHeader";
 import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import { examSessionApi } from "./api";
+import EvrakPaneli from "./EvrakPaneli";
 import { formatDate, StatusBadge } from "./oturumEtiket";
 import SinavSihirbazi from "./SinavSihirbazi";
 import YerlesimPaneli from "./YerlesimPaneli";
@@ -90,8 +92,10 @@ export default function OturumDetayPage() {
 
   // Yoklama yalnız ONAYLI/ARŞİV oturumda (yerleşim kesin olmalı).
   const attendanceOpen = data.status === "APPROVED" || data.status === "ARCHIVED";
+  // Evrak DRAFT dışı her durumda (dağıtımdan itibaren; arşivden yeniden basım).
   const tabs = [
     { key: "yerlesim", label: "Yerleşim", icon: "grid_on" },
+    { key: "evrak", label: "Evrak", icon: "print" },
     ...(attendanceOpen ? [{ key: "yoklama", label: "Yoklama", icon: "person_off" }] : []),
   ];
 
@@ -170,6 +174,7 @@ export default function OturumDetayPage() {
           <Tabs items={tabs} active={tab} onChange={setTab} idBase="oturum-detay" />
           <div {...tabPanelProps("oturum-detay", tab)}>
             {tab === "yerlesim" && <YerlesimPaneli session={data} />}
+            {tab === "evrak" && <EvrakPaneli session={data} />}
             {tab === "yoklama" && attendanceOpen && <YoklamaPaneli session={data} />}
           </div>
         </div>

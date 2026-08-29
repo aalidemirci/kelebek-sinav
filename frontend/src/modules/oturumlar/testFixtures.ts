@@ -21,6 +21,7 @@ export function makeSession(overrides: Partial<ExamSession> = {}): ExamSession {
     duration_minutes: 40,
     session_type: "SCHOOL",
     layout_mode: "BUTTERFLY",
+    proctors_enabled: false,
     term_id: 3,
     term_label: "2025-2026 Ders Yılı 1. Dönem",
     status: "DRAFT",

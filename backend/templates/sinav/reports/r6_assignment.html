@@ -1,0 +1,68 @@
+{% extends "sinav/reports/base.html" %}
+{% comment %}R6 — Gözetmen Görevlendirme ve Tebliğ-Tebellüğ Belgesi (yol haritası
+§9, K2 — yalnız gözetmen modülü açıkken). Resmî yazı formatı: görevlendirme
+metni + tablo (görevli / görev / salon / tebellüğ imzası) + müdür UYGUNDUR
+onay bloku (mevzuat: görevlendirmelerin müdür onayıyla imza karşılığı tebliği —
+Ortaöğretim Kurumları Yönetmeliği; madde no kasıtlı gömülmedi, Tur 219 emsali).
+Yedek görevliler salonsuz ("—") listelenir. Tek yaprak; satırlar bölünmez.
+{% endcomment %}
+{% block extra_style %}
+<style>
+  .duty-text { font-size: 9.5pt; margin: 4pt 0 8pt; text-align: justify; }
+  .duty td { height: 20pt; }
+  .duty .ack { width: 22%; }
+  .duty-counts { margin-top: 6pt; font-size: 8.5pt; color: var(--pr-label); }
+  .approve-block { margin-top: 22pt; text-align: center; break-inside: avoid;
+                   page-break-inside: avoid; }
+  .approve-block .label { font-weight: bold; font-size: 11pt;
+                          letter-spacing: 1pt; }
+  .approve-block .date { margin-top: 4pt; font-size: 9pt; }
+  .approve-block .sign { margin-top: 26pt; font-size: 9pt; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="sheet">
+  {% include "sinav/reports/_head.html" %}
+
+  <p class="duty-text">
+    Okulumuzda yapılacak "{{ header.exam_name }}" sınavında
+    ({{ header.exam_date }} günü, başlangıç saati {{ header.start_time }})
+    aşağıda adı yazılı öğretmenler karşılarında belirtilen salonlarda
+    görevlendirilmiştir. Görevin imza karşılığı tebliği rica olunur.
+    (Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği — sınav
+    görevlendirmelerinin okul müdürünün onayıyla imza karşılığı tebliği)
+  </p>
+
+  <table class="rpt-table duty">
+    <thead>
+      <tr>
+        <th class="num">Sıra</th>
+        <th>Görevli Adı Soyadı</th>
+        <th style="width: 18%;">Görevi</th>
+        <th style="width: 20%;">Salon</th>
+        <th class="ack">Tebellüğ (İmza / Tarih)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in duty.rows %}
+      <tr>
+        <td class="num">{{ forloop.counter }}</td>
+        <td>{{ row.teacher_name }}</td>
+        <td>{{ row.role_label }}</td>
+        <td class="center">{{ row.room_name }}</td>
+        <td></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="duty-counts">
+    Toplam görevli: {{ duty.duty_count }} (yedek: {{ duty.reserve_count }})
+  </div>
+
+  <div class="approve-block">
+    <div class="label">UYGUNDUR</div>
+    <div class="date">.... / .... / ........</div>
+    <div class="sign">Okul Müdürü<br>(Ad Soyad / İmza / Mühür)</div>
+  </div>
+</div>
+{% endblock %}

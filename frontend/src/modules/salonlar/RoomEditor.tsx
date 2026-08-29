@@ -9,6 +9,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { ApiError } from "../../lib/api";
+import { saveBlob } from "../../lib/download";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import Icon from "../../ui/Icon";
@@ -229,8 +230,19 @@ export default function RoomEditor({ room, sectionOptions, onSaved, onBack }: Ro
         <span className="ml-auto rounded-full bg-primary-container px-4 py-2 text-label-large text-on-primary-container">
           Kapasite: {capacity}
         </span>
-        {/* F4 notu: "Yerleşim planı (PDF)" düğmesi boş kroki ucuyla birlikte
-            evrak fazında gelir (layout-pdf). */}
+        <Button
+          variant="tonal"
+          icon="print"
+          title="Kaydedilmiş planı indirir — kaydedilmemiş değişiklikler PDF'e yansımaz."
+          onClick={() =>
+            void examRoomApi
+              .layoutPdfBlob(room.id)
+              .then((b) => saveBlob(b, `salon_yerlesim_plani_${room.id}.pdf`))
+              .catch(() => snackbar.error("Yerleşim planı indirilemedi."))
+          }
+        >
+          Yerleşim planı (PDF)
+        </Button>
         <Button onClick={() => save.mutate()} disabled={save.isPending} icon="save">
           {save.isPending ? "Kaydediliyor…" : "Kaydet"}
         </Button>

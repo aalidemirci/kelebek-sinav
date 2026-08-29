@@ -1,9 +1,9 @@
-// Oturum detayı testleri (F3): TASLAK'ta sihirbaz; sonrasında sekmeler
-// (yalnız Yerleşim + koşullu Yoklama — Sorular/Gözetmen/Rapor KS'de YOK) +
-// yaşam döngüsü eylemleri. SinavSihirbazi/YerlesimPaneli/YoklamaPaneli ayrı
-// dosyalarda paralel geliştirilir → vi.mock ile yerine geçirilir; test panel
-// içeriğine değil props sözleşmesine (session) bakar. Ortak kurucu
-// ./testFixtures'tan (test dosyaları birbirinden import ETMEZ — OYS Tur 232).
+// Oturum detayı testleri (F3+F4): TASLAK'ta sihirbaz; sonrasında sekmeler
+// (Yerleşim + Evrak + koşullu Yoklama — Sorular/Gözetmen sekmeleri F5/F7'de) +
+// yaşam döngüsü eylemleri. Paneller ayrı dosyalarda paralel geliştirilir →
+// vi.mock ile yerine geçirilir; test panel içeriğine değil props sözleşmesine
+// (session) bakar. Ortak kurucu ./testFixtures'tan (test dosyaları birbirinden
+// import ETMEZ — OYS Tur 232).
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -36,6 +36,9 @@ vi.mock("./YerlesimPaneli", () => ({
 }));
 vi.mock("./YoklamaPaneli", () => ({
   default: ({ session }: { session: ExamSession }) => <div>YOKLAMA PANELİ {session.id}</div>,
+}));
+vi.mock("./EvrakPaneli", () => ({
+  default: ({ session }: { session: ExamSession }) => <div>EVRAK PANELİ {session.id}</div>,
 }));
 
 import OturumDetayPage from "./OturumDetayPage";
@@ -86,7 +89,7 @@ describe("OturumDetayPage", () => {
     expect(await screen.findByText("OTURUM LİSTESİ")).toBeInTheDocument();
   });
 
-  it("DAĞITILDI: yalnız Yerleşim sekmesi (Yoklama/Sorular/Gözetmen/Rapor yok); Onayla approve çağırır", async () => {
+  it("DAĞITILDI: Yerleşim + Evrak sekmeleri (Yoklama/Sorular/Gözetmen yok); Onayla approve çağırır", async () => {
     const user = userEvent.setup();
     exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
     exam.approve.mockResolvedValue(makeSession({ status: "APPROVED" }));
@@ -94,15 +97,32 @@ describe("OturumDetayPage", () => {
 
     expect(await screen.findByText("YERLEŞİM PANELİ 5")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Yerleşim/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Evrak/ })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Yoklama/ })).not.toBeInTheDocument();
-    // OYS'deki gözetmen/soru/rapor sekmeleri KS'de tamamen düştü.
+    // OYS'deki gözetmen/soru sekmeleri F5/F7'ye ertelendi.
     expect(screen.queryByRole("tab", { name: /Sorular/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Gözetmen/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: /Rapor/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Onayla" }));
     await waitFor(() => expect(exam.approve).toHaveBeenCalledWith(5));
     expect(await screen.findByText("Oturum onaylandı — yerleşim kilitlendi.")).toBeInTheDocument();
+  });
+
+  it("DAĞITILDI: Evrak sekmesi paneli açar (dağıtımdan itibaren; arşivde de kalır)", async () => {
+    const user = userEvent.setup();
+    exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
+    renderPage();
+
+    await user.click(await screen.findByRole("tab", { name: /Evrak/ }));
+    expect(await screen.findByText("EVRAK PANELİ 5")).toBeInTheDocument();
+  });
+
+  it("ARŞİV: Evrak sekmesi görünür kalır (yeniden basım açık)", async () => {
+    exam.get.mockResolvedValue(makeSession({ status: "ARCHIVED" }));
+    renderPage();
+
+    expect(await screen.findByRole("tab", { name: /Evrak/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Yoklama/ })).toBeInTheDocument();
   });
 
   it("ONAYLI: Yoklama sekmesi açılır, panel oturumu alır; 'Yeniden aç' reopen çağırır", async () => {

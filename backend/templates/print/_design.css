@@ -1,0 +1,50 @@
+/* =========================================================================
+   OYS BASKI TASARIM DİLİ — "Kurumsal Sade" (Tur 238, talep 4)
+   Tek doğruluk kaynağı: PDF/baskı çıktılarının renk + tipografi token'ları.
+   Köken: documents/base.html (Tur 98-99) slate paleti — resmî evrakta yıllarca
+   rafine edilen dil tüm belge ailelerine standartlaştırıldı.
+
+   Kullanım: base şablonun <style> bloğu başında Django include etiketi ile
+   ("print/_design.css") gömülür; bileşen sınıfları değerleri var(--pr-*) ile
+   tüketir. DİKKAT: bu dosya şablon olarak render edilir — içine Django etiketi
+   yazılamaz (kendini include eden yorum bile sonsuz döngü yapar; Tur 238 dersi).
+
+   KURALLAR (bağlayıcı):
+   - text-transform KULLANILMAZ (WeasyPrint Türkçe i→I tuzağı) — büyük harf
+     doğrudan yazılır.
+   - Renkli dolgu yok; palet nötr slate gri (ofis yazıcısı dostu).
+   - Yazı tipi DejaVu Sans (tam Türkçe kapsama).
+   - M3 token'larından bağımsızdır (kurumsal kâğıt düzeni — CLAUDE.md §7.5 notu).
+   Belge: docs/rapor-tasarim-standardi.md
+   ========================================================================= */
+:root {
+  /* Renk rolleri (slate skalası) */
+  --pr-ink: #0f172a;          /* en koyu — başlık, güçlü çizgi */
+  --pr-text: #1e293b;         /* gövde metni */
+  --pr-secondary: #475569;    /* ikincil metin, rol/etiket */
+  --pr-label: #334155;        /* künye etiket hücresi / imza tarihi (resmî form) */
+  --pr-muted: #64748b;        /* soluk meta, altbilgi */
+  --pr-faint: #94a3b8;        /* ince ayraç çizgisi */
+  --pr-line: #cbd5e1;         /* tablo iç çizgileri */
+  --pr-line-soft: #e2e8f0;    /* en hafif çerçeve */
+  --pr-fill: #f8fafc;         /* etiket hücre dolgusu */
+  --pr-fill-head: #f1f5f9;    /* tablo başlık satırı dolgusu */
+
+  /* Tipografi ölçeği (DejaVu Sans) */
+  --pr-size-school: 11.5pt;   /* okul adı (anted/üst bant) */
+  --pr-size-title: 12pt;      /* belge başlığı */
+  --pr-size-body: 10pt;       /* gövde (kompakt evrakta 9.5pt'e daralabilir) */
+  --pr-size-table: 9pt;       /* tablo gövdesi */
+  --pr-size-meta: 8.5pt;      /* künye/alt başlık */
+  --pr-size-footer: 7.5pt;    /* sayfa altbilgisi */
+
+  /* Çizgi ağırlıkları */
+  --pr-rule-strong: 1.4pt;    /* başlık altı ana çizgi */
+  --pr-rule-thin: 0.6pt;      /* ince ayraç */
+  --pr-border: 0.5pt;         /* tablo iç sınırı */
+  --pr-border-outer: 0.9pt;   /* tablo dış çerçevesi / vurgu */
+}
+
+/* Ortak yardımcılar (tüm belge aileleri) */
+.pr-muted { color: var(--pr-muted); }
+.pr-secondary { color: var(--pr-secondary); }

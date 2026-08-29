@@ -1,0 +1,83 @@
+{% extends "sinav/reports/base.html" %}
+{% load l10n %}
+{% comment %}R8 — Dağıtım Doğrulama Raporu (yol haritası §9). Tek yaprak:
+ihlal=0 beyanı (veya adsız ihlal listesi — doğrulayıcı kişisel veri üretmez),
+mesafe metrikleri (1. halka aynı-grup çifti, grup başına min mesafe ders
+adıyla, yakınlık skoru), dağıtım parametreleri (seed/strict/satranç/düzen),
+üretim zamanı altbilgide. İdare imza bloğu — oturum onayının dayanağıdır.
+{% endcomment %}
+{% block extra_style %}
+<style>
+  .verdict { margin-top: 8pt; border: 1.2pt solid var(--pr-ink); padding: 8pt 10pt;
+             text-align: center; font-size: 11pt; font-weight: bold;
+             break-inside: avoid; page-break-inside: avoid; }
+  .verdict.bad { border-style: dashed; }
+  .violations { margin: 6pt 0 0; padding-left: 14pt; font-size: 8.5pt; }
+  .violations li { margin: 2pt 0; }
+  .kv { width: 100%; border-collapse: collapse; margin-top: 8pt; }
+  .kv td { border: 0.6pt solid var(--pr-secondary); padding: 4pt 7pt; font-size: 9pt; }
+  .kv td.k { width: 45%; font-weight: bold; background: var(--pr-fill-head); }
+</style>
+{% endblock %}
+{% block content %}
+<div class="sheet">
+  {% include "sinav/reports/_head.html" %}
+
+  {% if report.is_valid %}
+  <div class="verdict">SERT KISIT İHLALİ YOKTUR (İHLAL = 0)</div>
+  {% else %}
+  <div class="verdict bad">DİKKAT: {{ report.violation_count }} SERT KISIT İHLALİ TESPİT EDİLDİ</div>
+  <ul class="violations">
+    {% for violation in report.hard_violations %}<li>{{ violation }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  <table class="kv">
+    <tr><td class="k">Birinci halkada aynı-grup çifti (komşu sıra)</td>
+        <td>{{ report.first_ring_pairs }}</td></tr>
+    {% comment %}K1 (Tur 645): GROUPS-tipi açık uç — aynı şubeden farklı-grup
+    komşuluğu (kopya riski düşük: farklı kitapçık; V2 separate_sections girdisi).{% endcomment %}
+    <tr><td class="k">Aynı şubeden farklı-grup komşu çifti (1. halka)</td>
+        <td>{{ report.cross_section_pairs }}</td></tr>
+    <tr><td class="k">Toplam yakınlık skoru (Σ 1/d² — düşük iyidir)</td>
+        <td>{{ report.proximity_score }}</td></tr>
+    {% for metric in report.min_distances %}
+    <tr><td class="k">En yakın aynı-grup mesafesi — {{ metric.group_label }}</td>
+        <td>{{ metric.distance }} birim</td></tr>
+    {% endfor %}
+  </table>
+
+  {% if report.occupancy %}
+  {% comment %}K1 (Tur 645): salon doluluk tablosu — kapasite/yerleşen/yüzde.{% endcomment %}
+  <table class="kv">
+    <tr><td class="k">SALON DOLULUK</td><td>Kapasite · Yerleşen · Doluluk</td></tr>
+    {% for row in report.occupancy %}
+    <tr><td class="k">{{ row.room_name }}</td>
+        <td>{{ row.capacity }} · {{ row.placed }} · %{{ row.percent|unlocalize }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  <table class="kv">
+    <tr><td class="k">Dağıtım düzeni</td><td>{{ report.params.layout_mode_label }}</td></tr>
+    <tr><td class="k">Rastgelelik tohumu (seed)</td><td>{{ report.params.seed }}</td></tr>
+    <tr><td class="k">Katı mod (1. halka sert)</td><td>{{ report.params.strict|yesno:"Açık,Kapalı" }}</td></tr>
+    <tr><td class="k">Satranç modu</td><td>{{ report.params.checkerboard|yesno:"Açık,Kapalı" }}</td></tr>
+    <tr><td class="k">Yerleşen öğrenci / sabit kurallı</td>
+        <td>{{ report.params.placed }} / {{ report.params.pinned }}</td></tr>
+  </table>
+
+  {% if report.warnings %}
+  <div class="courses-title" style="font-weight: bold; font-size: 9.5pt; margin-top: 8pt;">DAĞITIM UYARILARI</div>
+  <ul class="violations">
+    {% for warning in report.warnings %}<li>{{ warning }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  <table class="officer-grid">
+    <tr><td class="space"></td><td class="space"></td></tr>
+    <tr><td><div class="line"></div>Sınav Komisyonu (Ad Soyad / İmza)</td>
+        <td><div class="line"></div>Okul Müdürü (Ad Soyad / İmza)</td></tr>
+  </table>
+</div>
+{% endblock %}

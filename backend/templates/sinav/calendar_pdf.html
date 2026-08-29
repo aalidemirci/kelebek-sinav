@@ -1,0 +1,95 @@
+{% extends "documents/base.html" %}
+{% comment %}Resmî sınav takvimi (ADR-0044, FAZ T3). documents/base.html anteti +
+.sig-grid TABLO imza deseni (float-altbilgi tuzağı yok). text-transform YOK —
+başlıklar doğrudan büyük harf (WeasyPrint TR "i" tuzağı). Onaysız takvimde
+"TASLAK" filigranı. Tur 644: plan gereği A4 YATAY (seviye sütunları geniş).{% endcomment %}
+{% block extra_style %}
+<style>
+  @page { size: A4 landscape; }
+</style>
+{% endblock %}
+{% block content %}
+  {% if is_draft %}
+    <div style="position: fixed; top: 40%; left: 0; width: 100%; text-align: center;
+                font-size: 60pt; color: #e2e8f0; font-weight: bold; letter-spacing: 8pt;
+                transform: rotate(-20deg); z-index: -1;">TASLAK</div>
+  {% endif %}
+
+  <div class="doc-title">{{ calendar.school_year.name }} EĞİTİM ÖĞRETİM YILI</div>
+  <div class="doc-title" style="margin-top: 0;">{{ calendar_title }}</div>
+  <div class="doc-subtitle">
+    {{ calendar.start_date|date:"d.m.Y" }} – {{ calendar.end_date|date:"d.m.Y" }}
+  </div>
+
+  <table class="doc-table" style="font-size: 8.5pt;">
+    <thead>
+      <tr>
+        <th style="width: 30%;">Tarih / Ders Saati</th>
+        {% for level in levels %}
+          <th style="text-align: center;">{{ level.display_label }} ({{ level.student_count }})</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for day in day_rows %}
+        {% for pc in day.period_cells %}
+          <tr>
+            <td>
+              {% if forloop.first %}<strong>{{ day.label }}</strong><br>{% endif %}
+              {{ pc.period.name }}. Ders
+            </td>
+            {% for cell_list in pc.level_cells %}
+              <td style="text-align: center;">
+                {% for cell in cell_list %}
+                  {{ cell.course_name }}{% if cell.exam_kind == "PRACTICE" %} [UYGULAMA]{% endif %}{% if not cell.is_butterfly %} (Kendi sınıfında){% endif %}{% if not forloop.last %}<br>{% endif %}
+                {% endfor %}
+              </td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      {% empty %}
+        <tr><td colspan="{{ levels|length|add:1 }}" style="text-align: center;">
+          Henüz sınav yerleştirilmedi.
+        </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if description_lines %}
+    <div class="section flow" style="margin-top: 12pt;">
+      <div class="section-title">AÇIKLAMALAR</div>
+      <div class="field-box" style="border-top: 0.75pt solid var(--pr-line);">{% for line in description_lines %}{{ line }}
+{% endfor %}</div>
+    </div>
+  {% endif %}
+
+  <table class="sig-grid">
+    <tr>
+      {% for chair in chairs %}
+        <td>
+          <div class="space"></div>
+          <div class="line"></div>
+          <div class="name">{{ chair.name|default:"…………………" }}</div>
+          <div class="role">{{ chair.role }}</div>
+        </td>
+        {% if forloop.counter|divisibleby:3 and not forloop.last %}</tr><tr>{% endif %}
+      {% endfor %}
+    </tr>
+    <tr>
+      <td>
+        <div class="space"></div>
+        <div class="line"></div>
+        <div class="name">{{ school_chair_name|default:"…………………" }}</div>
+        <div class="role">Okul Zümre Başkanı</div>
+      </td>
+      <td></td>
+      <td>
+        <div class="date" style="font-size: 9.5pt; color: var(--pr-label);">UYGUNDUR</div>
+        <div class="space"></div>
+        <div class="line"></div>
+        <div class="name">{{ principal_name|default:"…………………" }}</div>
+        <div class="role">Okul Müdürü</div>
+      </td>
+    </tr>
+  </table>
+{% endblock %}

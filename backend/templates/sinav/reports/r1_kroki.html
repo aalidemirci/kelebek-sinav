@@ -1,0 +1,75 @@
+{% extends "sinav/reports/base.html" %}
+{% load l10n %}
+{% comment %}R1 — Salon Oturma Planı (kroki). Salon başına bir sayfa; yerleşim
+planındaki kapı/tahta/öğretmen masası konumlarıyla BİREBİR (satır 0 = ön cephe,
+üstte). Çizim grid kimliğinden — (desk_row, desk_col, slot); x/y koordinatı
+kullanılmaz (Tur 223 tuzağı). Boş koltuk "BOŞ", devre dışı sıra "KULLANIM DIŞI".
+{% endcomment %}
+{% block extra_style %}
+<style>
+  .kroki { width: 100%; border-collapse: separate; border-spacing: 2.5pt;
+           table-layout: fixed; margin-top: 2pt; }
+  .kroki td { vertical-align: top; padding: 0; }
+  .cell-desk { border: 0.8pt solid var(--pr-ink); }
+  .seat-row { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .seat-row td { border-left: 0.5pt solid var(--pr-line); padding: 1.5pt 2pt;
+                 vertical-align: top; height: 30pt; overflow: hidden; }
+  .seat-row td:first-child { border-left: none; }
+  .seat-no { font-weight: bold; font-size: 7.5pt; }
+  .seat-name { font-size: 6.8pt; line-height: 1.15; }
+  .seat-meta { font-size: 6.4pt; color: var(--pr-label); }
+  .seat-empty { color: var(--pr-faint); font-size: 6.8pt; font-style: italic; }
+  .cell-furniture { border: 0.8pt solid var(--pr-secondary); background: var(--pr-fill-head);
+                    text-align: center; font-size: 6.6pt; font-weight: bold;
+                    padding: 4pt 1pt; color: var(--pr-label); }
+  .cell-disabled { border: 0.8pt dashed var(--pr-faint); text-align: center;
+                   font-size: 6.2pt; color: var(--pr-faint); padding: 4pt 1pt; }
+  .front-label { text-align: center; font-size: 7pt; color: var(--pr-secondary);
+                 letter-spacing: 2pt; margin-bottom: 2pt; }
+  .kroki-foot { margin-top: 5pt; font-size: 8pt; color: var(--pr-label); }
+</style>
+{% endblock %}
+{% block content %}
+{% for room in rooms %}
+<div class="sheet">
+  {% with scope_line="Salon: "|add:room.room_name %}
+    {% include "sinav/reports/_head.html" %}
+  {% endwith %}
+  <div class="front-label">— ÖN CEPHE —</div>
+  <table class="kroki">
+    {% for row in room.grid %}
+    <tr>
+      {% for cell in row %}
+      {# Türkçe locale ondalığı virgülle basar — CSS yutulur; unlocalize şart (F25/T244 bulgusu). #}
+      <td style="width: {{ room.col_width_pct|unlocalize }}%;">
+        {% if cell.kind == "desk" %}
+        <table class="seat-row cell-desk"><tr>
+          {% for seat in cell.seats %}
+          <td>
+            <div class="seat-no">{{ seat.seat_no|default_if_none:"–" }}</div>
+            {% if seat.empty %}
+            <div class="seat-empty">BOŞ</div>
+            {% else %}
+            <div class="seat-name">{{ seat.full_name }}</div>
+            <div class="seat-meta">{{ seat.student_number }} · {{ seat.class_label }}</div>
+            {% endif %}
+          </td>
+          {% endfor %}
+        </tr></table>
+        {% elif cell.kind == "disabled_desk" %}
+        <div class="cell-disabled">KULLANIM DIŞI</div>
+        {% elif cell.kind == "furniture" %}
+        <div class="cell-furniture">{{ cell.label }}</div>
+        {% endif %}
+      </td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </table>
+  <div class="kroki-foot">
+    {% if room.block %}Konum: {{ room.block }} · {% endif %}Öğrenci: {{ room.student_count }} ·
+    Kapasite: {{ room.capacity }}
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

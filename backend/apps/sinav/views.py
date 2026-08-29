@@ -1,8 +1,8 @@
 """sinav DRF view'ları — ince katman; mantık services.py'da.
 
 OYS view'larından UYARLA: izin sınıfları/denetim/OpenAPI süslemeleri düşer
-(authsuz tek kullanıcı); `layout-pdf` ve rapor uçları F4'te (WeasyPrint
-şablonlarıyla) gelir. Salon silme ucu yok: `is_active=False` ile pasifleştirilir.
+(authsuz tek kullanıcı); `layout-pdf` + rapor uçları F4'te WeasyPrint
+şablonlarıyla geldi. Salon silme ucu yok: `is_active=False` ile pasifleştirilir.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import HttpResponse
 from rest_framework import serializers as drf_serializers
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -106,6 +107,22 @@ class ExamRoomViewSet(viewsets.ModelViewSet[ExamRoom]):
         except DjangoValidationError as exc:
             raise drf_serializers.ValidationError(exc.messages) from exc
         return Response({"capacity": capacity, "seats": SeatSerializer(seat_list, many=True).data})
+
+    @action(detail=True, methods=["get"], url_path="layout-pdf")
+    def layout_pdf(self, request: Request, pk: str | None = None) -> HttpResponse:
+        """`GET /exam-rooms/<id>/layout-pdf/` — BOŞ yerleşim planı PDF'i.
+
+        Sınav öncesi dersliği düzenlemek için kapıya asılır; oturumdan
+        bağımsızdır ve kişisel veri içermez (`seats` ucu emsali).
+        """
+        room = self.get_object()
+        try:
+            report_file = services.render_room_layout_pdf(room)
+        except DjangoValidationError as exc:
+            raise drf_serializers.ValidationError(exc.messages) from exc
+        response = HttpResponse(report_file.content, content_type=report_file.content_type)
+        response["Content-Disposition"] = f'attachment; filename="{report_file.filename}"'
+        return response
 
     @action(detail=False, methods=["post"], url_path="generate-section-rooms")
     def generate_section_rooms(self, request: Request) -> Response:
@@ -345,6 +362,35 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
                 "report": _report_payload(report),
             }
         )
+
+    @action(detail=True, methods=["get"], url_path=r"reports/(?P<code>[a-z0-9]+)")
+    def reports(
+        self, request: Request, pk: str | None = None, code: str | None = None
+    ) -> HttpResponse | Response:
+        """Sınav evrakı indirme (F4): R1-R5 + R2k + R7-R9 — senkron PDF/Excel.
+
+        `?room_id=` salon bazlı raporları (R1/R2/R3/R7) tek salona daraltır;
+        `code=zip` tüm seti tek arşivde döner. Arşiv oturumdan yeniden basım
+        açıktır (durum kapısı serviste).
+        """
+        session = self.get_object()
+        if code != "zip" and code not in services.REPORT_CODES:
+            return Response(
+                {"code": "not_found", "message": "Bilinmeyen rapor kodu.", "fields": {}},
+                status=404,
+            )
+        room_raw = request.query_params.get("room_id", "")
+        room_id = int(room_raw) if room_raw.isdigit() else None
+        try:
+            if code == "zip":
+                report_file = services.render_session_reports_zip(session)
+            else:
+                report_file = services.render_session_report(session, code, room_id=room_id)
+        except DjangoValidationError as exc:
+            raise drf_serializers.ValidationError(exc.messages) from exc
+        response = HttpResponse(report_file.content, content_type=report_file.content_type)
+        response["Content-Disposition"] = f'attachment; filename="{report_file.filename}"'
+        return response
 
     # --- Durum makinesi ----------------------------------------------------
     def _transition(self, transition: Any) -> Response:

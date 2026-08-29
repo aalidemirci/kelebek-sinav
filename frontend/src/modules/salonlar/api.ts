@@ -1,7 +1,6 @@
-// Sınav salonları API istemcisi (backend apps/sinav — F2).
+// Sınav salonları API istemcisi (backend apps/sinav — F2 + F4 layout-pdf).
 // Numaralandırma iş kuralı BACKEND'dedir; editör her plan değişiminde
-// preview-seats ucunu çağırır, istemcide hesap yapılmaz. Boş plan PDF'i
-// (layout-pdf) F4'te evrak setiyle birlikte gelir.
+// preview-seats ucunu çağırır, istemcide hesap yapılmaz.
 
 import { api } from "../../lib/api";
 import type { Paginated } from "../../lib/pagination";
@@ -87,4 +86,6 @@ export const examRoomApi = {
   // Her aktif şube için 40 koltuklu derslik salonu üret (idempotent).
   generateSectionRooms: () =>
     api.post<GenerateSectionRoomsResult>("/exam-rooms/generate-section-rooms/", {}),
+  // Boş yerleşim planı PDF'i (F4) — oturumdan bağımsız, kişisel veri yok.
+  layoutPdfBlob: (id: number) => api.getBlob(`/exam-rooms/${id}/layout-pdf/`),
 };

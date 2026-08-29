@@ -1,4 +1,4 @@
-"""sinav servisleri — salon yaşam döngüsü (F2) + oturum akışı (F3).
+"""sinav servisleri — salon yaşam döngüsü (F2) + oturum akışı (F3) + evrak (F4).
 
 OYS `sinav_islemleri/services.py`'den UYARLA (tasarım §11): `created_by`/User
 damgaları düşer (tek kullanıcı — ad-snapshot + zaman kalır), core köprüleri
@@ -12,6 +12,7 @@ from __future__ import annotations
 import copy
 import math
 import random
+from dataclasses import dataclass
 from types import EllipsisType
 from typing import Any
 
@@ -24,7 +25,7 @@ from apps.dersler import selectors as ders_selectors
 from apps.dersler import services as ders_services
 from apps.okul import selectors as okul_selectors
 from apps.okul.models import ClassSection, SchoolConfig
-from apps.sinav import engine, layout, participants, validator
+from apps.sinav import engine, layout, participants, reports, validator
 from apps.sinav.models import (
     ExamAttendanceRecord,
     ExamRoom,
@@ -1256,3 +1257,269 @@ def update_attendance_record(record: ExamAttendanceRecord, **fields: Any) -> Exa
 def unmark_absent(record: ExamAttendanceRecord) -> None:
     """Yanlış işaretleme telafisi — soft-delete (iz kalır)."""
     record.delete()
+
+
+# ===========================================================================
+# F4 — sınav evrakı (rapor tasarım sistemi + R1-R5 + R7-R9; tasarım §9)
+# ===========================================================================
+
+#: Geçerli rapor kodları (URL parçası; R10 = kitapçık, F5'te ayrı uç).
+REPORT_CODES: tuple[str, ...] = ("r1", "r2", "r2k", "r3", "r4", "r5", "r6", "r7", "r8", "r9")
+
+#: Salon filtresi yalnız salon bazlı çıktılarında anlamlı.
+_ROOM_SCOPED_CODES: frozenset[str] = frozenset({"r1", "r2", "r3", "r7"})
+
+#: Evrak üretimine açık oturum durumları (ARŞİV dahil — yeniden basım).
+_REPORTABLE_STATUSES: tuple[str, ...] = (
+    ExamSessionStatus.DISTRIBUTED,
+    ExamSessionStatus.APPROVED,
+    ExamSessionStatus.ARCHIVED,
+)
+
+_PDF_MIME = "application/pdf"
+_XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+@dataclass(frozen=True)
+class ReportFile:
+    """Üretilmiş tek evrak — uç bunu indirme yanıtına çevirir."""
+
+    filename: str
+    content_type: str
+    content: bytes
+
+
+def _report_header(session: ExamSession) -> reports.ReportHeader:
+    """Ortak üst bant — okul adı yerel yapılandırmadan (OYS core köprüsü yerine)."""
+    return reports.ReportHeader(
+        school_name=SchoolConfig.load().school_name,
+        year_label=session.semester.school_year.name,
+        semester_label=session.semester.name,
+        exam_name=session.name,
+        exam_date=session.exam_date.strftime("%d.%m.%Y"),
+        start_time=session.start_time.strftime("%H:%M"),
+        generated_at=timezone.localtime().strftime("%d.%m.%Y %H:%M"),
+    )
+
+
+def render_room_layout_pdf(room: ExamRoom) -> ReportFile:
+    """Oturumdan bağımsız BOŞ salon yerleşim planı.
+
+    Sınav öncesi dersliğin fiziken hazırlanması için kapıya asılır: sıra
+    dizilimi + koltuk numaraları + demirbaş; ÖĞRENCİ VERİSİ İÇERMEZ (kişisel
+    veri yok). build_room_kroki R1 ile aynı grid kimliğini kullanır —
+    rows=() ile tüm koltuklar boş gelir, şablon yalnız numarayı basar.
+    """
+    plan = layout.validate_layout_plan(room.layout_plan)
+    sheet = reports.RoomSheet(
+        room_name=room.name,
+        block=room.block,
+        plan=plan,
+        numbering_scheme=room.numbering_scheme,
+        rows=(),
+    )
+    context: dict[str, object] = {
+        # base.html @page footer'ı header.* okur — üç anahtar da zorunlu
+        # (exam_name boş string = sağ alt slot boş kalır).
+        "header": {
+            "school_name": SchoolConfig.load().school_name,
+            "generated_at": timezone.localtime().strftime("%d.%m.%Y %H:%M"),
+            "exam_name": "",
+        },
+        "room": reports.build_room_kroki(sheet),
+    }
+    return ReportFile(
+        filename=f"salon_yerlesim_plani_{room.pk}.pdf",
+        content_type=_PDF_MIME,
+        content=reports.render_pdf("sinav/reports/room_layout.html", context),
+    )
+
+
+def _seat_rows(session: ExamSession, *, room_id: int | None = None) -> list[reports.SeatRow]:
+    """Yerleşim snapshot'larını saf rapor satırlarına çevirir (ders adı çözülü)."""
+    qs = (
+        SeatAssignment.objects.filter(session=session)
+        .select_related("room")
+        .order_by("room__name", "seat_no")
+    )
+    if room_id is not None:
+        qs = qs.filter(room_id=room_id)
+    assignments = list(qs)
+    course_ids = {int(a.conflict_group.split(":")[0]) for a in assignments}
+    course_names: dict[int, str] = ders_selectors.course_names_by_ids(course_ids)
+    return [
+        reports.SeatRow(
+            full_name=a.full_name,
+            student_number=a.student_number,
+            class_label=a.class_label,
+            room_name=a.room.name,
+            seat_no=a.seat_no,
+            desk_row=a.desk_row,
+            desk_col=a.desk_col,
+            slot=a.slot,
+            course_name=course_names.get(int(a.conflict_group.split(":")[0]), ""),
+            status=a.status,
+        )
+        for a in assignments
+    ]
+
+
+def _room_sheets(
+    session: ExamSession, rows: list[reports.SeatRow], *, room_id: int | None = None
+) -> list[reports.RoomSheet]:
+    """R1 kroki girdileri — yalnız yerleşim almış oturum salonları, ada göre."""
+    used_names = {r.room_name for r in rows}
+    sheets: list[reports.RoomSheet] = []
+    session_rooms = ExamSessionRoom.objects.filter(session=session).select_related("room")
+    for sr in sorted(session_rooms, key=lambda sr: sr.room.name):
+        room = sr.room
+        if room_id is not None and room.pk != room_id:
+            continue
+        if room.name not in used_names:
+            continue
+        sheets.append(
+            reports.RoomSheet(
+                room_name=room.name,
+                block=room.block,
+                plan=layout.validate_layout_plan(room.layout_plan),
+                numbering_scheme=room.numbering_scheme,
+                rows=tuple(r for r in rows if r.room_name == room.name),
+            )
+        )
+    return sheets
+
+
+def render_session_report(
+    session: ExamSession, code: str, *, room_id: int | None = None
+) -> ReportFile:
+    """Oturum evrakını üretir (R1-R5 + R7-R9; senkron — çıktılar küçük).
+
+    Ön koşul: dağıtım yapılmış olmalı (DAĞITILDI/ONAYLANDI/ARŞİV — arşivden
+    yeniden basım açık). Hata metinlerinde öğrenci adı ASLA (KVKK kuralı).
+    """
+    if code not in REPORT_CODES:
+        raise ValidationError("Bilinmeyen rapor kodu.")
+    if session.status not in _REPORTABLE_STATUSES:
+        raise ValidationError("Önce dağıtım yapın — sınav evrakı yerleşimden üretilir.")
+    if code == "r6":
+        # F7'de ProctorAssignment ile dolar; o güne dek görevlendirme hiç yok.
+        if not session.proctors_enabled:
+            raise ValidationError("Gözetmen modülü bu oturumda kapalı (K2); R6 üretilemez.")
+        raise ValidationError("Görevlendirme yapılmamış; önce gözetmen atayın.")
+    if room_id is not None:
+        if code not in _ROOM_SCOPED_CODES:
+            raise ValidationError(
+                "Salon filtresi yalnız salon bazlı raporlarda (R1/R2/R3) geçerli."
+            )
+        if not ExamSessionRoom.objects.filter(session=session, room_id=room_id).exists():
+            raise ValidationError("Salon bu oturumda tanımlı değil.")
+
+    rows = _seat_rows(session, room_id=room_id)
+    if not rows:
+        raise ValidationError("Oturumda yerleşim yok.")
+
+    header = _report_header(session)
+    title, stem = reports.REPORT_TITLES[code]
+    if code == "r5":
+        return ReportFile(
+            filename=f"{stem}_oturum_{session.pk}.xlsx",
+            content_type=_XLSX_MIME,
+            content=reports.build_r5_workbook(header, rows),
+        )
+
+    context: dict[str, object] = {"header": header, "title": title}
+    if code == "r1":
+        template = "r1_kroki.html"
+        context["rooms"] = [
+            reports.build_room_kroki(sheet)
+            for sheet in _room_sheets(session, rows, room_id=room_id)
+        ]
+    elif code in ("r2", "r2k"):
+        template = "r2_attendance.html"
+        context["sheets"] = (
+            reports.build_room_attendance(rows)
+            if code == "r2"
+            else reports.build_section_attendance(rows)
+        )
+    elif code == "r3":
+        template = "r3_door.html"
+        context["sheets"] = reports.build_door_lists(rows)
+    elif code == "r4":
+        template = "r4_announcement.html"
+        context["sheets"] = reports.build_announcements(rows)
+    elif code == "r7":
+        template = "r7_envelope.html"
+        context["sheets"] = reports.build_envelope_sheets(rows)
+    elif code == "r8":
+        template = "r8_validation.html"
+        context["report"] = _validation_report_context(session, rows)
+    else:  # r9
+        # Tek tablo: öncesi/sonrası imzaları yan yana sütun (OYS Tur 240).
+        template = "r9_handover.html"
+        context["rows"] = reports.build_handover_rows(
+            rows, proctor_names=_proctor_names_by_room(session)
+        )
+
+    return ReportFile(
+        filename=f"{stem}_oturum_{session.pk}.pdf",
+        content_type=_PDF_MIME,
+        content=reports.render_pdf(f"sinav/reports/{template}", context),
+    )
+
+
+def _proctor_names_by_room(session: ExamSession) -> dict[str, str]:
+    """Salon adı → görevli adları (R9 basılı sütunu).
+
+    F4'te görevlendirme modeli yok (F7'de gelir) — boş sözlük döner, R9'daki
+    görevli sütunu elle yazım için boş kalır (OYS'de gözetmen kapalı kipiyle
+    aynı davranış). İmza F7 sözleşmesi için şimdiden sabitlendi.
+    """
+    return {}
+
+
+def _validation_report_context(
+    session: ExamSession, rows: list[reports.SeatRow]
+) -> dict[str, object]:
+    """R8 bağlamı: bağımsız doğrulayıcı + dağıtım parametreleri (ders adlı)."""
+    report = seating_report(session)
+    params = dict(session.distribution_params)
+    # Çakışma grubu anahtarları ortak yardımcıyla etikete çözülür.
+    group_labels = conflict_group_labels(set(report.min_same_group_distance))
+    return reports.build_validation_context(
+        is_valid=report.is_valid,
+        hard_violations=report.hard_violations,
+        first_ring_pairs=report.first_ring_same_group_pairs,
+        min_distances=report.min_same_group_distance,
+        proximity_score=report.proximity_score,
+        cross_section_pairs=report.cross_group_same_section_first_ring_pairs,
+        occupancy=room_occupancy(session),
+        params={
+            **params,
+            "layout_mode_label": LayoutMode(session.layout_mode).label,
+            "seed": params.get("seed", "—"),
+            "strict": bool(params.get("strict", False)),
+            "checkerboard": bool(params.get("checkerboard", False)),
+            "placed": params.get("placed", len(rows)),
+            "pinned": params.get("pinned", 0),
+        },
+        group_labels=group_labels,
+        warnings=[str(w) for w in params.get("warnings", [])],
+    )
+
+
+def render_session_reports_zip(session: ExamSession) -> ReportFile:
+    """Tüm evrakı tek ZIP'te üretir (Evrak paneli "tümünü indir").
+
+    R10 kitapçıkları HARİÇ — onlar F5'te kendi ZIP'inde. R6 F4'te hiç
+    paketlenmez (görevlendirme modeli F7'de; geldiğinde OYS koşulu —
+    gözetmen açık + görevlendirme var — buraya döner).
+    """
+    codes = [code for code in REPORT_CODES if code != "r6"]
+    files = [
+        (rf.filename, rf.content) for rf in (render_session_report(session, code) for code in codes)
+    ]
+    return ReportFile(
+        filename=f"sinav_evraki_oturum_{session.pk}.zip",
+        content_type="application/zip",
+        content=reports.reports_zip(files),
+    )

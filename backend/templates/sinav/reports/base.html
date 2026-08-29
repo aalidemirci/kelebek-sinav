@@ -1,0 +1,91 @@
+{% comment %}
+SINAV EVRAKI ORTAK ŞABLONU (T8; Tur 238 — "Kurumsal Sade" tasarım standardı).
+Tüm R1-R9 çıktıları bunu extends eder. Renk + tipografi token'ları tek doğruluk
+kaynağından gelir: templates/print/_design.css (docs/rapor-tasarim-standardi.md).
+DejaVu Sans (tam Türkçe — kullanıcı kararı, Tur 228); nötr slate gri, ofis
+yazıcısı dostu (renkli dolgu YOK); altbilgi: üretim zamanı + Sayfa x/y + sınav adı.
+Resmî yazışma şablonu documents/base.html KASITLI extend edilmez — evrak
+anatomisi farklı (kompakt oturum bandı).
+ÖNEMLİ: text-transform:uppercase YOK — WeasyPrint Türkçe "i→I" tuzağı; büyük
+harfli başlıklar doğrudan büyük yazılır (documents/base.html emsali).
+Her .sheet bir sayfadır (salon/şube başına) ve _head.html bandıyla başlar.
+{% endcomment %}<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <style>
+    {% include "print/_design.css" %}
+    @page {
+      size: A4 portrait;
+      margin: 1.1cm 1.3cm 1.5cm 1.3cm;
+      @bottom-left {
+        content: "Üretim: {{ header.generated_at }}";
+        font-family: "DejaVu Sans"; font-size: 7pt; color: #64748b;
+      }
+      @bottom-center {
+        content: "Sayfa " counter(page) " / " counter(pages);
+        font-family: "DejaVu Sans"; font-size: 7.5pt; color: #64748b;
+      }
+      @bottom-right {
+        content: "{{ header.exam_name }}";
+        font-family: "DejaVu Sans"; font-size: 7pt; color: #64748b;
+      }
+    }
+    body { font-family: "DejaVu Sans", sans-serif; font-size: 9.5pt;
+           color: var(--pr-text); line-height: 1.3; margin: 0; }
+
+    /* Sayfa birimi: salon/şube başına bir yaprak */
+    .sheet { page-break-after: always; }
+    .sheet:last-child { page-break-after: avoid; }
+
+    /* Ortak üst bant (madde 7): okul + rapor adı + oturum bilgisi */
+    .rpt-head { text-align: center; margin-bottom: 6pt; }
+    .rpt-head .school { font-weight: bold; font-size: var(--pr-size-school);
+                        color: var(--pr-ink); }
+    .rpt-head .title { font-weight: bold; font-size: 10.5pt; letter-spacing: 0.6pt;
+                       color: var(--pr-ink); margin-top: 2pt; }
+    .rpt-head .session { font-size: var(--pr-size-meta); color: var(--pr-secondary);
+                         margin-top: 1pt; }
+    .rpt-head .scope { font-weight: bold; font-size: 10pt; color: var(--pr-ink);
+                       margin-top: 3pt; }
+    .rpt-rule { height: var(--pr-rule-strong); background: var(--pr-ink);
+                margin: 4pt 0 6pt; }
+
+    /* Veri tablosu — hairline slate (yazıcı dostu, kalite hissi) */
+    .rpt-table { width: 100%; border-collapse: collapse;
+                 font-size: var(--pr-size-table);
+                 border: var(--pr-border-outer) solid var(--pr-ink); }
+    .rpt-table th { background: var(--pr-fill-head); color: var(--pr-ink);
+                    font-weight: bold; letter-spacing: 0.3pt;
+                    border: var(--pr-border) solid var(--pr-line);
+                    border-bottom: var(--pr-border-outer) solid var(--pr-ink);
+                    padding: 3.5pt 5pt; font-size: var(--pr-size-meta); }
+    .rpt-table td { border: var(--pr-border) solid var(--pr-line);
+                    padding: 3pt 5pt; vertical-align: middle; }
+    .rpt-table tr { break-inside: avoid; page-break-inside: avoid; }
+    .rpt-table .num { text-align: center; width: 9%; }
+    .rpt-table .center { text-align: center; }
+
+    /* Evrak sayım + görevli imza bloğu (R2/R2k) */
+    .tally { margin-top: 10pt; border: var(--pr-border-outer) solid var(--pr-ink);
+             padding: 6pt 8pt; font-size: var(--pr-size-table);
+             break-inside: avoid; page-break-inside: avoid; }
+    .tally .row { margin: 3pt 0; }
+    .tally .blank { display: inline-block; min-width: 46pt;
+                    border-bottom: 0.7pt solid var(--pr-ink); }
+    .officer-grid { width: 100%; border-collapse: collapse; margin-top: 14pt;
+                    break-inside: avoid; page-break-inside: avoid; }
+    .officer-grid td { width: 50%; text-align: center; vertical-align: bottom;
+                       padding: 0 10pt; font-size: var(--pr-size-meta);
+                       color: var(--pr-secondary); }
+    .officer-grid .space { height: 26pt; }
+    .officer-grid .line { border-top: 0.7pt solid var(--pr-ink); margin: 0 6pt 3pt; }
+
+    .muted { color: var(--pr-muted); }
+  </style>
+  {% block extra_style %}{% endblock %}
+</head>
+<body>
+{% block content %}{% endblock %}
+</body>
+</html>
