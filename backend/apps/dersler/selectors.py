@@ -60,6 +60,16 @@ def get_course(course_id: int, *, active_only: bool = True) -> Course | None:
     return qs.first()
 
 
+def course_names_by_ids(course_ids: set[int]) -> dict[int, str]:
+    """id → ad eşlemesi (çakışma grubu etiketleri; pasif/silinmiş de çözülür).
+
+    Çakışma grubu anahtarı geçmiş oturumlardan gelebilir — ders sonradan
+    pasifleşmiş olsa da etiket üretilmelidir (all_objects).
+    """
+    rows = Course.all_objects.filter(pk__in=course_ids).values_list("pk", "name")
+    return {int(pk): name for pk, name in rows}
+
+
 def course_by_name(name: str) -> Course | None:
     """Canlı kayıtta ada göre ders (yoksa None)."""
     return Course.objects.filter(name=" ".join(name.split())).first()

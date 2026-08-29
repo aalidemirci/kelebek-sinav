@@ -14,6 +14,8 @@ import GuvenlikKapisi from "./modules/guvenlik/GuvenlikKapisi";
 import HakkindaPage from "./modules/hakkinda/HakkindaPage";
 import KisilerPage from "./modules/kisiler/KisilerPage";
 import KurulumPage from "./modules/kurulum/KurulumPage";
+import OturumDetayPage from "./modules/oturumlar/OturumDetayPage";
+import OturumlarPage from "./modules/oturumlar/OturumlarPage";
 import PanelPage from "./modules/panel/PanelPage";
 import SalonlarPage from "./modules/salonlar/SalonlarPage";
 
@@ -32,6 +34,9 @@ export default function App() {
             <Route path="/dersler" element={<DersHavuzuPage />} />
             {/* Salon şablonları + 2D yerleşim editörü (F2). */}
             <Route path="/salonlar" element={<SalonlarPage />} />
+            {/* Sınav oturumları: sihirbaz + dağıtım + yoklama (F3). */}
+            <Route path="/oturumlar" element={<OturumlarPage />} />
+            <Route path="/oturumlar/:id" element={<OturumDetayPage />} />
             {/* Ders yılı, şubeler, okul künyesi, güvenlik. */}
             <Route path="/ayarlar" element={<AyarlarPage />} />
             <Route path="/hakkinda" element={<HakkindaPage />} />

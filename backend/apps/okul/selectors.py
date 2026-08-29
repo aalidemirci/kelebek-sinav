@@ -39,6 +39,29 @@ def school_terms(*, school_year_id: int) -> QuerySet[SchoolTerm]:
     return SchoolTerm.objects.filter(school_year_id=school_year_id)
 
 
+def get_school_term(term_id: int) -> SchoolTerm | None:
+    """Tek dönem (canlı) — yoksa None. Sınav modülünün dönem köprüsü."""
+    return SchoolTerm.objects.filter(pk=term_id).select_related("school_year").first()
+
+
+def active_student_counts_by_level() -> dict[int, int]:
+    """Seviye başına AKTİF öğrenci sayısı (sınav Adım 0 ön kontrol verisi; PII yok)."""
+    counts: dict[int, int] = {}
+    qs = (
+        Student.objects.filter(status=StudentStatus.ACTIVE)
+        .exclude(class_level=None)
+        .values_list("class_level", flat=True)
+    )
+    for level in qs:
+        counts[int(level)] = counts.get(int(level), 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def last_student_import() -> ImportRun | None:
+    """Son TAMAMLANMIŞ öğrenci içe aktarması (Adım 0: 'liste ne kadar taze?')."""
+    return ImportRun.objects.filter(source_type="STUDENTS", status="COMPLETED").first()
+
+
 def grade_levels() -> list[dict[str, Any]]:
     """UI seçicileri için geçerli seviye listesi — okul türünden türetilir (U4)."""
     config = SchoolConfig.load()

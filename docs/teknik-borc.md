@@ -19,6 +19,16 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
 - **TB6 — Logo v1 geometrik yer tutucu:** `logo_uret.py` koltuk-karesi
   kelebeği üretiyor; markalaşmış bir çizim istenirse `kelebek-sinav-logo.png`
   değiştirilip `ikon_uret.py` yeniden koşulur (sözleşme hazır).
+- **TB7 — GROUPS katılımcı tipi alınmadı (F3 kesim kararı):** OYS'de şube-içi
+  grup (SectionGroup) kavramı ve GROUPS katılımcı tipi vardı; KS'de şube grubu
+  modeli olmadığından oturum dersi yalnız LEVEL/SECTIONS ile tanımlanır.
+  Seçmeli ders grupları gerekirse önce `okul` tarafına grup modeli gelir,
+  sonra `ParticipantType.GROUPS` + çözümleyici OYS'den taşınır
+  (`participants._resolve_groups`, OYS satır 141-169).
+- **TB8 — Yerleştirme kuralları arayüzü yok (OYS paritesi):** PlacementRule
+  backend'i (CRUD + dağıtımda PINNED) F3'te tam; OYS'de de FE istemcisi yoktu.
+  KS `placementRuleApi` hazır — kural yönetim ekranı F4'te sicil/oturum
+  ekranına bağlanacak (kroki PINNED rozetleri şimdiden görünür).
 
 ## Kapanan
 

@@ -1,10 +1,18 @@
-"""sinav salt-okunur sorguları — F2 kesiti."""
+"""sinav salt-okunur sorguları — salonlar (F2) + oturum akışı (F3)."""
 
 from __future__ import annotations
 
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 
-from apps.sinav.models import ExamRoom
+from apps.sinav.models import (
+    ExamAttendanceRecord,
+    ExamRoom,
+    ExamSession,
+    ExamSessionCourse,
+    ExamSessionRoom,
+    PlacementRule,
+    SeatAssignment,
+)
 
 
 def exam_rooms(*, include_inactive: bool = False) -> QuerySet[ExamRoom]:
@@ -37,3 +45,65 @@ def section_rooms_for_levels(levels: set[int]) -> list[ExamRoom]:
         )
         .order_by("linked_section__class_level", "linked_section__class_section")
     )
+
+
+# ---------------------------------------------------------------------------
+# F3 — oturum akışı
+# ---------------------------------------------------------------------------
+def exam_sessions(*, status: str | None = None) -> QuerySet[ExamSession]:
+    """Oturum listesi (tarih azalan; dönem join'li)."""
+    qs = ExamSession.objects.select_related("semester", "semester__school_year")
+    if status:
+        qs = qs.filter(status=status)
+    return qs.order_by("-exam_date", "start_time")
+
+
+def get_exam_session(session_id: int) -> ExamSession | None:
+    """Tek canlı oturumu id ile getirir — yoksa None."""
+    return ExamSession.objects.select_related("semester").filter(pk=session_id).first()
+
+
+def get_session_course(sc_id: int) -> ExamSessionCourse | None:
+    """Tek canlı oturum dersini id ile getirir (session+course join'li)."""
+    return ExamSessionCourse.objects.select_related("session", "course").filter(pk=sc_id).first()
+
+
+def placement_rules(*, session_id: int | None = None) -> QuerySet[PlacementRule]:
+    """Canlı yerleştirme kuralları (öğrenci + hedef salon join'li).
+
+    `session_id` verilirse o oturum İÇİN GEÇERLİ kurallar: oturuma özel +
+    kalıcı kurallar. KVKK md. 6: gerekçe yalnız kategori düzeyindedir.
+    """
+    qs = PlacementRule.objects.select_related("student", "target_room", "session")
+    if session_id is not None:
+        qs = qs.filter(Q(session_id=session_id) | Q(session__isnull=True))
+    return qs.order_by("-created_at")
+
+
+def session_seat_assignments(session_id: int) -> QuerySet[SeatAssignment]:
+    """Oturumun canlı yerleşimi (salon join'li; salon + koltuk no sıralı).
+
+    KİŞİSEL VERİ (snapshot) içerir — sıralama düz alanlarda kalır (TB3).
+    """
+    return (
+        SeatAssignment.objects.filter(session_id=session_id)
+        .select_related("room")
+        .order_by("room_id", "seat_no")
+    )
+
+
+def session_rooms(session_id: int) -> QuerySet[ExamSessionRoom]:
+    """Oturumun salonları (kullanım sırasına göre, salon join'li)."""
+    return (
+        ExamSessionRoom.objects.filter(session_id=session_id)
+        .select_related("room")
+        .order_by("order", "id")
+    )
+
+
+def attendance_records(*, session_id: int | None = None) -> QuerySet[ExamAttendanceRecord]:
+    """Sınav yoklama kayıtları — KİŞİSEL VERİ (snapshot ad/no)."""
+    qs = ExamAttendanceRecord.objects.select_related("room")
+    if session_id is not None:
+        qs = qs.filter(session_id=session_id)
+    return qs.order_by("room__name", "seat_no")
