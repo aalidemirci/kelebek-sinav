@@ -1,0 +1,400 @@
+/* Windows masaüstünde Segoe UI sistem yazı tipi kullanılır; yalnız ikonlar paketlenir. */
+@import "material-symbols/outlined.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+   Material Design 3 renk şemaları (CLAUDE.md §7.5).
+   Kurumsal mavi tohumdan türetilmiş tonal palet. Kanallar (RGB) → Tailwind
+   opaklık modifiyeleri (state layer) çalışsın.
+   Tema: `data-theme="dark"` <html>'e konunca alternatif token set devreye girer.
+   Bileşenler token kullandığı için kod tarafında değişiklik yok (Tur 46).
+--------------------------------------------------------------------------- */
+:root {
+  /* Masaüstü varsayılanı: fare/klavye için kompakt yoğunluk. Ortak bileşenler
+     bu ölçüleri okur; rahat mod dokunmatik ekranlar için eski ölçüleri korur. */
+  --ks-control-height: 2.25rem;
+  --ks-field-height: 2.5rem;
+  --ks-row-height: 2.5rem;
+  --ks-page-gap: 1rem;
+  --ks-panel-padding: 1rem;
+
+  /* 2026 görsel yenilemesi: güven veren lacivert + üretkenlik odaklı turkuaz.
+     M3 rol isimleri korunur; böylece mevcut ekranların tamamı yeni kimliği
+     ortak token katmanından, tek tek ham renk taşımadan alır. */
+  --md-primary: 0 142 146;
+  --md-on-primary: 255 255 255;
+  --md-primary-container: 204 246 243;
+  --md-on-primary-container: 0 58 60;
+  --md-secondary: 38 86 128;
+  --md-on-secondary: 255 255 255;
+  --md-secondary-container: 218 235 249;
+  --md-on-secondary-container: 13 48 77;
+  --md-tertiary: 180 105 18;
+  --md-on-tertiary: 255 255 255;
+  --md-tertiary-container: 255 237 207;
+  --md-on-tertiary-container: 91 50 0;
+  --md-error: 190 47 47;
+  --md-on-error: 255 255 255;
+  --md-error-container: 255 226 226;
+  --md-on-error-container: 107 17 17;
+  --md-surface: 246 248 250;
+  --md-on-surface: 20 39 57;
+  --md-surface-variant: 229 235 240;
+  --md-on-surface-variant: 83 101 118;
+  --md-surface-container-lowest: 255 255 255;
+  --md-surface-container-low: 251 252 253;
+  --md-surface-container: 241 245 248;
+  --md-surface-container-high: 234 240 244;
+  --md-surface-container-highest: 224 232 238;
+  /* surface-dim/bright: en sönük/en parlak nötr yüzeyler (M3 2023). surface-tint:
+     yükselen yüzeylerde tonal örtü için primary kanalları (= --md-primary). */
+  --md-surface-dim: 216 225 231;
+  --md-surface-bright: 255 255 255;
+  --md-surface-tint: 0 142 146;
+  --md-outline: 129 146 160;
+  --md-outline-variant: 214 223 230;
+  --md-inverse-surface: 19 43 63;
+  --md-inverse-on-surface: 239 246 250;
+  --md-inverse-primary: 100 223 218;
+  --md-scrim: 0 0 0;
+
+  /* Uygulama kabuğuna özgü semantik roller. */
+  --ks-sidebar: 8 38 66;
+  --ks-sidebar-raised: 12 52 84;
+  --ks-on-sidebar: 239 248 252;
+  --ks-on-sidebar-muted: 166 193 211;
+  --ks-sidebar-active: 9 166 170;
+  --ks-success: 22 139 92;
+  --ks-success-container: 220 247 235;
+  --ks-on-success-container: 10 86 56;
+
+  /* Ders programı ders renkleri (Tur 282) — açık tint, text-on-surface ile AA.
+     Deterministik (subjectColor) ile derse/sınıf+derse göre atanır. */
+  --md-subject-1: 207 226 255;
+  --md-subject-2: 192 234 230;
+  --md-subject-3: 202 233 199;
+  --md-subject-4: 223 237 188;
+  --md-subject-5: 249 235 188;
+  --md-subject-6: 250 224 188;
+  --md-subject-7: 255 218 197;
+  --md-subject-8: 255 213 210;
+  --md-subject-9: 250 213 232;
+  --md-subject-10: 234 218 250;
+  --md-subject-11: 218 222 250;
+  --md-subject-12: 200 232 245;
+}
+
+[data-density="comfortable"] {
+  --ks-control-height: 3rem;
+  --ks-field-height: 3.5rem;
+  --ks-row-height: 3rem;
+  --ks-page-gap: 1.5rem;
+  --ks-panel-padding: 1.5rem;
+}
+
+/* M3 dark — Material Theme Builder ile aynı tohumdan türetildi (kurumsal mavi).
+   Kontrast: tüm "on-*" rolleri WCAG 2.1 AA (≥4.5:1 metin, ≥3:1 büyük metin)
+   karşılar. */
+[data-theme="dark"] {
+  --md-primary: 101 221 216;
+  --md-on-primary: 0 55 57;
+  --md-primary-container: 0 82 85;
+  --md-on-primary-container: 192 246 243;
+  --md-secondary: 169 204 232;
+  --md-on-secondary: 12 50 79;
+  --md-secondary-container: 34 73 105;
+  --md-on-secondary-container: 216 235 249;
+  --md-tertiary: 245 190 112;
+  --md-on-tertiary: 71 40 0;
+  --md-tertiary-container: 101 59 2;
+  --md-on-tertiary-container: 255 231 193;
+  --md-error: 255 181 181;
+  --md-on-error: 104 0 8;
+  --md-error-container: 137 21 25;
+  --md-on-error-container: 255 218 218;
+  --md-surface: 11 25 37;
+  --md-on-surface: 225 235 241;
+  --md-surface-variant: 49 66 80;
+  --md-on-surface-variant: 183 199 210;
+  --md-surface-container-lowest: 6 18 28;
+  --md-surface-container-low: 15 31 44;
+  --md-surface-container: 20 38 52;
+  --md-surface-container-high: 28 47 61;
+  --md-surface-container-highest: 39 58 72;
+  --md-surface-dim: 11 25 37;
+  --md-surface-bright: 45 64 79;
+  --md-surface-tint: 101 221 216;
+  --md-outline: 126 147 161;
+  --md-outline-variant: 53 73 87;
+  --md-inverse-surface: 225 235 241;
+  --md-inverse-on-surface: 32 50 64;
+  --md-inverse-primary: 0 121 125;
+  --md-scrim: 0 0 0;
+
+  --ks-sidebar: 5 24 42;
+  --ks-sidebar-raised: 10 42 67;
+  --ks-on-sidebar: 239 248 252;
+  --ks-on-sidebar-muted: 156 185 204;
+  --ks-sidebar-active: 16 173 177;
+  --ks-success: 87 213 158;
+  --ks-success-container: 14 81 57;
+  --ks-on-success-container: 190 246 222;
+
+  /* Ders renkleri — koyu tema muted varyantları (V2; text-on-surface açık ile AA). */
+  --md-subject-1: 30 45 70;
+  --md-subject-2: 25 55 52;
+  --md-subject-3: 30 52 30;
+  --md-subject-4: 48 55 28;
+  --md-subject-5: 60 52 25;
+  --md-subject-6: 62 45 25;
+  --md-subject-7: 66 40 30;
+  --md-subject-8: 66 35 35;
+  --md-subject-9: 60 35 52;
+  --md-subject-10: 50 38 66;
+  --md-subject-11: 38 42 66;
+  --md-subject-12: 28 52 62;
+  color-scheme: dark;
+}
+
+/* ---------------------------------------------------------------------------
+   Material Design 3 hareket (motion) token'ları (Tur 311, öneri §1).
+   Tema-bağımsız (açık/koyu fark etmez) → tek :root. Tailwind
+   transitionTimingFunction / transitionDuration bunları okur:
+   `ease-standard`, `ease-emphasized-decelerate`, `duration-short-3`,
+   `duration-medium-2` … M3 referans eğrileri + süre ölçeği.
+   prefers-reduced-motion bloğu (aşağıda) süreleri zaten sıfırlar → korunur.
+--------------------------------------------------------------------------- */
+:root {
+  /* Easing — M3 referans cubic-bezier eğrileri. */
+  --md-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --md-easing-standard-decelerate: cubic-bezier(0, 0, 0, 1);
+  --md-easing-standard-accelerate: cubic-bezier(0.3, 0, 1, 1);
+  /* M3 `emphasized` gerçekte iki-parçalı bir spring yolu; tek cubic-bezier ile
+     basitleştirilince `standard` eğrisine eşittir (öneri §1 notu). Vurgulu
+     giriş/çıkış için decelerate/accelerate varyantları kullanılır. */
+  --md-easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --md-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --md-easing-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+
+  /* Süre (ms) — M3 referans ölçeği. Kısa: state geçişleri; orta: dialog/
+     snackbar/menü giriş-çıkışı; uzun: büyük yüzey geçişleri. */
+  --md-duration-short-1: 50ms;
+  --md-duration-short-2: 100ms;
+  --md-duration-short-3: 150ms;
+  --md-duration-short-4: 200ms;
+  --md-duration-medium-1: 250ms;
+  --md-duration-medium-2: 300ms;
+  --md-duration-medium-3: 350ms;
+  --md-duration-medium-4: 400ms;
+  --md-duration-long-1: 450ms;
+  --md-duration-long-2: 500ms;
+  --md-duration-long-3: 550ms;
+  --md-duration-long-4: 600ms;
+}
+
+/* M3 state layer opaklıkları (Tur 313, öneri §3). Tüm interaktif örtülerin tek
+   doğruluk kaynağı; `.state-layer` bileşen sınıfı bunları okur. ADR değerleri
+   (CLAUDE.md §5 / frontend-m3.md): hover %8, focus %12, pressed %12. */
+:root {
+  --md-state-hover: 0.08;
+  --md-state-focus: 0.12;
+  --md-state-pressed: 0.12;
+}
+
+@layer base {
+  html {
+    min-width: 20rem;
+    background-color: rgb(var(--md-surface));
+  }
+  body {
+    @apply bg-surface text-on-surface antialiased;
+    font-family: theme("fontFamily.sans");
+    min-height: 100vh;
+    letter-spacing: -0.005em;
+  }
+  ::selection {
+    background-color: rgb(var(--md-primary-container));
+    color: rgb(var(--md-on-primary-container));
+  }
+  /* M3 erişilebilirlik: görünür focus halkası (klavye). */
+  :focus-visible {
+    outline: 2px solid rgb(var(--md-primary));
+    outline-offset: 2px;
+  }
+  /* Material Symbols varsayılan hizalama. */
+  .material-symbols-outlined {
+    font-variation-settings:
+      "FILL" 0,
+      "wght" 400,
+      "GRAD" 0,
+      "opsz" 24;
+    /* Varsayılan ikon boyutu 24px (M3 standart; opsz 24 ile optik hizalı — Tur 314).
+       Açık `size` prop'u (Icon.tsx) text-* utility'siyle override eder; ör. buton
+       ikonu size="lg" = 18px (M3 buton ikon ölçüsü). */
+    font-size: 1.5rem;
+    user-select: none;
+    line-height: 1;
+  }
+  /* Native <select> açılır liste (popup option'ları) — tarayıcı popup'ı varsayılan
+     gri/beyaz yerine M3 yüzey token'larını kullansın. Özellikle GECE MODU sorunu:
+     color-scheme dark'ta zaten ayarlı, ama option'lara açık renk verilmediğinden
+     popup app paletiyle uyumsuz görünüyordu. Bu kural TÜM native select'leri (ui/Select
+     + ham <select>'ler) tek seferde, her iki temada da surface-container-high yüzeyine
+     hizalar (M3: menü/popup ≈ elevation 2). Token'lar tema-duyarlı → gece modunda
+     otomatik koyu. NOT: Chromium (Chrome/Edge — okul/Windows ortamı) option renklerini
+     popup'ta uygular; Safari/macOS native popup'ı OS-çizer (zarif fallback — eski davranış). */
+  select option {
+    background-color: rgb(var(--md-surface-container-high));
+    color: rgb(var(--md-on-surface));
+  }
+  select option:disabled {
+    color: rgb(var(--md-on-surface-variant));
+  }
+}
+
+/* M3 state layer (Tur 313, öneri §3) — merkezî örtü deseni. Etkileşimli, `group
+   relative overflow-hidden` (yuvarlak köşeli kaplar parent overflow ile kırpılır;
+   parent'ta overflow yoksa örtüye `rounded-*` eklenir) bir kabın İÇİNE konan
+   dekoratif `<span class="state-layer" aria-hidden="true" />`. Kabın hover /
+   focus-visible / pressed durumunda on-* (currentColor) örtüsü belirir. Süre +
+   easing Faz A motion token'larından; opaklıklar --md-state-* token'larından.
+   currentColor = kabın metin (on-) rengi → M3 doğru state layer (örn. filled
+   buton on-primary, yüzey kart on-surface). Dağınık /8 /12 markup'tan kalktı. */
+@layer components {
+  .ks-page-header {
+    @apply flex flex-wrap items-start justify-between gap-4 border-b border-outline-variant/70 pb-5;
+  }
+
+  .ks-page-title {
+    @apply text-headline-small font-semibold tracking-tight text-on-surface;
+  }
+
+  .ks-page-description {
+    @apply mt-1 max-w-4xl text-body-medium text-on-surface-variant;
+  }
+
+  .ks-panel {
+    @apply rounded-shape-lg border border-outline-variant/70 bg-surface-container-lowest;
+    box-shadow:
+      0 1px 2px rgb(15 42 61 / 0.03),
+      0 8px 24px rgb(15 42 61 / 0.04);
+  }
+
+  .ks-icon-button {
+    @apply relative inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-shape-md text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary;
+  }
+
+  .ks-sidebar-glow {
+    background:
+      radial-gradient(circle at 50% 0%, rgb(var(--ks-sidebar-active) / 0.2), transparent 34%),
+      rgb(var(--ks-sidebar));
+  }
+
+  .ks-card-hover {
+    transition:
+      transform var(--md-duration-short-4) var(--md-easing-standard),
+      border-color var(--md-duration-short-4) var(--md-easing-standard),
+      box-shadow var(--md-duration-short-4) var(--md-easing-standard);
+  }
+
+  .ks-card-hover:hover {
+    transform: translateY(-1px);
+    border-color: rgb(var(--md-primary) / 0.28);
+    box-shadow:
+      0 2px 4px rgb(15 42 61 / 0.05),
+      0 12px 28px rgb(15 42 61 / 0.08);
+  }
+
+  .state-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-color: currentColor;
+    opacity: 0;
+    transition: opacity var(--md-duration-short-3) var(--md-easing-standard);
+  }
+  .group:hover .state-layer {
+    opacity: var(--md-state-hover);
+  }
+  .group:focus-visible .state-layer {
+    opacity: var(--md-state-focus);
+  }
+  .group:active .state-layer {
+    opacity: var(--md-state-pressed);
+  }
+
+  /* M3 "scrollable tabs" (Tur 315, Ek A) — native kaydırma çubuğunu gizle; taşmayı
+     kenar solmasıyla (edge fade) bildir. Çubuk gizleme TÜM eksenlerde. */
+  .scrollbar-none {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* eski Edge */
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none; /* Chromium / Safari */
+  }
+
+  /* Modern/ince kaydırma çubuğu (Tur 573, S5) — tarayıcı-varsayılanı "ilkel"
+     çubuğun yerine M3 token'lı ince çubuk. Tema-agnostik: renk CSS değişkeninden
+     (rgb kanalları) okunduğu için açık/koyu otomatik. `scrollbar-gutter: stable`
+     → çubuk belirip kaybolurken içerik yatay zıplamaz. Ham renk/px yok; yalnız
+     --md-outline / --md-outline-variant token'ları (§7.5 kırmızı çizgi). */
+  .scrollbar-thin {
+    scrollbar-width: thin; /* Firefox */
+    scrollbar-color: rgb(var(--md-outline-variant)) transparent;
+    scrollbar-gutter: stable;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 0.5rem; /* 8px = spacing-2 token değeri */
+    height: 0.5rem;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background-color: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--md-outline-variant));
+    border-radius: 9999px; /* shape-full */
+  }
+  .scrollbar-thin:hover::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--md-outline)); /* etkileşimde belirginleşir */
+  }
+  /* Kenar solması — solda/sağda taşan içerik varsa "devam ediyor" sinyali. Ofset
+     1rem = Tailwind spacing-4 token değeri (ham px değil). Maske luminance (siyah=opak)
+     → renk değil, tema-agnostik. Tabs bileşeni kaydırma konumuna göre sınıfı seçer. */
+  .tab-fade-left {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 1rem);
+    mask-image: linear-gradient(to right, transparent, #000 1rem);
+  }
+  .tab-fade-right {
+    -webkit-mask-image: linear-gradient(to left, transparent, #000 1rem);
+    mask-image: linear-gradient(to left, transparent, #000 1rem);
+  }
+  .tab-fade-both {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 1rem,
+      #000 calc(100% - 1rem),
+      transparent
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 1rem,
+      #000 calc(100% - 1rem),
+      transparent
+    );
+  }
+}
+
+/* M3 ilkesi: hareketi azalt tercihi. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

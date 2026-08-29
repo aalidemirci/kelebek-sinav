@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Kelebek Sınav
+GenericName=Sınav Planlama Programı
+GenericName[tr]=Sınav Planlama Programı
+Comment=Ortak sınavları planlar, kelebek oturma düzeni kurar ve sınav evrakını üretir
+Comment[tr]=Ortak sınavları planlar, kelebek oturma düzeni kurar ve sınav evrakını üretir
+Exec=/usr/bin/kelebek-sinav
+Icon=kelebek-sinav
+Terminal=false
+Categories=Office;Education;
+Keywords=sinav;kelebek;okul;salon;evrak;
+Keywords[tr]=sınav;kelebek;okul;salon;evrak;
+StartupNotify=true
+StartupWMClass=kelebek-sinav

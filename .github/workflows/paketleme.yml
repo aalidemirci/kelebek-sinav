@@ -1,0 +1,224 @@
+# =============================================================================
+# .github/workflows/paketleme.yml — Windows + Linux paket üretimi (tasarım §8)
+# =============================================================================
+# 24.07.2026: uçtan uca YEŞİL koştu (Linux .deb + debian:11/12 kurulum provası +
+# Windows setup.exe/portable.zip; her iki platformda Türkçe PDF duman testi
+# gömülü DejaVu ile geçti). İlk koşular üç gerçek kusur buldu: PS1 BOM'suzluğu,
+# MSYS2 python'unun setup-python'ı gölgelemesi, paket içi fontconfig.
+#
+# Akış:
+#   arayuz          → frontend/dist artefaktı (bir kez derlenir, iki paket işi indirir)
+#   linux           → python:3.12-bullseye kabında onedir + .deb + .tar.gz
+#   linux-kurulum   → temiz debian:11 VE debian:12 kaplarında kurulum provası
+#   windows         → msys2 + ntldd + PyInstaller + Türkçe PDF duman testi + Inno
+#   yayin           → v* etiketinde SHA256SUMS.txt + GitHub Release
+# =============================================================================
+name: Paketleme
+
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+    paths:
+      - "packaging/**"
+      - ".github/workflows/paketleme.yml"
+      - "VERSION"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  arayuz:
+    name: Arayüz derlemesi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Bağımlılıklar
+        working-directory: frontend
+        run: npm ci
+      - name: Derle
+        working-directory: frontend
+        run: npm run build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  linux:
+    name: Linux paketi (.deb + .tar.gz)
+    needs: arayuz
+    runs-on: ubuntu-latest
+    # Tasarım §5.2: glibc 2.31 = Pardus 21 tabanı. Daha yeni bir tabanda
+    # derlenen paket Pardus 21'de açılmaz.
+    container:
+      image: python:3.12-bullseye
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: frontend-dist
+          path: frontend/dist
+      - name: Paketleri üret
+        run: bash packaging/linux/build.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-paketleri
+          path: |
+            dist/cikti/*.deb
+            dist/cikti/*.tar.gz
+            dist/cikti/pdf-duman.pdf
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  linux-kurulum:
+    name: Kurulum provası (debian:${{ matrix.debian }})
+    needs: linux
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 11 = bullseye (Pardus 21 tabanı), 12 = bookworm (Pardus 23 tabanı)
+        debian: ["11", "12"]
+    container:
+      image: debian:${{ matrix.debian }}
+    steps:
+      # Temiz debian imajında git yok; actions/checkout git olmadan da çalışır
+      # ama tarball yoluna düşer. Açıkça kurmak koşuyu öngörülebilir kılar.
+      - name: git
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends git ca-certificates
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: linux-paketleri
+          path: paketler
+      - name: Temiz kurulum + --autotest + PDF duman testi
+        run: bash packaging/linux/kap-ici-test.sh
+        env:
+          # kap-ici-test.sh paketleri /paketler altında arar.
+          PAKET_DIZINI: paketler
+      - name: Yerleşim (paket dizini)
+        if: always()
+        run: ls -la paketler
+
+  # ---------------------------------------------------------------------------
+  windows:
+    name: Windows paketi (setup.exe + portable.zip)
+    needs: arayuz
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # WeasyPrint'in çalışma anında açtığı pango/harfbuzz/fontconfig DLL'leri
+      # MSYS2'den gelir; ntldd bağımlılık kapanışını hesaplar (tasarım §5.1).
+      - uses: msys2/setup-msys2@v2
+        id: msys2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-pango
+            mingw-w64-x86_64-fontconfig
+            mingw-w64-x86_64-ntldd-git
+            mingw-w64-x86_64-binutils
+
+      - name: Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: WebView2 Evergreen kurucusu
+        # Kurulum paketine gömülür; WebView2 yoksa sessizce kurar.
+        # LinkId doğrulanmadı (NOTLAR.md/W5) — indirilemezse adım atlanır,
+        # paket yine üretilir ve program ilk açılışta yönlendirme verir.
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" `
+            -OutFile "packaging\windows\MicrosoftEdgeWebView2Setup.exe"
+
+      - name: Paketleri üret (DLL kapanışı + PyInstaller + duman testi + Inno)
+        shell: pwsh
+        env:
+          # setup-msys2 kurulum yerini çıktı olarak verir; boş dönerse
+          # bilinen iki konum denenir (NOTLAR.md/W1).
+          MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
+        run: |
+          $adaylar = @(
+            "$env:MSYS2_LOCATION\mingw64\bin",
+            "$env:RUNNER_TEMP\msys64\mingw64\bin",
+            "C:\msys64\mingw64\bin"
+          )
+          $mingw = $adaylar | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          if (-not $mingw) { throw "MSYS2 mingw64\bin bulunamadı: $($adaylar -join ', ')" }
+          # mingw SONA eklenir: mingw64\bin icinde python.exe de var ve basa
+          # eklenirse setup-python'in Python'unu golgeler (pip bulunamaz).
+          $env:PATH = "$env:PATH;$mingw"
+          powershell -ExecutionPolicy Bypass -File packaging\windows\build.ps1 -MingwBin $mingw
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-paketleri
+          path: |
+            dist/cikti/*.exe
+            dist/cikti/*.zip
+            dist/cikti/pdf-duman.pdf
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  yayin:
+    name: Yayın (GitHub Release)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux-kurulum, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: linux-paketleri
+          path: yayin
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-paketleri
+          path: yayin
+      - name: SHA256SUMS.txt
+        working-directory: yayin
+        run: |
+          rm -f pdf-duman.pdf
+          for paket in *~*.deb; do
+            [ -e "${paket}" ] || continue
+            mv -- "${paket}" "${paket//~/.}"
+          done
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ON_SURUM=""
+          case "${GITHUB_REF_NAME}" in
+            *-beta.*|*-rc.*|*-dev*) ON_SURUM="--prerelease" ;;
+          esac
+          gh release create "${GITHUB_REF_NAME}" yayin/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            ${ON_SURUM} \
+            --title "Kelebek Sınav ${GITHUB_REF_NAME}" \
+            --notes "Beta sürümüdür. Gerçek okul verisiyle kullanmadan önce şifreli yedek alın. Kurulum adımları: docs/kurulum.md — imzasız paketleri SHA256SUMS.txt ile doğrulayın."

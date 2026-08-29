@@ -1,0 +1,22 @@
+# =============================================================================
+# Kelebek Sınav — Geliştirme / Test bağımlılıkları
+# =============================================================================
+# YALNIZ geliştirme + test için. Pinler OYS'nin requirements-dev.txt'inden
+# AYNEN alındı (görev brifi).
+
+# Çekirdek bağımlılıklar — dev her zaman bunları da içerir.
+-r requirements.txt
+
+# ---------- Test ----------
+pytest==9.0.3
+pytest-django==4.9.0
+pytest-cov==6.0.0
+factory-boy==3.3.1
+
+# ---------- Lint / Biçimlendirme ----------
+ruff==0.8.4
+
+# ---------- Tip Kontrolü ----------
+mypy==1.13.0
+django-stubs[compatible-mypy]==5.1.1
+djangorestframework-stubs==3.15.2

@@ -21,7 +21,7 @@ alınmaz — kullanıcı kalitesini beğenmedi; işlevsel referans dahi OYS'dir.
 | Katman | Teknoloji |
 |---|---|
 | Backend | Django 5.1 + DRF 3.15, **SQLite** (WAL), Python **3.12** |
-| Evrak | WeasyPrint 63.1 + pypdf 5.1.0 + openpyxl 3.1.5, DejaVu Sans gömülü |
+| Evrak | WeasyPrint 68.0 + pypdf 6.14.2 + openpyxl 3.1.5 (DD sabitlemeleri), DejaVu Sans gömülü |
 | Frontend | React 18 + TypeScript + Vite + Tailwind (M3 "Mürekkep" kiti) |
 | Masaüstü | pywebview + waitress (127.0.0.1, rastgele boş port) |
 | Paket | Windows: PyInstaller onedir + Inno Setup · Linux: PyInstaller onedir → `.deb` |
@@ -48,7 +48,7 @@ Geliştirme yalnız Docker'da (host'a Python/Node kurulmaz); kapı zinciri
 
 | # | Karar | Gerekçe |
 |---|---|---|
-| K3 | PDF motoru WeasyPrint 63.1 + pypdf + openpyxl **aynen** | ReportLab OYS'de reddedilmiş; DD şablonunda fontconfig çift-düzeltme + `--pdf-duman` hattı hazır |
+| K3 | PDF motoru WeasyPrint + pypdf + openpyxl, DD sabitlemeleriyle **aynen** (F0 itibarıyla 68.0 / 6.14.2 / 3.1.5) | ReportLab OYS'de reddedilmiş; DD şablonunda fontconfig çift-düzeltme + `--pdf-duman` hattı hazır |
 | K5 | Ders havuzu = pakete gömülü MEB fixture md + ilk açılışta idempotent tembel tohum (`ensure_meb_catalog` + `ensure_course_aliases`) | Çevrimdışı güncelleme yolu = CalVer uygulama sürümü; UI'dan elle ekleme/pasifleştirme; `is_active=False` import'la geri açılmaz |
 | K6 | Python 3.12 sabit | DD Linux build zinciri `python:3.12-bullseye` (glibc 2.31 = Pardus 21) |
 | K7 | CalVer + `VERSION` + `surum.json` (dosya, tablo değil) + updates.py | DD'den birebir; eski exe yeni DB'yi açmaz |

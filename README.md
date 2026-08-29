@@ -15,8 +15,9 @@ telemetri yok. Öğrenci/öğretmen verisi e-Okul raporlarından (xlsx/pano) iç
 aktarılır; ders havuzu MEB ders çizelgesinden okul türü ve kademeye göre
 tohumlanır. Opsiyonel uygulama parolası ile alan şifrelemesi ve şifreli yedek.
 
-**Durum:** Tasarım aşaması tamamlandı, F0 (iskelet) başlamadı.
-Plan: [docs/tasarim/2026-08-29-genel-tasarim.md](docs/tasarim/2026-08-29-genel-tasarim.md)
+**Durum:** F0 (iskelet) tamamlandı — masaüstü kabuk, paketleme hattı, M3
+arayüz kiti ve kalite kapıları (gates.sh) yeşil; iş modülleri F1'den itibaren
+geliyor. Plan: [docs/tasarim/2026-08-29-genel-tasarim.md](docs/tasarim/2026-08-29-genel-tasarim.md)
 
 ## Köken
 

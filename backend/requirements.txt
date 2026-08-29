@@ -1,0 +1,48 @@
+# =============================================================================
+# Kelebek Sınav — Backend Python bağımlılıkları
+# Python 3.12+ / Django 5.x
+# =============================================================================
+# Pinler OYS'nin (Okul Yönetim Sistemi) backend/requirements.txt dosyasından
+# türetildi (görev brifi) — ortak parçalar (Django, DRF, WeasyPrint, cryptography,
+# argon2-cffi, openpyxl, Pillow, pypdf) AYNI sürümde tutuldu. Tek kullanıcılı
+# masaüstü uygulama olduğundan OYS'nin sunucu/ağ-merkezli bağımlılıkları (Postgres,
+# Redis, Celery, Sentry, Google OAuth, SimpleJWT, django-axes/cors/csp, structlog,
+# django-environ, python-magic) BİLİNÇLİ OLARAK alınmadı.
+
+# ---------- Çekirdek ----------
+Django==5.1.15
+djangorestframework==3.15.2
+
+# ---------- Güvenlik ----------
+argon2-cffi==23.1.0            # yerel kullanıcı şifre hashing (Argon2id)
+cryptography==48.0.1           # Fernet alan-seviyesi şifreleme (varsa hassas alanlar)
+
+# ---------- Belge / Tablo Üretimi ----------
+openpyxl==3.1.5                # Excel içe/dışa aktarma
+
+# ---------- Görüntü İşleme ----------
+Pillow==12.3.0                 # ek/fotoğraf normalize (thumbnail, EXIF)
+
+# ---------- Dosya Doğrulama ----------
+# Soru belgesi PDF eklerinin gerçek MIME türünü uzantıdan bağımsız doğrular. python-magic
+# YERİNE: saf-Python, libmagic1 sistem paketi gerektirmez (Docker imajı sade kalır).
+filetype==1.2.0
+
+# ---------- PDF Üretimi ----------
+# WeasyPrint 63 cairo/gdk-pixbuf KULLANMAZ (53+ saf-Python render motoru) — Docker
+# imajındaki sistem paketleri buna göre minimal tutuldu (docker/backend.Dockerfile).
+weasyprint==68.0
+
+# ---------- PDF Okuma / Bölme ----------
+pypdf==6.14.2
+
+# ---------- Masaüstü Uygulama Altyapısı ----------
+# platformdirs: işletim sistemine uygun veri/config dizini (masaüstü paket veri
+# dizini — CLAUDE.md/brif KS_DATA_DIR ile eşleşir).
+platformdirs==4.11.0
+# whitenoise: statik dosyaları ayrı bir web sunucusu olmadan servis eder (masaüstü
+# uygulamada nginx yok).
+whitenoise==6.12.0
+# waitress: üretim WSGI sunucusu — gunicorn'un yerini alır (saf-Python, Windows
+# masaüstü paketlemesiyle uyumlu; gunicorn Unix-only fork modeli kullanır).
+waitress==3.0.2

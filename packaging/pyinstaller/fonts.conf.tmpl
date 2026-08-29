@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<!--
+  DOCTYPE satırı (`<!DOCTYPE fontconfig SYSTEM "fonts.dtd">`) BİLİNÇLİ OLARAK
+  YOK: paketle gelen fontconfig Windows'ta `fonts.dtd`'yi çözemez ve DTD
+  çözülemeyince libfontconfig yapılandırmayı SESSİZCE reddedip varsayılana
+  (sistem font dizini) döner. İlk CI koşusunda belirti tam buydu — PDF
+  üretiliyor ama Verdana ile diziliyordu. DOCTYPE zorunlu değildir.
+-->
+<!--
+  Kelebek Sınav — Windows fontconfig yapılandırma ŞABLONU.
+
+  Yer tutucular çalışma anında `packaging/pyinstaller/rthook_ks.py` tarafından
+  doldurulur ve sonuç YAZILABİLİR bir dizine yazılır:
+    @FONT_DIR@   → paketin içindeki gömülü font dizini (salt-okunur olabilir)
+    @CACHE_DIR@  → kullanıcı önbellek dizini (fontconfig buraya yazar)
+
+  Tasarım §5.1 "fontconfig tuzağı": Windows'ta SİSTEM FONTLARINA GÜVENİLMEZ.
+  Okul bilgisayarında DejaVu kurulu olmayabilir, kurulu olan sürüm Türkçe
+  kesmelerde farklı davranabilir. Bu yüzden burada YALNIZ paketle gelen DejaVu
+  dizini taranır; `WINDOWSFONTDIR` bilinçli olarak EKLENMEZ.
+-->
+<fontconfig>
+
+  <!-- Taranacak TEK font dizini: paketin içindeki DejaVu kesimleri. -->
+  <dir>@FONT_DIR@</dir>
+
+  <!-- Önbellek kurulum dizinine değil, kullanıcı veri dizinine yazılır. -->
+  <cachedir>@CACHE_DIR@</cachedir>
+
+  <!-- Genel aileler gömülü DejaVu kesimlerine bağlanır. -->
+  <match target="pattern">
+    <test qual="any" name="family"><string>sans-serif</string></test>
+    <edit name="family" mode="prepend" binding="same"><string>DejaVu Sans</string></edit>
+  </match>
+  <match target="pattern">
+    <test qual="any" name="family"><string>sans</string></test>
+    <edit name="family" mode="prepend" binding="same"><string>DejaVu Sans</string></edit>
+  </match>
+  <match target="pattern">
+    <test qual="any" name="family"><string>serif</string></test>
+    <edit name="family" mode="prepend" binding="same"><string>DejaVu Serif</string></edit>
+  </match>
+  <match target="pattern">
+    <test qual="any" name="family"><string>monospace</string></test>
+    <edit name="family" mode="prepend" binding="same"><string>DejaVu Sans Mono</string></edit>
+  </match>
+
+  <!-- Eşleşmeyen her istek de DejaVu Sans'a düşer (boş sayfa yerine metin). -->
+  <match target="pattern">
+    <edit name="family" mode="append_last"><string>DejaVu Sans</string></edit>
+  </match>
+
+</fontconfig>

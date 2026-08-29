@@ -1,0 +1,15 @@
+dist
+build
+node_modules
+coverage
+.vite
+*.min.js
+*.min.css
+
+# Tur 48 — openapi-typescript otomatik üretimi
+src/lib/api-types.ts
+openapi/schema.yaml
+
+# Tur 48 — Playwright çıktıları
+playwright-report
+test-results

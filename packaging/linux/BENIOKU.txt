@@ -1,0 +1,53 @@
+Kelebek Sınav — Taşınabilir Linux/Pardus Sürümü
+==================================================
+
+Bu arşiv, yönetici (root) yetkisi gerektirmeden kurulabilen sürümdür.
+Yönetici yetkiniz varsa .deb paketini tercih edin (menü kaydı ve bağımlılık
+kurulumu otomatik yapılır).
+
+KURULUM
+-------
+    ./kur.sh
+
+Program ev dizininize kurulur:
+    ~/.local/opt/kelebek-sinav     program dosyaları
+    ~/.local/bin/kelebek-sinav     uçbirim kısayolu
+
+ÇALIŞTIRMA
+----------
+Menüden "Kelebek Sınav" ile ya da uçbirimden:
+    kelebek-sinav
+
+KALDIRMA
+--------
+    ./kaldir.sh
+Verileriniz silinmez.
+
+VERİLERİNİZ NEREDE?
+-------------------
+    ~/.local/share/kelebek-sinav/data      veritabanı
+    ~/.local/share/kelebek-sinav/backups   günlük otomatik yedekler
+    ~/.local/state/kelebek-sinav/logs      günlükler
+
+Yedekler her açılışta alınır ve 14 gün saklanır. Bilgisayar arızasına karşı
+bu klasörü düzenli olarak bir USB belleğe kopyalayın.
+
+GEREKLİ SİSTEM PAKETLERİ
+------------------------
+Taşınabilir sürüm, dağıtımın kendi yazı tipi ve metin dizme kütüphanelerini
+kullanır. Eksikse PDF üretimi çalışmaz. Yönetici yetkisiyle:
+
+    sudo apt install libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
+                     libfontconfig1 libglib2.0-0 fonts-dejavu-core
+
+Pardus 21 ve Pardus 23'te bu paketler kurulu gelir.
+
+PDF ÜRETİMİ ÇALIŞIYOR MU?
+-------------------------
+    kelebek-sinav --pdf-duman /tmp/deneme.pdf
+
+Komut 0 ile biterse PDF motoru ve Türkçe karakterler sorunsuzdur.
+
+SORUN GİDERME
+-------------
+Ayrıntılı kılavuz: docs/kurulum.md (çıkış kodları tablosu dahil).

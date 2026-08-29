@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-ssr
+*.local
+.vite
+
+# Playwright çıktıları (Tur 48)
+playwright-report/
+test-results/
+playwright/.cache/
+# Sertifika doğrulama
+blob-report/

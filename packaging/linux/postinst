@@ -1,0 +1,21 @@
+#!/bin/sh
+# Kelebek Sınav - kurulum sonrasi (masaustu menusu + ikon onbellegi).
+# NOT: Bu dosya /bin/sh (dash) ile calisir ve BILINCLI OLARAK ASCII'dir;
+# dash'in heredoc/utf-8 davranisi dagitimdan dagitima degistigi icin
+# bakim betiklerinde Turkce karakter kullanilmaz (bkz. packaging/README.md).
+set -e
+
+case "$1" in
+    configure)
+        if command -v update-desktop-database >/dev/null 2>&1; then
+            update-desktop-database -q /usr/share/applications || true
+        fi
+        if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+            gtk-update-icon-cache -q -f /usr/share/icons/hicolor || true
+        fi
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+esac
+
+exit 0

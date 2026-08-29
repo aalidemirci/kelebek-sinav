@@ -1,0 +1,31 @@
+# =============================================================================
+# docker-compose.yml — Kelebek Sınav geliştirme ortamı
+# =============================================================================
+# `backend`/`frontend` servisleri yalnız test/geliştirme amaçlı; port açılmaz
+# (masaüstü uygulama ağ servisi sunmaz — geliştirmede komutlar
+# `docker compose run --rm backend|frontend ...` ile çalıştırılır).
+# =============================================================================
+
+name: kelebek-sinav
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../docker/backend.Dockerfile
+    volumes:
+      - ./backend:/app
+      # Masaüstü kabuğu (desktop/) backend paketlerini import eder; testleri depo
+      # kökünden koşulur (`-w /repo`).
+      - .:/repo
+    environment:
+      # DEBUG varsayılanı güvenli tarafta (False); geliştirme burada açar.
+      KS_DEBUG: "1"
+    command: sleep infinity
+
+  frontend:
+    image: node:20-slim
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    command: sleep infinity

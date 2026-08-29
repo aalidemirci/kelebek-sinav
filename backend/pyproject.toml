@@ -1,0 +1,64 @@
+# =============================================================================
+# backend/pyproject.toml — araç yapılandırması (ruff, mypy, pytest)
+# =============================================================================
+# OYS'nin (Okul Yönetim Sistemi) backend/pyproject.toml dosyası referans alındı;
+# aynı ruff kuralları/satır uzunluğu + mypy strict + django-stubs. Kapsam kapısı
+# `--cov=apps --cov=shared` (config hariç — görev brifi; OYS `--cov=config` da
+# ekliyordu, burada config yalnız statik ayar/URL/wsgi, iş mantığı barındırmıyor).
+# =============================================================================
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["."]
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+# E/F: pyflakes+pycodestyle, I: isort, UP: pyupgrade, B: bugbear,
+# DJ: flake8-django, S: bandit (güvenlik), C4: comprehensions
+select = ["E", "F", "I", "UP", "B", "DJ", "S", "C4"]
+ignore = [
+    "S101",   # assert kullanımı (testlerde gerekli)
+    "E501",   # satır uzunluğu (formatter halleder)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"*/tests/*" = ["S105", "S106"]   # testlerde sabit parola string'leri serbest
+
+[tool.ruff.lint.isort]
+known-first-party = ["apps", "config", "shared"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+exclude = ['migrations/']
+ignore_missing_imports = true
+warn_unused_ignores = true
+
+[tool.django-stubs]
+django_settings_module = "config.settings"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["test_*.py", "*_test.py"]
+addopts = "--reuse-db --strict-markers -ra --cov=apps --cov=shared --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=75"
+testpaths = ["apps", "shared"]
+
+[tool.coverage.run]
+branch = true
+omit = [
+    "*/migrations/*",
+    "*/tests/*",
+    "manage.py",
+    "config/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if typing.TYPE_CHECKING:",
+]
+show_missing = true

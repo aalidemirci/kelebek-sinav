@@ -49,7 +49,8 @@
 - **SQLite:** `levels__contains` yok (Python süzme); yedek daima
   `Connection.backup()` (dosya kopyalama WAL'de yasak).
 - **Kimlik sabitleri:** `KS_*` env, `ks_oturum`, `X-KS-Token`, `.ksbak`,
-  yeni Inno AppId GUID — `DD_*`/`.ddbak` kalıntısı sıfır tolerans.
+  yeni Inno AppId GUID — şablondan kalan `DD_`/`ddbak`/disiplin kalıntısı
+  sıfır tolerans.
 
 ## 3. Değişmez sözleşmeler (motor)
 

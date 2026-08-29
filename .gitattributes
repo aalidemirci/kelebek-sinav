@@ -1,0 +1,13 @@
+# Windows ve Linux paketleme aynı depodan çalışır. Özellikle *.sh ve Debian
+# bakım betikleri CRLF ile çalışmayabileceğinden metin dosyalarını depoda LF tut.
+* text=auto eol=lf
+
+# Windows kabuğunun doğrudan çalıştırdığı klasik betikler CRLF kullanabilir.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Git'in metin sezgisine bırakılmaması gereken ikili varlıklar.
+*.ico binary
+*.png binary
+*.ttf binary
+*.woff2 binary

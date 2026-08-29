@@ -1,0 +1,32 @@
+# =============================================================================
+# packaging/requirements-paketleme.txt — YALNIZ paket üretimi için bağımlılıklar
+# =============================================================================
+# Bu dosya `backend/requirements.txt`'e EK olarak kurulur; geliştirme/test
+# koşusunda kurulmaz (masaüstü kabuğunun testleri pywebview olmadan yeşildir).
+#
+# Kurulum:
+#   pip install -r backend/requirements.txt -r packaging/requirements-paketleme.txt
+#
+# Sürüm pinleri bilinçlidir: paket üretimi tekrarlanabilir olmalı, "en son sürüm"
+# sessizce davranış değiştirmemeli (tasarım §5, §8).
+# =============================================================================
+
+# ---------- Paketleyici ----------
+pyinstaller==6.11.1
+
+# ---------- Pencere motoru sarmalayıcısı ----------
+# Windows'ta WebView2 (EdgeChromium), Linux'ta Qt WebEngine kullanır.
+pywebview==5.3.2
+
+# ---------- Windows: WebView2 köprüsü ----------
+# pywebview'ın edgechromium arka ucu .NET birlikte çalışabilirliği üzerinden
+# gider; pythonnet olmadan Windows'ta pencere AÇILMAZ (MSHTML düşüşü kodla
+# engelli olduğundan program hata verip durur).
+pythonnet==3.0.5 ; sys_platform == "win32"
+
+# ---------- Linux/Pardus: Qt WebEngine ----------
+# Tasarım §5.2: WebKitGTK/PyGObject yolu ELENDİ (typelib paketleme + Pardus
+# 21/23 ABI oynaklığı). PyQt5 tekerlekleri manylinux2014 (glibc 2.17) olduğu
+# için bullseye'da (glibc 2.31) üretilen paket Pardus 21'de de çalışır.
+PyQt5==5.15.11 ; sys_platform == "linux"
+PyQtWebEngine==5.15.7 ; sys_platform == "linux"
