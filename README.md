@@ -15,13 +15,14 @@ telemetri yok. Öğrenci/öğretmen verisi e-Okul raporlarından (xlsx/pano) iç
 aktarılır; ders havuzu MEB ders çizelgesinden okul türü ve kademeye göre
 tohumlanır. Opsiyonel uygulama parolası ile alan şifrelemesi ve şifreli yedek.
 
-**Durum:** F5 (kitapçık) tamamlandı — ders başına soru PDF'i yükleme (A4
-dikey ±6pt doğrulaması, 20 MB sınırı, seviye/ortak-kitapçık grup anahtarı
-kuralları), 4 cm üst marjlı Word soru şablonu ve kişiselleştirilmiş kitapçık
-üretimi (R10): salon başına birleşik PDF + tümü-ZIP, bant üst 4 cm sabit,
-soru sayfaları 1:1 (ölçekleme yok), üretim senkron (90×4 sayfa dakikanın çok
-altında). Evrak seti (F4: R1-R5 + R7-R9 + boş plan + ZIP) ve arşivden yeniden
-basım açık. Sırada F6: sınav takvimi (statutory_window + günlük limit).
+**Durum:** F6 (takvim) tamamlandı — mevzuat pencereli sınav takvimleri
+(`statutory_window`: ayın son Pazartesisi + 11 gün; tur 3 dönemin son iki
+haftası elle), ders havuzu + tıkla-yerleştir ızgarası, öğrenci-bazlı günlük
+sınav limiti (3. sınav uyarı, ≥4 sert hata — konservatif düşüşle), onay akışı
+(taslak → sunuldu → onaylı; damgalar korunur), onaylı slottan tek tıkla
+kelebek oturum üretimi, süreç takip matrisi ve A4 yatay resmî takvim PDF'i
+(TASLAK filigranlı). Önceki fazlar: kitapçık (F5), evrak seti (F4), oturum
+akışı (F3), salonlar + motor (F2). Sırada F7: gözetmen görevlendirme.
 Plan: [docs/tasarim/2026-08-29-genel-tasarim.md](docs/tasarim/2026-08-29-genel-tasarim.md)
 
 ## Köken

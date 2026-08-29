@@ -1,10 +1,10 @@
-"""sinav modülü modelleri — salon (F2) + oturum akışı (F3) + kitapçık (F5).
+"""sinav modelleri — salon (F2) + oturum (F3) + kitapçık (F5) + takvim (F6).
 
 OYS `sinav_islemleri/models.py`'den UYARLA (tasarım §11): `created_by` ve User
 FK'ları düşer (onay/beyan damgaları ad-snapshot + zaman olarak kalır — B12),
 `linked_section` → okul.ClassSection, Course → dersler.Course, Semester →
 okul.SchoolTerm; SeatAssignment/ExamAttendanceRecord ad snapshot'ları
-EncryptedCharField (U3). Takvim F6'da, gözetmen modelleri F7'de gelir.
+EncryptedCharField (U3). Gözetmen modelleri F7'de gelir.
 """
 
 from __future__ import annotations
@@ -659,3 +659,241 @@ class BookletRun(BaseModel):
 
     def __str__(self) -> str:
         return f"Kitapçık koşusu #{self.pk} — oturum {self.session_id} ({self.status})"
+
+
+# ===========================================================================
+# F6 — sınav takvimi + süreç takibi (OYS FAZ T / ADR-0044'ten UYARLA)
+# ===========================================================================
+
+
+class ExamCalendarStatus(models.TextChoices):
+    DRAFT = "DRAFT", "Taslak"
+    SUBMITTED = "SUBMITTED", "Onaya Sunuldu"
+    APPROVED = "APPROVED", "Onaylandı"
+
+
+class ExamKind(models.TextChoices):
+    """Sınav türü — yazılı / uygulama (Excel '[UYGULAMA SINAVI]' ayrı slot)."""
+
+    WRITTEN = "WRITTEN", "Yazılı"
+    PRACTICE = "PRACTICE", "Uygulama"
+
+
+class ExamTrackMarkStatus(models.TextChoices):
+    """Süreç takip işareti — 'yapılmadı' = kayıt yokluğu (üçüncü durum tutulmaz)."""
+
+    DONE = "DONE", "Yapıldı"
+    NOT_APPLICABLE = "NOT_APPLICABLE", "Kapsam dışı"
+
+
+class ExamCalendar(BaseModel):
+    """Ortak sınav takvimi — dönem+tur bazlı (OYS ADR-0044'ten UYARLA).
+
+    DRAFT → SUBMITTED → APPROVED (reopen ile geri alınır); havuz/yerleştirme
+    yalnız DRAFT'ta değişir. KS uyarlaması (B12): iki-kişilik "hazırlayan
+    onaylayamaz" akışı tek kullanıcıya indi — SUBMITTED tek tıkla geçilir;
+    APPROVED kilidi ve onay damgaları (ad-snapshot + zaman) KORUNUR (resmî
+    evrak değeri — risk #10). `school_year` FK'sı düştü: dönem (SchoolTerm)
+    yılı zaten taşır, teklik (dönem, tur) üstünden. `description_text` create
+    sırasında varsayılan mevzuat-dayanaklı metinden kopyalanır (şablon
+    güncellenirse eski takvimler etkilenmez).
+    """
+
+    semester = models.ForeignKey(
+        "okul.SchoolTerm",
+        on_delete=models.PROTECT,
+        related_name="exam_calendars",
+        verbose_name="dönem",
+    )
+    round = models.PositiveSmallIntegerField(
+        "sınav turu",
+        help_text="Dönem içi kaçıncı ortak sınav (1-3; 3 = haftalık ≥6 saatlik derste).",
+    )
+    name = models.CharField(
+        "takvim adı",
+        max_length=120,
+        help_text="Otomatik '1. Dönem 1. Sınav Takvimi'; düzenlenebilir.",
+    )
+    start_date = models.DateField("başlangıç tarihi")
+    end_date = models.DateField("bitiş tarihi")
+    status = models.CharField(
+        "durum",
+        max_length=12,
+        choices=ExamCalendarStatus.choices,
+        default=ExamCalendarStatus.DRAFT,
+        db_index=True,
+    )
+    description_text = models.TextField(
+        "açıklama metni",
+        blank=True,
+        default="",
+        help_text="Takvim ile imza bloğu arasındaki açıklamalar (mazeret, 'G', vb.).",
+    )
+    submitted_at = models.DateTimeField("onaya sunulma zamanı", null=True, blank=True)
+    approved_by_name = models.CharField(
+        "onaylayan (ad-snapshot)", max_length=128, blank=True, default=""
+    )
+    approved_at = models.DateTimeField("onay zamanı", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "sınav takvimi"
+        verbose_name_plural = "sınav takvimleri"
+        ordering = ["-start_date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["semester", "round"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_examcalendar_sem_round_alive",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(start_date__lte=models.F("end_date")),
+                name="ck_examcalendar_date_range",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.get_status_display()})"
+
+    @property
+    def is_draft(self) -> bool:
+        return self.status == ExamCalendarStatus.DRAFT
+
+
+class ExamCalendarEntry(BaseModel):
+    """Takvim havuzu + yerleştirme birimi — (ders, seviye, tür) (ADR-0044).
+
+    Havuzdayken `placed_date`/`period_no` boştur; ızgaraya yerleştirilince
+    ikisi de dolar (CheckConstraint çifti). `is_butterfly=False` "Kelebek Değil"
+    (kendi sınıfında/ders saatinde). `session` bağı slot→oturum üretiminde
+    yazılır (SET_NULL — oturum silinirse slot yeniden üretilebilir). Katılımcı
+    listesi anlık türetilir; burada KİŞİSEL VERİ YOK.
+    """
+
+    calendar = models.ForeignKey(
+        ExamCalendar,
+        on_delete=models.CASCADE,
+        related_name="entries",
+        verbose_name="takvim",
+    )
+    course = models.ForeignKey(
+        "dersler.Course",
+        on_delete=models.PROTECT,
+        related_name="exam_calendar_entries",
+        verbose_name="ders",
+    )
+    level = models.PositiveSmallIntegerField("seviye", help_text="Sınıf düzeyi (0=Hazırlık, 9-12).")
+    exam_kind = models.CharField(
+        "sınav türü", max_length=10, choices=ExamKind.choices, default=ExamKind.WRITTEN
+    )
+    is_butterfly = models.BooleanField(
+        "kelebek", default=True, help_text="False = kendi sınıfında (Kelebek Değil)."
+    )
+    placed_date = models.DateField("yerleştirme tarihi", null=True, blank=True, db_index=True)
+    period_no = models.PositiveSmallIntegerField(
+        "ders saati", null=True, blank=True, help_text="Ders saati listesindeki saat no (B6)."
+    )
+    session = models.ForeignKey(
+        ExamSession,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="calendar_entries",
+        verbose_name="üretilen oturum",
+    )
+    note = models.CharField("not", max_length=200, blank=True, default="")
+
+    class Meta:
+        verbose_name = "sınav takvimi girdisi"
+        verbose_name_plural = "sınav takvimi girdileri"
+        indexes = [
+            models.Index(fields=["calendar", "placed_date"], name="sinav_calentry_cal_date_idx")
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["calendar", "course", "level", "exam_kind"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_examcalentry_alive",
+            ),
+            # Yerleştirme çifti: tarih ve ders saati ya birlikte boş ya birlikte dolu.
+            models.CheckConstraint(
+                condition=(
+                    models.Q(placed_date__isnull=True, period_no__isnull=True)
+                    | models.Q(placed_date__isnull=False, period_no__isnull=False)
+                ),
+                name="ck_examcalentry_slot_pair",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Takvim #{self.calendar_id} — ders {self.course_id} / {self.level}"
+
+
+class ExamTrackItem(BaseModel):
+    """Sınav süreç takip kalemi kataloğu — GLOBAL, düzenlenebilir.
+
+    Excel 'Sınav Takip' sürecinin sistem karşılığı (KSD ilanı → soru+CA teslimi
+    → basım → paketleme → uygulama → 'G' girişi → puan girişi → analiz raporu).
+    Kişisel veri yok; silme yerine is_active=False (marks PROTECT ile bağlı).
+    """
+
+    name = models.CharField("kalem adı", max_length=160)
+    order = models.PositiveSmallIntegerField("sıra", default=0)
+    is_active = models.BooleanField("aktif", default=True)
+    description = models.CharField("açıklama", max_length=200, blank=True, default="")
+
+    class Meta:
+        verbose_name = "sınav süreç kalemi"
+        verbose_name_plural = "sınav süreç kalemleri"
+        ordering = ["order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_examtrackitem_name_alive",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class ExamTrackMark(BaseModel):
+    """Takvim girdisi × süreç kalemi işareti (ADR-0044).
+
+    'Yapılmadı' = kayıt yokluğu; işaret kaldırma soft-delete. `marked_by_name`
+    ad-snapshot'tır (KS'de User yok — B17); varsayılanı yapılandırmadaki müdür
+    adından servis doldurur.
+    """
+
+    entry = models.ForeignKey(
+        ExamCalendarEntry,
+        on_delete=models.CASCADE,
+        related_name="track_marks",
+        verbose_name="takvim girdisi",
+    )
+    item = models.ForeignKey(
+        ExamTrackItem,
+        on_delete=models.PROTECT,
+        related_name="marks",
+        verbose_name="kalem",
+    )
+    status = models.CharField("durum", max_length=16, choices=ExamTrackMarkStatus.choices)
+    marked_by_name = models.CharField(
+        "işaretleyen (ad-snapshot)", max_length=128, blank=True, default=""
+    )
+    marked_at = models.DateTimeField("işaret zamanı")
+    note = models.CharField("not", max_length=200, blank=True, default="")
+
+    class Meta:
+        verbose_name = "sınav süreç işareti"
+        verbose_name_plural = "sınav süreç işaretleri"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["entry", "item"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_examtrackmark_alive",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Girdi #{self.entry_id} × {self.item_id}: {self.status}"

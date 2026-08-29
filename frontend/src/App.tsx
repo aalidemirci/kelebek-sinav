@@ -18,6 +18,8 @@ import OturumDetayPage from "./modules/oturumlar/OturumDetayPage";
 import OturumlarPage from "./modules/oturumlar/OturumlarPage";
 import PanelPage from "./modules/panel/PanelPage";
 import SalonlarPage from "./modules/salonlar/SalonlarPage";
+import TakvimDetayPage from "./modules/takvimler/TakvimDetayPage";
+import TakvimlerPage from "./modules/takvimler/TakvimlerPage";
 
 export default function App() {
   return (
@@ -37,6 +39,9 @@ export default function App() {
             {/* Sınav oturumları: sihirbaz + dağıtım + yoklama (F3). */}
             <Route path="/oturumlar" element={<OturumlarPage />} />
             <Route path="/oturumlar/:id" element={<OturumDetayPage />} />
+            {/* Sınav takvimi: pencereler + ızgara + süreç takip + PDF (F6). */}
+            <Route path="/takvimler" element={<TakvimlerPage />} />
+            <Route path="/takvimler/:id" element={<TakvimDetayPage />} />
             {/* Ders yılı, şubeler, okul künyesi, güvenlik. */}
             <Route path="/ayarlar" element={<AyarlarPage />} />
             <Route path="/hakkinda" element={<HakkindaPage />} />

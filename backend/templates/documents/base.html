@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  {% comment %}OYS ORTAK modern resmî evrak şablonu (Tur 98-99). Disiplin +
+  rehberlik PDF'leri bunu extends eder ({% templatetag openblock %} extends
+  "documents/base.html" {% templatetag closeblock %}). M3 token'larından bağımsız
+  baskı estetiği (.claude/rules/frontend-tasarim.md notu). Tur 239 (talep 4 faz 2):
+  renkler tek doğruluk kaynağına bağlandı — templates/print/_design.css
+  (docs/rapor-tasarim-standardi.md); GÖRSEL DİL DEĞİŞMEDİ (token değerleri
+  zaten bu şablondan türetilmişti).
+  ÖNEMLİ: text-transform:uppercase YOK — WeasyPrint Türkçe küçük "i"yi locale-
+  duyarsız noktasız "I"ya çevirir; büyük harfli başlıklar şablonda DOĞRUDAN büyük
+  harfle yazılır. Yazı tipi DejaVu Sans (Türkçe-tam). Antet shared.letterhead'den.{% endcomment %}
+  <style>
+    {% include "print/_design.css" %}
+    @page {
+      size: A4 portrait;
+      margin: 1.4cm 1.8cm 1.5cm 1.8cm;
+      /* Talep 1g: footer'dan form kodu + "OYS ile üretilmiştir" kaldırıldı; yalnız
+         sayfa numarası kalır ve ORTALANIR (@bottom-center). */
+      @bottom-center {
+        content: "Sayfa " counter(page) " / " counter(pages);
+        font-family: "DejaVu Sans"; font-size: 7.5pt; color: #64748b;
+      }
+    }
+    body { font-family: "DejaVu Sans", sans-serif; font-size: 10pt; color: var(--pr-text);
+           line-height: 1.35; margin: 0; }
+
+    /* Antet */
+    .letterhead { text-align: center; }
+    .letterhead .tc { font-weight: bold; font-size: 10pt; letter-spacing: 3pt; }
+    .letterhead .authority { font-weight: bold; font-size: 10.5pt; margin-top: 1pt; }
+    .letterhead .school { font-weight: bold; font-size: 12.5pt; color: var(--pr-ink); margin-top: 1pt; }
+    .letterhead .unit { font-size: 9pt; color: var(--pr-secondary); margin-top: 1pt; }
+    .rule { height: 2pt; background: var(--pr-ink); margin: 6pt 0 2pt; }
+    .rule-thin { height: 0.6pt; background: var(--pr-faint); }
+
+    /* Başlık (DOĞRUDAN büyük harf — text-transform yok) */
+    .doc-title { text-align: center; font-size: 12pt; font-weight: bold; letter-spacing: 0.5pt;
+                 color: var(--pr-ink); margin: 12pt 0 2pt; }
+    .doc-subtitle { text-align: center; font-size: 8.5pt; color: var(--pr-muted); margin-bottom: 8pt; }
+
+    /* Künye ızgarası (etiket / değer) */
+    .info { width: 100%; border-collapse: collapse; margin: 8pt 0 2pt;
+            border: 0.75pt solid var(--pr-line-soft); break-inside: avoid; page-break-inside: avoid; }
+    .info td { padding: 5pt 9pt; font-size: 9.5pt; border-bottom: 0.75pt solid var(--pr-line-soft);
+               vertical-align: top; }
+    .info tr:last-child td { border-bottom: none; }
+    .info td.label { width: 38%; color: var(--pr-label); font-weight: bold; background: var(--pr-fill);
+                     border-right: 0.75pt solid var(--pr-line-soft); }
+    .info td.narr { white-space: pre-wrap; }
+    .info.flush { border-top: none; margin-top: 0; }
+    /* Tur 218 (talep 4): uzun anlatılı künye tabloları (EK-1) SATIR SINIRINDAN
+       bölünebilir — tablo bütün hâlde sonraki sayfaya itilip taşma/boşluk yaratmaz;
+       tek satır yine bütün kalır. */
+    .info.flow { break-inside: auto; page-break-inside: auto; }
+    .info.flow tr { break-inside: avoid; page-break-inside: avoid; }
+
+    /* Anlatı bölümü (başlık + kutu birlikte kalır) */
+    .section { margin-top: 9pt; break-inside: avoid; page-break-inside: avoid; }
+    /* Talep 1j: uzun serbest-metin kutuları (ifade/görüşme özeti vb.) için bölüm
+       içeriden BÖLÜNEBİLİR — taşan metin alttan kesilmeden sonraki sayfada sürer
+       (tüm kutu yeni sayfaya itilmez). Başlık tek başına sayfa sonunda kalmasın. */
+    .section.flow { break-inside: auto; page-break-inside: auto; }
+    .section.flow .section-title { break-after: avoid; page-break-after: avoid; }
+    .section-title { font-size: 9.5pt; font-weight: bold; color: var(--pr-ink); letter-spacing: 0.3pt;
+                     padding: 0 0 2pt 2pt; border-bottom: 1.5pt solid var(--pr-ink); }
+    .field-box { border: 0.75pt solid var(--pr-line); border-top: none; padding: 7pt 9pt;
+                 min-height: 0.95cm; font-size: 10pt; white-space: pre-wrap; background: #ffffff; }
+    {% comment %}Tur 749: elle doldurulan alanlar 1,7 cm'di ve kullanıcı "öğrencinin veya
+    öğretmenin elle dolduracağı alan küçük" dedi. `tall` büyütüldü; serbest yazı
+    bölümleri için `taller` eklendi. Değerler TAHMİN DEĞİL — test_discipline_pdf.py
+    içindeki sayfa düzeni pinleri (pypdf ile geri okuma) bu değerleri sınırlıyor.{% endcomment %}
+    .field-box.tall { min-height: 3.2cm; }
+    .field-box.taller { min-height: 4.6cm; }
+
+    {% comment %}Tur 749: bir bloğu kendinden SONRAKİNE bağlar (imza öksüz kalmasın).
+    `.signature` zaten `break-inside: avoid` taşıyor — bölünmüyor ama kendinden
+    öncekine de bağlı değildi; Form-8'de imza tek başına 2. sayfaya düşüyordu
+    (ölçüm: 66 karakterlik sayfa). Bu sınıf bölüm+imzayı birlikte taşır.{% endcomment %}
+    .keep-with-next { break-after: avoid; page-break-after: avoid; }
+
+    /* Kriter ızgarası (onur belgesi md. 161 — modern 2 sütun, WeasyPrint multicol) */
+    .criteria { columns: 2; column-gap: 14pt; margin-top: 5pt; }
+    .criteria .item { break-inside: avoid; font-size: 8.3pt; line-height: 1.3;
+                      padding: 4pt 8pt; margin: 0 0 4pt; background: var(--pr-fill);
+                      border-left: 2.5pt solid var(--pr-ink); }
+
+    /* Veri tablosu (dizi pusulası vb.) */
+    .doc-table { width: 100%; border-collapse: collapse; margin: 8pt 0; font-size: 9.5pt;
+                 border: 0.75pt solid var(--pr-line); }
+    .doc-table th { background: var(--pr-ink); color: #ffffff; font-weight: bold; font-size: 9pt;
+                    padding: 5pt 8pt; text-align: left; }
+    .doc-table td { border: 0.5pt solid var(--pr-line-soft); padding: 5pt 8pt; vertical-align: top; }
+
+    /* Paragraf metni */
+    .para { margin: 8pt 0; font-size: 10pt; text-align: justify; line-height: 1.45; }
+
+    /* Çoklu imza ızgarası (kurul üyeleri / tebliğ-tebellüğ) */
+    .sig-grid { width: 100%; border-collapse: collapse; margin-top: 22pt;
+                break-inside: avoid; page-break-inside: avoid; }
+    .sig-grid td { text-align: center; vertical-align: bottom; padding: 0 8pt; font-size: 9pt; }
+    .sig-grid .space { height: 30pt; }
+    .sig-grid .line { border-top: 0.75pt solid var(--pr-secondary); margin: 0 4pt 3pt; }
+    .sig-grid .name { font-weight: bold; }
+    .sig-grid .role { color: var(--pr-secondary); font-size: 8.5pt; }
+
+    /* Tekil imza (sağ blok) */
+    .signature { margin-top: 16pt; width: 58%; margin-left: auto; text-align: center;
+                 break-inside: avoid; page-break-inside: avoid; }
+    .signature .date { font-size: 9.5pt; color: var(--pr-label); margin-bottom: 18pt; }
+    .signature .sig-line { border-top: 0.75pt solid var(--pr-secondary); width: 75%; margin: 0 auto 4pt; }
+    .signature .name { font-size: 10pt; font-weight: bold; }
+    .signature .role { font-size: 9pt; color: var(--pr-secondary); margin-top: 1pt; }
+
+    {% comment %}Eski .approval (UYGUNDUR) bloğu Tur 218'de kaldırıldı — EK-1 onayı
+    artık işaretlenebilir seçenekli bölüm (talep 5); başka tüketicisi yoktu.{% endcomment %}
+    .muted { color: var(--pr-faint); font-style: italic; font-size: 9pt; }
+  </style>{% comment %}Tur 644: alt şablonlar sayfa yönü/ek stil override edebilsin
+  (calendar_pdf A4 landscape). Blok ve yorum TEK satır akışında — boş blokta çıktı
+  bayt-bayt değişmez (bordro byte-golden HTML testleri).{% endcomment %}{% block extra_style %}{% endblock %}
+</head>
+<body>
+  <div class="letterhead">
+    <div class="tc">{{ tc|default:'T.C.' }}</div>
+    <div class="authority">{{ authority }}</div>
+    <div class="school">{{ school_name }}</div>
+    {% if unit %}<div class="unit">{{ unit }}</div>{% endif %}
+  </div>
+  <div class="rule"></div>
+  <div class="rule-thin"></div>
+
+  {% block content %}{% endblock %}
+</body>
+</html>

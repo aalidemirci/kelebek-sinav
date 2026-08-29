@@ -84,6 +84,16 @@ class SchoolConfig(BaseModel):
     app_password_hash = models.CharField(
         "uygulama parolası özeti", max_length=255, blank=True, default=""
     )
+    # B6 — program köprüsü SADELEŞTİR: OYS zil çizelgesinin yerini alan
+    # düzenlenebilir varsayılan ders saati listesi. Öğe şekli OYS sözleşmesiyle
+    # birebir: {"no": int, "name": str, "start": "SS:DD"}. Boş liste →
+    # apps.sinav.services_calendar.DEFAULT_BELL_SCHEDULE kullanılır.
+    bell_schedule = models.JSONField(
+        "ders saati listesi",
+        default=list,
+        blank=True,
+        help_text='[{"no": 1, "name": "1. Ders", "start": "08:30"}, ...] — boşsa varsayılan.',
+    )
 
     class Meta:
         verbose_name = "kurum yapılandırması"

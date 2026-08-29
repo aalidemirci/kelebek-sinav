@@ -1,16 +1,21 @@
-"""sinav salt-okunur sorguları — salonlar (F2) + oturum akışı (F3) + kitapçık (F5)."""
+"""sinav salt-okunur sorguları — salon (F2) + oturum (F3) + kitapçık (F5) + takvim (F6)."""
 
 from __future__ import annotations
+
+from datetime import date
 
 from django.db.models import Q, QuerySet
 
 from apps.sinav.models import (
     BookletRun,
     ExamAttendanceRecord,
+    ExamCalendar,
+    ExamCalendarEntry,
     ExamRoom,
     ExamSession,
     ExamSessionCourse,
     ExamSessionRoom,
+    ExamTrackItem,
     PlacementRule,
     QuestionDocument,
     SeatAssignment,
@@ -126,3 +131,69 @@ def booklet_runs(*, session_id: int | None = None) -> QuerySet[BookletRun]:
     if session_id is not None:
         qs = qs.filter(session_id=session_id)
     return qs.order_by("-created_at")
+
+
+# ---------------------------------------------------------------------------
+# F6 — sınav takvimi (OYS FAZ T selectors'tan UYARLA)
+# ---------------------------------------------------------------------------
+
+
+def exam_calendars(
+    *, school_year_id: int | None = None, semester_id: int | None = None, status: str | None = None
+) -> QuerySet[ExamCalendar]:
+    """Takvim listesi (başlangıç azalan; dönem/yıl join'li)."""
+    qs = ExamCalendar.objects.select_related("semester__school_year")
+    if school_year_id is not None:
+        qs = qs.filter(semester__school_year_id=school_year_id)
+    if semester_id is not None:
+        qs = qs.filter(semester_id=semester_id)
+    if status:
+        qs = qs.filter(status=status)
+    return qs.order_by("-start_date")
+
+
+def get_exam_calendar(calendar_id: int) -> ExamCalendar | None:
+    return (
+        ExamCalendar.objects.select_related("semester__school_year").filter(pk=calendar_id).first()
+    )
+
+
+def calendar_entries(
+    calendar_id: int, *, placed: bool | None = None
+) -> QuerySet[ExamCalendarEntry]:
+    qs = ExamCalendarEntry.objects.select_related("course").filter(calendar_id=calendar_id)
+    if placed is True:
+        qs = qs.filter(placed_date__isnull=False)
+    elif placed is False:
+        qs = qs.filter(placed_date__isnull=True)
+    return qs.order_by("course__name", "level")
+
+
+def get_calendar_entry(entry_id: int) -> ExamCalendarEntry | None:
+    return (
+        ExamCalendarEntry.objects.select_related("calendar", "course").filter(pk=entry_id).first()
+    )
+
+
+def entries_for_slot(
+    calendar_id: int, on_date: date, period_no: int
+) -> QuerySet[ExamCalendarEntry]:
+    return ExamCalendarEntry.objects.select_related("course").filter(
+        calendar_id=calendar_id, placed_date=on_date, period_no=period_no
+    )
+
+
+def track_items(*, include_inactive: bool = False) -> QuerySet[ExamTrackItem]:
+    qs = ExamTrackItem.objects.all()
+    if not include_inactive:
+        qs = qs.filter(is_active=True)
+    return qs.order_by("order", "id")
+
+
+def get_track_item(item_id: int) -> ExamTrackItem | None:
+    return ExamTrackItem.objects.filter(pk=item_id).first()
+
+
+# Not: slot→oturum salon ön-seçimi F3'teki `section_rooms_for_levels` (satır
+# ~35, list dönen sürüm) ile yapılır — OYS'deki QuerySet sürümünün KS karşılığı
+# zaten oydu; ikinci bir kopya AÇILMAZ.

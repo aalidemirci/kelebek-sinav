@@ -9,6 +9,7 @@ kaydını tek başına SQL ile bulamazdı.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from django.db.models import QuerySet
@@ -212,3 +213,88 @@ def duplicate_course_candidates() -> list[dict[str, Any]]:
             }
         )
     return result
+
+
+# ---------------------------------------------------------------------------
+# F6 — takvim köprüleri (OYS ders_yapisi servis arayüzünün YERELLEŞTİRİLMİŞ
+# karşılıkları — B8). KS'de ders programı/kayıt (LessonGroup/LessonEnrollment)
+# zinciri YOKTUR (tasarım §11 ALMA); bu üç fonksiyon OYS imzalarını korur ama
+# katalog + öğrenci seviye sayımlarından beslenir. `course_level_student_ids`
+# bilinçli olarak boş döner → günlük sınav yükü sayımında her ders "seviyenin
+# tamamını kapsar" sayılır (konservatif düşüş — ADR-0044 karar 13, risk #4:
+# bu varsayım GEVŞETİLEMEZ).
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CourseLevelPair:
+    """Havuz doldurma çifti — OYS taught_course_levels satırıyla aynı yüzey."""
+
+    course_id: int
+    course_name: str
+    level: int
+
+
+@dataclass(frozen=True)
+class CoverageGroup:
+    """Katılımcı kapsam grubu — OYS course_level_coverage satırıyla aynı yüzey."""
+
+    label: str
+    student_count: int
+    whole_sections: bool
+
+
+def taught_course_levels(school_year_id: int | None = None) -> list[CourseLevelPair]:
+    """Havuz doldurma kaynağı — KS sapması: program verisi yok (B6/B8).
+
+    OYS'de canlı LessonGroup'lardan "fiilen okutulan" çiftler gelirdi; KS'de
+    kaynak aktif ders kataloğu × (dersin seviyeleri ∩ okulun seviye kümesi ∩
+    AKTİF ÖĞRENCİSİ OLAN seviyeler). Öğrenci filtresi havuzu okulda gerçekten
+    sınav yapılabilecek seviyelere daraltır; fazlalıklar havuzdan elle silinir.
+    `school_year_id` OYS imza uyumu içindir (öğrenci kayıtları tek-yıl yereldir).
+    """
+    from apps.okul import selectors as okul_selectors
+
+    del school_year_id  # imza uyumu — KS öğrenci kayıtları aktif yıla aittir
+    counts = okul_selectors.active_student_counts_by_level()
+    student_levels = {lvl for lvl, n in counts.items() if n > 0}
+    school_levels = set(okul_selectors.grade_level_values())
+    pairs: list[CourseLevelPair] = []
+    for course in Course.objects.filter(is_active=True).order_by("name"):
+        for level in sorted(set(course.levels) & school_levels & student_levels):
+            pairs.append(CourseLevelPair(course_id=course.pk, course_name=course.name, level=level))
+    return pairs
+
+
+def course_level_student_ids(
+    *, course_id: int, level: int, school_year_id: int, on_date: Any = None
+) -> set[int]:
+    """Derse kayıtlı öğrenci kümesi — KS v1'de kayıt verisi YOK, hep boş döner.
+
+    Boş dönüş, `_daily_exam_load`'da dersin "seviyenin tamamını kapsadığı"
+    konservatif varsayımını tetikler (OYS ADR-0044 karar 13 ile birebir).
+    Seçmeli ders kayıtları ileride gelirse yalnız bu fonksiyon dolar; sayım
+    algoritması değişmez.
+    """
+    del course_id, level, school_year_id, on_date
+    return set()
+
+
+def course_level_coverage(
+    *, course_id: int, level: int, school_year_id: int, on_date: Any = None
+) -> list[CoverageGroup]:
+    """Katılımcı kapsam önizlemesi — KS v1: her ders seviyenin tamamını kapsar."""
+    from apps.dersler.services import level_label
+    from apps.okul import selectors as okul_selectors
+
+    del course_id, school_year_id, on_date
+    counts = okul_selectors.active_student_counts_by_level()
+    label = level_label(level)
+    display = f"{label}. sınıf" if label.isdigit() else label
+    return [
+        CoverageGroup(
+            label=f"{display} — seviyenin tamamı",
+            student_count=counts.get(level, 0),
+            whole_sections=True,
+        )
+    ]

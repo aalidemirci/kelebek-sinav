@@ -1,5 +1,4 @@
 // Panel (hub) — OYS SinavIslemleriHub'dan UYARLA (F3): modül kartları.
-// Rapor/kitapçık ve sınav takvimi kartları kendi fazlarında (F4-F6) eklenir.
 
 import HubFeatureCard from "../../ui/HubFeatureCard";
 
@@ -9,10 +8,16 @@ export default function PanelPage() {
       <header>
         <h1 className="text-headline-medium font-semibold tracking-tight text-on-surface">Panel</h1>
         <p className="mt-2 text-body-medium text-on-surface-variant">
-          Ortak sınav planlama: oturum kur, dağıt, onayla; evrak ve kitapçık fazları (F4-F5) yolda.
+          Ortak sınav planlama: takvimle, oturum kur, dağıt, onayla; evrakı ve kitapçıkları bas.
         </p>
       </header>
       <div className="grid gap-4 sm:grid-cols-2">
+        <HubFeatureCard
+          to="/takvimler"
+          icon="calendar_month"
+          title="Sınav Takvimi"
+          description="Mevzuat pencereli dönem takvimleri; ders havuzu, yerleştirme ızgarası, süreç takibi ve resmî PDF."
+        />
         <HubFeatureCard
           to="/oturumlar"
           icon="event_seat"

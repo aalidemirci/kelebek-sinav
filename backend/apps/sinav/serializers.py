@@ -1,4 +1,4 @@
-"""sinav DRF serializer'ları — salonlar (F2) + oturum akışı (F3) + kitapçık (F5)."""
+"""sinav DRF serializer'ları — salon (F2) + oturum (F3) + kitapçık (F5) + takvim (F6)."""
 
 from __future__ import annotations
 
@@ -10,10 +10,13 @@ from apps.sinav import services
 from apps.sinav.models import (
     BookletRun,
     ExamAttendanceRecord,
+    ExamCalendar,
+    ExamCalendarEntry,
     ExamRoom,
     ExamSession,
     ExamSessionCourse,
     ExamSessionRoom,
+    ExamTrackItem,
     NumberingScheme,
     PlacementRule,
     QuestionDocument,
@@ -353,3 +356,88 @@ class BookletRunSerializer(serializers.ModelSerializer[BookletRun]):
             "completed_at",
         )
         read_only_fields = fields
+
+
+# --------------------------------------------------------------------------- #
+# F6 — sınav takvimi (OYS FAZ T2 serializer'larından UYARLA)
+# --------------------------------------------------------------------------- #
+
+
+class ExamCalendarSerializer(serializers.ModelSerializer[ExamCalendar]):
+    """Takvim kaydı. Yazma servis katmanında (create/update_exam_calendar).
+
+    KS: `school_year` FK'sı modelde yok — yıl adı dönem üzerinden okunur;
+    onay damgası (approved_by_name) FE onay özetinde gösterilir (B12).
+    """
+
+    semester_name = serializers.CharField(source="semester.name", read_only=True)
+    school_year_name = serializers.CharField(source="semester.school_year.name", read_only=True)
+    # Ad opsiyonel — verilmezse servis "1. Dönem 1. Sınav Takvimi" üretir.
+    # OYS Tur 644: elle override modelin max_length'ini düşürmüştü; tur 1-3'e sabit.
+    name = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    round = serializers.IntegerField(min_value=1, max_value=3)
+
+    class Meta:
+        model = ExamCalendar
+        fields = (
+            "id",
+            "school_year_name",
+            "semester",
+            "semester_name",
+            "round",
+            "name",
+            "start_date",
+            "end_date",
+            "status",
+            "description_text",
+            "submitted_at",
+            "approved_by_name",
+            "approved_at",
+        )
+        read_only_fields = (
+            "id",
+            "school_year_name",
+            "semester_name",
+            "status",
+            "submitted_at",
+            "approved_by_name",
+            "approved_at",
+        )
+        validators: list[object] = []
+
+
+class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]):
+    course_name = serializers.CharField(source="course.name", read_only=True)
+
+    class Meta:
+        model = ExamCalendarEntry
+        fields = (
+            "id",
+            "calendar",
+            "course",
+            "course_name",
+            "level",
+            "exam_kind",
+            "is_butterfly",
+            "placed_date",
+            "period_no",
+            "session",
+            "note",
+        )
+        read_only_fields = (
+            "id",
+            "course_name",
+            "calendar",
+            "placed_date",
+            "period_no",
+            "session",
+        )
+        validators: list[object] = []
+
+
+class ExamTrackItemSerializer(serializers.ModelSerializer[ExamTrackItem]):
+    class Meta:
+        model = ExamTrackItem
+        fields = ("id", "name", "description", "order", "is_active")
+        read_only_fields = ("id", "order")
+        validators: list[object] = []
