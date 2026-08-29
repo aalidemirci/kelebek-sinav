@@ -1,11 +1,10 @@
-"""sinav modülü modelleri — salon (F2) + oturum akışı (F3).
+"""sinav modülü modelleri — salon (F2) + oturum akışı (F3) + kitapçık (F5).
 
 OYS `sinav_islemleri/models.py`'den UYARLA (tasarım §11): `created_by` ve User
 FK'ları düşer (onay/beyan damgaları ad-snapshot + zaman olarak kalır — B12),
 `linked_section` → okul.ClassSection, Course → dersler.Course, Semester →
 okul.SchoolTerm; SeatAssignment/ExamAttendanceRecord ad snapshot'ları
-EncryptedCharField (U3). QuestionDocument/BookletRun F5'te, takvim F6'da,
-gözetmen modelleri F7'de gelir.
+EncryptedCharField (U3). Takvim F6'da, gözetmen modelleri F7'de gelir.
 """
 
 from __future__ import annotations
@@ -561,3 +560,102 @@ class PlacementRule(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.student_id} — {self.get_rule_type_display()} ({self.get_scope_display()})"
+
+
+class ScoreMode(models.TextChoices):
+    """Başlık puan bölümü (K5): tek kutu varsayılan; soru sayısı girilirse tablo."""
+
+    SINGLE_BOX = "SINGLE_BOX", "Tek puan kutusu"
+    QUESTION_TABLE = "QUESTION_TABLE", "Soru bazlı puan tablosu"
+
+
+class QuestionDocument(BaseModel):
+    """Oturum dersinin soru dosyası (F5 — OYS §4.5/T7'den UYARLA).
+
+    Sınav öncesi gizlilik: dosya yalnız yerel API üzerinden (X-KS-Token)
+    sunulur, media URL'i yoktur. Kişisel veri içermez (sorular), ama üretilen
+    kitapçıklar içerir (BookletRun'a bakınız).
+    """
+
+    # FK + kısmi unique (OneToOne DEĞİL): yeniden yükleme eskisini soft-delete
+    # eder; sert unique sütunu silinmiş satırla çakışırdı (DD soft-delete izi).
+    session_course = models.ForeignKey(
+        ExamSessionCourse,
+        on_delete=models.CASCADE,
+        related_name="question_documents",
+        verbose_name="oturum dersi",
+    )
+    file = models.FileField("soru PDF'i", upload_to="exam_questions/%Y/%m/")
+    page_count = models.PositiveSmallIntegerField("sayfa sayısı")
+    sha256 = models.CharField("içerik özeti", max_length=64)
+    score_mode = models.CharField(
+        "puan bölümü", max_length=14, choices=ScoreMode.choices, default=ScoreMode.SINGLE_BOX
+    )
+    question_count = models.PositiveSmallIntegerField(
+        "soru sayısı", null=True, blank=True, help_text="Puan tablosu için (K5)."
+    )
+    # scaling_enabled alanı OYS Tur 239'da kaldırılmıştı; KS'ye hiç girmedi —
+    # ölçekleme yok, bant sabit 4 cm.
+
+    class Meta:
+        verbose_name = "soru dosyası"
+        verbose_name_plural = "soru dosyaları"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session_course"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_questiondoc_sessioncourse_alive",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Soru dosyası — oturum dersi {self.session_course_id}"
+
+
+class BookletRunStatus(models.TextChoices):
+    PENDING = "PENDING", "Bekliyor"
+    IN_PROGRESS = "IN_PROGRESS", "Üretiliyor"
+    COMPLETED = "COMPLETED", "Tamamlandı"
+    FAILED = "FAILED", "Başarısız"
+
+
+class BookletRun(BaseModel):
+    """Kişiselleştirilmiş kitapçık üretim koşusu (R10 — OYS T7'den UYARLA).
+
+    KS'de üretim SENKRONDUR (Celery yok): koşu tek çağrıda COMPLETED/FAILED'a
+    iner; PENDING/IN_PROGRESS değerleri durum sözlüğü OYS ile birebir kalsın
+    diye korunur. Çıktı ZIP salon bazlı birleşik PDF'ler taşır ve KİŞİSEL VERİ
+    İÇERİR (kitapçık başlığında ad/no/şube) — dosya yalnız API'den sunulur.
+    """
+
+    session = models.ForeignKey(
+        ExamSession, on_delete=models.CASCADE, related_name="booklet_runs", verbose_name="oturum"
+    )
+    status = models.CharField(
+        "durum",
+        max_length=12,
+        choices=BookletRunStatus.choices,
+        default=BookletRunStatus.PENDING,
+        db_index=True,
+    )
+    file = models.FileField("ZIP", upload_to="exam_booklets/%Y/%m/", blank=True)
+    backup_copies = models.PositiveSmallIntegerField(
+        "isimsiz yedek kopya", default=0, help_text="Salon başına isimsiz kitapçık adedi."
+    )
+    manifest = models.JSONField(
+        "manifest",
+        default=dict,
+        blank=True,
+        help_text="Salon → dosya adı/kitapçık/sayfa sayıları (PII yok).",
+    )
+    error_message = models.TextField("hata", blank=True, default="")
+    completed_at = models.DateTimeField("tamamlanma", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "kitapçık koşusu"
+        verbose_name_plural = "kitapçık koşuları"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Kitapçık koşusu #{self.pk} — oturum {self.session_id} ({self.status})"

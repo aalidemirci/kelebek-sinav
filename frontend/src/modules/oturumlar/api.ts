@@ -209,6 +209,31 @@ export interface DistributeResult {
   report: ValidationReport;
 }
 
+// --- Soru dosyası + kitapçık (F5) ---
+
+export type ScoreModeCode = "SINGLE_BOX" | "QUESTION_TABLE";
+export type BookletRunStatusCode = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "FAILED";
+
+export interface QuestionDocumentMeta {
+  id: number;
+  course_name: string;
+  page_count: number;
+  sha256: string;
+  score_mode: ScoreModeCode;
+  question_count: number | null;
+  created_at: string;
+}
+
+export interface BookletRun {
+  id: number;
+  status: BookletRunStatusCode;
+  backup_copies: number;
+  manifest: Record<string, unknown>;
+  error_message: string;
+  created_at: string;
+  completed_at: string | null;
+}
+
 /** Evrak paneli katalog satırı — kodlar backend REPORT_CODES ile birebir (OYS AYNEN). */
 export const REPORT_CATALOG: { code: string; title: string; roomScoped: boolean }[] = [
   { code: "r1", title: "Salon Oturma Planı (kroki)", roomScoped: true },
@@ -296,6 +321,22 @@ export const examSessionApi = {
   reportBlob: (id: number, code: string, roomId?: number) =>
     api.getBlob(`/exam-sessions/${id}/reports/${code}/${roomId ? `?room_id=${roomId}` : ""}`),
   reportsZipBlob: (id: number) => api.getBlob(`/exam-sessions/${id}/reports/zip/`),
+
+  // --- Soru dosyası + kitapçık (F5) — üretim SENKRON (Celery yok) ---
+  question: (sessionCourseId: number) =>
+    api.get<QuestionDocumentMeta>(`/exam-session-courses/${sessionCourseId}/question/`),
+  uploadQuestion: (sessionCourseId: number, form: FormData) =>
+    api.postForm<QuestionDocumentMeta>(`/exam-session-courses/${sessionCourseId}/question/`, form),
+  deleteQuestion: (sessionCourseId: number) =>
+    api.del<void>(`/exam-session-courses/${sessionCourseId}/question/`),
+  questionBlob: (sessionCourseId: number) =>
+    api.getBlob(`/exam-session-courses/${sessionCourseId}/question/download/`),
+  questionTemplateBlob: () => api.getBlob("/exam-sessions/question-template/"),
+  startBookletRun: (id: number, backupCopies: number) =>
+    api.post<BookletRun>(`/exam-sessions/${id}/booklets/`, { backup_copies: backupCopies }),
+  bookletRuns: (id: number) =>
+    api.get<Paginated<BookletRun>>(`/booklet-runs/?session=${id}&limit=10`),
+  bookletRunZipBlob: (runId: number) => api.getBlob(`/booklet-runs/${runId}/download/`),
 };
 
 // ---------------------------------------------------------------------------

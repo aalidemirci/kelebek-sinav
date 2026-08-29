@@ -1,16 +1,18 @@
-"""sinav salt-okunur sorguları — salonlar (F2) + oturum akışı (F3)."""
+"""sinav salt-okunur sorguları — salonlar (F2) + oturum akışı (F3) + kitapçık (F5)."""
 
 from __future__ import annotations
 
 from django.db.models import Q, QuerySet
 
 from apps.sinav.models import (
+    BookletRun,
     ExamAttendanceRecord,
     ExamRoom,
     ExamSession,
     ExamSessionCourse,
     ExamSessionRoom,
     PlacementRule,
+    QuestionDocument,
     SeatAssignment,
 )
 
@@ -107,3 +109,20 @@ def attendance_records(*, session_id: int | None = None) -> QuerySet[ExamAttenda
     if session_id is not None:
         qs = qs.filter(session_id=session_id)
     return qs.order_by("room__name", "seat_no")
+
+
+def question_document_for(session_course_id: int) -> QuestionDocument | None:
+    """Oturum dersinin canlı soru dosyası — yoksa None."""
+    return (
+        QuestionDocument.objects.select_related("session_course__course")
+        .filter(session_course_id=session_course_id)
+        .first()
+    )
+
+
+def booklet_runs(*, session_id: int | None = None) -> QuerySet[BookletRun]:
+    """Kitapçık koşuları (en yeni önce)."""
+    qs = BookletRun.objects.all()
+    if session_id is not None:
+        qs = qs.filter(session_id=session_id)
+    return qs.order_by("-created_at")

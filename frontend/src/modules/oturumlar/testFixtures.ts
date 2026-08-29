@@ -5,8 +5,11 @@
 import type { Paginated } from "../../lib/pagination";
 import type { ExamRoom } from "../salonlar/api";
 import type {
+  BookletRun,
   ExamAttendanceRecordRow,
   ExamSession,
+  ExamSessionCourseRow,
+  QuestionDocumentMeta,
   SeatAssignmentRow,
   SeatingResponse,
   ValidationReport,
@@ -38,6 +41,49 @@ export function makeSession(overrides: Partial<ExamSession> = {}): ExamSession {
 /** DRF sayfalı liste sarmalayıcı — mock list yanıtları için. */
 export function paginated<T>(results: T[]): Paginated<T> {
   return { count: results.length, next: null, previous: null, results };
+}
+
+export function makeCourseRow(overrides: Partial<ExamSessionCourseRow> = {}): ExamSessionCourseRow {
+  return {
+    id: 21,
+    course_id: 10,
+    course_name: "Matematik",
+    participant_type: "LEVEL",
+    level: 9,
+    display_label: "Matematik — 9. Sınıf",
+    section_ids: [],
+    duration_minutes: null,
+    shared_booklet: false,
+    ...overrides,
+  };
+}
+
+export function makeQuestionMeta(
+  overrides: Partial<QuestionDocumentMeta> = {},
+): QuestionDocumentMeta {
+  return {
+    id: 31,
+    course_name: "Matematik",
+    page_count: 2,
+    sha256: "a".repeat(64),
+    score_mode: "SINGLE_BOX",
+    question_count: null,
+    created_at: "2026-06-01T09:00:00+03:00",
+    ...overrides,
+  };
+}
+
+export function makeBookletRun(overrides: Partial<BookletRun> = {}): BookletRun {
+  return {
+    id: 41,
+    status: "COMPLETED",
+    backup_copies: 0,
+    manifest: { total_booklets: 8, total_pages: 16 },
+    error_message: "",
+    created_at: "2026-06-01T09:05:00+03:00",
+    completed_at: "2026-06-01T09:05:20+03:00",
+    ...overrides,
+  };
 }
 
 export function makeReport(overrides: Partial<ValidationReport> = {}): ValidationReport {

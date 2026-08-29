@@ -40,6 +40,9 @@ vi.mock("./YoklamaPaneli", () => ({
 vi.mock("./EvrakPaneli", () => ({
   default: ({ session }: { session: ExamSession }) => <div>EVRAK PANELİ {session.id}</div>,
 }));
+vi.mock("./SorularPaneli", () => ({
+  default: ({ session }: { session: ExamSession }) => <div>SORULAR PANELİ {session.id}</div>,
+}));
 
 import OturumDetayPage from "./OturumDetayPage";
 
@@ -89,7 +92,7 @@ describe("OturumDetayPage", () => {
     expect(await screen.findByText("OTURUM LİSTESİ")).toBeInTheDocument();
   });
 
-  it("DAĞITILDI: Yerleşim + Evrak sekmeleri (Yoklama/Sorular/Gözetmen yok); Onayla approve çağırır", async () => {
+  it("DAĞITILDI: Yerleşim + Sorular + Evrak sekmeleri (Yoklama/Gözetmen yok); Onayla approve çağırır", async () => {
     const user = userEvent.setup();
     exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
     exam.approve.mockResolvedValue(makeSession({ status: "APPROVED" }));
@@ -97,10 +100,10 @@ describe("OturumDetayPage", () => {
 
     expect(await screen.findByText("YERLEŞİM PANELİ 5")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Yerleşim/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Sorular ve Kitapçıklar/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Evrak/ })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Yoklama/ })).not.toBeInTheDocument();
-    // OYS'deki gözetmen/soru sekmeleri F5/F7'ye ertelendi.
-    expect(screen.queryByRole("tab", { name: /Sorular/ })).not.toBeInTheDocument();
+    // OYS'deki gözetmen sekmesi F7'ye ertelendi.
     expect(screen.queryByRole("tab", { name: /Gözetmen/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Onayla" }));
@@ -108,12 +111,14 @@ describe("OturumDetayPage", () => {
     expect(await screen.findByText("Oturum onaylandı — yerleşim kilitlendi.")).toBeInTheDocument();
   });
 
-  it("DAĞITILDI: Evrak sekmesi paneli açar (dağıtımdan itibaren; arşivde de kalır)", async () => {
+  it("DAĞITILDI: Sorular ve Evrak sekmeleri panellerini açar", async () => {
     const user = userEvent.setup();
     exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
     renderPage();
 
-    await user.click(await screen.findByRole("tab", { name: /Evrak/ }));
+    await user.click(await screen.findByRole("tab", { name: /Sorular ve Kitapçıklar/ }));
+    expect(await screen.findByText("SORULAR PANELİ 5")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /Evrak/ }));
     expect(await screen.findByText("EVRAK PANELİ 5")).toBeInTheDocument();
   });
 

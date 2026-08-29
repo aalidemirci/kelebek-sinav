@@ -98,8 +98,8 @@ export default function EvrakPaneli({ session }: { session: ExamSession }) {
         ))}
       </ul>
       <p className="text-body-small text-on-surface-variant">
-        Kişiselleştirilmiş kitapçıklar (R10) F5 ile gelir. Arşivli oturumdan tüm evrak yeniden
-        basılabilir.
+        Kişiselleştirilmiş kitapçıklar (R10) &quot;Sorular ve Kitapçıklar&quot; sekmesinden
+        üretilir. Arşivli oturumdan tüm evrak yeniden basılabilir.
       </p>
     </div>
   );

@@ -10,7 +10,8 @@ from __future__ import annotations
 from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.http import HttpResponse
+from django.db.models import QuerySet
+from django.http import FileResponse, HttpResponse
 from rest_framework import serializers as drf_serializers
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -20,6 +21,8 @@ from rest_framework.response import Response
 from apps.sinav import participants as sinav_participants
 from apps.sinav import selectors, services
 from apps.sinav.models import (
+    BookletRun,
+    BookletRunStatus,
     ExamAttendanceRecord,
     ExamRoom,
     ExamSession,
@@ -28,6 +31,7 @@ from apps.sinav.models import (
 )
 from apps.sinav.serializers import (
     AttendanceMarkSerializer,
+    BookletRunSerializer,
     DistributeSerializer,
     ExamAttendanceRecordSerializer,
     ExamRoomSerializer,
@@ -36,6 +40,8 @@ from apps.sinav.serializers import (
     ExamSessionSerializer,
     ParticipantSerializer,
     PlacementRuleSerializer,
+    QuestionDocumentSerializer,
+    QuestionUploadSerializer,
     SeatAssignmentSerializer,
     SeatSerializer,
     SessionRoomsUpdateSerializer,
@@ -213,6 +219,23 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
     def terms(self, request: Request) -> Response:
         """Adım 1 dönem seçici — aktif ders yılının dönemleri (id + etiket)."""
         return Response({"terms": services.term_options()})
+
+    @action(detail=False, methods=["get"], url_path="question-template")
+    def question_template(self, request: Request) -> HttpResponse:
+        """`GET /exam-sessions/question-template/` — öğretmen Word şablonu (F5).
+
+        4 cm üst marjlı boş .docx döner; kişisel veri içermez.
+        """
+        from apps.sinav.word_template import build_question_template_docx
+
+        response = HttpResponse(
+            build_question_template_docx(),
+            content_type=(
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ),
+        )
+        response["Content-Disposition"] = 'attachment; filename="soru_sablonu.docx"'
+        return response
 
     @action(detail=True, methods=["post"], url_path="confirm-transfer-check")
     def confirm_transfer_check(self, request: Request, pk: str | None = None) -> Response:
@@ -392,6 +415,22 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
         response["Content-Disposition"] = f'attachment; filename="{report_file.filename}"'
         return response
 
+    @action(detail=True, methods=["post"])
+    def booklets(self, request: Request, pk: str | None = None) -> Response:
+        """Kitapçık koşusu başlatır ve SENKRON üretir (R10 — F5).
+
+        Yanıt tamamlanmış (COMPLETED/FAILED) koşu kaydıdır; ZIP indirme
+        `/booklet-runs/<id>/download/` ucundadır (geçmiş izlenebilir kalır).
+        """
+        session = self.get_object()
+        backup_raw = request.data.get("backup_copies", 0)
+        backup = int(backup_raw) if str(backup_raw).isdigit() else 0
+        try:
+            run = services.request_booklet_run(session, backup_copies=min(backup, 10))
+        except DjangoValidationError as exc:
+            raise drf_serializers.ValidationError(exc.messages) from exc
+        return Response(BookletRunSerializer(run).data, status=201)
+
     # --- Durum makinesi ----------------------------------------------------
     def _transition(self, transition: Any) -> Response:
         """Durum geçişi ortak gövdesi — hata Türkçe 400'e çevrilir."""
@@ -453,6 +492,92 @@ class ExamSessionCourseViewSet(viewsets.GenericViewSet[ExamSessionCourse]):
         except DjangoValidationError as exc:
             raise drf_serializers.ValidationError(exc.messages) from exc
         return Response(status=204)
+
+    # ÇOK METOTLU `@action` — tek yolda GET üst veri · POST yükle/değiştir ·
+    # DELETE kaldır (OYS Tur 842 kalıbı).
+    @action(detail=True, methods=["get", "post", "delete"])
+    def question(self, request: Request, pk: str | None = None) -> Response:
+        """Soru dosyası ucu (F5) — doğrulama servis katmanında (A4 ±6pt dahil)."""
+        sc = self.get_object()
+        doc = selectors.question_document_for(sc.pk)
+        if request.method == "GET":
+            if doc is None:
+                return Response(
+                    {"code": "not_found", "message": "Soru dosyası yüklenmemiş.", "fields": {}},
+                    status=404,
+                )
+            return Response(QuestionDocumentSerializer(doc).data)
+        if request.method == "DELETE":
+            if doc is not None:
+                doc.delete()
+            return Response(status=204)
+        serializer = QuestionUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        vd = serializer.validated_data
+        try:
+            doc = services.upload_question_document(
+                sc,
+                file_bytes=vd["file"].read(),
+                score_mode=vd.get("score_mode", "SINGLE_BOX"),
+                question_count=vd.get("question_count"),
+            )
+        except DjangoValidationError as exc:
+            raise drf_serializers.ValidationError(exc.messages) from exc
+        return Response(QuestionDocumentSerializer(doc).data, status=201)
+
+    @action(detail=True, methods=["get"], url_path="question/download")
+    def question_download(self, request: Request, pk: str | None = None) -> Response | FileResponse:
+        """Soru PDF'i indirme — sınav öncesi gizlilik: yalnız yerel API'den sunulur."""
+        sc = self.get_object()
+        doc = selectors.question_document_for(sc.pk)
+        if doc is None:
+            return Response(
+                {"code": "not_found", "message": "Soru dosyası yüklenmemiş.", "fields": {}},
+                status=404,
+            )
+        return FileResponse(
+            doc.file.open("rb"),
+            as_attachment=True,
+            filename=f"soru_{sc.course.name}.pdf",
+            content_type="application/pdf",
+        )
+
+
+class BookletRunViewSet(viewsets.GenericViewSet[BookletRun]):
+    """Kitapçık koşuları — durum + ZIP indirme (ZIP kişisel veri içerir)."""
+
+    serializer_class = BookletRunSerializer
+
+    def get_queryset(self) -> QuerySet[BookletRun]:
+        params = self.request.query_params
+        session_raw = params.get("session", "")
+        return selectors.booklet_runs(
+            session_id=int(session_raw) if session_raw.isdigit() else None
+        )
+
+    def list(self, request: Request) -> Response:
+        page = self.paginate_queryset(self.get_queryset())
+        serializer = BookletRunSerializer(page, many=True)
+        return self.get_paginated_response(serializer.data)
+
+    def retrieve(self, request: Request, pk: str | None = None) -> Response:
+        return Response(BookletRunSerializer(self.get_object()).data)
+
+    @action(detail=True, methods=["get"])
+    def download(self, request: Request, pk: str | None = None) -> Response | FileResponse:
+        """ZIP indirme — kitapçıklar öğrenci ad/no taşır; yalnız yerel API'den."""
+        run = self.get_object()
+        if run.status != BookletRunStatus.COMPLETED or not run.file:
+            return Response(
+                {"code": "not_ready", "message": "Koşu henüz tamamlanmadı.", "fields": {}},
+                status=409,
+            )
+        return FileResponse(
+            run.file.open("rb"),
+            as_attachment=True,
+            filename=f"kitapciklar_oturum_{run.session_id}.zip",
+            content_type="application/zip",
+        )
 
 
 class PlacementRuleViewSet(viewsets.ModelViewSet[PlacementRule]):

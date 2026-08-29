@@ -1,4 +1,4 @@
-"""sinav DRF serializer'ları — salonlar (F2) + oturum akışı (F3)."""
+"""sinav DRF serializer'ları — salonlar (F2) + oturum akışı (F3) + kitapçık (F5)."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from rest_framework import serializers
 
 from apps.sinav import services
 from apps.sinav.models import (
+    BookletRun,
     ExamAttendanceRecord,
     ExamRoom,
     ExamSession,
@@ -15,6 +16,8 @@ from apps.sinav.models import (
     ExamSessionRoom,
     NumberingScheme,
     PlacementRule,
+    QuestionDocument,
+    ScoreMode,
     SeatAssignment,
 )
 
@@ -300,3 +303,53 @@ class AttendanceMarkSerializer(serializers.Serializer[dict[str, object]]):
     seat_assignment_id = serializers.IntegerField()
     excuse_status = serializers.CharField(required=False, default="PENDING")
     note = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class QuestionUploadSerializer(serializers.Serializer[Any]):
+    """`POST /exam-session-courses/<id>/question/` girdisi (multipart)."""
+
+    file = serializers.FileField(help_text="Soru PDF'i.")
+    score_mode = serializers.ChoiceField(
+        choices=ScoreMode.choices, required=False, default=ScoreMode.SINGLE_BOX
+    )
+    question_count = serializers.IntegerField(
+        min_value=1, max_value=60, required=False, allow_null=True
+    )
+    # OYS Tur 236: scaling_enabled kaldırıldı — eski istemcinin gönderdiği
+    # anahtar DRF tarafından sessizce yutulur.
+
+
+class QuestionDocumentSerializer(serializers.ModelSerializer[QuestionDocument]):
+    """Soru dosyası özeti (dosya içeriği ayrı uçtan indirilir)."""
+
+    course_name = serializers.CharField(source="session_course.course.name", read_only=True)
+
+    class Meta:
+        model = QuestionDocument
+        fields = (
+            "id",
+            "course_name",
+            "page_count",
+            "sha256",
+            "score_mode",
+            "question_count",
+            "created_at",
+        )
+        read_only_fields = fields
+
+
+class BookletRunSerializer(serializers.ModelSerializer[BookletRun]):
+    """Kitapçık koşusu durumu (manifest PII içermez)."""
+
+    class Meta:
+        model = BookletRun
+        fields = (
+            "id",
+            "status",
+            "backup_copies",
+            "manifest",
+            "error_message",
+            "created_at",
+            "completed_at",
+        )
+        read_only_fields = fields

@@ -1,4 +1,4 @@
-"""sinav servisleri — salon yaşam döngüsü (F2) + oturum akışı (F3) + evrak (F4).
+"""sinav servisleri — salon (F2) + oturum akışı (F3) + evrak (F4) + kitapçık (F5).
 
 OYS `sinav_islemleri/services.py`'den UYARLA (tasarım §11): `created_by`/User
 damgaları düşer (tek kullanıcı — ad-snapshot + zaman kalır), core köprüleri
@@ -25,8 +25,10 @@ from apps.dersler import selectors as ders_selectors
 from apps.dersler import services as ders_services
 from apps.okul import selectors as okul_selectors
 from apps.okul.models import ClassSection, SchoolConfig
-from apps.sinav import engine, layout, participants, reports, validator
+from apps.sinav import booklet, engine, layout, participants, reports, validator
 from apps.sinav.models import (
+    BookletRun,
+    BookletRunStatus,
     ExamAttendanceRecord,
     ExamRoom,
     ExamSession,
@@ -39,9 +41,11 @@ from apps.sinav.models import (
     NumberingScheme,
     ParticipantType,
     PlacementRule,
+    QuestionDocument,
     RuleReason,
     RuleScope,
     RuleType,
+    ScoreMode,
     SeatAssignment,
     SeatStatus,
 )
@@ -1523,3 +1527,264 @@ def render_session_reports_zip(session: ExamSession) -> ReportFile:
         content_type="application/zip",
         content=reports.reports_zip(files),
     )
+
+
+# ===========================================================================
+# F5 — soru dosyası + kitapçık üretimi (R10; OYS T7'den UYARLA, senkron)
+# ===========================================================================
+
+_PDF_MAGIC = b"%PDF-"
+_MAX_QUESTION_PDF_MB = 20
+#: A4 nokta ölçüleri + tolerans (OYS Tur 646): Word'ün PDF ihracı 595.32×841.92
+#: gibi küsurat üretir — ±6pt tolerans bunu kapsar, Letter'ı (612×792) reddeder.
+_A4_W_PT, _A4_H_PT = 595.28, 841.89
+_A4_TOL_PT = 6.0
+
+
+def upload_question_document(
+    sc: ExamSessionCourse,
+    *,
+    file_bytes: bytes,
+    score_mode: str = ScoreMode.SINGLE_BOX,
+    question_count: int | None = None,
+) -> QuestionDocument:
+    """Oturum dersine soru PDF'i yükler; mevcut canlı dosya kapatılır (iz kalır).
+
+    Doğrulama: PDF magic bytes + boyut + sayfa sayısı (pypdf açabilmeli) +
+    her sayfa A4 DİKEY ±6pt. Oturum ONAYLANDI/ARŞİV ise yükleme reddedilir.
+    """
+    import hashlib
+    import io as _io
+
+    from django.core.files.base import ContentFile
+
+    if sc.session.status in (ExamSessionStatus.APPROVED, ExamSessionStatus.ARCHIVED):
+        raise ValidationError("Onaylı/arşiv oturumda soru dosyası değiştirilemez.")
+    if sc.shared_booklet:
+        # K7 ortak kitapçık: aynı dersin tüm satırları tek dosya kullanır —
+        # kardeş satırda canlı dosya varsa ikinci yükleme reddedilir.
+        sibling_doc = QuestionDocument.objects.filter(
+            session_course__session=sc.session,
+            session_course__course=sc.course,
+            session_course__deleted_at__isnull=True,
+        ).exclude(session_course=sc)
+        if sibling_doc.exists():
+            raise ValidationError(
+                "Ortak kitapçıkta soru dosyası tek satıra yüklenir — "
+                f"'{sc.course.name}' için dosya başka bir seviyede zaten yüklü."
+            )
+    if not file_bytes:
+        raise ValidationError("Boş dosya yüklenemez.")
+    if not file_bytes.startswith(_PDF_MAGIC):
+        raise ValidationError("Yalnız PDF kabul edilir (dosya imzası PDF değil).")
+    if len(file_bytes) > _MAX_QUESTION_PDF_MB * 1024 * 1024:
+        raise ValidationError(f"Dosya çok büyük (üst sınır {_MAX_QUESTION_PDF_MB} MB).")
+    if score_mode == ScoreMode.QUESTION_TABLE and not question_count:
+        raise ValidationError("Soru bazlı puan tablosu için soru sayısı girin.")
+
+    from pypdf import PdfReader
+
+    try:
+        reader = PdfReader(_io.BytesIO(file_bytes))
+        page_count = len(reader.pages)
+    except Exception as exc:  # pypdf çeşitli hatalar fırlatabilir
+        raise ValidationError("PDF okunamadı; dosya bozuk olabilir.") from exc
+    if page_count == 0:
+        raise ValidationError("PDF sayfa içermiyor.")
+
+    # Sayfa boyutu/yönü doğrulaması — bant üst 4 cm sözleşmesi yalnız A4 DİKEY
+    # sayfada tutar. /Rotate normalize edilir (90/270 taşıyan dikey mediabox
+    # fiilen YATAYdır). NOT: üst bant içerik tespiti BİLİNÇLE yapılmaz —
+    # metin katmanı taranmış PDF'te kördür, güvenilir sinyal değil.
+    for page_no, page in enumerate(reader.pages, start=1):
+        try:
+            rotation = int(page.get("/Rotate") or 0) % 360
+            box = page.mediabox
+            width, height = float(box.width), float(box.height)
+        except Exception as exc:
+            raise ValidationError(f"PDF sayfa {page_no} okunamadı; dosya bozuk olabilir.") from exc
+        if rotation in (90, 270):
+            width, height = height, width
+        if abs(width - _A4_W_PT) <= _A4_TOL_PT and abs(height - _A4_H_PT) <= _A4_TOL_PT:
+            continue
+        if abs(width - _A4_H_PT) <= _A4_TOL_PT and abs(height - _A4_W_PT) <= _A4_TOL_PT:
+            raise ValidationError(
+                f"Sayfa {page_no} YATAY (A4 yatay) — başlık bandı üst 4 cm sözleşmesi "
+                "bozulur. Sayfaları A4 DİKEY yapın; panelden indirilen Word şablonunu "
+                "kullanmanız önerilir."
+            )
+        raise ValidationError(
+            f"Sayfa {page_no} A4 boyutunda değil ({width:.0f}×{height:.0f} pt; beklenen "
+            "595×842). Belgeyi A4 dikey sayfa boyutuyla PDF'e aktarın; panelden "
+            "indirilen Word şablonunu kullanmanız önerilir."
+        )
+
+    with transaction.atomic():
+        QuestionDocument.objects.filter(session_course=sc).update(deleted_at=timezone.now())
+        doc = QuestionDocument(
+            session_course=sc,
+            page_count=page_count,
+            sha256=hashlib.sha256(file_bytes).hexdigest(),
+            score_mode=score_mode,
+            question_count=question_count if score_mode == ScoreMode.QUESTION_TABLE else None,
+        )
+        doc.file.save(f"soru_{sc.pk}.pdf", ContentFile(file_bytes), save=False)
+        doc.save()
+    return doc
+
+
+def _session_info(session: ExamSession) -> booklet.SessionInfo:
+    """Başlık üst bloğu — okul/il/ilçe yerel yapılandırmadan (core köprüsü yerine)."""
+    config = SchoolConfig.load()
+    return booklet.SessionInfo(
+        school_name=config.school_name,
+        year_label=session.semester.school_year.name,
+        semester_label=session.semester.name,
+        exam_name=session.name,
+        exam_date=session.exam_date.strftime("%d.%m.%Y"),
+        district=config.district,
+        province=config.province,
+    )
+
+
+def _session_course_group_key(sc: ExamSessionCourse) -> str:
+    """Satırın çakışma grubu anahtarı — participants ile tek doğruluk kaynağı."""
+    if sc.shared_booklet:
+        # Ortak kitapçıkta seviye anahtara girmez ("<course_id>:*").
+        return participants.conflict_group_key(sc.course_id, 0, shared_booklet=True)
+    if sc.level is None:
+        # Servis katmanı seviyeyi ekleme anında zorunlu kılar — None bozuk satırdır.
+        raise ValidationError("Oturum dersinin seviyesi eksik; dersi çıkarıp yeniden ekleyin.")
+    return participants.conflict_group_key(sc.course_id, sc.level)
+
+
+def _course_docs(session: ExamSession) -> dict[str, booklet.CourseDoc]:
+    """Oturum derslerinin soru dosyaları: çakışma grubu anahtarı → CourseDoc.
+
+    OYS Tur 241 (talep 9b): anahtar course_id DEĞİL grup anahtarıdır — aynı
+    dersin 9. ve 10. sınıf satırları FARKLI soru dosyası taşır; eski anahtar
+    seviyeleri sessizce ezerdi.
+    """
+    docs: dict[str, booklet.CourseDoc] = {}
+    rows = QuestionDocument.objects.filter(
+        session_course__session=session, session_course__deleted_at__isnull=True
+    ).select_related("session_course__course")
+    for qd in rows:
+        sc = qd.session_course
+        key = _session_course_group_key(sc)
+        with qd.file.open("rb") as fh:
+            pdf_bytes = fh.read()
+        docs[key] = booklet.CourseDoc(
+            group_key=key,
+            course_name=session_course_label(
+                sc.course.name, sc.level, shared_booklet=sc.shared_booklet
+            ),
+            pdf_bytes=pdf_bytes,
+            score_mode=qd.score_mode,
+            question_count=qd.question_count,
+        )
+    return docs
+
+
+def _course_docs_keys(session: ExamSession) -> set[str]:
+    """Yüklü soru dosyalarının grup anahtarları (PDF içeriği OKUNMADAN)."""
+    rows = QuestionDocument.objects.filter(
+        session_course__session=session, session_course__deleted_at__isnull=True
+    ).select_related("session_course")
+    return {_session_course_group_key(qd.session_course) for qd in rows}
+
+
+def request_booklet_run(session: ExamSession, *, backup_copies: int = 0) -> BookletRun:
+    """Kitapçık koşusu oluşturur ve SENKRON üretir (Celery yok — B3).
+
+    Ön koşullar: oturum DAĞITILDI/ONAYLANDI/ARŞİV (arşivden yeniden basım) +
+    her katılımcı dersin soru dosyası yüklü (eksikler DERS ADIYLA listelenir —
+    öğrenci adı asla). Üretim hatası koşuyu FAILED + PII'siz error_message ile
+    kapatır (OYS Celery görev gövdesinin senkron karşılığı); koşu kaydı her
+    durumda döner — geçmiş izlenebilir kalır.
+    """
+    if session.status not in (
+        ExamSessionStatus.DISTRIBUTED,
+        ExamSessionStatus.APPROVED,
+        ExamSessionStatus.ARCHIVED,
+    ):
+        raise ValidationError("Önce dağıtım yapın — kitapçık yerleşim sırasına göre üretilir.")
+    assignments = SeatAssignment.objects.filter(session=session)
+    if not assignments.exists():
+        raise ValidationError("Oturumda yerleşim yok.")
+
+    # Eksik kontrolü grup anahtarı bazında — seviye başına ayrı dosya.
+    needed_groups = set(assignments.values_list("conflict_group", flat=True).distinct())
+    have = set(_course_docs_keys(session))
+    missing = needed_groups - have
+    if missing:
+        labels = sorted(conflict_group_labels(missing).values())
+        raise ValidationError("Soru dosyası eksik dersler: " + ", ".join(labels) + ".")
+
+    run: BookletRun = BookletRun.objects.create(session=session, backup_copies=backup_copies)
+    run.status = BookletRunStatus.IN_PROGRESS
+    run.save(update_fields=["status", "updated_at"])
+    try:
+        generate_booklets_for_run(run)
+    except Exception as exc:  # üretim hatası koşuya yazılır (PII'siz)
+        run.status = BookletRunStatus.FAILED
+        run.error_message = f"{type(exc).__name__}: {exc}"[:2000]
+        run.save(update_fields=["status", "error_message", "updated_at"])
+    return run
+
+
+def generate_booklets_for_run(run: BookletRun) -> BookletRun:
+    """Koşunun asıl üretimi (OYS Celery görev gövdesi; testlerde doğrudan çağrılır).
+
+    Salon bazlı paketler: yerleşim `seat_no` sırasında (kelebek → oturma
+    sırası; klasik → okul no sırası — yerleşim zaten o sırada üretildi).
+    """
+    from django.core.files.base import ContentFile
+
+    session = run.session
+    docs = _course_docs(session)
+    info = _session_info(session)
+
+    assignments = list(
+        SeatAssignment.objects.filter(session=session)
+        .select_related("room")
+        .order_by("room_id", "seat_no")
+    )
+    by_room: dict[int, tuple[str, list[booklet.BookletSpec]]] = {}
+    for a in assignments:
+        name, specs = by_room.setdefault(a.room_id, (a.room.name, []))
+        specs.append(
+            booklet.BookletSpec(
+                full_name=a.full_name,
+                class_label=a.class_label,
+                student_number=a.student_number,
+                group_key=a.conflict_group,
+            )
+        )
+
+    packages = [
+        booklet.build_room_package(name, specs, docs, info, backup_copies=run.backup_copies)
+        for name, specs in by_room.values()
+    ]
+    zip_bytes = booklet.package_zip(packages)
+
+    run.manifest = {
+        "rooms": [
+            {
+                "room_name": pkg.room_name,
+                "booklets": pkg.booklet_count,
+                "pages": pkg.page_count,
+                "missing_groups": pkg.missing_groups,
+            }
+            for pkg in packages
+        ],
+        "total_booklets": sum(p.booklet_count for p in packages),
+        "total_pages": sum(p.page_count for p in packages),
+    }
+    run.file.save(
+        f"kitapcik_oturum_{session.pk}_kosu_{run.pk}.zip", ContentFile(zip_bytes), save=False
+    )
+    run.status = BookletRunStatus.COMPLETED
+    run.completed_at = timezone.now()
+    run.save()
+    return run
