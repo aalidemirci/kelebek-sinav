@@ -134,7 +134,7 @@ describe("App — kabuk gezinmesi", () => {
   it("ana bölüm bağlantılarını gösterir", async () => {
     ekranaBas("/");
     await screen.findByRole("heading", { name: "Panel" });
-    for (const ad of ["Panel", "Kişiler", "Ders Havuzu", "Ayarlar"]) {
+    for (const ad of ["Panel", "Salonlar", "Kişiler", "Ders Havuzu", "Ayarlar"]) {
       expect(screen.getByRole("link", { name: ad })).toBeInTheDocument();
     }
     expect(screen.getByRole("link", { name: "Hakkında ve Lisans" })).toHaveAttribute(

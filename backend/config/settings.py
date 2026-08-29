@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "apps.okul",
     "apps.dersler",
+    "apps.sinav",
 ]
 
 # ---------------------------------------------------------------------------

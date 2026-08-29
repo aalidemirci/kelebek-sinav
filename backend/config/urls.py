@@ -16,6 +16,7 @@ from django.urls import URLPattern, URLResolver, include, path, re_path
 urlpatterns: list[URLPattern | URLResolver] = [
     path("api/v1/", include("apps.okul.urls")),
     path("api/v1/", include("apps.dersler.urls")),
+    path("api/v1/", include("apps.sinav.urls")),
 ]
 
 

@@ -16,12 +16,14 @@ interface NavItem {
 // Salonlar (F2), Takvimler (F6) buraya eklenecek.
 const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Panel", icon: "space_dashboard" },
+  { to: "/salonlar", label: "Salonlar", icon: "meeting_room" },
   { to: "/kisiler", label: "Kişiler", icon: "group" },
   { to: "/dersler", label: "Ders Havuzu", icon: "menu_book" },
   { to: "/ayarlar", label: "Ayarlar", icon: "settings" },
 ];
 
 const PAGE_TITLES: Array<[prefix: string, title: string]> = [
+  ["/salonlar", "Sınav salonları"],
   ["/kisiler", "Kişiler"],
   ["/dersler", "Ders havuzu"],
   ["/ayarlar", "Ayarlar"],

@@ -15,6 +15,7 @@ import HakkindaPage from "./modules/hakkinda/HakkindaPage";
 import KisilerPage from "./modules/kisiler/KisilerPage";
 import KurulumPage from "./modules/kurulum/KurulumPage";
 import PanelPage from "./modules/panel/PanelPage";
+import SalonlarPage from "./modules/salonlar/SalonlarPage";
 
 export default function App() {
   return (
@@ -29,6 +30,8 @@ export default function App() {
             <Route path="/kisiler" element={<KisilerPage />} />
             {/* MEB çizelgesinden tohumlanan ders havuzu (K5/U4). */}
             <Route path="/dersler" element={<DersHavuzuPage />} />
+            {/* Salon şablonları + 2D yerleşim editörü (F2). */}
+            <Route path="/salonlar" element={<SalonlarPage />} />
             {/* Ders yılı, şubeler, okul künyesi, güvenlik. */}
             <Route path="/ayarlar" element={<AyarlarPage />} />
             <Route path="/hakkinda" element={<HakkindaPage />} />
