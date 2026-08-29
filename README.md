@@ -15,11 +15,11 @@ telemetri yok. Öğrenci/öğretmen verisi e-Okul raporlarından (xlsx/pano) iç
 aktarılır; ders havuzu MEB ders çizelgesinden okul türü ve kademeye göre
 tohumlanır. Opsiyonel uygulama parolası ile alan şifrelemesi ve şifreli yedek.
 
-**Durum:** F2 (salonlar + motor) tamamlandı — kelebek dağıtım motoru, bağımsız
-doğrulayıcı ve 2D plan şeması OYS'den bire bir taşındı (aynı-seed determinizm,
-satranç modu, pin sabitliği testleriyle); salon editörü (tıkla-yerleştir,
-backend koltuk numarası önizlemesi) ve şube dersliği otomasyonu çalışıyor.
-Sırada F3: sınav oturumu akışı (sihirbaz + dağıtım + takas + yoklama).
+**Durum:** F3 (oturum akışı) tamamlandı — 5 adımlı sınav sihirbazı (nakil
+beyanı → bilgiler → dersler → salonlar → dağıt & önizle), kelebek/klasik
+dağıtım + tıkla-takas, yerleştirme kuralları (dağıtımda sabitlenir), yoklama
+ve durum makinesi (taslak → dağıtıldı → onaylı → arşiv; onay yalnız ihlal=0
+yerleşimde) uçtan uca çalışıyor. Sırada F4: evrak seti (R1-R9 + kroki PDF).
 Plan: [docs/tasarim/2026-08-29-genel-tasarim.md](docs/tasarim/2026-08-29-genel-tasarim.md)
 
 ## Köken
