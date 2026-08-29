@@ -1,0 +1,29 @@
+# Gerçek veri asla depoya girmez (KVKK)
+data/raw/
+backend/data/
+media/
+*.xlsx
+*.sqlite3
+*.db
+*.ksbak
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*_cache/
+.coverage
+htmlcov/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+
+# Paketleme çıktıları
+build/
+dist/
+
+# Ortam
+.env
+.DS_Store
+Thumbs.db
