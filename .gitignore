@@ -13,6 +13,7 @@ __pycache__/
 .venv/
 *_cache/
 .coverage
+coverage.xml
 htmlcov/
 
 # Node / frontend
