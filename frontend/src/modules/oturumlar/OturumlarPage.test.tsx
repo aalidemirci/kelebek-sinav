@@ -94,7 +94,7 @@ describe("OturumlarPage", () => {
     expect(await screen.findByText("DETAY EKRANI")).toBeInTheDocument();
   });
 
-  it("yeni oturum: form doğru gövdeyle (term_id, proctors YOK) gönderilir ve detaya gidilir", async () => {
+  it("yeni oturum: form doğru gövdeyle (term_id + proctors_enabled) gönderilir ve detaya gidilir", async () => {
     const user = userEvent.setup();
     exam.list.mockResolvedValue(paginated([]));
     exam.create.mockResolvedValue(makeSession({ id: 7, name: "3. Ortak Sınav" }));
@@ -111,8 +111,8 @@ describe("OturumlarPage", () => {
       screen.getByLabelText(/Dönem/),
       await screen.findByRole("option", { name: "2025-2026 Ders Yılı 1. Dönem" }),
     );
-    // Gözetmen onay kutusu KS diyaloğunda yoktur.
-    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    // Gözetmen anahtarı F7 ile diyaloğa geldi (U2 — varsayılan kapalı).
+    await user.click(screen.getByRole("checkbox", { name: /Gözetmen modülü açık/ }));
 
     await user.click(screen.getByRole("button", { name: "Oluştur" }));
 
@@ -123,6 +123,7 @@ describe("OturumlarPage", () => {
         start_time: "09:00",
         duration_minutes: 40,
         layout_mode: "BUTTERFLY",
+        proctors_enabled: true,
         term_id: 3,
       }),
     );

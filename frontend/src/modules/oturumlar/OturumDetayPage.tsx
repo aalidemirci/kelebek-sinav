@@ -1,10 +1,11 @@
 // Oturum detayı (F3-F5): TASLAK'ta sihirbaz; sonrasında sekmeli paneller
-// (Yerleşim + Sorular ve Kitapçıklar + Evrak + koşullu Yoklama) + yaşam
+// (Yerleşim + Gözetmenler + Sorular ve Kitapçıklar + Evrak + koşullu Yoklama) + yaşam
 // döngüsü eylemleri (onayla → kilit; yeniden aç; arşivle → salt-okunur,
 // evrak yeniden basılabilir). Onay İHLAL=0 şartına bağlıdır (backend approve
 // guard'ı). OYS T11 OturumDetayPage'den UYARLANDI:
-// - Gözetmenler sekmesi F7'de gelir; Rapor Merkezi'nin karşılığı Evrak (F4),
-//   Soru Yükleme'nin karşılığı Sorular ve Kitapçıklar (F5) sekmesidir;
+// - Rapor Merkezi'nin karşılığı Evrak (F4), Soru Yükleme'nin karşılığı
+//   Sorular ve Kitapçıklar (F5); Gözetmenler sekmesi F7 ile geldi (kapalı
+//   ayarda panel bilgi mesajı basar — sekme OYS gibi koşulsuz);
 // - dönem etiketi `term_label` (OYS `semester_label` değil);
 // - rota kökü `/oturumlar`. Yoklama yalnız ONAYLI/ARŞİV oturumda
 //   (yerleşim kesinleşmeden yoklama açılmaz — OYS Tur 245 kuralı korunur).
@@ -21,6 +22,7 @@ import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import { examSessionApi } from "./api";
 import EvrakPaneli from "./EvrakPaneli";
+import GozetmenlerPaneli from "./GozetmenlerPaneli";
 import { formatDate, StatusBadge } from "./oturumEtiket";
 import SinavSihirbazi from "./SinavSihirbazi";
 import SorularPaneli from "./SorularPaneli";
@@ -96,6 +98,7 @@ export default function OturumDetayPage() {
   // Evrak DRAFT dışı her durumda (dağıtımdan itibaren; arşivden yeniden basım).
   const tabs = [
     { key: "yerlesim", label: "Yerleşim", icon: "grid_on" },
+    { key: "gozetmenler", label: "Gözetmenler", icon: "supervisor_account" },
     { key: "sorular", label: "Sorular ve Kitapçıklar", icon: "description" },
     { key: "evrak", label: "Evrak", icon: "print" },
     ...(attendanceOpen ? [{ key: "yoklama", label: "Yoklama", icon: "person_off" }] : []),
@@ -176,6 +179,7 @@ export default function OturumDetayPage() {
           <Tabs items={tabs} active={tab} onChange={setTab} idBase="oturum-detay" />
           <div {...tabPanelProps("oturum-detay", tab)}>
             {tab === "yerlesim" && <YerlesimPaneli session={data} />}
+            {tab === "gozetmenler" && <GozetmenlerPaneli session={data} />}
             {tab === "sorular" && <SorularPaneli session={data} />}
             {tab === "evrak" && <EvrakPaneli session={data} />}
             {tab === "yoklama" && attendanceOpen && <YoklamaPaneli session={data} />}

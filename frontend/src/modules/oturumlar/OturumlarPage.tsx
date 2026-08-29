@@ -1,8 +1,8 @@
 // Sınav Oturumları sayfası (F3): liste + yeni oturum diyaloğu (sihirbaz Adım 1
 // bilgileri). OYS T11 OturumlarPage'den UYARLANDI:
 // - dönem alanı `term_id` + `terms` ucu (OYS `semester_*` değil);
-// - gözetmen modülü KS kapsamı dışı → `proctors_enabled` alanı ve "Gözetmenli"
-//   rozeti DÜŞTÜ (tasarım ALMA sınıfı);
+// - gözetmen anahtarı (`proctors_enabled`) F7 ile geldi (U2 — varsayılan
+//   kapalı); yeni oturum diyaloğunda ve sihirbaz Adım 1'de açılabilir;
 // - rota kökü `/oturumlar` (modül öneki yok — App.tsx route ağacı).
 // Durum rozeti + tarih biçimi ./oturumEtiket'te (detay sayfasıyla ortak).
 // M3 token'ları — ham renk/px yok.
@@ -38,6 +38,7 @@ export default function OturumlarPage() {
     start_time: "09:00",
     duration_minutes: "40",
     layout_mode: "BUTTERFLY" as LayoutModeCode,
+    proctors_enabled: false,
     term_id: "",
   });
 
@@ -53,6 +54,7 @@ export default function OturumlarPage() {
         start_time: form.start_time,
         duration_minutes: Number(form.duration_minutes),
         layout_mode: form.layout_mode,
+        proctors_enabled: form.proctors_enabled,
         term_id: Number(form.term_id),
       }),
     onSuccess: (session) => {
@@ -200,6 +202,15 @@ export default function OturumlarPage() {
               setForm((f) => ({ ...f, layout_mode: e.target.value as LayoutModeCode }))
             }
           />
+          <label className="flex min-h-9 items-center gap-2 text-body-medium text-on-surface">
+            <input
+              type="checkbox"
+              className="h-5 w-5 accent-primary"
+              checked={form.proctors_enabled}
+              onChange={(e) => setForm((f) => ({ ...f, proctors_enabled: e.target.checked }))}
+            />
+            Gözetmen modülü açık (görevlendirme + R6 belgesi)
+          </label>
         </div>
       </Dialog>
     </div>

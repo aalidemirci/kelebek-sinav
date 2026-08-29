@@ -2,7 +2,7 @@
 // TASLAK oturumun 5 adımı:
 //   0 Veri Ön Kontrolü (B10 — beyan esaslı: sayılar + son aktarım tazeliği;
 //     OYS'deki e-Okul nakil hareket sorgusu KS'de YOK)
-//   1 Oturum bilgileri (düzen seçimi; OYS'deki gözetmen anahtarı KS'de YOK)
+//   1 Oturum bilgileri (düzen seçimi; gözetmen anahtarı (proctors_enabled) F7 ile Adım 1'e geldi)
 //   2 Ders ve katılımcılar (LEVEL | SECTIONS — GROUPS kaldırıldı, TB7;
 //     canlı sayılar + çakışma uyarıları)
 //   3 Salon seçimi (klasikte adım atlanır) + kapasite yeterlilik çubuğu
@@ -189,6 +189,7 @@ function InfoStep({
     start_time: session.start_time.slice(0, 5),
     duration_minutes: String(session.duration_minutes),
     layout_mode: session.layout_mode as LayoutModeCode,
+    proctors_enabled: session.proctors_enabled,
   });
 
   const save = useMutation({
@@ -199,6 +200,7 @@ function InfoStep({
         start_time: form.start_time,
         duration_minutes: Number(form.duration_minutes),
         layout_mode: form.layout_mode,
+        proctors_enabled: form.proctors_enabled,
       }),
     onSuccess: () => {
       onChanged();
@@ -248,6 +250,15 @@ function InfoStep({
         onChange={(e) => setForm((f) => ({ ...f, layout_mode: e.target.value as LayoutModeCode }))}
         helperText="Klasikte salon seçimi yoktur — öğrenciler bağlı dersliklerine yerleşir."
       />
+      <label className="flex min-h-9 items-center gap-2 text-body-medium text-on-surface">
+        <input
+          type="checkbox"
+          className="h-5 w-5 accent-primary"
+          checked={form.proctors_enabled}
+          onChange={(e) => setForm((f) => ({ ...f, proctors_enabled: e.target.checked }))}
+        />
+        Gözetmen modülü açık (görevlendirme + R6 belgesi)
+      </label>
       <p className="text-body-small text-on-surface-variant">Dönem: {session.term_label}</p>
       <div className="flex justify-between">
         <Button variant="text" onClick={onBack}>

@@ -145,13 +145,14 @@ describe("SinavSihirbazi — Adım 0 (Veri Ön Kontrolü)", () => {
     expect(await screen.findByText(/Henüz öğrenci aktarımı yapılmamış/)).toBeInTheDocument();
   });
 
-  it("onaylı oturum Adım 1'den başlar; gözetmen izi yoktur", async () => {
+  it("onaylı oturum Adım 1'den başlar; gözetmen anahtarı Adım 1'de (F7)", async () => {
     renderWizard(makeSession({ transfer_check_confirmed_at: "2026-06-10T10:00:00+03:00" }));
 
     expect(await screen.findByRole("heading", { name: "Oturum Bilgileri" })).toBeInTheDocument();
     expect(sessionApi.preCheck).not.toHaveBeenCalled();
-    // OYS'deki gözetmen anahtarı KS'de bilinçli olarak yoktur.
-    expect(screen.queryByText(/Gözetmen/)).not.toBeInTheDocument();
+    // Gözetmen anahtarı F7 ile Adım 1'e geldi (U2 — varsayılan kapalı).
+    const kutu = screen.getByRole("checkbox", { name: /Gözetmen modülü açık/ });
+    expect(kutu).not.toBeChecked();
   });
 });
 

@@ -1,10 +1,10 @@
-"""sinav modelleri — salon (F2) + oturum (F3) + kitapçık (F5) + takvim (F6).
+"""sinav modelleri — salon (F2) + oturum (F3) + kitapçık (F5) + takvim (F6) + gözetmen (F7).
 
 OYS `sinav_islemleri/models.py`'den UYARLA (tasarım §11): `created_by` ve User
 FK'ları düşer (onay/beyan damgaları ad-snapshot + zaman olarak kalır — B12),
 `linked_section` → okul.ClassSection, Course → dersler.Course, Semester →
 okul.SchoolTerm; SeatAssignment/ExamAttendanceRecord ad snapshot'ları
-EncryptedCharField (U3). Gözetmen modelleri F7'de gelir.
+EncryptedCharField (U3). Gözetmen modelleri F7 ile tamamlandı.
 """
 
 from __future__ import annotations
@@ -897,3 +897,141 @@ class ExamTrackMark(BaseModel):
 
     def __str__(self) -> str:
         return f"Girdi #{self.entry_id} × {self.item_id}: {self.status}"
+
+
+# ===========================================================================
+# F7 — gözetmen görevlendirme (OYS T9b'den UYARLA; U2: elle atama, oto YOK)
+# ===========================================================================
+
+
+class ProctorRole(models.TextChoices):
+    """Görev rolü — CHIEF (salon başkanı) OYS Tur 235'te kalktı: okul içi
+    sınavda salona TEK öğretmen; devamsızlık ihtimali için salonsuz YEDEK."""
+
+    PROCTOR = "PROCTOR", "Gözetmen"
+    RESERVE = "RESERVE", "Yedek"
+
+
+class ProctorAssignment(BaseModel):
+    """Gözetmen görevlendirmesi — SNAPSHOT desenli (arşiv evrak sabitliği).
+
+    KS uyarlaması: `teacher` OYS'deki core.User yerine okul.Personnel'e bağlanır
+    (F27 anonimleştirmesinde koparılabilsin diye null/blank); `teacher_name`
+    ŞİFRELİ ad-snapshot'tır (tasarım §5 U3 listesi — kaynak şifreliyken kopya
+    düz kalamaz). Ada dayalı sıralama/teklik ORM'e yazılmaz (TB3) — teklik FK
+    üstünden, sıralama bellekte (`build_assignment_context`).
+    """
+
+    session = models.ForeignKey(
+        ExamSession,
+        on_delete=models.CASCADE,
+        related_name="proctor_assignments",
+        verbose_name="oturum",
+    )
+    room = models.ForeignKey(
+        ExamRoom,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="proctor_assignments",
+        verbose_name="salon",
+        help_text="YEDEK rolünde boş; gözetmende zorunlu (servis doğrular).",
+    )
+    teacher = models.ForeignKey(
+        "okul.Personnel",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="proctor_assignments",
+        verbose_name="öğretmen",
+        help_text="Anonimleştirilmiş arşivde boş (F27).",
+    )
+    teacher_name = EncryptedCharField("öğretmen adı (snapshot)", max_length=150)
+    role = models.CharField(
+        "rol", max_length=8, choices=ProctorRole.choices, default=ProctorRole.PROCTOR
+    )
+    acknowledged = models.BooleanField("tebellüğ edildi", default=False)
+    acknowledged_at = models.DateTimeField("tebellüğ zamanı", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "gözetmen görevlendirmesi"
+        verbose_name_plural = "gözetmen görevlendirmeleri"
+        ordering = ["room_id", "id"]
+        indexes = [models.Index(fields=["session", "room"], name="sinav_proctor_sess_room_idx")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session", "teacher"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_proctor_session_teacher_alive",
+            ),
+            # Salon başına TAM 1 canlı GÖZETMEN (yedekler room=NULL — kapsam dışı).
+            models.UniqueConstraint(
+                fields=["session", "room"],
+                condition=models.Q(deleted_at__isnull=True, role="PROCTOR"),
+                name="uq_proctor_session_room_proctor_alive",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Oturum {self.session_id} — {self.get_role_display()} (salon {self.room_id})"
+
+
+class ExemptionReason(models.TextChoices):
+    """Muafiyet gerekçesi — YALNIZ kategori (KVKK md. 6; PlacementRule emsali)."""
+
+    HEALTH = "HEALTH", "Sağlık"
+    DUTY = "DUTY", "İdari görev"
+    OTHER = "OTHER", "Diğer"
+
+
+class ProctorExemption(BaseModel):
+    """Gözetmenlik muafiyeti — kapsam oturum ya da kalıcı; gerekçe yalnız kategori.
+
+    HEALTH kategorisi özel nitelikli veriye İŞARET eder — tanı/rapor serbest
+    metni BİLİNÇLE YOKTUR (KVKK md. 6). Elle atamada bile muafiyet SERTTİR.
+    """
+
+    teacher = models.ForeignKey(
+        "okul.Personnel",
+        on_delete=models.PROTECT,
+        related_name="exam_proctor_exemptions",
+        verbose_name="öğretmen",
+    )
+    scope = models.CharField(
+        "kapsam", max_length=10, choices=RuleScope.choices, default=RuleScope.PERMANENT
+    )
+    session = models.ForeignKey(
+        ExamSession,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="proctor_exemptions",
+        verbose_name="oturum",
+        help_text="Yalnız SESSION kapsamında dolu.",
+    )
+    reason_category = models.CharField(
+        "gerekçe kategorisi",
+        max_length=10,
+        choices=ExemptionReason.choices,
+        default=ExemptionReason.OTHER,
+    )
+
+    class Meta:
+        verbose_name = "gözetmenlik muafiyeti"
+        verbose_name_plural = "gözetmenlik muafiyetleri"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["teacher"],
+                condition=models.Q(deleted_at__isnull=True, session__isnull=True),
+                name="uq_proctorexemption_permanent_alive",
+            ),
+            models.UniqueConstraint(
+                fields=["teacher", "session"],
+                condition=models.Q(deleted_at__isnull=True, session__isnull=False),
+                name="uq_proctorexemption_session_alive",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Muafiyet — personel {self.teacher_id} ({self.get_scope_display()})"

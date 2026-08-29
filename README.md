@@ -15,14 +15,14 @@ telemetri yok. Öğrenci/öğretmen verisi e-Okul raporlarından (xlsx/pano) iç
 aktarılır; ders havuzu MEB ders çizelgesinden okul türü ve kademeye göre
 tohumlanır. Opsiyonel uygulama parolası ile alan şifrelemesi ve şifreli yedek.
 
-**Durum:** F6 (takvim) tamamlandı — mevzuat pencereli sınav takvimleri
-(`statutory_window`: ayın son Pazartesisi + 11 gün; tur 3 dönemin son iki
-haftası elle), ders havuzu + tıkla-yerleştir ızgarası, öğrenci-bazlı günlük
-sınav limiti (3. sınav uyarı, ≥4 sert hata — konservatif düşüşle), onay akışı
-(taslak → sunuldu → onaylı; damgalar korunur), onaylı slottan tek tıkla
-kelebek oturum üretimi, süreç takip matrisi ve A4 yatay resmî takvim PDF'i
-(TASLAK filigranlı). Önceki fazlar: kitapçık (F5), evrak seti (F4), oturum
-akışı (F3), salonlar + motor (F2). Sırada F7: gözetmen görevlendirme.
+**Durum:** F7 (gözetmen) tamamlandı — elle görevlendirme (U2: oto-atama
+bilinçli yok), salon başına tek gözetmen + salonsuz yedekler, muafiyet
+yönetimi (gerekçe yalnız kategori — KVKK), tebliğ-tebellüğ izi, yeniden
+dağıtımda görevlendirme sıfırlama ve R6 belgesinin üç katmanlı K2 kapısı
+(katalog filtresi + üretim reddi + ZIP koşulu). Önceki fazlar: takvim (F6 —
+mevzuat pencereleri + öğrenci-bazlı günlük limit + slot→oturum + A4 yatay
+PDF), kitapçık (F5), evrak seti (F4), oturum akışı (F3), salonlar + motor
+(F2). Sırada F8: bakım (yedek + anonimleştirme + güncelleme bildirimi).
 Plan: [docs/tasarim/2026-08-29-genel-tasarim.md](docs/tasarim/2026-08-29-genel-tasarim.md)
 
 ## Köken

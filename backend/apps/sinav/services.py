@@ -1,4 +1,4 @@
-"""sinav servisleri — salon (F2) + oturum akışı (F3) + evrak (F4) + kitapçık (F5).
+"""sinav servisleri — salon (F2) + oturum (F3) + evrak (F4) + kitapçık (F5) + gözetmen (F7).
 
 OYS `sinav_islemleri/services.py`'den UYARLA (tasarım §11): `created_by`/User
 damgaları düşer (tek kullanıcı — ad-snapshot + zaman kalır), core köprüleri
@@ -24,7 +24,7 @@ from django.utils import timezone
 from apps.dersler import selectors as ders_selectors
 from apps.dersler import services as ders_services
 from apps.okul import selectors as okul_selectors
-from apps.okul.models import ClassSection, SchoolConfig
+from apps.okul.models import ClassSection, Personnel, SchoolConfig
 from apps.sinav import booklet, engine, layout, participants, reports, validator
 from apps.sinav.models import (
     BookletRun,
@@ -37,10 +37,14 @@ from apps.sinav.models import (
     ExamSessionStatus,
     ExamSessionType,
     ExcuseStatus,
+    ExemptionReason,
     LayoutMode,
     NumberingScheme,
     ParticipantType,
     PlacementRule,
+    ProctorAssignment,
+    ProctorExemption,
+    ProctorRole,
     QuestionDocument,
     RuleReason,
     RuleScope,
@@ -724,6 +728,14 @@ def distribute_session(
 
     # Önceki canlı yerleşimi kapat, yenisini yaz (SNAPSHOT deseni).
     SeatAssignment.objects.filter(session=session).update(deleted_at=timezone.now())
+    # F7: yeniden dağıtımda salon kümesi değişebilir — görevlendirmeler
+    # sıfırlanır (OYS T9b); muafiyetlere DOKUNULMAZ.
+    stale_proctors = ProctorAssignment.objects.filter(session=session)
+    if stale_proctors.exists():
+        stale_proctors.update(deleted_at=timezone.now())
+        result.warnings.append(
+            "Gözetmen görevlendirmeleri yeni dağıtım nedeniyle sıfırlandı; yeniden atayın."
+        )
     SeatAssignment.objects.bulk_create(
         SeatAssignment(
             session=session,
@@ -1406,10 +1418,10 @@ def render_session_report(
     if session.status not in _REPORTABLE_STATUSES:
         raise ValidationError("Önce dağıtım yapın — sınav evrakı yerleşimden üretilir.")
     if code == "r6":
-        # F7'de ProctorAssignment ile dolar; o güne dek görevlendirme hiç yok.
         if not session.proctors_enabled:
             raise ValidationError("Gözetmen modülü bu oturumda kapalı (K2); R6 üretilemez.")
-        raise ValidationError("Görevlendirme yapılmamış; önce gözetmen atayın.")
+        if not ProctorAssignment.objects.filter(session=session).exists():
+            raise ValidationError("Görevlendirme yapılmamış; önce gözetmen atayın.")
     if room_id is not None:
         if code not in _ROOM_SCOPED_CODES:
             raise ValidationError(
@@ -1451,6 +1463,9 @@ def render_session_report(
     elif code == "r4":
         template = "r4_announcement.html"
         context["sheets"] = reports.build_announcements(rows)
+    elif code == "r6":
+        template = "r6_assignment.html"
+        context["duty"] = reports.build_assignment_context(_proctor_rows(session))
     elif code == "r7":
         template = "r7_envelope.html"
         context["sheets"] = reports.build_envelope_sheets(rows)
@@ -1471,14 +1486,39 @@ def render_session_report(
     )
 
 
-def _proctor_names_by_room(session: ExamSession) -> dict[str, str]:
-    """Salon adı → görevli adları (R9 basılı sütunu).
+def _proctor_rows(session: ExamSession) -> list[reports.ProctorRow]:
+    """Görevlendirme snapshot'larını saf R6 satırlarına çevirir (booklet deseni)."""
+    return [
+        reports.ProctorRow(
+            teacher_name=a.teacher_name,
+            role=a.role,
+            role_label=a.get_role_display(),
+            room_name=a.room.name if a.room is not None else "",
+        )
+        for a in ProctorAssignment.objects.filter(session=session).select_related("room")
+    ]
 
-    F4'te görevlendirme modeli yok (F7'de gelir) — boş sözlük döner, R9'daki
-    görevli sütunu elle yazım için boş kalır (OYS'de gözetmen kapalı kipiyle
-    aynı davranış). İmza F7 sözleşmesi için şimdiden sabitlendi.
+
+def _proctor_names_by_room(session: ExamSession) -> dict[str, str]:
+    """R9 basımı: salon adı → görevli ad(lar)ı.
+
+    Salon başına tek gözetmen beklenir (Tur 235 sonrası); join mekanik olarak
+    çok-adlı eski kayıtları da kaldırır. Gözetmen modülü kapalıysa boş döner —
+    R9 elle yazım modunda kalır (K2). Sıralama düz alanlarda (salon adı/rol);
+    ad şifreli — ada dayalı ORM sıralaması yazılmaz (TB3).
     """
-    return {}
+    if not session.proctors_enabled:
+        return {}
+    names: dict[str, list[str]] = {}
+    rows = (
+        ProctorAssignment.objects.filter(session=session, room__isnull=False)
+        .select_related("room")
+        .order_by("room__name", "role", "id")
+    )
+    for assignment in rows:
+        assert assignment.room is not None  # filtre garantisi
+        names.setdefault(assignment.room.name, []).append(assignment.teacher_name)
+    return {room: ", ".join(people) for room, people in names.items()}
 
 
 def _validation_report_context(
@@ -1514,11 +1554,14 @@ def _validation_report_context(
 def render_session_reports_zip(session: ExamSession) -> ReportFile:
     """Tüm evrakı tek ZIP'te üretir (Evrak paneli "tümünü indir").
 
-    R10 kitapçıkları HARİÇ — onlar F5'te kendi ZIP'inde. R6 F4'te hiç
-    paketlenmez (görevlendirme modeli F7'de; geldiğinde OYS koşulu —
-    gözetmen açık + görevlendirme var — buraya döner).
+    R10 kitapçıkları HARİÇ — onlar F5'te kendi ZIP'inde. R6 yalnız gözetmen
+    modülü açık + görevlendirme varken pakete girer (K2 — koşulu sağlamayan
+    r6 sessizce dışarıda kalır, hata değil).
     """
-    codes = [code for code in REPORT_CODES if code != "r6"]
+    r6_available = (
+        session.proctors_enabled and ProctorAssignment.objects.filter(session=session).exists()
+    )
+    codes = [code for code in REPORT_CODES if code != "r6" or r6_available]
     files = [
         (rf.filename, rf.content) for rf in (render_session_report(session, code) for code in codes)
     ]
@@ -1788,3 +1831,220 @@ def generate_booklets_for_run(run: BookletRun) -> BookletRun:
     run.completed_at = timezone.now()
     run.save()
     return run
+
+
+# ===========================================================================
+# F7 — gözetmen görevlendirme (OYS T9b'den UYARLA; U2: ELLE atama)
+# Oto-atama ALINMADI (TB4): OYS'de havuz ders programı + devamsızlık
+# köprülerine dayanıyordu (B5/B6) — o kaynaklar KS'de yok, aynı yanlış-seçim
+# sorunu geri gelirdi. Adil-yük sayacı da onunla gitti.
+# ===========================================================================
+
+
+def _ensure_proctors_editable(session: ExamSession) -> None:
+    """Görevlendirme yalnız gözetmen modülü açık + DAĞITILDI oturumda düzenlenir.
+
+    Taslakta salonlar kesin değildir (klasik düzende salonlar yerleşimden
+    gelir); onaylı/arşiv oturumda evrak kilitlidir (T9 emsali).
+    """
+    if not session.proctors_enabled:
+        raise ValidationError("Gözetmen modülü bu oturumda kapalı (K2) — oturum ayarlarından açın.")
+    if session.status != ExamSessionStatus.DISTRIBUTED:
+        raise ValidationError(
+            f"Oturum '{session.get_status_display()}' durumunda; görevlendirme yalnız "
+            "dağıtılmış (henüz onaylanmamış) oturumda düzenlenebilir."
+        )
+
+
+def _resolve_active_personnel(teacher_id: int) -> Personnel:
+    """Aktif personeli çözer (OYS core köprüsü yerine yerel tablo — B9)."""
+    teacher: Personnel | None = Personnel.objects.filter(pk=teacher_id, is_active=True).first()
+    if teacher is None:
+        raise ValidationError(f"Aktif personel bulunamadı (id={teacher_id}).")
+    return teacher
+
+
+def create_proctor_exemption(
+    *,
+    teacher_id: int,
+    scope: str = RuleScope.PERMANENT,
+    session: ExamSession | None = None,
+    reason_category: str = ExemptionReason.OTHER,
+) -> ProctorExemption:
+    """Gözetmenlik muafiyeti oluşturur (gerekçe YALNIZ kategori — KVKK).
+
+    PlacementRule emsali: kapsam SESSION ise oturum zorunlu; onaylı/arşiv
+    oturuma muafiyet eklenemez; öğretmen başına kapsamda tek canlı kayıt.
+    """
+    teacher = _resolve_active_personnel(teacher_id)
+    if scope == RuleScope.SESSION and session is None:
+        raise ValidationError("Oturum kapsamı için oturum seçin.")
+    if scope == RuleScope.PERMANENT:
+        session = None
+    if session is not None and session.status not in (
+        ExamSessionStatus.DRAFT,
+        ExamSessionStatus.DISTRIBUTED,
+    ):
+        raise ValidationError(
+            f"Oturum '{session.get_status_display()}' durumunda; muafiyet eklenemez "
+            "(onaylı/arşivlenmiş oturum değiştirilemez)."
+        )
+    if ProctorExemption.objects.filter(teacher=teacher, session=session).exists():
+        raise ValidationError("Bu öğretmen için bu kapsamda zaten canlı bir muafiyet var.")
+    exemption: ProctorExemption = ProctorExemption.objects.create(
+        teacher=teacher,
+        scope=scope,
+        session=session,
+        reason_category=reason_category,
+    )
+    return exemption
+
+
+def remove_proctor_exemption(exemption: ProctorExemption) -> None:
+    """Muafiyeti kaldırır (soft-delete — tarihsel iz)."""
+    exemption.delete()
+
+
+def _exempt_teacher_ids(session: ExamSession) -> set[int]:
+    """Oturum için geçerli muafiyetler: oturuma özel + kalıcı."""
+    return set(
+        ProctorExemption.objects.filter(Q(session=session) | Q(session__isnull=True)).values_list(
+            "teacher_id", flat=True
+        )
+    )
+
+
+def _busy_teacher_ids(session: ExamSession) -> set[int]:
+    """Aynı tarihte zaman penceresi çakışan BAŞKA oturumda görevli öğretmenler.
+
+    Pencere oturum süresinden hesaplanır (ders bazlı süre farkları yok
+    sayılır — pencere oturumun varsayılan süresidir).
+    """
+    from datetime import datetime, timedelta
+
+    def _window(s: ExamSession) -> tuple[datetime, datetime]:
+        start = datetime.combine(s.exam_date, s.start_time)
+        return start, start + timedelta(minutes=s.duration_minutes)
+
+    start, end = _window(session)
+    busy: set[int] = set()
+    rows = (
+        ProctorAssignment.objects.filter(session__exam_date=session.exam_date)
+        .exclude(session=session)
+        .select_related("session")
+    )
+    for row in rows:
+        other_start, other_end = _window(row.session)
+        if start < other_end and other_start < end:
+            if row.teacher_id is not None:
+                busy.add(row.teacher_id)
+    return busy
+
+
+def _seated_rooms(session: ExamSession) -> list[ExamRoom]:
+    """Yerleşim almış salonlar (ada göre) — klasikte ExamSessionRoom satırı yoktur."""
+    room_ids = (
+        SeatAssignment.objects.filter(session=session).values_list("room_id", flat=True).distinct()
+    )
+    return list(ExamRoom.objects.filter(pk__in=list(room_ids)).order_by("name"))
+
+
+@transaction.atomic
+def assign_proctor(
+    session: ExamSession,
+    *,
+    teacher_id: int,
+    role: str = ProctorRole.PROCTOR,
+    room_id: int | None = None,
+) -> ProctorAssignment:
+    """Elle görevlendirme (U2 — tek akış; oto-öneri yok).
+
+    Kendi-şube kuralı elle atamada UYGULANMAZ (idare bilinçli ezebilir);
+    muafiyet ve aynı-tarih çakışması her zaman serttir.
+    """
+    _ensure_proctors_editable(session)
+    teacher = _resolve_active_personnel(teacher_id)
+    if teacher.pk in _exempt_teacher_ids(session):
+        raise ValidationError("Bu öğretmen gözetmenlikten muaf; önce muafiyeti kaldırın.")
+    if teacher.pk in _busy_teacher_ids(session):
+        raise ValidationError(
+            "Bu öğretmen aynı tarihte zaman penceresi çakışan başka oturumda görevli."
+        )
+    if ProctorAssignment.objects.filter(session=session, teacher=teacher).exists():
+        raise ValidationError("Bu öğretmen bu oturumda zaten görevli.")
+
+    room: ExamRoom | None = None
+    if role == ProctorRole.RESERVE:
+        if room_id is not None:
+            raise ValidationError("Yedek görevli salona bağlanmaz (salon boş bırakılır).")
+    else:
+        if room_id is None:
+            raise ValidationError("Bu görev için salon seçin.")
+        room = next((r for r in _seated_rooms(session) if r.pk == room_id), None)
+        if room is None:
+            raise ValidationError("Salon bu oturumun yerleşiminde kullanılmıyor.")
+        # Tur 235: salon başına TAM 1 gözetmen (DB kısıtı
+        # uq_proctor_session_room_proctor_alive garanti; burada dostça hata).
+        if ProctorAssignment.objects.filter(
+            session=session, room=room, role=ProctorRole.PROCTOR
+        ).exists():
+            raise ValidationError("Bu salonda zaten bir gözetmen var.")
+
+    assignment: ProctorAssignment = ProctorAssignment.objects.create(
+        session=session,
+        room=room,
+        teacher=teacher,
+        teacher_name=teacher.get_full_name(),
+        role=role,
+    )
+    return assignment
+
+
+def remove_proctor_assignment(assignment: ProctorAssignment) -> None:
+    """Görevlendirmeyi kaldırır (soft-delete) — yalnız düzenlenebilir durumda."""
+    _ensure_proctors_editable(assignment.session)
+    assignment.delete()
+
+
+def acknowledge_proctor(assignment: ProctorAssignment) -> ProctorAssignment:
+    """Tebliğ-tebellüğ işler (mevzuat: imza karşılığı tebliğin sistem izi).
+
+    Onaydan sonra da işlenebilir (tebliğ genelde müdür onayını izler);
+    arşivde kapalı. Tek kullanıcıda elle işaret (B12 emsali).
+    """
+    if assignment.session.status not in (
+        ExamSessionStatus.DISTRIBUTED,
+        ExamSessionStatus.APPROVED,
+    ):
+        raise ValidationError("Tebellüğ yalnız dağıtılmış veya onaylı oturumda işlenebilir.")
+    if assignment.acknowledged:
+        raise ValidationError("Bu görevlendirme zaten tebellüğ edilmiş.")
+    assignment.acknowledged = True
+    assignment.acknowledged_at = timezone.now()
+    assignment.save(update_fields=["acknowledged", "acknowledged_at", "updated_at"])
+    return assignment
+
+
+def proctor_candidates(session: ExamSession) -> list[dict[str, Any]]:
+    """Atama ekranı verisi: aktif personel havuzu + uygunluk bayrakları.
+
+    KS sadeleşmesi (TB4): OYS'deki ders-programı/devamsızlık bayrakları ve
+    adil-yük sayacı ALINMADI — havuz = aktif personel; uygunluk = − muaf −
+    aynı-pencere-görevli − bu-oturumda-görevli. Sıralama TR-katlamalı Python
+    tarafında (ad şifreli — TB3).
+    """
+    exempt = _exempt_teacher_ids(session)
+    busy = _busy_teacher_ids(session)
+    assigned = set(
+        ProctorAssignment.objects.filter(session=session).values_list("teacher_id", flat=True)
+    )
+    return [
+        {
+            "teacher_id": t.pk,
+            "teacher_name": t.get_full_name(),
+            "is_exempt": t.pk in exempt,
+            "is_busy": t.pk in busy,
+            "is_assigned": t.pk in assigned,
+        }
+        for t in okul_selectors.personnel_sorted(only_active=True)
+    ]

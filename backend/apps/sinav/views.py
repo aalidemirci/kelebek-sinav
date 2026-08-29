@@ -28,6 +28,8 @@ from apps.sinav.models import (
     ExamSession,
     ExamSessionCourse,
     PlacementRule,
+    ProctorAssignment,
+    ProctorExemption,
 )
 from apps.sinav.serializers import (
     AttendanceMarkSerializer,
@@ -40,6 +42,9 @@ from apps.sinav.serializers import (
     ExamSessionSerializer,
     ParticipantSerializer,
     PlacementRuleSerializer,
+    ProctorAssignmentSerializer,
+    ProctorAssignSerializer,
+    ProctorExemptionSerializer,
     QuestionDocumentSerializer,
     QuestionUploadSerializer,
     SeatAssignmentSerializer,
@@ -431,6 +436,38 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
             raise drf_serializers.ValidationError(exc.messages) from exc
         return Response(BookletRunSerializer(run).data, status=201)
 
+    # ÇOK METOTLU `@action` — GET görevlendirme listesi · POST elle atama (F7).
+    @action(detail=True, methods=["get", "post"], serializer_class=ProctorAssignmentSerializer)
+    def proctors(self, request: Request, pk: str | None = None) -> Response:
+        """Gözetmen görevlendirmeleri (U2 — elle atama; oto-öneri yok)."""
+        session = self.get_object()
+        if request.method == "GET":
+            qs = selectors.proctor_assignments(session_id=session.pk)
+            return Response(
+                {
+                    "proctors_enabled": session.proctors_enabled,
+                    "assignments": ProctorAssignmentSerializer(qs, many=True).data,
+                }
+            )
+        serializer = ProctorAssignSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        vd = serializer.validated_data
+        try:
+            assignment = services.assign_proctor(
+                session,
+                teacher_id=vd["teacher_id"],
+                role=vd.get("role", "PROCTOR"),
+                room_id=vd.get("room_id"),
+            )
+        except DjangoValidationError as exc:
+            raise drf_serializers.ValidationError(exc.messages) from exc
+        return Response(ProctorAssignmentSerializer(assignment).data, status=201)
+
+    @action(detail=True, methods=["get"], url_path="proctor-candidates")
+    def proctor_candidates(self, request: Request, pk: str | None = None) -> Response:
+        """Atama ekranı: aktif personel havuzu + uygunluk bayrakları (F7)."""
+        return Response({"candidates": services.proctor_candidates(self.get_object())})
+
     # --- Durum makinesi ----------------------------------------------------
     def _transition(self, transition: Any) -> Response:
         """Durum geçişi ortak gövdesi — hata Türkçe 400'e çevrilir."""
@@ -665,4 +702,64 @@ class ExamAttendanceRecordViewSet(viewsets.ModelViewSet[ExamAttendanceRecord]):
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         record = self.get_object()
         services.unmark_absent(record)
+        return Response(status=204)
+
+
+class ProctorAssignmentViewSet(viewsets.GenericViewSet[ProctorAssignment]):
+    """Görevlendirme satırı — kaldırma + tebellüğ işleme (F7)."""
+
+    serializer_class = ProctorAssignmentSerializer
+
+    def get_queryset(self) -> QuerySet[ProctorAssignment]:
+        return selectors.proctor_assignments()
+
+    def destroy(self, request: Request, pk: str | None = None) -> Response:
+        assignment = self.get_object()
+        try:
+            services.remove_proctor_assignment(assignment)
+        except DjangoValidationError as exc:
+            raise drf_serializers.ValidationError(exc.messages) from exc
+        return Response(status=204)
+
+    @action(detail=True, methods=["post"])
+    def acknowledge(self, request: Request, pk: str | None = None) -> Response:
+        """Tebliğ-tebellüğ işler (imza karşılığı tebliğin sistem izi)."""
+        assignment = self.get_object()
+        try:
+            assignment = services.acknowledge_proctor(assignment)
+        except DjangoValidationError as exc:
+            raise drf_serializers.ValidationError(exc.messages) from exc
+        return Response(ProctorAssignmentSerializer(assignment).data)
+
+
+class ProctorExemptionViewSet(viewsets.ModelViewSet[ProctorExemption]):
+    """Gözetmenlik muafiyetleri (F7) — güncelleme yok: kaldır + yeniden ekle.
+
+    `reason_category` SAĞLIK kategorisinde özel nitelikli veriye işaret eder
+    (PlacementRule emsali); serbest metin alanı bilinçle yoktur.
+    """
+
+    serializer_class = ProctorExemptionSerializer
+    http_method_names = ["get", "post", "delete"]
+
+    def get_queryset(self) -> QuerySet[ProctorExemption]:
+        params = self.request.query_params
+        session_raw = params.get("session")
+        return selectors.proctor_exemptions(
+            session_id=int(session_raw) if session_raw and session_raw.isdigit() else None,
+        )
+
+    def perform_create(self, serializer: drf_serializers.BaseSerializer[ProctorExemption]) -> None:
+        data: dict[str, Any] = dict(serializer.validated_data or {})
+        session_id = data.pop("session_id", None)
+        session = selectors.get_exam_session(session_id) if session_id is not None else None
+        if session_id is not None and session is None:
+            raise drf_serializers.ValidationError("Oturum bulunamadı.")
+        try:
+            serializer.instance = services.create_proctor_exemption(session=session, **data)
+        except DjangoValidationError as exc:
+            raise drf_serializers.ValidationError(exc.messages) from exc
+
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        services.remove_proctor_exemption(self.get_object())
         return Response(status=204)

@@ -1,4 +1,4 @@
-"""sinav DRF serializer'ları — salon (F2) + oturum (F3) + kitapçık (F5) + takvim (F6)."""
+"""sinav DRF serializer'ları — F2 salon · F3 oturum · F5 kitapçık · F6 takvim · F7 gözetmen."""
 
 from __future__ import annotations
 
@@ -19,6 +19,9 @@ from apps.sinav.models import (
     ExamTrackItem,
     NumberingScheme,
     PlacementRule,
+    ProctorAssignment,
+    ProctorExemption,
+    ProctorRole,
     QuestionDocument,
     ScoreMode,
     SeatAssignment,
@@ -441,3 +444,64 @@ class ExamTrackItemSerializer(serializers.ModelSerializer[ExamTrackItem]):
         fields = ("id", "name", "description", "order", "is_active")
         read_only_fields = ("id", "order")
         validators: list[object] = []
+
+
+# --------------------------------------------------------------------------- #
+# F7 — gözetmen görevlendirme (OYS T9b serializer'larından UYARLA)
+# --------------------------------------------------------------------------- #
+
+
+class ProctorAssignmentSerializer(serializers.ModelSerializer[ProctorAssignment]):
+    """Görevlendirme satırı — personel adı snapshot (şifreli alan çözülür)."""
+
+    session_id = serializers.IntegerField(read_only=True)
+    teacher_id = serializers.IntegerField(read_only=True)
+    room_id = serializers.IntegerField(read_only=True, allow_null=True)
+    room_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProctorAssignment
+        fields = (
+            "id",
+            "session_id",
+            "teacher_id",
+            "teacher_name",
+            "role",
+            "room_id",
+            "room_name",
+            "acknowledged",
+            "acknowledged_at",
+        )
+        read_only_fields = fields
+
+    def get_room_name(self, obj: ProctorAssignment) -> str:
+        return obj.room.name if obj.room is not None else ""
+
+
+class ProctorAssignSerializer(serializers.Serializer[Any]):
+    """`POST /exam-sessions/<id>/proctors/` girdisi (elle atama — U2)."""
+
+    teacher_id = serializers.IntegerField(min_value=1)
+    role = serializers.ChoiceField(
+        choices=ProctorRole.choices, required=False, default=ProctorRole.PROCTOR
+    )
+    room_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+
+
+class ProctorExemptionSerializer(serializers.ModelSerializer[ProctorExemption]):
+    """Gözetmenlik muafiyeti — ÖZEL NİTELİKLİ veriye işaret (PlacementRule emsali).
+
+    Gerekçe yalnız kategori; güncelleme yok (kaldır + yeniden ekle).
+    """
+
+    teacher_id = serializers.IntegerField()
+    teacher_name = serializers.SerializerMethodField()
+    session_id = serializers.IntegerField(required=False, allow_null=True)
+
+    class Meta:
+        model = ProctorExemption
+        fields = ("id", "teacher_id", "teacher_name", "scope", "session_id", "reason_category")
+        read_only_fields = ("id", "teacher_name")
+
+    def get_teacher_name(self, obj: ProctorExemption) -> str:
+        return obj.teacher.get_full_name()

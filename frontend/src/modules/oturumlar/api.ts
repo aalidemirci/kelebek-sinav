@@ -3,8 +3,8 @@
 // KS backend'idir (`apps/sinav/{serializers,views,urls}.py`):
 // - `term_id`/`term_label` (OYS `semester_*` değil); dönem seçici `terms` ucu.
 // - GROUPS katılımcı tipi ve `group_ids` YOK (TB7 — LEVEL + SECTIONS kaldı).
-// - Gözetmen/soru dosyası/kitapçık/rapor/takvim uçları bu dilimde YOKTUR
-//   (F3 kapsamı dışı — kasıtlı; rapor/evrak F4'te gelir).
+// - Evrak (F4), kitapçık (F5) ve gözetmen (F7) uçları fazlarıyla eklendi;
+//   takvim uçları `modules/takvimler/api.ts`'dedir (F6).
 // - PlacementRule uçları YENİdir (OYS FE'de hiç yoktu) — KVKK md. 6 notuna bak.
 // Salon listesi için `examRoomApi` salonlar modülündedir (oradan import edilir,
 // burada kopyası tutulmaz).
@@ -105,6 +105,7 @@ export interface ExamSessionPayload {
   name?: string;
   exam_date?: string;
   start_time?: string;
+  proctors_enabled?: boolean;
   duration_minutes?: number;
   session_type?: ExamSessionTypeCode;
   layout_mode?: LayoutModeCode;
@@ -207,6 +208,49 @@ export interface DistributeResult {
   placed: number;
   warnings: string[];
   report: ValidationReport;
+}
+
+// --- Gözetmen görevlendirme (F7) ---
+
+export type ProctorRoleCode = "PROCTOR" | "RESERVE";
+
+export interface ProctorAssignmentRow {
+  id: number;
+  session_id: number;
+  teacher_id: number;
+  teacher_name: string;
+  role: ProctorRoleCode;
+  room_id: number | null;
+  room_name: string;
+  acknowledged: boolean;
+  acknowledged_at: string | null;
+}
+
+/** Aday satırı — KS sadeleşmesi (TB4): ders programı/devamsızlık bayrağı ve
+ * dönem yük sayacı yok; uygunluk = muaf/pencere-çakışması/oturumda-görevli. */
+export interface ProctorCandidate {
+  teacher_id: number;
+  teacher_name: string;
+  is_exempt: boolean;
+  is_busy: boolean;
+  is_assigned: boolean;
+}
+
+export type ExemptionReasonCode = "HEALTH" | "DUTY" | "OTHER";
+
+export const EXEMPTION_REASON_TR: Record<ExemptionReasonCode, string> = {
+  HEALTH: "Sağlık",
+  DUTY: "İdari görev",
+  OTHER: "Diğer",
+};
+
+export interface ProctorExemptionRow {
+  id: number;
+  teacher_id: number;
+  teacher_name: string;
+  scope: "PERMANENT" | "SESSION";
+  session_id: number | null;
+  reason_category: ExemptionReasonCode;
 }
 
 // --- Soru dosyası + kitapçık (F5) ---
@@ -337,6 +381,36 @@ export const examSessionApi = {
   bookletRuns: (id: number) =>
     api.get<Paginated<BookletRun>>(`/booklet-runs/?session=${id}&limit=10`),
   bookletRunZipBlob: (runId: number) => api.getBlob(`/booklet-runs/${runId}/download/`),
+
+  // --- Gözetmen görevlendirme (F7) — elle atama, oto-öneri YOK (U2/TB4) ---
+  proctors: (id: number) =>
+    api.get<{ proctors_enabled: boolean; assignments: ProctorAssignmentRow[] }>(
+      `/exam-sessions/${id}/proctors/`,
+    ),
+  assignProctor: (
+    id: number,
+    payload: { teacher_id: number; role?: ProctorRoleCode; room_id?: number },
+  ) => api.post<ProctorAssignmentRow>(`/exam-sessions/${id}/proctors/`, payload),
+  proctorCandidates: (id: number) =>
+    api.get<{ candidates: ProctorCandidate[] }>(`/exam-sessions/${id}/proctor-candidates/`),
+  removeProctor: (assignmentId: number) => api.del<void>(`/proctor-assignments/${assignmentId}/`),
+  acknowledgeProctor: (assignmentId: number) =>
+    api.post<ProctorAssignmentRow>(`/proctor-assignments/${assignmentId}/acknowledge/`),
+};
+
+/** Gözetmenlik muafiyetleri — güncelleme yok: kaldır + yeniden ekle (KVKK izi). */
+export const proctorExemptionApi = {
+  list: (sessionId?: number) =>
+    api.get<Paginated<ProctorExemptionRow>>(
+      `/proctor-exemptions/?limit=100${sessionId ? `&session=${sessionId}` : ""}`,
+    ),
+  create: (payload: {
+    teacher_id: number;
+    scope: "PERMANENT" | "SESSION";
+    session_id?: number | null;
+    reason_category?: ExemptionReasonCode;
+  }) => api.post<ProctorExemptionRow>("/proctor-exemptions/", payload),
+  remove: (id: number) => api.del<void>(`/proctor-exemptions/${id}/`),
 };
 
 // ---------------------------------------------------------------------------

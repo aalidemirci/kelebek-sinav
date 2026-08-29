@@ -1,5 +1,5 @@
-// Oturum detayı testleri (F3+F4): TASLAK'ta sihirbaz; sonrasında sekmeler
-// (Yerleşim + Evrak + koşullu Yoklama — Sorular/Gözetmen sekmeleri F5/F7'de) +
+// Oturum detayı testleri (F3-F7): TASLAK'ta sihirbaz; sonrasında sekmeler
+// (Yerleşim + Gözetmenler + Sorular + Evrak + koşullu Yoklama) +
 // yaşam döngüsü eylemleri. Paneller ayrı dosyalarda paralel geliştirilir →
 // vi.mock ile yerine geçirilir; test panel içeriğine değil props sözleşmesine
 // (session) bakar. Ortak kurucu ./testFixtures'tan (test dosyaları birbirinden
@@ -42,6 +42,9 @@ vi.mock("./EvrakPaneli", () => ({
 }));
 vi.mock("./SorularPaneli", () => ({
   default: ({ session }: { session: ExamSession }) => <div>SORULAR PANELİ {session.id}</div>,
+}));
+vi.mock("./GozetmenlerPaneli", () => ({
+  default: ({ session }: { session: ExamSession }) => <div>GÖZETMEN PANELİ {session.id}</div>,
 }));
 
 import OturumDetayPage from "./OturumDetayPage";
@@ -92,7 +95,7 @@ describe("OturumDetayPage", () => {
     expect(await screen.findByText("OTURUM LİSTESİ")).toBeInTheDocument();
   });
 
-  it("DAĞITILDI: Yerleşim + Sorular + Evrak sekmeleri (Yoklama/Gözetmen yok); Onayla approve çağırır", async () => {
+  it("DAĞITILDI: Yerleşim + Gözetmenler + Sorular + Evrak sekmeleri (Yoklama yok); Onayla approve çağırır", async () => {
     const user = userEvent.setup();
     exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
     exam.approve.mockResolvedValue(makeSession({ status: "APPROVED" }));
@@ -103,8 +106,8 @@ describe("OturumDetayPage", () => {
     expect(screen.getByRole("tab", { name: /Sorular ve Kitapçıklar/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Evrak/ })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Yoklama/ })).not.toBeInTheDocument();
-    // OYS'deki gözetmen sekmesi F7'ye ertelendi.
-    expect(screen.queryByRole("tab", { name: /Gözetmen/ })).not.toBeInTheDocument();
+    // Gözetmenler sekmesi F7 ile geldi (koşulsuz — kapalıysa panel mesajı).
+    expect(screen.getByRole("tab", { name: /Gözetmenler/ })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Onayla" }));
     await waitFor(() => expect(exam.approve).toHaveBeenCalledWith(5));
@@ -116,7 +119,9 @@ describe("OturumDetayPage", () => {
     exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
     renderPage();
 
-    await user.click(await screen.findByRole("tab", { name: /Sorular ve Kitapçıklar/ }));
+    await user.click(await screen.findByRole("tab", { name: /Gözetmenler/ }));
+    expect(await screen.findByText("GÖZETMEN PANELİ 5")).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /Sorular ve Kitapçıklar/ }));
     expect(await screen.findByText("SORULAR PANELİ 5")).toBeInTheDocument();
     await user.click(screen.getByRole("tab", { name: /Evrak/ }));
     expect(await screen.findByText("EVRAK PANELİ 5")).toBeInTheDocument();

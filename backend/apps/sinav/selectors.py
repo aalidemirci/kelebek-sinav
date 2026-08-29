@@ -1,4 +1,4 @@
-"""sinav salt-okunur sorguları — salon (F2) + oturum (F3) + kitapçık (F5) + takvim (F6)."""
+"""sinav salt-okunur sorguları — F2 salon · F3 oturum · F5 kitapçık · F6 takvim · F7 gözetmen."""
 
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ from apps.sinav.models import (
     ExamSessionRoom,
     ExamTrackItem,
     PlacementRule,
+    ProctorAssignment,
+    ProctorExemption,
     QuestionDocument,
     SeatAssignment,
 )
@@ -197,3 +199,28 @@ def get_track_item(item_id: int) -> ExamTrackItem | None:
 # Not: slot→oturum salon ön-seçimi F3'teki `section_rooms_for_levels` (satır
 # ~35, list dönen sürüm) ile yapılır — OYS'deki QuerySet sürümünün KS karşılığı
 # zaten oydu; ikinci bir kopya AÇILMAZ.
+
+
+# ---------------------------------------------------------------------------
+# F7 — gözetmen görevlendirme (OYS T9b selectors'tan UYARLA)
+# ---------------------------------------------------------------------------
+
+
+def proctor_assignments(*, session_id: int | None = None) -> QuerySet[ProctorAssignment]:
+    """Görevlendirmeler (salon join'li) — KİŞİSEL VERİ (ad snapshot).
+
+    Sıra düz alanlarda (salon adı/rol) — ad şifreli, ORM'e yazılmaz (TB3).
+    """
+    qs = ProctorAssignment.objects.select_related("room")
+    if session_id is not None:
+        qs = qs.filter(session_id=session_id)
+    return qs.order_by("room__name", "role", "id")
+
+
+def proctor_exemptions(*, session_id: int | None = None) -> QuerySet[ProctorExemption]:
+    """Muafiyetler — `session_id` verilirse o oturum İÇİN GEÇERLİ olanlar
+    (oturuma özel + kalıcı). HEALTH kategorisi özel nitelikli veriye işaret."""
+    qs = ProctorExemption.objects.select_related("teacher", "session")
+    if session_id is not None:
+        qs = qs.filter(Q(session_id=session_id) | Q(session__isnull=True))
+    return qs.order_by("-created_at")
