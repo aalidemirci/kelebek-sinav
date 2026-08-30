@@ -101,19 +101,22 @@ kopyalamayı alışkanlık edinin.
 
 ### 5.1 Yedekten geri dönme
 
-Uygulama parolası kurulu değilken alınmış yedekler için:
+Program yedekten dönüş için kendi aracını taşır — düz VE şifreli yedekleri
+açar, elle dosya kopyalamak gerekmez:
 
-1. Programı tamamen kapatın.
-2. `backups` klasöründen en güncel sağlam yedeği seçin
-   (örn. `gunluk-2026-09-15.ksbak`).
-3. Dosyayı `data` klasörüne kopyalayın ve adını `db.sqlite3` yapın
-   (varsa eski `db.sqlite3`, `db.sqlite3-wal` ve `db.sqlite3-shm`
-   dosyalarını önce başka bir klasöre taşıyın — silmeyin).
-4. Programı yeniden açın.
+* **Windows:** Başlat menüsündeki **"Kelebek Sınav — Yedekten Geri Yükle"**
+  kısayolunu çalıştırın (veya komut isteminden `kelebek-sinav --geri-yukle`).
+* **Pardus/Linux:** uçbirimden `kelebek-sinav --geri-yukle`
 
-**Parola kuruluyken alınmış (şifreli) yedekler bu yöntemle açılmaz** — dosya
-şifreli bir kapsayıcıdır. Bu durumda okul bilişim sorumlusuna başvurun;
-uygulama içi geri yükleme aracı sonraki sürümde gelecektir.
+Araç yedekleri en yeniden eskiye listeler; seçtiğiniz yedek veritabanının
+yerine konur. Şifreli yedekler için uygulama parolanız (parola sonradan
+değiştiyse yedeğin alındığı dönemdeki parola da denenebilir) ya da kurtarma
+anahtarınız sorulur. Mevcut (bozuk) veritabanı SİLİNMEZ — `db-onceki-<tarih>`
+adıyla `data` klasöründe saklanır. İşlem bitince programı normal açın.
+
+Parolasız kipte alınmış (düz) bir yedeği elle de döndürebilirsiniz: programı
+kapatıp yedeği `data` klasörüne `db.sqlite3` adıyla kopyalamak yeterlidir;
+ama aracı kullanmak her iki kipte de daha güvenlidir.
 
 ### 5.2 Bütün verileri silip temiz başlama
 
@@ -177,8 +180,9 @@ aşağıdaki kodlardan biriyle çıkar:
 | 6 | Yerel sunucu başlatılamadı | güvenlik yazılımı 127.0.0.1'i engelliyor olabilir |
 | 7 | WebView2/pencere motoru yok | §6.1 |
 | 8 | PDF duman testi başarısız | §6.5 |
+| 9 | Geri yükleme (`--geri-yukle`) başarısız | parola/kurtarma anahtarını doğrulayıp yeniden deneyin; `logs/uygulama.log` |
 
-\* Parola kuruluyken yedekler şifrelidir — §5.1'in sonundaki nota bakın.
+\* Yedekler şifreli de olsa geri yükleme aracı açar — §5.1.
 
 ## 8. İndirilen dosyayı doğrulama
 

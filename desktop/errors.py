@@ -18,6 +18,8 @@ EXIT_SERVER_FAILED = 6
 EXIT_WEBVIEW_UNAVAILABLE = 7
 # Paket teşhis kipi (`--pdf-duman`): Türkçe PDF üretimi/font zinciri bozuk.
 EXIT_PDF_SMOKE_FAILED = 8
+# Geri yükleme kipi (`--geri-yukle`): yedek açılamadı/yerleştirilemedi.
+EXIT_RESTORE_FAILED = 9
 
 
 class StartupError(Exception):
