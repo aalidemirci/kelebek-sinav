@@ -17,14 +17,17 @@ raporlarından (xlsx/pano) içe aktarılır; ders havuzu MEB ders çizelgesinden
 okul türü ve kademeye göre tohumlanır. Opsiyonel uygulama parolası ile alan
 şifrelemesi ve şifreli yedek.
 
-**Durum:** F8 (bakım) tamamlandı — iki kipli günlük yedek (parolasızsa düz,
-parolalıysa X25519 şifreli `.ksbak`; K9 düzeltmesi: yedek hiçbir kipte
-atlanmaz), F27 arşiv anonimleştirmesi (ARŞİV + sınav tarihinden 730 gün;
-açılışta aday tespiti + kullanıcı onaylı geri dönüşsüz tetik; evrak yeniden
-basımı "—" işaretiyle açık kalır; kitapçık/soru dosyaları silinir) ve GitHub
-Release güncelleme denetimi (SHA-256 doğrulamalı kurucu indirme + banner).
-Önceki fazlar: gözetmen (F7), takvim (F6), kitapçık (F5), evrak seti (F4),
-oturum akışı (F3), salonlar + motor (F2). Sırada F9: paketleme.
+**Durum:** F9 (paketleme) tamamlandı — Windows setup.exe (WebView2 gömülü,
+yönetici gerektirmez) + portable.zip ve Linux .deb + .tar.gz yerel olarak
+üretildi; temiz debian:11/12 kaplarında kurulum → Türkçe PDF → `--autotest`
+provaları ve Windows 11'de paketten gerçek pencere açılışı (kurulum sihirbazı)
+doğrulandı. F9 denetimi zincirdeki bayat noktaları kapattı: Pardus 21
+SQLite'ında (`serialize` yok) yedek çöküşü, işlevsiz Inno AppMutex, CI'da
+`backend/**` değişikliklerinin paket kapısını tetiklememesi, VERSION↔etiket
+kapısı, `.ksbak`/medya sızıntı taraması, `docs/kurulum.md`. Önceki fazlar:
+bakım (F8), gözetmen (F7), takvim (F6), kitapçık (F5), evrak seti (F4),
+oturum akışı (F3), salonlar + motor (F2). Kalan saha adımı: gerçek Pardus 21
+masaüstünde pencere/Qt provası (packaging/README.md "doğrulanmamış" listesi).
 Plan: [docs/tasarim/2026-08-29-genel-tasarim.md](docs/tasarim/2026-08-29-genel-tasarim.md)
 
 ## Köken

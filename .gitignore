@@ -25,6 +25,13 @@ frontend/vitest-sonuc.json
 # Paketleme çıktıları
 build/
 dist/
+# dll_kapanisi.py'nin ÜRETİLEN çıktısı — depoda bayat DLL izlemek, spec'in
+# boş-klasör korumasını öldürüp doğrudan `pyinstaller spec` koşusuna eski
+# ikilileri sessizce paketletirdi (F9 denetim bulgusu; LGPL yeniden dağıtımı da
+# kaynak deposunun işi değil).
+packaging/windows/dll/*.dll
+# build.ps1/CI'ın indirdiği WebView2 Evergreen önyükleyicisi
+packaging/windows/MicrosoftEdgeWebView2Setup.exe
 
 # Ortam
 .env

@@ -60,6 +60,7 @@ Geliştirme yalnız Docker'da (host'a Python/Node kurulmaz); kapı zinciri
 | K13 | Kitapçık (R10) + Word soru şablonu alınır, **senkron** | booklet.py/word_template.py saf; 90×4 sayfa < 30 sn masaüstünde kabul edilebilir |
 | K14 | F27 anonimleştirme (ARŞİV + 730 gün) korunur; Celery beat yerine **açılışta aday tespiti + kullanıcı onaylı geri dönüşsüz tetik** | KVKK saklama süresi gerekçesi geçerli kalır |
 | K16 | Klasik düzen (HOME_CLASSROOM) alınır | Yoklama/kitapçık/tutanak tek SeatAssignment altyapısından; kesmek evrak setini ikiye bölerdi |
+| K17 | Linux pencere motoru **PyQt5 + QtWebEngine** (F9'da kayda geçti — karar F0 paket iskeletinden) | WebKitGTK/PyGObject yolu ELENDİ: typelib paketleme + Pardus 21/23 ABI oynaklığı. PyQt5 tekerlekleri manylinux2014 (glibc 2.17) olduğundan bullseye derlemesi Pardus 21'de çalışır. Qt'nin sistemden beklediği X/GL/ses kütüphaneleri `.deb` Depends'ine girer — tek doğruluk kaynağı `packaging/linux/build.sh::DEPENDS_QT` |
 
 ### 2.3 Kimlik sabitleri (F0'da toplu — DD kalıntısı sıfır toleranslı)
 

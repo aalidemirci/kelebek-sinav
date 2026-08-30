@@ -7,6 +7,7 @@ Ağ hiç kullanılmaz — `latest_release`/`_read_url` monkeypatch'lenir.
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -101,6 +102,29 @@ def test_guvenilmeyen_varlik_adresi_kabul_edilmez() -> None:
     )
 
     assert release.installer is None
+
+
+def test_kararli_surum_yokken_on_surum_listeden_secilir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Beta dönemi: `releases/latest` 404 verir (yalnız --prerelease yayın var);
+    liste okunur, taslaklar elenir, en yüksek sürüm seçilir (F9 bulgusu)."""
+
+    def sahte_read_url(url: str, *, max_bytes: int) -> bytes:
+        if url == updates.LATEST_RELEASE_URL:
+            raise updates.ReleaseNotFoundError("GitHub'da henüz yayımlanmış bir sürüm bulunmuyor.")
+        assert url == updates.RELEASE_LIST_URL
+        return json.dumps(
+            [
+                {"tag_name": "v2026.10.0-beta.1", "assets": []},
+                {"tag_name": "v2026.10.0-beta.2", "assets": []},
+                {"tag_name": "v2026.11.0", "draft": True, "assets": []},  # taslak elenir
+            ]
+        ).encode("utf-8")
+
+    monkeypatch.setattr(updates, "_read_url", sahte_read_url)
+
+    release = updates.latest_release(force=True)
+
+    assert release.version == "2026.10.0-beta.2"
 
 
 def test_guncelleme_durumu_surumu_karsilastirir(monkeypatch: pytest.MonkeyPatch) -> None:

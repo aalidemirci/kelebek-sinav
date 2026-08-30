@@ -25,6 +25,12 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
   Seçmeli ders grupları gerekirse önce `okul` tarafına grup modeli gelir,
   sonra `ParticipantType.GROUPS` + çözümleyici OYS'den taşınır
   (`participants._resolve_groups`, OYS satır 141-169).
+- **TB9 — Şifreli `.ksbak` için uygulama içi geri yükleme aracı yok (F8/F9):**
+  parolasız kipte yedek düz SQLite'tır ve `docs/kurulum.md` §5.1 yeniden
+  adlandırma yöntemiyle döner; parola kuruluyken alınan şifreli yedeği açan
+  kullanıcı akışı yok (DD'den miras boşluk). Zemin hazır:
+  `backup_crypto.embedded_recovery_metadata` + `decrypt_bytes` +
+  `app_password._unwrap_with_password/_unwrap_with_recovery`. v-sonraki iş.
 - **TB8 — Yerleştirme kuralları arayüzü yok (OYS paritesi):** PlacementRule
   backend'i (CRUD + dağıtımda PINNED) F3'te tam; OYS'de de FE istemcisi yoktu.
   KS `placementRuleApi` hazır — kural yönetim ekranı F4'te sicil/oturum

@@ -25,7 +25,7 @@ pywebview==5.3.2
 pythonnet==3.0.5 ; sys_platform == "win32"
 
 # ---------- Linux/Pardus: Qt WebEngine ----------
-# Tasarım §5.2: WebKitGTK/PyGObject yolu ELENDİ (typelib paketleme + Pardus
+# Tasarım §2.2 K17: WebKitGTK/PyGObject yolu ELENDİ (typelib paketleme + Pardus
 # 21/23 ABI oynaklığı). PyQt5 tekerlekleri manylinux2014 (glibc 2.17) olduğu
 # için bullseye'da (glibc 2.31) üretilen paket Pardus 21'de de çalışır.
 PyQt5==5.15.11 ; sys_platform == "linux"

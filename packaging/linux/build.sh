@@ -7,7 +7,7 @@
 #     bash packaging/linux/docker-build.sh
 #
 # Doğrudan çalıştırmak yalnız `python:3.12-bullseye` (veya Debian 11 tabanlı)
-# bir kap içinde anlamlıdır. Tasarım §5.2: derleme YALNIZ bullseye'da yapılır
+# bir kap içinde anlamlıdır. Tasarım §2.2 K6: derleme YALNIZ bullseye'da yapılır
 # çünkü glibc 2.31, Pardus 21'in tabanıdır — daha yeni bir glibc'de derlenen
 # paket Pardus 21'de açılmaz ("GLIBC_2.34 not found").
 #
@@ -32,8 +32,10 @@ cd "$DEPO"
 
 QT_ILE="${KS_WITH_QT:-1}"
 CIKTI="$DEPO/dist/cikti"
-PAKET_KOKU="$DEPO/dist/paket"
-CALISMA="$DEPO/dist/_build"
+# Ara dizinler platforma özel (build.ps1 ile çarpışma önlenir); nihai
+# artefaktlar iki platformda da dist/cikti'ye düşer.
+PAKET_KOKU="$DEPO/dist/paket-linux"
+CALISMA="$DEPO/dist/_build-linux"
 GECICI_PAKETLEME="$(mktemp -d)"
 trap 'rm -rf "$GECICI_PAKETLEME"' EXIT
 DEB_AGACI="$GECICI_PAKETLEME/deb"
@@ -46,7 +48,7 @@ DEB_SURUM="${SURUM/-/\~}"
 DEB_ADI="kelebek-sinav_${DEB_SURUM}_amd64.deb"
 TAR_ADI="kelebek-sinav-${SURUM}-linux-x64.tar.gz"
 
-# .deb bağımlılıkları — tasarım §5.2. Pango/glib/fontconfig Linux'ta BUNDLE
+# .deb bağımlılıkları — tasarım §12 F9 + §2.2 K17. Pango/glib/fontconfig Linux'ta BUNDLE
 # EDİLMEZ (sistem sürümüyle çakışır); dağıtımın kendi paketleri kullanılır.
 # Hepsi Debian 11 ve 12 ana deposunda mevcuttur.
 DEPENDS_TEMEL="libpango-1.0-0, libpangoft2-1.0-0, libharfbuzz0b, libfontconfig1, libglib2.0-0, fonts-dejavu-core"
@@ -57,7 +59,7 @@ DEPENDS_QT="libgl1, libegl1, libxkbcommon0, libxkbcommon-x11-0, libdbus-1-3, lib
 APT_TEMEL="libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libfontconfig1 libglib2.0-0 fonts-dejavu-core binutils"
 # libharfbuzz-subset0 Debian 11'DE YOKTUR (bookworm ile geldi). WeasyPrint font
 # alt-kümeleme için arar, bulamazsa fontu tam gömer — PDF büyür ama üretilir.
-# Bu yüzden hem burada hem .deb Depends'inde ZORUNLU DEĞİLDİR (tasarım §5.2'nin
+# Bu yüzden hem burada hem .deb Depends'inde ZORUNLU DEĞİLDİR (tasarım §12 F9'un
 # bağımlılık listesiyle birebir uyumlu).
 APT_ISTEGE_BAGLI="libharfbuzz-subset0"
 APT_QT="libgl1 libegl1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 libnss3 libnspr4 libxcomposite1 libxdamage1 libxrandr2 libxtst6 libxi6 libasound2 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1"

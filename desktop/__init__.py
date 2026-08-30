@@ -1,4 +1,4 @@
-"""Masaüstü kabuğu — Kelebek Sınav'ni yerel bir pencerede çalıştırır.
+"""Masaüstü kabuğu — Kelebek Sınav'ı yerel bir pencerede çalıştırır.
 
 Bu paket Django uygulamasının DIŞINDADIR: `backend/` içindeki hiçbir modül
 buraya bağımlı değildir (tek istisna `config/settings.py`'deki koşullu oturum

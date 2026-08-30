@@ -1,5 +1,5 @@
 #!/bin/sh
-# Kelebek Sınav - kaldirma oncesi.
+# Kelebek Sinav - kaldirma oncesi.
 # KULLANICI VERISI SILINMEZ: veritabani, yedekler ve gunlukler
 # ~/.local/share/kelebek-sinav altindadir; paket yalnizca program
 # dosyalarini kaldirir. (ASCII: bkz. postinst basindaki not.)

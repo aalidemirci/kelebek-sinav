@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 import re
 import sqlite3
+import tempfile
 from contextlib import closing
 from datetime import date, timedelta
 from pathlib import Path
@@ -56,14 +57,31 @@ _LEGACY_PATTERNS = (
 )
 
 
+# CPython `Connection.serialize`i ancak SQLite ≥3.36 (SQLITE_ENABLE_DESERIALIZE)
+# ile derlendiyse sunar; Pardus 21/bullseye tabanının libsqlite3'ü 3.34'tür ve
+# yöntem HİÇ yoktur — F9 paket `--autotest`i bullseye kabında bununla çöktü
+# (eski kod parolasız kipte yedeği atladığı için tuzak hiç tetiklenmemişti).
+_HAS_SERIALIZE = hasattr(sqlite3.Connection, "serialize")
+
+
 def database_snapshot(source_path: Path) -> bytes:
-    """WAL dahil tutarlı SQLite görüntüsünü RAM'de üretir."""
-    with (
-        closing(sqlite3.connect(source_path)) as source,
-        closing(sqlite3.connect(":memory:")) as target,
-    ):
-        source.backup(target)
-        return bytes(target.serialize())
+    """WAL dahil tutarlı SQLite görüntüsünü üretir (mümkünse RAM'de).
+
+    `serialize` yoksa görüntü, veri dizini altında 0700 izinli geçici bir
+    dizine `Connection.backup()` ile alınır ve baytları okunur okunmaz silinir.
+    Şifreli kipte düz baytların diske bu KISA temasını, Pardus 21 uyumu için
+    bilinçli kabul ediyoruz — kalıcı düz kopya yine yazılmaz.
+    """
+    with closing(sqlite3.connect(source_path)) as source:
+        if _HAS_SERIALIZE:
+            with closing(sqlite3.connect(":memory:")) as target:
+                source.backup(target)
+                return bytes(target.serialize())
+        with tempfile.TemporaryDirectory(dir=source_path.parent) as tmp_dir:
+            snapshot_path = Path(tmp_dir) / "goruntu.sqlite3"
+            with closing(sqlite3.connect(snapshot_path)) as target:
+                source.backup(target)
+            return snapshot_path.read_bytes()
 
 
 def _write_plain(content: bytes, target: Path) -> None:

@@ -1,4 +1,4 @@
-"""Tek-instance kilidi (tasarım §5.3).
+"""Tek-instance kilidi (tasarım §5.3) + Inno AppMutex sinyali.
 
 İki kopya aynı SQLite dosyasına yazarsa WAL kilitleri yüzünden kullanıcı
 "veritabanı kilitli" hatalarıyla karşılaşır; daha kötüsü iki pencere aynı dosya
@@ -8,6 +8,12 @@ mesajla çıkar.
 Yöntem işletim sistemine göre değişir ama sözleşme aynıdır: bir dosya açılır ve
 üzerine paylaşımsız kilit konur. Kilit süreç ölünce (çökme dahil) işletim sistemi
 tarafından bırakılır — bayat PID dosyası sorunu yaşanmaz.
+
+Windows'ta kilide EK olarak `KelebekSinav` adlı bir mutex açılır (tasarım §2.3).
+Tek-instance güvencesi ondan GELMEZ — o yalnız Inno Setup'ın `AppMutex`
+denetimine "program açık" sinyalidir: mutex olmadan kurucu, çalışan programın
+`_internal/` ağacını üzerine yazmaya çalışırdı (DD iskeletinde bu sinyal hiç
+üretilmiyordu; iss'teki denetim ölüydü).
 """
 
 from __future__ import annotations
@@ -18,6 +24,9 @@ from types import TracebackType
 from typing import BinaryIO
 
 from desktop.errors import AlreadyRunningError
+
+#: Inno `AppMutex` ile birebir aynı olmak ZORUNDA (packaging/windows/kelebek-sinav.iss).
+APP_MUTEX_NAME = "KelebekSinav"
 
 _MESSAGE = "Kelebek Sınav zaten çalışıyor. Aynı anda yalnızca bir kopya açılabilir."
 _HINT = (
@@ -57,6 +66,7 @@ class SingleInstanceLock:
     def __init__(self, path: Path) -> None:
         self._path = path
         self._handle: BinaryIO | None = None
+        self._mutex_handle: int | None = None
 
     @property
     def path(self) -> Path:
@@ -81,9 +91,39 @@ class SingleInstanceLock:
             handle.close()
             raise AlreadyRunningError(_MESSAGE, hint=_HINT) from exc
         self._handle = handle
+        self._mutex_handle = self._create_app_mutex()
+
+    @staticmethod
+    def _create_app_mutex() -> int | None:
+        """Windows'ta kurucuya görünen adlandırılmış mutex'i açar (yalnız sinyal).
+
+        Başarısızlık açılışı DURDURMAZ: tek-instance güvencesi dosya kilidinde;
+        mutex yalnız Inno'nun "program açıkken yükseltme yapma" denetimi içindir.
+        """
+        if sys.platform != "win32":
+            return None
+        try:
+            import ctypes
+
+            handle = int(ctypes.windll.kernel32.CreateMutexW(None, False, APP_MUTEX_NAME))
+            return handle or None
+        except (OSError, AttributeError):
+            return None
+
+    @staticmethod
+    def _close_app_mutex(handle: int) -> None:
+        if sys.platform != "win32":
+            return
+        import ctypes
+
+        ctypes.windll.kernel32.CloseHandle(handle)
 
     def release(self) -> None:
         """Kilidi bırakır. Kilit alınmamışsa sessizce döner."""
+        mutex = self._mutex_handle
+        self._mutex_handle = None
+        if mutex is not None:
+            self._close_app_mutex(mutex)
         handle = self._handle
         if handle is None:
             return

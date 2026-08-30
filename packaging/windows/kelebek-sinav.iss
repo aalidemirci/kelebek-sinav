@@ -60,7 +60,10 @@ SetupIconFile={#AppIconSource}
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName}
 ; Program çalışırken yükseltme yapılmasın (SQLite dosyası açık olabilir).
-AppMutex=KelebekSinavKurulum
+; Ad, uygulamanın açtığı mutex'le BİREBİR aynı olmak zorunda
+; (desktop/lock.py::APP_MUTEX_NAME; tasarım §2.3) — F9'a dek uygulama bu
+; mutex'i hiç üretmiyordu, denetim ölüydü.
+AppMutex=KelebekSinav
 
 [Languages]
 Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
@@ -74,6 +77,10 @@ Source: "{#AppIconSource}"; DestDir: "{app}"; DestName: "{#InstalledIconName}"; 
 ; WebView2 Evergreen kurucusu — build.ps1 indirdiyse pakete girer.
 #if FileExists(AddBackslash(SourcePath) + WebView2Setup)
 Source: "{#WebView2Setup}"; DestDir: "{app}"; Flags: ignoreversion
+#else
+; Sessiz düşme tuzağı kapatıldı: dosya yoksa derleme kırılmaz ama uyarı basılır
+; (WebView2'siz makinede kurulum biter, program çıkış kodu 7 ile kapanırdı).
+#pragma warning "WebView2 kurucusu (" + WebView2Setup + ") bulunamadı — paket onsuz üretiliyor."
 #endif
 
 [Icons]

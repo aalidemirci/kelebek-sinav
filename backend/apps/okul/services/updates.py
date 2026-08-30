@@ -27,6 +27,7 @@ from urllib.request import Request, urlopen
 GITHUB_REPOSITORY = os.environ.get("KS_UPDATE_REPOSITORY", "aalidemirci/kelebek-sinav").strip()
 GITHUB_API_VERSION = "2026-03-10"
 LATEST_RELEASE_URL = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/releases/latest"
+RELEASE_LIST_URL = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/releases?per_page=10"
 USER_AGENT = "Kelebek-Sinav-Updater"
 INSTALLER_PATTERN = re.compile(r"^kelebek-sinav-.+-win64-setup\.exe$", re.IGNORECASE)
 MAX_INSTALLER_BYTES = 250 * 1024 * 1024
@@ -38,6 +39,10 @@ _cached_release: tuple[float, ReleaseInfo] | None = None
 
 class UpdateError(RuntimeError):
     """Kullanıcıya güvenle gösterilebilen güncelleme hatası."""
+
+
+class ReleaseNotFoundError(UpdateError):
+    """GitHub 404: kararlı sürüm hiç yayımlanmamış (ör. yalnız ön-sürüm var)."""
 
 
 @dataclass(frozen=True)
@@ -129,7 +134,7 @@ def _read_url(url: str, *, max_bytes: int) -> bytes:
             return b"".join(chunks)
     except HTTPError as exc:
         if exc.code == 404:
-            raise UpdateError("GitHub'da henüz yayımlanmış bir sürüm bulunmuyor.") from exc
+            raise ReleaseNotFoundError("GitHub'da henüz yayımlanmış bir sürüm bulunmuyor.") from exc
         if exc.code in {403, 429}:
             raise UpdateError(
                 "GitHub güncelleme denetimi geçici olarak sınırlandı; daha sonra yeniden deneyin."
@@ -194,6 +199,37 @@ def _parse_release(payload: Any) -> ReleaseInfo:
     )
 
 
+def _decode_payload(raw: bytes) -> Any:
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise UpdateError("GitHub sürüm yanıtı okunamadı.") from exc
+
+
+def _latest_prerelease() -> ReleaseInfo:
+    """Kararlı sürüm yokken sürüm LİSTESİNDEN en yükseğini seçer.
+
+    F9 yayın işi `-dev/-beta/-rc` etiketlerini `--prerelease` yayımlar; GitHub'ın
+    `releases/latest` ucu ön-sürümleri DÖNDÜRMEZ — beta dönemi boyunca güncelleme
+    denetimi bu yedek yol olmadan ölü kalırdı. Kararlı sürüm çıktığı anda
+    `releases/latest` yeniden devreye girer ve bu yol hiç koşmaz.
+    """
+    payload = _decode_payload(_read_url(RELEASE_LIST_URL, max_bytes=4 * 1024 * 1024))
+    if not isinstance(payload, list):
+        raise UpdateError("GitHub sürüm yanıtı beklenen biçimde değil.")
+    releases: list[ReleaseInfo] = []
+    for item in payload:
+        if not isinstance(item, dict) or item.get("draft"):
+            continue
+        try:
+            releases.append(_parse_release(item))
+        except UpdateError:
+            continue
+    if not releases:
+        raise ReleaseNotFoundError("GitHub'da henüz yayımlanmış bir sürüm bulunmuyor.")
+    return max(releases, key=lambda release: version_key(release.version))
+
+
 def latest_release(*, force: bool = False) -> ReleaseInfo:
     global _cached_release
 
@@ -202,12 +238,11 @@ def latest_release(*, force: bool = False) -> ReleaseInfo:
         if not force and _cached_release and now - _cached_release[0] < CACHE_SECONDS:
             return _cached_release[1]
 
-    raw = _read_url(LATEST_RELEASE_URL, max_bytes=2 * 1024 * 1024)
     try:
-        payload = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise UpdateError("GitHub sürüm yanıtı okunamadı.") from exc
-    release = _parse_release(payload)
+        raw = _read_url(LATEST_RELEASE_URL, max_bytes=2 * 1024 * 1024)
+        release = _parse_release(_decode_payload(raw))
+    except ReleaseNotFoundError:
+        release = _latest_prerelease()
     with _cache_lock:
         _cached_release = (now, release)
     return release

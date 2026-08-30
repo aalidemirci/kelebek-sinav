@@ -1,12 +1,16 @@
-> **GÜNCELLEME 24.07.2026:** Windows yolu artık CI'da uçtan uca YEŞİL (setup.exe + portable.zip üretiliyor, Türkçe PDF duman testi gömülü DejaVu ile geçiyor, `--autotest` çıkış 0). Aşağıdaki varsayım tablosu ilk koşudan önce yazılmıştı; doğrulananlar artık kesindir. Koşuda bulunan üç gerçek kusur (PS1 BOM'suzluğu, MSYS2 python gölgelemesi, paket içi fontconfig) düzeltildi.
+> **KS koşusu 29.08.2026 (run 33257833345 — TB5):** Windows yolu CI'da uçtan
+> uca YEŞİL (setup.exe + portable.zip üretildi, Türkçe PDF duman testi gömülü
+> DejaVu ile geçti, `--autotest` çıkış 0). Bu koşu W1 (ntldd paket adı) ve W5
+> (fwlink bağlantısı indirilebildi) varsayımlarını fiilen doğruladı; W2-W4 ve
+> W6-W8 duman testleri/derleme geçtiği için dolaylı doğrulandı. **W9 da
+> doğrulandı (30.08.2026, F9 yerel koşusu):** paketlenmiş exe Windows 11'de
+> gerçek pencere açtı — WebView2/pythonnet zinciri çalışıyor, SPA (kurulum
+> sihirbazı) render oldu, adım geçişleri ve MEB ders havuzu tohumu paket
+> içinden çalıştı; `KelebekSinav` mutex'i süreç açıkken dışarıdan görüldü.
+> Kurucu düzeltmeler (PS1 BOM'suzluğu, MSYS2 python gölgelemesi, paket içi
+> fontconfig) DD şablonundan devralındı.
 
 # Windows paketleme — doğrulanmamış varsayımlar ve ilk koşu çek-listesi
-
-> **Bu klasördeki hiçbir dosya Windows'ta çalıştırılmadı.** Geliştirme ortamı
-> Linux + Docker'dır; Windows paketi ancak bir Windows makinede veya GitHub
-> Actions `windows-latest` koşucusunda üretilebilir. Aşağıdaki maddeler
-> "yazıldı ama sınanmadı" durumundadır; ilk Windows koşusunda sırayla
-> doğrulanmalı ve bu dosya güncellenmelidir.
 
 ## 1. Doğrulanması gereken varsayımlar
 

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Kelebek Sınav - kurulum sonrasi (masaustu menusu + ikon onbellegi).
+# Kelebek Sinav - kurulum sonrasi (masaustu menusu + ikon onbellegi).
 # NOT: Bu dosya /bin/sh (dash) ile calisir ve BILINCLI OLARAK ASCII'dir;
 # dash'in heredoc/utf-8 davranisi dagitimdan dagitima degistigi icin
 # bakim betiklerinde Turkce karakter kullanilmaz (bkz. packaging/README.md).

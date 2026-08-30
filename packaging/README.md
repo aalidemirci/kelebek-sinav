@@ -12,9 +12,12 @@ packaging/
 │   ├── kelebek_sinav.spec    Windows + Linux ORTAK spec
 │   ├── giris.py                 paket giriş noktası + `--pdf-duman` teşhis kipi
 │   ├── rthook_ks.py             çalışma-zamanı kancası (DLL/fontconfig/SPA yolu)
-│   └── fonts.conf.tmpl          Windows fontconfig şablonu (gömülü DejaVu)
+│   ├── fonts.conf.tmpl          Windows fontconfig şablonu (gömülü DejaVu)
+│   └── fonts.paket.conf         paket içi fontconfig — build.ps1 adım 4b bunu
+│                                `_internal/etc/fonts/fonts.conf` üzerine kopyalar
 ├── fontlar/                     DejaVu Sans 4 kesim + lisans (pakete gömülür)
-├── ikonlar/                     ikon_uret.py + PNG kesimleri + .ico + .svg
+├── ikonlar/                     logo_uret.py + kelebek-sinav-logo.png +
+│                                ikon_uret.py + PNG kesimleri + .ico
 ├── linux/
 │   ├── docker-build.sh          HOST'tan çalıştırılan sarmalayıcı  ← BURADAN BAŞLA
 │   ├── build.sh                 kap İÇİNDE koşan asıl derleme
@@ -51,9 +54,10 @@ KS_WITH_QT=0 bash packaging/linux/docker-build.sh
 
 ### Linux tarafında DOĞRULANMAMIŞ kalan
 
-Bu ortamda ekran (X11/Wayland) yok; **pencere hiç açılmadı**. Doğrulananlar:
-paket üretimi, `.deb` kurulumu (debian:11 + debian:12), `--autotest` zinciri ve
-Türkçe PDF üretimi. Doğrulanmayanlar:
+CI/derleme kaplarında ekran (X11/Wayland) yok; **pencere hiç açılmadı**.
+KS'nin 29.08.2026 CI koşusunda (TB5) doğrulananlar: paket üretimi, `.deb`
+kurulumu (debian:11 + debian:12), `--autotest` zinciri ve Türkçe PDF üretimi.
+Doğrulanmayanlar:
 
 * **Qt penceresinin gerçekten açılması.** İlk Pardus koşusunda `kelebek-sinav`
   menüden açılıp arayüzün geldiği görülmelidir.

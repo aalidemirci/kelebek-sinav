@@ -11,14 +11,22 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-YASAK_UZANTILAR = frozenset({".sqlite", ".sqlite3", ".xls", ".xlsx"})
+# .ksbak: KS yedek kapsayıcısı (K9 — parolasız kipte DÜZ SQLite baytları taşır).
+YASAK_UZANTILAR = frozenset({".sqlite", ".sqlite3", ".xls", ".xlsx", ".ksbak"})
+# KS yerleşiminde medya DATA_DIR altındadır (backend/data/media/...); DD dönemi
+# ("backend","media") çifti ölüydü — gerçek yol ("data","media") ile yakalanır.
 YASAK_DIZIN_CIFTLERI = frozenset(
     {
         ("backend", "data"),
-        ("backend", "media"),
+        ("data", "media"),
     }
 )
 YASAK_SONLAR = (".sqlite3-shm", ".sqlite3-wal")
+# Kullanıcı kurulumuna ait durum dosyaları — pakete girmeleri, geliştirme veri
+# dizininin yanlışlıkla paketlendiğinin kanıtıdır (guvenlik.json parola sarmalı
+# taşır; ders-cizelgeleri gibi meşru data/ içeriğini uzantı/çift kuralları zaten
+# serbest bırakır).
+YASAK_ADLAR = frozenset({"guvenlik.json", "yedekleme.json", "surum.json"})
 
 
 def guvenli_metin(metin: str, encoding: str | None = None) -> str:
@@ -46,6 +54,9 @@ def yol_yasak_mi(goreli_yol: Path) -> bool:
         bool(ciftler & YASAK_DIZIN_CIFTLERI)
         or goreli_yol.suffix.casefold() in YASAK_UZANTILAR
         or ad.endswith(YASAK_SONLAR)
+        or ad in YASAK_ADLAR
+        # Parola kaldırma arşivi (app_password._archive_state) — sarmal taşır.
+        or ad.startswith("guvenlik-arsiv-")
     )
 
 

@@ -118,7 +118,7 @@ class BackgroundServer:
             if server is not None:
                 server.run()
 
-        self._thread = threading.Thread(target=_run, name="dd-wsgi", daemon=True)
+        self._thread = threading.Thread(target=_run, name="ks-wsgi", daemon=True)
         self._thread.start()
         logger.info("Yerel sunucu başladı (port %d).", self.port)
         return self.base_url

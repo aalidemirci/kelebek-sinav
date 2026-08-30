@@ -45,8 +45,11 @@ while (($NumericVersion -split "\.").Count -lt 4) { $NumericVersion += ".0" }
 
 $DistRoot   = Join-Path $Repo "dist"
 $Output     = Join-Path $DistRoot "cikti"
-$PackageDir = Join-Path $DistRoot "paket"
-$WorkDir    = Join-Path $DistRoot "_build"
+# Ara dizinler platforma özel: Linux derlemesi (docker-build.sh) aynı depoda eş
+# zamanlı koşarsa ortak `dist/paket` ağacında ÇARPIŞIRLARDI (build.ps1'in
+# Remove-Item'ı kabın yazdığı ağacı siler). Nihai artefaktlar yine dist/cikti'de.
+$PackageDir = Join-Path $DistRoot "paket-win"
+$WorkDir    = Join-Path $DistRoot "_build-win"
 $DllDir     = Join-Path $Repo "packaging\windows\dll"
 $AppDir     = Join-Path $PackageDir "kelebek-sinav"
 $AppExe     = Join-Path $AppDir "kelebek-sinav.exe"
@@ -126,6 +129,14 @@ Write-Adim "paket kişisel veri sızıntısı denetimi"
 & $PythonExe (Join-Path $Repo "packaging\veri_sizintisi.py") $AppDir
 if ($LASTEXITCODE -ne 0) { throw "Paket kişisel veri denetimi başarısız." }
 
+# MEB çizelge verisi (K5): spec Tree yolu bozulursa tohum SESSİZCE boş kalırdı
+# (TB2 düşüşü) — pakette dosyanın varlığı ve boş olmadığı burada sabitlenir.
+Write-Adim "paket içi katalog verisi denetimi"
+$Katalog = Join-Path $AppDir "_internal\data\ders-cizelgeleri\anadolu-lisesi-2025-2026.md"
+if (-not (Test-Path $Katalog) -or (Get-Item $Katalog).Length -eq 0) {
+    throw "MEB çizelge verisi pakette yok/boş: $Katalog (spec Tree yolu bozulmuş olabilir)."
+}
+
 # --- 4b. Paket içi fontconfig yapılandırması --------------------------------
 # PyInstaller MSYS2'nin etc/fonts/ ağacını pakete gömüyor ve Windows'ta
 # libfontconfig yapılandırmayı DLL'in yanındaki O AĞAÇTAN çözüyor;
@@ -150,7 +161,7 @@ if ($kod -ne 0) {
 if (-not (Test-Path $pdf)) { throw "PDF üretilmedi: $pdf" }
 
 Write-Adim "duman testi: --autotest"
-$gecici = Join-Path ([System.IO.Path]::GetTempPath()) ("dd-" + [Guid]::NewGuid().ToString("N"))
+$gecici = Join-Path ([System.IO.Path]::GetTempPath()) ("ks-" + [Guid]::NewGuid().ToString("N"))
 $kod = Invoke-Uygulama $AppExe @("--autotest") @{ "KS_APP_HOME" = $gecici }
 Remove-Item -Recurse -Force $gecici -ErrorAction SilentlyContinue
 if ($kod -ne 0) { throw "Açılış denetimi BAŞARISIZ (çıkış $kod)." }
@@ -163,6 +174,22 @@ Compress-Archive -Path (Join-Path $AppDir "*") -DestinationPath $zip
 
 # --- 7. Inno Setup kurulum paketi -------------------------------------------
 if (-not $SkipInno) {
+    # WebView2 Evergreen önyükleyicisi kurucuya gömülür (tasarım §12 F9 "WebView2
+    # gömülü"). Daha önce yalnız CI indiriyordu; yerel/elle üretilen her setup.exe
+    # onsuz çıkıyor ve .iss önişlemcisi bunu SESSİZCE düşürüyordu. İndirilemezse
+    # paket yine üretilir (iss artık uyarı basar); program ilk açılışta Türkçe
+    # yönlendirme verir (desktop/window.py).
+    $WebView2Yolu = Join-Path $Repo "packaging\windows\MicrosoftEdgeWebView2Setup.exe"
+    if (-not (Test-Path $WebView2Yolu)) {
+        Write-Adim "WebView2 Evergreen kurucusu indiriliyor"
+        try {
+            Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" `
+                -OutFile $WebView2Yolu
+        } catch {
+            Write-Host "    UYARI: WebView2 kurucusu indirilemedi — paket onsuz üretilecek." -ForegroundColor Yellow
+        }
+    }
+
     Write-Adim "Inno Setup"
     $iscc = (Get-Command iscc.exe -ErrorAction SilentlyContinue)
     if ($null -eq $iscc) {

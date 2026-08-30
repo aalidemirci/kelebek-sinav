@@ -23,11 +23,6 @@ openpyxl==3.1.5                # Excel içe/dışa aktarma
 # ---------- Görüntü İşleme ----------
 Pillow==12.3.0                 # ek/fotoğraf normalize (thumbnail, EXIF)
 
-# ---------- Dosya Doğrulama ----------
-# Soru belgesi PDF eklerinin gerçek MIME türünü uzantıdan bağımsız doğrular. python-magic
-# YERİNE: saf-Python, libmagic1 sistem paketi gerektirmez (Docker imajı sade kalır).
-filetype==1.2.0
-
 # ---------- PDF Üretimi ----------
 # WeasyPrint 63 cairo/gdk-pixbuf KULLANMAZ (53+ saf-Python render motoru) — Docker
 # imajındaki sistem paketleri buna göre minimal tutuldu (docker/backend.Dockerfile).
@@ -37,9 +32,11 @@ weasyprint==68.0
 pypdf==6.14.2
 
 # ---------- Masaüstü Uygulama Altyapısı ----------
-# platformdirs: işletim sistemine uygun veri/config dizini (masaüstü paket veri
-# dizini — CLAUDE.md/brif KS_DATA_DIR ile eşleşir).
-platformdirs==4.11.0
+# NOT (F9 temizliği): `filetype` ve `platformdirs` F0 brifinden geldi ama hiç
+# bağlanmadı — soru PDF doğrulaması %PDF imzası + A4 ölçüsüyle (services.py),
+# dizin çözümü saf os.environ ile (desktop/paths.py) yapılıyor. K7 hiddenimports
+# listesi gerçek bağımlılık kümesiyle senkron kalsın diye ikisi de düşürüldü;
+# MIME doğrulaması gerekirse `filetype` kullanıldığı fazda spec'le birlikte döner.
 # whitenoise: statik dosyaları ayrı bir web sunucusu olmadan servis eder (masaüstü
 # uygulamada nginx yok).
 whitenoise==6.12.0

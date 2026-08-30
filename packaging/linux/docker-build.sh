@@ -14,6 +14,10 @@
 # =============================================================================
 set -euo pipefail
 
+# Git Bash (Windows) MSYS yol dönüşümü `-w /repo` gibi konteyner yollarını
+# Windows yoluna çevirip koşuyu kırar (gates.sh ile aynı koruma).
+export MSYS_NO_PATHCONV=1
+
 DEPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 IMAJ="${KS_BUILD_IMAGE:-python:3.12-bullseye}"
 

@@ -273,6 +273,24 @@ def test_eski_duz_yedek_sifrelenir_ve_duz_kopya_silinir(tmp_path: Path) -> None:
 # ------------------------------------------------------------- iki kip (K9)
 
 
+def test_serialize_olmayan_sqlite_ile_yedek_alinir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Pardus 21/bullseye: libsqlite3 3.34 `Connection.serialize` sunmaz (F9).
+
+    Geçici-dosya yedek yolu da tutarlı görüntü üretmeli ve artık bırakmamalı.
+    """
+    monkeypatch.setattr(backup_mod, "_HAS_SERIALIZE", False)
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db, sifreli=False)
+
+    sonuc = daily_backup(db, tmp_path / "backups", today=date(2026, 7, 24))
+
+    assert sonuc is not None and _satir_sayisi(sonuc) == 3
+    # Geçici görüntü dizini veri dizininde kalıntı bırakmaz.
+    assert not list(tmp_path.glob("tmp*")) and not list(tmp_path.glob("*goruntu*"))
+
+
 def test_parolasiz_kipte_gunluk_yedek_duz_alinir(tmp_path: Path) -> None:
     """K9 düzeltmesi: anahtar yoksa yedek ATLANMAZ, düz `.ksbak` yazılır."""
     db = tmp_path / "db.sqlite3"

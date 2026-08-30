@@ -43,3 +43,15 @@ def test_ps1_dosyalari_gecerli_utf8() -> None:
     for yol in _ps1_dosyalari():
         ham = yol.read_bytes().removeprefix(UTF8_BOM)
         ham.decode("utf-8")  # UnicodeDecodeError → test kırılır
+
+
+def test_debian_bakim_betikleri_ascii() -> None:
+    """postinst/prerm `/bin/sh` (dash) ile koşar; ASCII kuralı kapıya bağlanır.
+
+    Kural packaging/README.md'de yazılıydı ama F0 kimlik değişimi başlıklara
+    Türkçe `ı` sokmuştu ve hiçbir test yakalamıyordu (F9 denetim bulgusu).
+    """
+    for ad in ("postinst", "prerm"):
+        yol = PAKET_KOKU / "linux" / ad
+        ascii_disi = [bayt for bayt in yol.read_bytes() if bayt > 0x7F]
+        assert ascii_disi == [], f"packaging/linux/{ad} ASCII olmalı (dash uyumu)"

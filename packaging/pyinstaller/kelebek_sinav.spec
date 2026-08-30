@@ -1,7 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec — Kelebek Sınav (Windows + Linux ORTAK).
 
-Kullanım (depo kökünden):
+Kullanım (depo kökünden; Windows'ta ÖNCE `python packaging/windows/dll_kapanisi.py`
+koşmuş olmalı — DLL klasörü üretilen çıktıdır, depoda tutulmaz):
 
     pyinstaller --noconfirm --clean packaging/pyinstaller/kelebek_sinav.spec
 
@@ -145,6 +146,11 @@ hiddenimports += collect_submodules("fontTools")
 hiddenimports += collect_submodules("openpyxl")
 hiddenimports += collect_submodules("pypdf")
 hiddenimports += collect_submodules("webview")
+if WINDOWS:
+    # pywebview edgechromium arka ucu .NET köprüsünü `import clr` ile açar;
+    # pythonnet zinciri eksik paketlenirse pencere HİÇ açılmaz ve ne --autotest
+    # ne --pdf-duman bunu yakalar (NOTLAR.md W9 — açık sigorta).
+    hiddenimports += ["clr", "pythonnet"]
 hiddenimports += [
     # WeasyPrint zinciri
     "pydyf",
@@ -164,9 +170,7 @@ hiddenimports += [
     "_argon2_cffi_bindings",
     "cryptography.fernet",
     # Backend yardımcıları
-    "filetype",
     "sqlparse",
-    "platformdirs",
     # Django SQLite arka ucu (dizeyle import edilir)
     "django.db.backends.sqlite3",
     "django.db.backends.sqlite3.base",

@@ -2,7 +2,7 @@
 # =============================================================================
 # packaging/linux/test-kurulum.sh — .deb'i TEMİZ Debian kaplarında sınar
 # =============================================================================
-# Tasarım §11 F5 kabulü: paket, derlendiği kapta değil, hiçbir geliştirme
+# Tasarım §12 F9 kapısı: paket, derlendiği kapta değil, hiçbir geliştirme
 # bağımlılığı olmayan TEMİZ bir sistemde kurulup açılabilmelidir.
 #
 #   debian:11 (bullseye) → Pardus 21 provası
@@ -13,6 +13,10 @@
 #     bash packaging/linux/test-kurulum.sh 12        # yalnız bookworm
 # =============================================================================
 set -euo pipefail
+
+# Git Bash (Windows) MSYS yol dönüşümü `/paketler` gibi konteyner yollarını
+# Windows yoluna çevirip koşuyu kırar (gates.sh ile aynı koruma).
+export MSYS_NO_PATHCONV=1
 
 DEPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CIKTI="$DEPO/dist/cikti"

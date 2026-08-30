@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# kur.sh — Kelebek Sınav'ni yönetici yetkisi OLMADAN kurar
+# kur.sh — Kelebek Sınav'ı yönetici yetkisi OLMADAN kurar
 # =============================================================================
 # Taşınabilir arşivin (.tar.gz) içinden çalıştırılır:
 #
