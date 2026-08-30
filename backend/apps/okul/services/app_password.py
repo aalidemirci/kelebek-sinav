@@ -583,7 +583,11 @@ def _adopt_key(state: dict[str, Any], data_key: bytes) -> None:
             "yanlış dosyayla açmak kayıtları okunamaz hâle getirir."
         )
     crypto.load_key(data_key)
-    ensure_public_config(_data_dir(), data_key)
+    # replace=True (birleşme incelemesi): bu noktada DEK, DB parmak izine karşı
+    # KANITLANDI — otorite dosya değil anahtardır. Bayat/uyumsuz yedekleme.json
+    # (ör. çapraz-DEK geri yükleme artığı) burada sessizce onarılır; replace=False
+    # olsaydı kilit açma her denemede "anahtar eşleşmiyor" hatasıyla düşerdi.
+    ensure_public_config(_data_dir(), data_key, replace=True)
     encrypt_legacy_backups(backup_dir(), _data_dir())
     _reset_failures()
     if gecis != TRANSITION_DONE or not kayitli:

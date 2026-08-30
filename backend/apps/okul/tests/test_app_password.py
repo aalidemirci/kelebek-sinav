@@ -210,6 +210,21 @@ class TestUnlock:
             app_password.unlock(password="yanlis-parola")
         assert app_password.is_locked() is True
 
+    def test_kilit_acma_bayat_yedekleme_json_u_onarir(self) -> None:
+        """Çapraz-DEK geri yükleme artığı gibi UYUMSUZ bir yedekleme.json kilidi
+        kalıcı kilitlememeli: DB parmak izi DEK'i kanıtladıktan sonra otorite
+        dosya değil anahtardır (replace=True — birleşme incelemesi)."""
+        app_password.enable(password=PAROLA)
+        app_password.lock()
+        yol = app_password.state_path().parent / "yedekleme.json"
+        ensure_public_config(yol.parent, b"x" * 32, replace=True)  # yabancı anahtar
+        yabanci = yol.read_bytes()
+
+        app_password.unlock(password=PAROLA)  # eskiden "anahtar eşleşmiyor" hatasıydı
+
+        assert app_password.is_locked() is False
+        assert yol.read_bytes() != yabanci  # dosya gerçek DEK'le onarıldı
+
     def test_yanlis_parola_kademeli_gecikme_uygular(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Kalıcı kilit YOK; art arda hatada süreç-içi gecikme artar (bkz. modül notu)."""
         monkeypatch.setattr(app_password, "FAILURE_DELAYS", (0.0, 0.5))

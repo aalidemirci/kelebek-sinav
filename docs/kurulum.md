@@ -105,7 +105,9 @@ Program yedekten dönüş için kendi aracını taşır — düz VE şifreli yed
 açar, elle dosya kopyalamak gerekmez:
 
 * **Windows:** Başlat menüsündeki **"Kelebek Sınav — Yedekten Geri Yükle"**
-  kısayolunu çalıştırın (veya komut isteminden `kelebek-sinav --geri-yukle`).
+  kısayolunu çalıştırın. (Program PATH'e eklenmez; komut istemi kullanacaksanız
+  kurulum klasöründeki exe'yi tam adıyla çağırın:
+  `"%LOCALAPPDATA%\Programs\Kelebek Sınav\kelebek-sinav.exe" --geri-yukle`)
 * **Pardus/Linux:** uçbirimden `kelebek-sinav --geri-yukle`
 
 Araç yedekleri en yeniden eskiye listeler; seçtiğiniz yedek veritabanının
@@ -115,8 +117,11 @@ anahtarınız sorulur. Mevcut (bozuk) veritabanı SİLİNMEZ — `db-onceki-<tar
 adıyla `data` klasöründe saklanır. İşlem bitince programı normal açın.
 
 Parolasız kipte alınmış (düz) bir yedeği elle de döndürebilirsiniz: programı
-kapatıp yedeği `data` klasörüne `db.sqlite3` adıyla kopyalamak yeterlidir;
-ama aracı kullanmak her iki kipte de daha güvenlidir.
+kapatın, varsa eski `db.sqlite3`, `db.sqlite3-wal` ve `db.sqlite3-shm`
+dosyalarını başka bir klasöre taşıyın (silmeyin — WAL/SHM kalıntıları yeni
+dosyayla eşleşirse veriyi bozar), sonra yedeği `data` klasörüne `db.sqlite3`
+adıyla kopyalayın. Araç bu adımların hepsini kendisi yaptığı için her iki
+kipte de daha güvenlidir.
 
 ### 5.2 Bütün verileri silip temiz başlama
 

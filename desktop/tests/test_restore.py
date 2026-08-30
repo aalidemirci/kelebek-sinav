@@ -34,6 +34,19 @@ SQLITE_MAGIC = b"SQLite format 3\x00"
 # ------------------------------------------------------------------ argümanlar
 
 
+def test_read_secret_pencere_disi_platformda_getpass_kullanir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Windows dışında gizli okuma getpass'e devredilir (yankı korumalı yol).
+
+    Windows dalı msvcrt ile konsoldan doğrudan okur — paketli exe'de stdlib
+    getpass, CONIN$ ile değiştirilmiş stdin'i görüp YANKILI fallback'e düşerdi
+    (birleşme incelemesi bulgusu); o dal ancak Windows'ta koşar.
+    """
+    monkeypatch.setattr(restore_mod, "getpass", lambda prompt: "gizli-deger")
+    assert restore_mod._read_secret("Parola: ") == "gizli-deger"
+
+
 def test_geri_yukle_bayragi_uc_bicimde_ayristirilir() -> None:
     parser = main_mod.build_parser()
     assert parser.parse_args([]).geri_yukle is None

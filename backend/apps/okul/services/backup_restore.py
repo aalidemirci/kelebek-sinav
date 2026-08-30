@@ -47,6 +47,7 @@ from desktop.backup_crypto import (
     BackupCryptoError,
     decrypt_bytes,
     embedded_recovery_metadata,
+    ensure_public_config,
 )
 from desktop.paths import VERSION_STAMP_FILE_NAME
 from django.utils import timezone
@@ -125,14 +126,25 @@ def restore_database(
             raise BackupRestoreError(
                 "Bu yedek şifreli; açmak için uygulama parolası ya da kurtarma " "anahtarı gerekli."
             )
-        icerik, kaynak = _decrypt_container(container, info, password=parola, recovery_key=anahtar)
+        icerik, kaynak, dek = _decrypt_container(
+            container, info, password=parola, recovery_key=anahtar
+        )
         if not icerik.startswith(SQLITE_MAGIC):
             raise BackupRestoreError(
                 "Yedek çözüldü ama içeriği SQLite veritabanı çıkmadı; dosya bozulmuş olabilir."
             )
 
     eski = _swap_database_files(db_path, icerik)
-    yazildi = _ensure_state_file(info, kaynak) if info.encrypted else False
+    yazildi = False
+    if info.encrypted:
+        yazildi = _ensure_state_file(info, kaynak)
+        # KARDEŞ DOSYA da eşitlenir (birleşme incelemesi bulgusu): yedekleme.json
+        # bayat kalırsa (a) `_adopt_key` her kilit açılışında "anahtar eşleşmiyor"
+        # hatası verir; (b) daha kötüsü, açılıştaki günlük yedek İÇERİĞİ eski açık
+        # anahtarla mühürleyip başlığına yeni guvenlik.json'ı gömer — o yedek
+        # hiçbir adayla açılamaz ve rotasyon sağlam eskileri süpürür. replace=True
+        # güvenli: DEK az önce AES-GCM doğrulamasıyla bu veriye ait olduğunu kanıtladı.
+        ensure_public_config(app_password.state_path().parent, dek, replace=True)
     # Sürüm damgası artık geri yüklenen veriyi tarif etmiyor (yedeğin hangi
     # sürümle yazıldığı bilinmez). Eksik damga açılışa engel DEĞİLDİR
     # (desktop/version.py); ilk başarılı migrate damgayı yeniden yazar.
@@ -184,8 +196,8 @@ def _decrypt_container(
     *,
     password: str | None,
     recovery_key: str | None,
-) -> tuple[bytes, str]:
-    """Kapsayıcıyı çözer; (düz içerik, DEK'in geldiği kaynak) döndürür."""
+) -> tuple[bytes, str, bytes]:
+    """Kapsayıcıyı çözer; (düz içerik, DEK kaynağı, DEK) döndürür."""
     adaylar = _candidate_states(info)
     if not adaylar:
         raise BackupRestoreError(
@@ -202,7 +214,7 @@ def _decrypt_container(
         except app_password.AppPasswordError:
             continue  # bu durum dosyası bu sırla açılmadı; diğer adaya geç
         try:
-            return decrypt_bytes(container, dek), kaynak
+            return decrypt_bytes(container, dek), kaynak, dek
         except BackupCryptoError:
             continue  # sarmal açıldı ama DEK bu yedeğe ait değil (başka kurulum)
     raise BackupRestoreError(

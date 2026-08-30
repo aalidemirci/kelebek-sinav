@@ -239,12 +239,45 @@ def _pick_backup(yedekler: list[Path]) -> Path | None:
         print("Geçersiz seçim; listedeki numaralardan birini yazın.")
 
 
+def _read_secret(prompt: str) -> str:
+    """Parolayı EKRANA YANSITMADAN okur (birleşme incelemesi bulgusu).
+
+    Paketli Windows'ta `sys.stdin` CONIN$ ile DEĞİŞTİRİLMİŞTİR; stdlib
+    `getpass.win_getpass` bunu görünce (`sys.stdin is not sys.__stdin__`)
+    yankılı `fallback_getpass`e düşer ve parola ekranda görünürdü. Konsoldan
+    doğrudan okuyan msvcrt yolu bu tuzağa girmez; diğer platformlarda getpass
+    zaten doğru çalışır.
+    """
+    if sys.platform == "win32":
+        import msvcrt
+
+        print(prompt, end="", flush=True)
+        karakterler: list[str] = []
+        while True:
+            ch = msvcrt.getwch()
+            if ch in ("\r", "\n"):
+                print()
+                return "".join(karakterler)
+            if ch == "\x03":  # Ctrl+C → boş giriş say (akış "girilmedi" hatasıyla biter)
+                print()
+                return ""
+            if ch == "\x08":  # Backspace
+                if karakterler:
+                    karakterler.pop()
+                continue
+            if ch in ("\x00", "\xe0"):  # işlev tuşu ön eki — ikinci kodu yut
+                msvcrt.getwch()
+                continue
+            karakterler.append(ch)
+    try:
+        return getpass(prompt)
+    except EOFError:
+        return ""
+
+
 def _ask_secret() -> tuple[str | None, str | None]:
     """(parola, kurtarma anahtarı) — biri dolu döner."""
-    try:
-        parola = getpass("Uygulama parolası (kurtarma anahtarıyla açmak için boş bırakın): ")
-    except EOFError:
-        parola = ""
+    parola = _read_secret("Uygulama parolası (kurtarma anahtarıyla açmak için boş bırakın): ")
     if parola:
         return parola, None
     try:

@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from desktop.backup_crypto import encrypt_bytes, private_key_from_data_key
+from desktop.backup_crypto import encrypt_bytes, ensure_public_config, private_key_from_data_key
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -249,6 +249,34 @@ def test_yabanci_guvenlik_dosyasi_arsivlenip_gomulu_baslik_yazilir(
     assert arsiv["parola"] == yabanci_durum["parola"]
     guncel = json.loads((veri_dizini / "guvenlik.json").read_text(encoding="utf-8"))
     assert guncel["parola"] == durum["parola"]
+
+
+def test_capraz_dek_geri_yukleme_yedekleme_json_u_da_esitler(
+    tmp_path: Path, veri_dizini: Path
+) -> None:
+    """Birleşme incelemesi bulgusu: yalnız guvenlik.json onarılıp kardeş
+    yedekleme.json bayat kalsaydı kilit açma "anahtar eşleşmiyor" hatasına
+    düşer, açılıştaki günlük yedek de İÇERİĞİ eski anahtarla mühürleyip
+    başlığa yeni durumu gömerdi — o yedek bir daha açılamazdı."""
+    from desktop.backup_crypto import load_public_key, public_key_bytes
+
+    yerli_dek, yerli_durum = _dek_ile_durum(PAROLA)
+    (veri_dizini / "guvenlik.json").write_text(
+        json.dumps(yerli_durum, ensure_ascii=False), encoding="utf-8"
+    )
+    ensure_public_config(veri_dizini, yerli_dek, replace=True)  # bayat kalacak aday
+    dek, durum = _dek_ile_durum(PAROLA)
+    yedek = tmp_path / "gunluk.ksbak"
+    yedek.write_bytes(_sifreli_kapsayici(_sqlite_baytlari(tmp_path, "gizli"), dek, durum))
+
+    backup_restore.restore_database(yedek, veri_dizini / "db.sqlite3", password=PAROLA)
+
+    from cryptography.hazmat.primitives import serialization
+
+    guncel_acik = load_public_key(veri_dizini).public_bytes(
+        encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
+    )
+    assert guncel_acik == public_key_bytes(dek)  # üçlü (db, guvenlik, yedekleme) tutarlı
 
 
 def test_bassiz_yedek_guncel_guvenlik_dosyasiyla_acilir(tmp_path: Path, veri_dizini: Path) -> None:
