@@ -66,8 +66,10 @@ def run_migrations() -> None:
         raise MigrationError(
             "Veritabanı güncellenemedi; program veriyi korumak için açılmadı.",
             hint=(
-                "Yedek klasöründeki en son 'pre-migrate-*' veya günlük yedeği veri "
-                "klasörüne 'db.sqlite3' adıyla kopyalayıp programı yeniden açın."
+                "Yedek klasöründeki en son 'pre-migrate-*' veya günlük yedeği geri "
+                "yüklemek için Başlat menüsündeki 'Kelebek Sınav — Yedekten Geri "
+                "Yükle' kısayolunu (veya 'kelebek-sinav --geri-yukle' komutunu) "
+                "çalıştırıp programı yeniden açın."
             ),
         ) from exc
 

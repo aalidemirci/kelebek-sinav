@@ -24,18 +24,20 @@ _MESSAGE = "Veri dosyası bozuk görünüyor; program veriyi korumak için açı
 
 
 def _hint(backup_dir: Path | None) -> str:
-    if backup_dir is None:
-        return (
-            "Son sağlam yedeği veri klasöründeki yedekler dizininden geri yükleyin "
-            "(yedek dosyasını db.sqlite3 adıyla veri dizinine kopyalayın)."
-        )
-    return (
-        f"Yedek klasörü: {backup_dir}\n"
-        "En son tarihli yedeği veri klasörüne 'db.sqlite3' adıyla kopyalayıp programı "
-        "yeniden açın (uygulama parolası kuruluyken alınan yedekler şifrelidir; onları "
-        "açmak için okul bilişim sorumlusuna başvurun). Bozuk dosyayı silmeyin; bir "
-        "kopyasını saklayın."
+    """Yol daima geri yükleme kipine çıkar: `--geri-yukle` düz VE şifreli yedeği
+    açar (şifrelide uygulama parolası ya da kurtarma anahtarı sorulur); elle
+    kopyalama tarifi kaldırıldı — şifreli `.ksbak` için zaten çalışmıyordu."""
+    yol = (
+        "Son sağlam yedeği geri yüklemek için Başlat menüsündeki "
+        "'Kelebek Sınav — Yedekten Geri Yükle' kısayolunu çalıştırın "
+        "(veya komut satırından: kelebek-sinav --geri-yukle). Yedek listeden "
+        "seçilir; şifreli yedekler için uygulama parolanız ya da kurtarma "
+        "anahtarınız sorulur. Bozuk dosya silinmez; 'db-onceki-*' adıyla veri "
+        "klasöründe saklanır."
     )
+    if backup_dir is None:
+        return yol
+    return f"Yedek klasörü: {backup_dir}\n{yol}"
 
 
 def check_database_integrity(db_path: Path, *, backup_dir: Path | None = None) -> None:

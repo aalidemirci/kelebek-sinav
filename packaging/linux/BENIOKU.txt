@@ -32,6 +32,18 @@ VERİLERİNİZ NEREDE?
 Yedekler her açılışta alınır ve 14 gün saklanır. Bilgisayar arızasına karşı
 bu klasörü düzenli olarak bir USB belleğe kopyalayın.
 
+YEDEKTEN GERİ YÜKLEME
+---------------------
+Veritabanı bozulursa (program "Veritabanı bozuk" iletisiyle açılmıyorsa)
+uçbirimden:
+
+    kelebek-sinav --geri-yukle
+
+Yedekler listelenir ve seçtiğiniz yedek veritabanının yerine konur. Uygulama
+parolası kuruluyken alınan şifreli yedekler için parolanız ya da kurtarma
+anahtarınız sorulur. Mevcut (bozuk) dosya silinmez; 'db-onceki-*' adıyla
+veri klasöründe saklanır.
+
 GEREKLİ SİSTEM PAKETLERİ
 ------------------------
 Taşınabilir sürüm, dağıtımın kendi yazı tipi ve metin dizme kütüphanelerini

@@ -78,6 +78,10 @@ Source: "{#WebView2Setup}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\{#InstalledIconName}"; AppUserModelID: "{#AppUserModelId}"
+; Geri yükleme kipi: bozuk veritabanında bütünlük denetimi pencereyi açmaz;
+; hata iletisi kullanıcıyı bu kısayola yönlendirir (desktop/integrity.py).
+; Kip kendi konsol penceresini açar (desktop/restore.py, AllocConsole).
+Name: "{group}\{#AppName} — Yedekten Geri Yükle"; Filename: "{app}\{#AppExeName}"; Parameters: "--geri-yukle"; IconFilename: "{app}\{#InstalledIconName}"; Comment: "Veritabanını bir yedekten geri yükler"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\{#InstalledIconName}"; AppUserModelID: "{#AppUserModelId}"; Tasks: desktopicon
 
 [InstallDelete]

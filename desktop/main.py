@@ -16,7 +16,9 @@ bozukken rotasyonun sağlam eski yedekleri silmesi istenmez.
 
 Herhangi bir adım başarısız olursa pencere açılmaz; kullanıcıya Türkçe ileti +
 "son yedekten dön" yolu gösterilir ve hataya özel bir çıkış kodu döner (CI ve
-paket kurulum testleri bu kodlara bakar).
+paket kurulum testleri bu kodlara bakar). "Son yedekten dön" yolunun kendisi
+`--geri-yukle` kipidir (desktop/restore.py): pencere/sunucu açılmadan yedek
+seçtirilir ve veritabanının yerine konur.
 """
 
 from __future__ import annotations
@@ -51,6 +53,7 @@ from desktop.paths import (
     resolve_app_paths,
     resolve_backend_dir,
 )
+from desktop.restore import run_restore
 from desktop.server import BackgroundServer, check_health
 from desktop.session_guard import ENV_TOKEN, generate_session_token, window_url
 from desktop.version import (
@@ -84,6 +87,32 @@ def build_parser() -> argparse.ArgumentParser:
         "--data-dir",
         default=None,
         help="Veri klasörünü değiştirir (taşınabilir kip ve testler için).",
+    )
+    parser.add_argument(
+        "--geri-yukle",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="YEDEK",
+        help=(
+            "Programı açmak yerine verilen .ksbak yedeğini veritabanının yerine "
+            "geri yükler; dosya verilmezse yedek klasöründen seçtirir."
+        ),
+    )
+    parser.add_argument(
+        "--parola",
+        default=None,
+        help="Geri yükleme: uygulama parolası (otomasyon içindir; komut geçmişine düşer).",
+    )
+    parser.add_argument(
+        "--kurtarma-anahtari",
+        default=None,
+        help="Geri yükleme: kurtarma anahtarı (otomasyon içindir).",
+    )
+    parser.add_argument(
+        "--evet",
+        action="store_true",
+        help="Geri yükleme onay sorusunu ve kapanış beklemesini atlar.",
     )
     return parser
 
@@ -152,6 +181,12 @@ def run(argv: Sequence[str] | None = None) -> int:
     hazard = check_sync_hazard(paths.root)
     if hazard:
         logger.warning("%s", hazard)
+
+    if args.geri_yukle is not None:
+        # Geri yükleme kipi: pencere/sunucu açılmaz; bütünlük denetimi ve göç
+        # KOŞULMAZ — bozuk veritabanı bu kipin varlık sebebidir. Tek-instance
+        # kilidini ve hata gösterimini akış kendi içinde yönetir.
+        return run_restore(paths, args)
 
     lock = SingleInstanceLock(paths.lock_path)
     try:
