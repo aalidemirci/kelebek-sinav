@@ -15,7 +15,8 @@
 #   1. Sistem bağımlılıkları (yalnız DERLEME için; pakete girmez)
 #   2. Python bağımlılıkları
 #   3. PyInstaller onedir
-#   4. Duman testleri: `--autotest` (çıkış 0) + `--pdf-duman` (Türkçe PDF)
+#   4. Duman testleri: `--bagimlilik-duman` (K7) + `--autotest` (çıkış 0)
+#      + `--pdf-duman` (Türkçe PDF)
 #   5. .deb sargısı (dpkg-deb)
 #   6. Taşınabilir .tar.gz (+ kur.sh)
 #   7. SHA256SUMS.txt
@@ -120,6 +121,9 @@ bilgi "paket kişisel veri sızıntısı denetimi"
 python "$DEPO/packaging/veri_sizintisi.py" "$PAKET_KOKU/kelebek-sinav"
 
 # --- 5. Duman testleri (paketlenmiş çalıştırılabilir üzerinden) --------------
+bilgi "duman testi: --bagimlilik-duman (K7 hiddenimports)"
+"$UYGULAMA" --bagimlilik-duman
+
 bilgi "duman testi: --pdf-duman"
 "$UYGULAMA" --pdf-duman "$CIKTI/pdf-duman.pdf"
 

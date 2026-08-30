@@ -40,9 +40,13 @@
 - **Türkçe büyük harf:** evrak şablonlarında `text-transform: uppercase`
   YASAK (WeasyPrint i→I basar); Python'da çıplak `.upper()/.lower()` TR metne
   uygulanmaz — normalize yardımcıları kullanılır (yalnız eşleştirme için).
-- **hiddenimports (DD borç K7):** her yeni Python bağımlılığı
-  `packaging/pyinstaller/*.spec` hiddenimports'a elle eklenir; `--pdf-duman`
-  kapısı bunun sigortasıdır.
+- **hiddenimports (DD borç K7):** her yeni Python bağımlılığı ÜÇ yere elle
+  eklenir — `packaging/pyinstaller/*.spec` hiddenimports, `test_spec_kapsami.py`
+  içindeki `DAGITIM_IMPORT_ESLEME` ve `giris.py` içindeki `RUNTIME_MODULES`.
+  İlk ikisi statiktir; sigorta **`--bagimlilik-duman`** kipidir: paketlenmiş
+  ikili her derlemede modülleri gerçekten import eder. (`--pdf-duman` yalnız
+  WeasyPrint zincirini sınar — 30.08.2026'da `xlrd` eklendiğinde yeni
+  bağımlılığı sınayan kapı olmadığı görüldü.)
 - **Şifreli alan sorguları:** ad-temelli filtre/sıralama/teklik DB'de
   çalışmaz → selector katmanında Python ile (tasarım §5). Yeni ad sorgusu
   doğrudan ORM filtresiyle yazılmaz.

@@ -9,9 +9,10 @@
 # Sınananlar:
 #   1. dpkg -i + apt-get -f install ile bağımlılıkların gerçekten çözülmesi
 #   2. `--autotest` → ÇIKIŞ KODU 0 (açılış zinciri: kilit, yedek, göç, sunucu)
-#   3. `--pdf-duman` → Türkçe metinli PDF üretimi + pypdf ile geri okuma
-#   4. Dosya yerleşimi (menü kaydı, ikon, /usr/bin bağlantısı)
-#   5. Temiz kaldırma
+#   3. `--bagimlilik-duman` → üçüncü taraf modüller pakette mi (K7)
+#   4. `--pdf-duman` → Türkçe metinli PDF üretimi + pypdf ile geri okuma
+#   5. Dosya yerleşimi (menü kaydı, ikon, /usr/bin bağlantısı)
+#   6. Temiz kaldırma
 # =============================================================================
 set -euo pipefail
 
@@ -49,6 +50,9 @@ test -f /usr/share/icons/hicolor/48x48/apps/kelebek-sinav.png
 # (TB2 düşüşü) — dosyanın varlığı ve boş olmadığı burada sabitlenir.
 test -s /opt/kelebek-sinav/_internal/data/ders-cizelgeleri/anadolu-lisesi-2025-2026.md
 test -s /opt/kelebek-sinav/_internal/data/ders-cizelgeleri/ders-adi-takma-adlari.md
+
+echo "== --bagimlilik-duman (K7: üçüncü taraf modüller pakette mi)"
+kelebek-sinav --bagimlilik-duman
 
 echo "== --pdf-duman (Türkçe PDF + font doğrulaması)"
 kelebek-sinav --pdf-duman /tmp/duman.pdf

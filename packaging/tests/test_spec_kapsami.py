@@ -18,6 +18,8 @@ import runpy
 import tempfile
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[2]
 SPEC = REPO / "packaging" / "pyinstaller" / "kelebek_sinav.spec"
 REQUIREMENTS = REPO / "backend" / "requirements.txt"
@@ -71,6 +73,45 @@ _ERRORS = runpy.run_path(str(REPO / "desktop" / "errors.py"))
 def test_pdf_duman_bayragi_ve_cikis_kodu_sozlesmesi() -> None:
     assert _GIRIS["PDF_SMOKE_FLAG"] == "--pdf-duman"  # build.ps1 / build.sh / kap-ici-test
     assert _GIRIS["EXIT_PDF_SMOKE_FAILED"] == _ERRORS["EXIT_PDF_SMOKE_FAILED"] == 8
+
+
+def test_bagimlilik_duman_bayragi_ve_cikis_kodu_sozlesmesi() -> None:
+    assert _GIRIS["IMPORT_SMOKE_FLAG"] == "--bagimlilik-duman"
+    assert _GIRIS["EXIT_IMPORT_SMOKE_FAILED"] == _ERRORS["EXIT_IMPORT_SMOKE_FAILED"] == 10
+
+
+def test_bagimlilik_duman_eksik_modulu_yakalar(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Kapının GERÇEKTEN kapandığı sabitlenir: eksik modül → sıfır olmayan çıkış.
+
+    `runpy.run_path` sözlüğün KOPYASINI döndürür; fonksiyonun kendi globals'ı
+    yamalanır (yoksa liste değişimi fonksiyona ulaşmaz ve test hep yeşil kalır).
+    """
+    fn = _GIRIS["run_import_smoke"]
+    monkeypatch.setitem(fn.__globals__, "RUNTIME_MODULES", ("json", "ks_olmayan_modul"))
+    assert fn() == 10
+
+
+def test_bagimlilik_duman_var_olan_modulde_gecer(monkeypatch: pytest.MonkeyPatch) -> None:
+    fn = _GIRIS["run_import_smoke"]
+    monkeypatch.setitem(fn.__globals__, "RUNTIME_MODULES", ("json",))
+    assert fn() == 0
+
+
+def test_runtime_modules_requirements_ile_senkron() -> None:
+    """K7 zincirinin son halkası: her bağımlılık pakette RUNTIME'da da sınanır.
+
+    `test_her_backend_bagimliligi_spec_kapsaminda` yalnız spec metnine bakar —
+    statiktir, modülün pakete gerçekten girdiğini kanıtlamaz. `--bagimlilik-duman`
+    kipi bunu paketlenmiş ikilide import ederek kanıtlar; bu test de listenin
+    requirements.txt ile birlikte büyümesini zorunlu kılar (30.08.2026: `xlrd`
+    eklendiğinde onu paket içinde sınayan hiçbir kapı yoktu).
+    """
+    beklenen = {DAGITIM_IMPORT_ESLEME[d] for d in _gereksinimler()}
+    mevcut = set(_GIRIS["RUNTIME_MODULES"])
+    assert mevcut == beklenen, (
+        "giris.py RUNTIME_MODULES ile requirements.txt ayrıştı — "
+        f"eksik: {sorted(beklenen - mevcut)}, fazla: {sorted(mevcut - beklenen)}"
+    )
 
 
 def test_pdf_duman_hedef_dosya_ayristirmasi() -> None:

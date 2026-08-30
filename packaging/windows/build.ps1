@@ -152,6 +152,14 @@ Copy-Item -Force $FontsConfKaynak $FontsConfHedef
 # (hinting/antialias); font DİZİNİ eklemezler.
 
 # --- 5. Duman testleri ------------------------------------------------------
+# ÖNCE bağımlılık kapısı: eksik bir hiddenimport'u burada yakalamak, sonraki
+# testlerin anlaşılmaz hatalarını okumaktan ucuzdur (K7 — CLAUDE.md §2).
+Write-Adim "duman testi: --bagimlilik-duman (K7 hiddenimports)"
+$kod = Invoke-Uygulama $AppExe @("--bagimlilik-duman")
+if ($kod -ne 0) {
+    throw "Bağımlılık duman testi BAŞARISIZ (çıkış $kod). spec hiddenimports eksik."
+}
+
 Write-Adim "duman testi: --pdf-duman (Türkçe PDF)"
 $pdf = Join-Path $Output "pdf-duman.pdf"
 $kod = Invoke-Uygulama $AppExe @("--pdf-duman", $pdf)

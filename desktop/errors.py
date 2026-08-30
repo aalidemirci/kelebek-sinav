@@ -20,6 +20,9 @@ EXIT_WEBVIEW_UNAVAILABLE = 7
 EXIT_PDF_SMOKE_FAILED = 8
 # Geri yükleme kipi (`--geri-yukle`): yedek açılamadı/yerleştirilemedi.
 EXIT_RESTORE_FAILED = 9
+# Paket teşhis kipi (`--bagimlilik-duman`): üçüncü taraf modüllerden biri
+# pakete girmemiş (K7 hiddenimports borcu).
+EXIT_IMPORT_SMOKE_FAILED = 10
 
 
 class StartupError(Exception):

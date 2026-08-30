@@ -4,7 +4,15 @@ Normal çalışmada tek işi vardır: `desktop.main.run()`'a devretmek. Kabuğun
 kendisi `desktop/` altındadır ve bu dosyaya bağımlı DEĞİLDİR — depodan
 `python -m desktop.main` ile çalıştırmak da aynı sonucu verir.
 
-Ek olarak paketlenmiş sürümde **teşhis kipi** sunar:
+Ek olarak paketlenmiş sürümde **iki teşhis kipi** sunar:
+
+    kelebek-sinav --bagimlilik-duman
+
+Bu kip `RUNTIME_MODULES`'ın tamamını import eder ve K7 borcunun (CLAUDE.md §2)
+runtime kapısıdır: spec'e eklenmeyi unutulan bir bağımlılık burada, derleme
+başında yakalanır — sahada değil. Aşağıdaki PDF kipi yalnız WeasyPrint
+zincirini sınadığı için tek başına yetmez (30.08.2026'da `xlrd` eklendiğinde
+görüldü: yeni bağımlılığın pakete girip girmediğini sınayan kapı yoktu).
 
     kelebek-sinav --pdf-duman [dosya.pdf]
 
@@ -39,9 +47,38 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 PDF_SMOKE_FLAG = "--pdf-duman"
+IMPORT_SMOKE_FLAG = "--bagimlilik-duman"
 
-# `desktop/errors.py` 0-7 arasını kullanıyor; teşhis kipi 8'den devam eder.
+# `desktop/errors.py` 0-7 arasını kullanıyor; teşhis kipi 8'den devam eder
+# (9 = --geri-yukle). Kodlar `desktop/errors.py` ile İKİZDİR.
 EXIT_PDF_SMOKE_FAILED = 8
+EXIT_IMPORT_SMOKE_FAILED = 10
+
+#: Paketin İÇİNDE çalışma anında bulunması ZORUNLU üçüncü taraf modüller.
+#:
+#: K7 borcunun (CLAUDE.md §2) son halkası. Zincirin ilk üç halkası STATİKTİR ve
+#: bir modülün pakete gerçekten girdiğini kanıtlamaz:
+#:   requirements.txt → DAGITIM_IMPORT_ESLEME → spec hiddenimports
+#: Bu liste dördüncü halkadır: paketlenmiş ikili her derlemede modülleri
+#: GERÇEKTEN import eder. `--pdf-duman` yalnız WeasyPrint zincirini sınar;
+#: 30.08.2026'da `xlrd` eklendiğinde onun paketlenip paketlenmediğini sınayan
+#: hiçbir kapı olmadığı görüldü (e-Okul .xls içe aktarımı sahada çökebilirdi).
+#:
+#: Liste `backend/requirements.txt` ile senkron tutulur; kaymayı
+#: `packaging/tests/test_spec_kapsami.py` kapıya bağlar.
+RUNTIME_MODULES: tuple[str, ...] = (
+    "django",
+    "rest_framework",
+    "argon2",
+    "cryptography",
+    "openpyxl",
+    "xlrd",
+    "PIL",
+    "weasyprint",
+    "pypdf",
+    "whitenoise",
+    "waitress",
+)
 
 # Duman testinin aradığı metin — Türkçe'ye özgü altı harf, hem büyük hem küçük.
 TURKISH_SAMPLE = "ĞÜŞİÖÇ ığüşiöç"
@@ -171,6 +208,33 @@ def run_pdf_smoke(target: Path) -> int:
     return 0
 
 
+def run_import_smoke() -> int:
+    """`RUNTIME_MODULES`'ın tamamını import eder; 0 = hepsi pakette.
+
+    Django ayağa KALDIRILMAZ, veri dizinine dokunulmaz — yalnız modül çözümü
+    sınanır. Bir modül eksikse paket "geliştirmede çalışıyor, kurulumda
+    çöküyor" sınıfına girer; hangi modülün düştüğü tek tek yazılır.
+    """
+    import importlib
+
+    eksik: list[str] = []
+    for modul in RUNTIME_MODULES:
+        try:
+            importlib.import_module(modul)
+        except Exception as hata:  # noqa: BLE001 — teşhis kipi: her hata rapor edilir
+            eksik.append(f"{modul} ({hata!r})")
+
+    if eksik:
+        _write("HATA: şu modüller pakette çözülemedi (K7 hiddenimports eksiği):")
+        for satir in eksik:
+            _write(f"  - {satir}")
+        _write("Düzeltme: packaging/pyinstaller/kelebek_sinav.spec → hiddenimports.")
+        return EXIT_IMPORT_SMOKE_FAILED
+
+    _write(f"Bağımlılık duman testi başarılı: {len(RUNTIME_MODULES)} modül çözüldü.")
+    return 0
+
+
 def _smoke_target(argv: Sequence[str]) -> Path:
     """`--pdf-duman` sonrasında dosya yolu verildiyse onu, yoksa geçici dosyayı seçer."""
     index = list(argv).index(PDF_SMOKE_FLAG)
@@ -183,6 +247,13 @@ def _smoke_target(argv: Sequence[str]) -> Path:
 def run(argv: Sequence[str] | None = None) -> int:
     """Argümanlara göre teşhis kipini veya normal açılışı çalıştırır."""
     args = list(sys.argv[1:] if argv is None else argv)
+    if IMPORT_SMOKE_FLAG in args:
+        try:
+            return run_import_smoke()
+        except Exception as error:  # noqa: BLE001 — teşhis kipi: her hata rapor edilir
+            _write(f"HATA: bağımlılık duman testi çöktü: {error!r}")
+            return EXIT_IMPORT_SMOKE_FAILED
+
     if PDF_SMOKE_FLAG in args:
         try:
             return run_pdf_smoke(_smoke_target(args))
