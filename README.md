@@ -10,19 +10,21 @@ masaüstü uygulaması (Windows 10/11 + Pardus 21/23).
 - tüm salon ve takvim evrakını A4 PDF olarak üretir (kroki, yoklama, kapı
   listesi, tutanaklar, kişiselleştirilmiş soru kitapçıkları…).
 
-Veri kurumda kalır: tek yerel SQLite dosyası, hiçbir dış servis çağrısı ve
-telemetri yok. Öğrenci/öğretmen verisi e-Okul raporlarından (xlsx/pano) içe
-aktarılır; ders havuzu MEB ders çizelgesinden okul türü ve kademeye göre
-tohumlanır. Opsiyonel uygulama parolası ile alan şifrelemesi ve şifreli yedek.
+Veri kurumda kalır: tek yerel SQLite dosyası, telemetri yok. Tek dış istek,
+GitHub'daki son sürümü soran anonim güncelleme denetimidir — kişisel veri
+taşımaz, çevrimdışıyken sessizce atlanır. Öğrenci/öğretmen verisi e-Okul
+raporlarından (xlsx/pano) içe aktarılır; ders havuzu MEB ders çizelgesinden
+okul türü ve kademeye göre tohumlanır. Opsiyonel uygulama parolası ile alan
+şifrelemesi ve şifreli yedek.
 
-**Durum:** F7 (gözetmen) tamamlandı — elle görevlendirme (U2: oto-atama
-bilinçli yok), salon başına tek gözetmen + salonsuz yedekler, muafiyet
-yönetimi (gerekçe yalnız kategori — KVKK), tebliğ-tebellüğ izi, yeniden
-dağıtımda görevlendirme sıfırlama ve R6 belgesinin üç katmanlı K2 kapısı
-(katalog filtresi + üretim reddi + ZIP koşulu). Önceki fazlar: takvim (F6 —
-mevzuat pencereleri + öğrenci-bazlı günlük limit + slot→oturum + A4 yatay
-PDF), kitapçık (F5), evrak seti (F4), oturum akışı (F3), salonlar + motor
-(F2). Sırada F8: bakım (yedek + anonimleştirme + güncelleme bildirimi).
+**Durum:** F8 (bakım) tamamlandı — iki kipli günlük yedek (parolasızsa düz,
+parolalıysa X25519 şifreli `.ksbak`; K9 düzeltmesi: yedek hiçbir kipte
+atlanmaz), F27 arşiv anonimleştirmesi (ARŞİV + sınav tarihinden 730 gün;
+açılışta aday tespiti + kullanıcı onaylı geri dönüşsüz tetik; evrak yeniden
+basımı "—" işaretiyle açık kalır; kitapçık/soru dosyaları silinir) ve GitHub
+Release güncelleme denetimi (SHA-256 doğrulamalı kurucu indirme + banner).
+Önceki fazlar: gözetmen (F7), takvim (F6), kitapçık (F5), evrak seti (F4),
+oturum akışı (F3), salonlar + motor (F2). Sırada F9: paketleme.
 Plan: [docs/tasarim/2026-08-29-genel-tasarim.md](docs/tasarim/2026-08-29-genel-tasarim.md)
 
 ## Köken

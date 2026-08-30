@@ -83,4 +83,11 @@ urlpatterns = [
         views.EncryptedBackupDownloadView.as_view(),
         name="encrypted-backup-download",
     ),
+    # GitHub Release tabanlı uygulama güncellemesi (F8)
+    path("updates/latest/", views.UpdateStatusView.as_view(), name="update-latest"),
+    path(
+        "updates/latest/installer/",
+        views.UpdateInstallerView.as_view(),
+        name="update-installer",
+    ),
 ]

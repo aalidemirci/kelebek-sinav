@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 
+import UpdateBanner from "./modules/guncelleme/UpdateBanner";
 import DensitySwitcher from "./ui/DensitySwitcher";
 import Icon from "./ui/Icon";
 import ThemeSwitcher from "./ui/ThemeSwitcher";
@@ -201,8 +202,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
         <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-5 lg:px-7 lg:py-6">
           <div className="mx-auto w-full max-w-[100rem]">
-            {/* F8 notu: UpdateBanner (GitHub sürüm denetimi) güncelleme
-                altyapısıyla birlikte buraya geri gelir. */}
+            {/* F8: GitHub sürüm denetimi — kabuk remount olmadığından denetim
+                uygulama ömründe bir kez koşar; çevrimdışıysa sessizce gizli. */}
+            <UpdateBanner />
             {children}
           </div>
         </main>

@@ -158,6 +158,7 @@ class ExamSessionSerializer(serializers.ModelSerializer[ExamSession]):
             "transfer_check_confirmed_at",
             "approved_by_name",
             "approved_at",
+            "anonymized_at",
             "courses",
             "rooms",
         )
@@ -169,6 +170,7 @@ class ExamSessionSerializer(serializers.ModelSerializer[ExamSession]):
             "transfer_check_confirmed_at",
             "approved_by_name",
             "approved_at",
+            "anonymized_at",
             "courses",
             "rooms",
         )

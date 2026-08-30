@@ -10,13 +10,16 @@ blokları alınmadı (F7/F6'da gelir); GROUPS katılımcı tipi alınmadı (TB7)
 from __future__ import annotations
 
 import copy
+import logging
 import math
 import random
 from dataclasses import dataclass
+from datetime import timedelta
 from types import EllipsisType
 from typing import Any
 
 from django.core.exceptions import ValidationError
+from django.core.files.storage import Storage
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -53,6 +56,8 @@ from apps.sinav.models import (
     SeatAssignment,
     SeatStatus,
 )
+
+logger = logging.getLogger("kelebek_sinav.sinav")
 
 
 def _normalize_room_name(name: str) -> str:
@@ -1258,7 +1263,13 @@ def mark_absent(
 
 
 def update_attendance_record(record: ExamAttendanceRecord, **fields: Any) -> ExamAttendanceRecord:
-    """Mazeret durumu/notu günceller — ARŞİVDE DE açık (belge sonradan gelir)."""
+    """Mazeret durumu/notu günceller — ARŞİVDE DE açık (belge sonradan gelir).
+
+    Anonim oturumda KAPALI: F27 notu sildikten sonra buradan yeniden kişisel
+    bağlam yazılabilseydi geri dönüşsüzlük delinirdi (OYS'de bilinen açık).
+    """
+    if record.session.anonymized_at is not None:
+        raise ValidationError("Oturum arşiv saklama süresi sonunda anonimleştirilmiş.")
     if "excuse_status" in fields:
         status = fields["excuse_status"]
         if status not in ExcuseStatus.values:
@@ -1271,8 +1282,128 @@ def update_attendance_record(record: ExamAttendanceRecord, **fields: Any) -> Exa
 
 
 def unmark_absent(record: ExamAttendanceRecord) -> None:
-    """Yanlış işaretleme telafisi — soft-delete (iz kalır)."""
+    """Yanlış işaretleme telafisi — soft-delete (iz kalır). Anonim oturumda kapalı."""
+    if record.session.anonymized_at is not None:
+        raise ValidationError("Oturum arşiv saklama süresi sonunda anonimleştirilmiş.")
     record.delete()
+
+
+# ===========================================================================
+# F27 (F8) — arşiv saklama süresi + anonimleştirme (KVKK veri minimizasyonu;
+# OYS Tur 246'dan UYARLA — Celery beat yerine açılışta aday + onaylı tetik, K14)
+# ===========================================================================
+
+#: Arşiv oturum snapshot'larının saklama süresi — SINAV TARİHİNDEN itibaren
+#: 2 ders yılı (≈730 gün; OYS Tur 246 kullanıcı kararı). Eksen `exam_date`tir:
+#: `archived_at` alanı OYS'de de yoktur, arşivlenme zamanı tutulmaz.
+EXAM_ARCHIVE_RETENTION_DAYS = 730
+
+#: Anonim satır işareti (OYS ile birebir aynı em-dash; serializer ve evrak
+#: bu değeri olduğu gibi basar — rapor zinciri kırılmaz).
+ANONYMIZED_MARK = "—"
+
+
+@transaction.atomic
+def anonymize_exam_session(session: ExamSession) -> dict[str, int]:
+    """ARŞİV oturumun kişisel verili snapshot'larını anonimleştirir (F27).
+
+    Geri dönüşsüz: ad/no "—" olur, öğrenci/öğretmen FK'ları koparılır, yoklama
+    notu (belge no/tarih) silinir; sayısal düzen (koltuk/salon/çakışma grubu/
+    sınıf etiketi) İSTATİSTİK arşivi olarak korunur — evrak yeniden basımı
+    KIRILMAZ (F8 kapısı). Soft-silinmiş satırlar DAHİL (`all_objects` — KVKK
+    tam minimizasyon). Oturum-kapsamlı yerleştirme kurallarının öğrenci bağı da
+    koparılır (kategori md. 6'ya işaret eder; öznesiz kategori kişisel veri
+    değildir).
+
+    KS eki (OYS `kvkk_media_scope.PURGE_PENDING`de beyan edilen açık kalemin
+    kapanışı): kitapçık ZIP'leri başlıklarında ad/no taşır, soru PDF'lerinin
+    saklanması sınav güvenliği gereği istenmez — iki modelin dosyaları silinir,
+    satırlar (durum/manifest/sayım) kalır.
+    """
+    if session.status != ExamSessionStatus.ARCHIVED:
+        raise ValidationError("Yalnız ARŞİV oturum anonimleştirilebilir.")
+    if session.anonymized_at is not None:
+        raise ValidationError("Oturum zaten anonimleştirilmiş.")
+
+    # Dosya silme diske çıkar; işlem geri sarılırsa dosya da yerinde kalsın
+    # diye storage çağrıları COMMIT SONRASINA ertelenir.
+    files: list[tuple[Storage, str]] = []
+    for field in (
+        *(run.file for run in BookletRun.all_objects.filter(session=session)),
+        *(doc.file for doc in QuestionDocument.all_objects.filter(session_course__session=session)),
+    ):
+        if field and field.name:
+            files.append((field.storage, field.name))
+    counts = {
+        "seat_assignments": SeatAssignment.all_objects.filter(session=session).update(
+            full_name=ANONYMIZED_MARK, student_number=ANONYMIZED_MARK, student=None
+        ),
+        "attendance_records": ExamAttendanceRecord.all_objects.filter(session=session).update(
+            full_name=ANONYMIZED_MARK, student_number=ANONYMIZED_MARK, note="", student=None
+        ),
+        "proctor_assignments": ProctorAssignment.all_objects.filter(session=session).update(
+            teacher_name=ANONYMIZED_MARK, teacher=None
+        ),
+        "placement_rules": PlacementRule.all_objects.filter(session=session).update(student=None),
+        "deleted_files": len(files),
+    }
+    BookletRun.all_objects.filter(session=session).update(file="")
+    QuestionDocument.all_objects.filter(session_course__session=session).update(file="")
+    session.anonymized_at = timezone.now()
+    session.save(update_fields=["anonymized_at", "updated_at"])
+
+    def _delete_files() -> None:
+        for storage, name in files:
+            if storage.exists(name):
+                storage.delete(name)
+
+    transaction.on_commit(_delete_files)
+    return counts
+
+
+def expired_archive_candidates(
+    *, retention_days: int = EXAM_ARCHIVE_RETENTION_DAYS
+) -> list[ExamSession]:
+    """Saklama süresi dolan (ve henüz anonimleşmemiş) ARŞİV oturumları listeler.
+
+    Açılışta FE bu listeyle kullanıcıyı uyarır (K14); tetik ayrı ve onaylıdır.
+    """
+    cutoff = timezone.localdate() - timedelta(days=retention_days)
+    return list(
+        ExamSession.objects.filter(
+            status=ExamSessionStatus.ARCHIVED, anonymized_at__isnull=True, exam_date__lt=cutoff
+        ).order_by("exam_date")
+    )
+
+
+def anonymize_expired_exam_archives(
+    *,
+    session_ids: list[int] | None = None,
+    retention_days: int = EXAM_ARCHIVE_RETENTION_DAYS,
+) -> list[int]:
+    """Süresi dolan ARŞİV oturumları anonimleştirir; işlenen id'leri döndürür.
+
+    `session_ids` verilirse YALNIZ o oturumlar işlenir ve her biri aday listesinde
+    olmak ZORUNDADIR — aday olmayan bir id tüm isteği düşürür (risk #9: onay
+    diyaloğu + aday listesi olmadan tetik yok). Verilmezse tüm adaylar işlenir.
+    """
+    candidates = expired_archive_candidates(retention_days=retention_days)
+    if session_ids is not None:
+        by_id = {session.pk: session for session in candidates}
+        unknown = [pk for pk in session_ids if pk not in by_id]
+        if unknown:
+            raise ValidationError(
+                "Seçilen oturumlardan bazıları anonimleştirme adayı değil "
+                f"(id: {', '.join(str(pk) for pk in sorted(unknown))}). Listeyi yenileyin."
+            )
+        candidates = [by_id[pk] for pk in session_ids]
+    done: list[int] = []
+    for session in candidates:
+        counts = anonymize_exam_session(session)
+        # KVKK: günlükte oturum adı/sayılar var, öğrenci adı asla.
+        logger.info("Oturum %s anonimleştirildi: %s", session.pk, counts)
+        done.append(session.pk)
+    return done
 
 
 # ===========================================================================
@@ -1752,6 +1883,12 @@ def request_booklet_run(session: ExamSession, *, backup_copies: int = 0) -> Book
         ExamSessionStatus.ARCHIVED,
     ):
         raise ValidationError("Önce dağıtım yapın — kitapçık yerleşim sırasına göre üretilir.")
+    if session.anonymized_at is not None:
+        # F27 dosya adımı soru PDF'lerini sildi; adsız snapshot'la kitapçık
+        # üretmek hem anlamsız hem ham dosya hatasıyla çökerdi.
+        raise ValidationError(
+            "Oturum arşiv saklama süresi sonunda anonimleştirilmiş; kitapçık üretilemez."
+        )
     assignments = SeatAssignment.objects.filter(session=session)
     if not assignments.exists():
         raise ValidationError("Oturumda yerleşim yok.")

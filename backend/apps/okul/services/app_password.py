@@ -60,6 +60,7 @@ from desktop.backup import database_snapshot, encrypt_legacy_backups
 from desktop.backup_crypto import (
     BACKUP_SUFFIX,
     BackupCryptoError,
+    config_path,
     encrypt_to_path,
     ensure_public_config,
     load_public_key,
@@ -506,6 +507,7 @@ def disable(*, password: str) -> None:
 
     _run_decrypt_pass()
     _archive_state()
+    _drop_backup_public_key()
     crypto.unload_key()
     logger.info("Uygulama parolası kaldırıldı; alanlar düz metne döndürüldü.")
 
@@ -528,6 +530,7 @@ def resume_pending(*, force: bool = False) -> dict[str, Any]:
     if gecis == TRANSITION_DECRYPTING:
         satir = _run_decrypt_pass()
         _archive_state()
+        _drop_backup_public_key()
         crypto.unload_key()
         logger.info("Yarım kalan parola kaldırma işlemi tamamlandı.")
         return {"resumed": True, "rows": satir, "transition": TRANSITION_DECRYPTING}
@@ -555,6 +558,17 @@ def _require_raw_key() -> bytes:
     if ham is None:  # pragma: no cover — çağrı yerleri kilidin açık olduğunu doğrular
         raise AppPasswordError("Veri anahtarı bellekte değil; parolayla yeniden açın.")
     return ham
+
+
+def _drop_backup_public_key() -> None:
+    """Parolasız kipe dönüşte yedek açık anahtarını kaldırır (K9 iki kip).
+
+    Dosya kalsaydı günlük yedekler, sarmalı artık yalnız `guvenlik-arsiv-*` +
+    ESKİ parolayla çözülebilen bir anahtarla şifrelenmeye devam ederdi. Eski
+    şifreli `.ksbak` yedekleri etkilenmez: çözümleri açık anahtarı değil,
+    arşivlenen durum dosyasındaki sarmalı ister.
+    """
+    config_path(_data_dir()).unlink(missing_ok=True)
 
 
 def _adopt_key(state: dict[str, Any], data_key: bytes) -> None:

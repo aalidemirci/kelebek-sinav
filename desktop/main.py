@@ -5,7 +5,8 @@
     3. Oturum belirteci ..................... ayarlar okunmadan ÖNCE üretilir
     4. Sürüm damgası ........................ eski program yeni veriyi AÇMAZ
     5. Bütünlük denetimi .................... bozuk veriyle pencere AÇILMAZ
-    6. Günlük yedek + 14 gün rotasyonu ...... `Connection.backup()`
+    6. Günlük yedek + 14 gün rotasyonu ...... `Connection.backup()`; parolalıysa
+       şifreli, parolasızsa düz `.ksbak` — yedek her kipte ALINIR (K9)
     7. Göç öncesi yedek + `migrate --no-input`
     8. Gömülü sunucu (waitress, 127.0.0.1, boş port) + sağlık denetimi
     9. Pencere (pywebview) — `--autotest` kipinde AÇILMAZ

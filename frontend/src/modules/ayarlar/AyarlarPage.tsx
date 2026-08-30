@@ -1,7 +1,7 @@
-// Ayarlar sayfası (DD kalıbından KS'ye) — dört sekme: ders yılları (dönemlerle),
+// Ayarlar sayfası (DD kalıbından KS'ye) — beş sekme: ders yılları (dönemlerle),
 // şube kataloğu (salon-şube eşlemesi ve R2k bu katalogdan okur), okul bilgileri
-// (evrak antedi + okul türü, U4) ve güvenlik (uygulama parolası). DD'deki tatil
-// ve güncelleme sekmeleri YOK (tatil: iş günü hesabı alınmadı; güncelleme: F8).
+// (evrak antedi + okul türü, U4), güvenlik (uygulama parolası) ve güncelleme
+// (F8 — GitHub sürüm denetimi). DD'deki tatil sekmesi YOK (iş günü hesabı alınmadı).
 
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -21,6 +21,7 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import type { TabItem } from "../../ui/Tabs";
 import TextField from "../../ui/TextField";
+import UpdatePanel from "../guncelleme/UpdatePanel";
 import GuvenlikAyarlari from "../guvenlik/GuvenlikAyarlari";
 import { SCHOOL_TYPE_TR, okulApi } from "../okul/api";
 import type {
@@ -31,7 +32,7 @@ import type {
   SchoolYear,
 } from "../okul/api";
 
-const TABS = ["ders-yillari", "subeler", "okul", "guvenlik"] as const;
+const TABS = ["ders-yillari", "subeler", "okul", "guvenlik", "guncelleme"] as const;
 type TabKey = (typeof TABS)[number];
 
 const TAB_ITEMS: TabItem[] = [
@@ -39,6 +40,7 @@ const TAB_ITEMS: TabItem[] = [
   { key: "subeler", label: "Şubeler", icon: "meeting_room" },
   { key: "okul", label: "Okul Bilgileri", icon: "apartment" },
   { key: "guvenlik", label: "Güvenlik", icon: "lock" },
+  { key: "guncelleme", label: "Güncelleme", icon: "system_update" },
 ];
 
 /** Backend hatasını alan-bazlı haritaya VEYA genel hata bandına dağıtır. */
@@ -140,6 +142,7 @@ export default function AyarlarPage() {
         {tab === "subeler" && <SubelerPanel years={years} yearsLoading={yearsLoading} />}
         {tab === "okul" && <OkulBilgileriPanel />}
         {tab === "guvenlik" && <GuvenlikAyarlari okulAdi={okulAdi} />}
+        {tab === "guncelleme" && <UpdatePanel />}
       </div>
 
       <section className="space-y-3">

@@ -338,6 +338,19 @@ class TestDisable:
         assert len(arsiv) == 1
         assert "kurtarma" in json.loads(arsiv[0].read_text(encoding="utf-8"))
 
+    def test_yedek_acik_anahtari_kaldirilir(self) -> None:
+        """K9 iki kip: parolasız kipe dönüşte `yedekleme.json` kalkar — sonraki
+        günlük yedekler düz alınır; dosya kalsaydı yedekler yalnız ESKİ parolayla
+        açılabilen bir anahtarla şifrelenmeye devam ederdi."""
+        ogrenci_olustur()
+        app_password.enable(password=PAROLA)
+        yedek_ayari = app_password.state_path().parent / "yedekleme.json"
+        assert yedek_ayari.is_file()
+
+        app_password.disable(password=PAROLA)
+
+        assert not yedek_ayari.exists()
+
     def test_gecis_oncesi_yedek_cozmeden_ONCE_alinir(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ogrenci = ogrenci_olustur()
         app_password.enable(password=PAROLA)

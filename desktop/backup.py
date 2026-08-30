@@ -1,10 +1,18 @@
-"""Otomatik şifreli yedekleme — SQLite çevrimiçi görüntü + 14 gün rotasyonu.
+"""Otomatik İKİ KİPLİ yedekleme — SQLite çevrimiçi görüntü + 14 gün rotasyonu.
 
 **Dosya kopyalama YAPILMAZ.** WAL kipinde işlenmiş sayfaların bir bölümü hâlâ
 `-wal` dosyasındadır; `db.sqlite3`'ü tek başına kopyalamak tutarsız (hatta bozuk)
 bir yedek üretir. `Connection.backup()` ise SQLite'ın kendi çevrimiçi yedek API'sini
 kullanır: kaynak veritabanını sayfa sayfa RAM'e okur, WAL dahil tutarlı bir görüntü
-çıkarır. Görüntü diske yalnız `.ksbak` şifreli kapsayıcısı olarak yazılır.
+çıkarır.
+
+**Kip, yedek anahtarı dosyasından (`yedekleme.json`) belirlenir (K9 düzeltmesi):**
+uygulama parolası kuruluysa görüntü diske X25519 şifreli `.ksbak` kapsayıcısı
+olarak yazılır; parolasız kipte DÜZ SQLite baytları (yine `.ksbak` adıyla) yazılır.
+DD şablonundaki "parolasız kipte günlük yedek atlanır" dalı burada bilinçle
+düzeltildi — yedek her gün ALINIR. Anahtar dosyası VAR ama bozuksa düz yedek
+YAZILMAZ (şifreli kurulumdan düz kopya sızdırmak olurdu): uyarı loglanıp atlanır;
+kilit bir kez açıldığında `ensure_public_config` dosyayı onarır.
 
 Yedek adları tarihlidir ve deterministiktir: aynı gün ikinci kez açılan program o
 günün yedeğini yeniden ÜRETMEZ (sabah alınan yedek, akşam bozulan veriyle ezilmez).
@@ -21,7 +29,9 @@ from pathlib import Path
 
 from desktop.backup_crypto import (
     BACKUP_SUFFIX,
+    MAGIC,
     BackupCryptoError,
+    config_path,
     encrypt_to_path,
     load_public_key,
     recovery_metadata,
@@ -47,7 +57,7 @@ _LEGACY_PATTERNS = (
 
 
 def database_snapshot(source_path: Path) -> bytes:
-    """WAL dahil tutarlı SQLite görüntüsünü RAM'de üretir; düz yedek diske yazılmaz."""
+    """WAL dahil tutarlı SQLite görüntüsünü RAM'de üretir."""
     with (
         closing(sqlite3.connect(source_path)) as source,
         closing(sqlite3.connect(":memory:")) as target,
@@ -56,19 +66,58 @@ def database_snapshot(source_path: Path) -> bytes:
         return bytes(target.serialize())
 
 
-def _copy_database(source_path: Path, target_path: Path) -> None:
-    """Tutarlı SQLite görüntüsünü doğrudan şifreli kapsayıcıya yazar."""
-    public_key = load_public_key(source_path.parent)
+def _write_plain(content: bytes, target: Path) -> None:
+    """Düz baytları atomik yazar (`encrypt_to_path` ile aynı .tmp→replace deseni)."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp = target.with_name(target.name + ".tmp")
+    temp.unlink(missing_ok=True)
+    try:
+        temp.write_bytes(content)
+        temp.replace(target)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def _copy_database(source_path: Path, target_path: Path) -> bool:
+    """Tutarlı SQLite görüntüsünü KİPE GÖRE yazar; yazıldıysa True döner.
+
+    Kip anahtarı `yedekleme.json`un VARLIĞIdır: dosya hiç yoksa parolasız kip →
+    düz yedek (K9); dosya var ama okunamıyorsa şifreli kurulum bozulmuş demektir →
+    düz kopya SIZINTI olurdu, yedek atlanır (False).
+    """
+    data_dir = source_path.parent
+    if not config_path(data_dir).is_file():
+        _write_plain(database_snapshot(source_path), target_path)
+        return True
+    try:
+        public_key = load_public_key(data_dir)
+    except BackupCryptoError:
+        logger.warning(
+            "Şifreli yedekleme anahtarı bozuk; yedek alınamadı (düz kopya yazılmadı). "
+            "Uygulama parolasıyla kilidi açmak dosyayı onarır."
+        )
+        return False
     encrypt_to_path(
         database_snapshot(source_path),
         target_path,
         public_key,
-        recovery_header=recovery_metadata(source_path.parent),
+        recovery_header=recovery_metadata(data_dir),
     )
+    return True
+
+
+def _is_encrypted_container(path: Path) -> bool:
+    with path.open("rb") as handle:
+        return handle.read(len(MAGIC)) == MAGIC
 
 
 def encrypt_legacy_backups(backup_dir: Path, data_dir: Path) -> list[Path]:
-    """Eski düz SQLite yedeklerini atomik olarak şifreli `.ksbak` biçimine çevirir."""
+    """Düz yedekleri atomik olarak şifreli `.ksbak` biçimine çevirir.
+
+    İki kaynak vardır: DD dönemi kalıbındaki `*.sqlite3` adlı düz yedekler ve
+    parolasız kipte alınmış düz `.ksbak` yedekleri (K9). Parola kurulduğunda /
+    kilit her açıldığında çağrılır — kaynak şifreliyken diskte düz kopya kalmaz.
+    """
     if not backup_dir.is_dir():
         return []
     try:
@@ -87,8 +136,22 @@ def encrypt_legacy_backups(backup_dir: Path, data_dir: Path) -> list[Path]:
             )
             source.unlink()
             encrypted.append(target)
+    for pattern in (
+        f"{DAILY_PREFIX}-*{BACKUP_SUFFIX}",
+        f"{PRE_MIGRATE_PREFIX}-*{BACKUP_SUFFIX}",
+    ):
+        for source in sorted(backup_dir.glob(pattern)):
+            if _is_encrypted_container(source):
+                continue
+            encrypt_to_path(
+                source.read_bytes(),
+                source,
+                public_key,
+                recovery_header=recovery_metadata(data_dir),
+            )
+            encrypted.append(source)
     if encrypted:
-        logger.info("%d eski düz yedek şifreli biçime dönüştürüldü.", len(encrypted))
+        logger.info("%d düz yedek şifreli biçime dönüştürüldü.", len(encrypted))
     return encrypted
 
 
@@ -114,10 +177,7 @@ def daily_backup(db_path: Path, backup_dir: Path, *, today: date | None = None) 
     target = backup_dir / f"{DAILY_PREFIX}-{day.isoformat()}{BACKUP_SUFFIX}"
     if target.exists():
         return target
-    try:
-        _copy_database(db_path, target)
-    except BackupCryptoError:
-        logger.warning("Şifreli yedekleme anahtarı hazır değil; günlük yedek atlandı.")
+    if not _copy_database(db_path, target):
         return None
     logger.info("Günlük yedek alındı: %s", target.name)
     return target
@@ -138,10 +198,7 @@ def pre_migrate_backup(
     target = backup_dir / name
     if target.exists():
         return target
-    try:
-        _copy_database(db_path, target)
-    except BackupCryptoError:
-        logger.warning("Şifreli yedekleme anahtarı hazır değil; güncelleme yedeği atlandı.")
+    if not _copy_database(db_path, target):
         return None
     logger.info("Güncelleme öncesi yedek alındı: %s", target.name)
     return target

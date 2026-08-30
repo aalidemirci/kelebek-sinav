@@ -501,6 +501,41 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
         """Arşivler — ONAYLANDI → ARŞİV (salt-okunur; yeniden basım açık)."""
         return self._transition(services.archive_session)
 
+    # ÇOK METOTLU `@action` — GET süresi dolan arşiv adayları · POST kullanıcı
+    # onaylı GERİ DÖNÜŞSÜZ anonimleştirme (F27/F8, K14). POST gövdesi aday
+    # id listesini AÇIKÇA taşır: FE onay diyaloğu listeyi göstermeden tetik
+    # atamaz (risk #9 — aday listesi görülmeden veri kaybı şikâyeti kaçınılmaz).
+    @action(detail=False, methods=["get", "post"], url_path="archive-anonymization")
+    def archive_anonymization(self, request: Request) -> Response:
+        if request.method == "GET":
+            return Response(
+                {
+                    "retention_days": services.EXAM_ARCHIVE_RETENTION_DAYS,
+                    "candidates": [
+                        {
+                            "id": session.pk,
+                            "name": session.name,
+                            "exam_date": session.exam_date.isoformat(),
+                        }
+                        for session in services.expired_archive_candidates()
+                    ],
+                }
+            )
+        raw_ids = request.data.get("session_ids")
+        if not isinstance(raw_ids, list) or not raw_ids:
+            raise drf_serializers.ValidationError(
+                "Anonimleştirilecek oturumların id listesi (session_ids) zorunludur."
+            )
+        # bool int'in alt tipidir: JSON `true` → int(True)=1 sessizce id olurdu.
+        if not all(isinstance(value, int) and not isinstance(value, bool) for value in raw_ids):
+            raise drf_serializers.ValidationError("session_ids yalnız tam sayı içerebilir.")
+        session_ids = list(raw_ids)
+        try:
+            done = services.anonymize_expired_exam_archives(session_ids=session_ids)
+        except DjangoValidationError as exc:
+            raise drf_serializers.ValidationError(exc.messages) from exc
+        return Response({"anonymized": done})
+
 
 class ExamSessionCourseViewSet(viewsets.GenericViewSet[ExamSessionCourse]):
     """Oturum dersi güncelle/çıkar — `/exam-session-courses/<id>/`."""
@@ -567,7 +602,9 @@ class ExamSessionCourseViewSet(viewsets.GenericViewSet[ExamSessionCourse]):
         """Soru PDF'i indirme — sınav öncesi gizlilik: yalnız yerel API'den sunulur."""
         sc = self.get_object()
         doc = selectors.question_document_for(sc.pk)
-        if doc is None:
+        # F27 anonimleştirmesi satırı koruyup dosyayı siler — boş FieldFile
+        # açılmaya çalışılırsa ham ValueError 500 olurdu.
+        if doc is None or not doc.file:
             return Response(
                 {"code": "not_found", "message": "Soru dosyası yüklenmemiş.", "fields": {}},
                 status=404,

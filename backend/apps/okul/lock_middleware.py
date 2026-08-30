@@ -39,6 +39,8 @@ ALLOWED_PREFIXES = (
     # Açılış sağlık denetimi (bkz. dosya başlığı). YALNIZ bu tekil yol; kurulum
     # sihirbazının diğer uçları kapalıdır.
     "/api/v1/setup/status/",
+    # Kişisel veri içermez; kilit ekranında başlayan otomatik sürüm denetimi (F8).
+    "/api/v1/updates/",
 )
 
 _LOCKED_BODY = {

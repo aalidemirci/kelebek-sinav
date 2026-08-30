@@ -254,9 +254,10 @@ def test_ikinci_acilis_gunluk_yedegi_alir(tmp_path: Path) -> None:
         )
         assert sonuc.returncode == EXIT_OK, sonuc.stderr
 
-    # Uygulama parolası kurulana dek açık yedek üretmek yerine günlük yedek atlanır.
-    yedekler = list((tmp_path / "backups").glob("gunluk-*"))
-    assert yedekler == []
+    # K9 iki kip: parolasız kipte günlük yedek ATLANMAZ — düz `.ksbak` alınır.
+    yedekler = list((tmp_path / "backups").glob("gunluk-*.ksbak"))
+    assert len(yedekler) == 1
+    assert yedekler[0].read_bytes().startswith(b"SQLite format 3")
 
 
 @pytest.mark.slow

@@ -13,7 +13,7 @@ function hataMesaji(error: unknown): string {
 
 function yedekDosyaAdi(): string {
   const timestamp = new Date().toISOString().replace("T", "-").slice(0, 19).replace(/:/g, "");
-  return `disiplin-defteri-yedek-${timestamp}.ddbak`;
+  return `kelebek-sinav-yedek-${timestamp}.ksbak`;
 }
 
 export default function SifreliYedekleme({ parolaKurulu }: { parolaKurulu: boolean }) {
@@ -41,7 +41,7 @@ export default function SifreliYedekleme({ parolaKurulu }: { parolaKurulu: boole
           <h2 className="text-title-large text-on-surface">Şifreli veritabanı yedeği</h2>
           <p className="mt-2 text-body-medium text-on-surface-variant">
             Veritabanının tutarlı bir görüntüsü cihazda X25519 ve AES-256-GCM ile şifrelenir,
-            ardından <span className="font-mono">.ddbak</span> dosyası olarak indirilir. Düz metin
+            ardından <span className="font-mono">.ksbak</span> dosyası olarak indirilir. Düz metin
             yedek veya bulut bağlantısı oluşturulmaz.
           </p>
           <p className="mt-2 text-body-small text-on-surface-variant">

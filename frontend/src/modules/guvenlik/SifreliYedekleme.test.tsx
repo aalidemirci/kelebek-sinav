@@ -27,8 +27,8 @@ it("parola yokken şifreli yedek indirmesini kapalı tutar", () => {
   expect(screen.getByText(/önce uygulama parolası kurmalısınız/)).toBeInTheDocument();
 });
 
-it("yalnız şifreli ddbak dosyasını kullanıcıya indirir", async () => {
-  const blob = new Blob(["DDBAK-encrypted"]);
+it("yalnız şifreli ksbak dosyasını kullanıcıya indirir", async () => {
+  const blob = new Blob(["KSBAK-encrypted"]);
   mocks.postBlob.mockResolvedValue(blob);
   render(
     <SnackbarProvider>
@@ -42,7 +42,7 @@ it("yalnız şifreli ddbak dosyasını kullanıcıya indirir", async () => {
     expect(mocks.postBlob).toHaveBeenCalledWith("/backups/encrypted/");
     expect(mocks.saveBlob).toHaveBeenCalledWith(
       blob,
-      expect.stringMatching(/^disiplin-defteri-yedek-.+\.ddbak$/),
+      expect.stringMatching(/^kelebek-sinav-yedek-.+\.ksbak$/),
     );
   });
 });

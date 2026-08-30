@@ -1,4 +1,9 @@
-"""Otomatik yedek testleri (tasarım §5.3 — `Connection.backup()`, 14 gün rotasyon)."""
+"""Otomatik yedek testleri (tasarım §5.3 — `Connection.backup()`, 14 gün rotasyon).
+
+K9 iki kip: parolalı kurulumda (yedekleme.json var) yedekler şifreli, parolasız
+kipte DÜZ `.ksbak` alınır — hiçbir kipte atlanmaz. Yardımcılar kapsayıcının
+başındaki MAGIC'e bakarak iki biçimi de açar.
+"""
 
 from __future__ import annotations
 
@@ -17,6 +22,7 @@ from desktop.backup import (
     rotate_backups,
 )
 from desktop.backup_crypto import (
+    MAGIC,
     BackupCryptoError,
     decrypt_bytes,
     embedded_recovery_metadata,
@@ -26,9 +32,10 @@ from desktop.backup_crypto import (
 _TEST_KEY = b"k" * 32
 
 
-def _db_olustur(path: Path, satir_sayisi: int = 3) -> None:
+def _db_olustur(path: Path, satir_sayisi: int = 3, *, sifreli: bool = True) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    ensure_public_config(path.parent, _TEST_KEY)
+    if sifreli:
+        ensure_public_config(path.parent, _TEST_KEY)
     conn = sqlite3.connect(path)
     try:
         conn.execute("PRAGMA journal_mode=WAL")
@@ -43,11 +50,10 @@ def _db_olustur(path: Path, satir_sayisi: int = 3) -> None:
 
 
 def _satir_sayisi(path: Path) -> int:
+    content = path.read_bytes()
     restored = path.with_name(path.name + ".restored.sqlite3")
     restored.write_bytes(
-        decrypt_bytes(path.read_bytes(), _TEST_KEY)
-        if path.suffix == ".ksbak"
-        else path.read_bytes()
+        decrypt_bytes(content, _TEST_KEY) if content.startswith(MAGIC) else content
     )
     conn = sqlite3.connect(restored)
     try:
@@ -262,6 +268,61 @@ def test_eski_duz_yedek_sifrelenir_ve_duz_kopya_silinir(tmp_path: Path) -> None:
     assert not legacy.exists()
     assert b"SQLite format 3" not in target.read_bytes()
     assert _satir_sayisi(target) == 3
+
+
+# ------------------------------------------------------------- iki kip (K9)
+
+
+def test_parolasiz_kipte_gunluk_yedek_duz_alinir(tmp_path: Path) -> None:
+    """K9 düzeltmesi: anahtar yoksa yedek ATLANMAZ, düz `.ksbak` yazılır."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db, sifreli=False)
+
+    sonuc = daily_backup(db, tmp_path / "backups", today=date(2026, 7, 24))
+
+    assert sonuc == tmp_path / "backups" / "gunluk-2026-07-24.ksbak"
+    assert sonuc is not None and sonuc.read_bytes().startswith(b"SQLite format 3")
+    assert _satir_sayisi(sonuc) == 3
+
+
+def test_parolasiz_kipte_migrate_oncesi_yedek_duz_alinir(tmp_path: Path) -> None:
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db, sifreli=False)
+
+    sonuc = pre_migrate_backup(db, tmp_path / "backups", "0.2.0", today=date(2026, 7, 24))
+
+    assert sonuc is not None and sonuc.read_bytes().startswith(b"SQLite format 3")
+
+
+def test_bozuk_anahtar_dosyasiyla_duz_yedek_yazilmaz(tmp_path: Path) -> None:
+    """Anahtar dosyası VAR ama bozuksa şifreli kurulumdan düz kopya SIZDIRILMAZ."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db, sifreli=False)
+    (tmp_path / "yedekleme.json").write_text("{bozuk", encoding="utf-8")
+
+    assert daily_backup(db, tmp_path / "backups", today=date(2026, 7, 24)) is None
+    assert pre_migrate_backup(db, tmp_path / "backups", "0.2.0", today=date(2026, 7, 24)) is None
+    assert list((tmp_path / "backups").glob("*.ksbak")) == []
+
+
+def test_parolasiz_donemin_duz_yedekleri_parola_kurulunca_sifrelenir(
+    tmp_path: Path,
+) -> None:
+    """Parola kurulduğunda düz `.ksbak` yedekleri YERİNDE şifreli biçime döner."""
+    db = tmp_path / "db.sqlite3"
+    _db_olustur(db, sifreli=False)
+    yedekler = tmp_path / "backups"
+    duz = daily_backup(db, yedekler, today=date(2026, 7, 24))
+    assert duz is not None and duz.read_bytes().startswith(b"SQLite format 3")
+
+    ensure_public_config(tmp_path, _TEST_KEY)
+    encrypted = encrypt_legacy_backups(yedekler, tmp_path)
+
+    assert encrypted == [duz]
+    assert duz.read_bytes().startswith(MAGIC)
+    assert _satir_sayisi(duz) == 3
+    # İkinci çağrı fikirdeş: zaten şifreli dosyaya yeniden dokunulmaz.
+    assert encrypt_legacy_backups(yedekler, tmp_path) == []
 
 
 def test_rotasyon_olmayan_dizinde_patlamaz(tmp_path: Path) -> None:

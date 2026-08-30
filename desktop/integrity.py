@@ -32,7 +32,9 @@ def _hint(backup_dir: Path | None) -> str:
     return (
         f"Yedek klasörü: {backup_dir}\n"
         "En son tarihli yedeği veri klasörüne 'db.sqlite3' adıyla kopyalayıp programı "
-        "yeniden açın. Bozuk dosyayı silmeyin; bir kopyasını saklayın."
+        "yeniden açın (uygulama parolası kuruluyken alınan yedekler şifrelidir; onları "
+        "açmak için okul bilişim sorumlusuna başvurun). Bozuk dosyayı silmeyin; bir "
+        "kopyasını saklayın."
     )
 
 

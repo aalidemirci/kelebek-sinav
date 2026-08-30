@@ -45,6 +45,7 @@ from apps.okul.services import sections as section_service
 from apps.okul.services import setup as setup_service
 from apps.okul.services import templates as template_service
 from apps.okul.services import terms as term_service
+from apps.okul.services import updates as update_service
 
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -436,4 +437,38 @@ class EncryptedBackupDownloadView(APIView):
             as_attachment=True,
             filename=filename,
             content_type="application/octet-stream",
+        )
+
+
+# ---------------------------------------------------------------------------
+# GitHub Release tabanlı uygulama güncellemesi (F8 — DD updates.py AYNEN)
+# ---------------------------------------------------------------------------
+class UpdateStatusView(APIView):
+    """GitHub'daki son kararlı sürümü çalışan sürümle karşılaştırır."""
+
+    def get(self, request: Request) -> Response:
+        force = str(request.query_params.get("force", "")).lower() in TRUE_VALUES
+        try:
+            return Response(update_service.update_status(force=force))
+        except update_service.UpdateError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
+
+class UpdateInstallerView(APIView):
+    """Doğrulanmış Windows kurucusunu uygulama indirmesi olarak döndürür."""
+
+    def get(self, request: Request) -> FileResponse:
+        try:
+            installer = update_service.download_latest_installer(force=True)
+        except update_service.UpdateError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+        # Savunma derinliği: dönen dosya güncelleme önbelleği içinde mi?
+        update_dir = update_service.update_directory().resolve()
+        if update_dir not in installer.resolve().parents:
+            raise serializers.ValidationError("Güncelleme dosyası güvenli önbellek dışında.")
+        return FileResponse(
+            installer.open("rb"),
+            as_attachment=True,
+            filename=installer.name,
+            content_type="application/vnd.microsoft.portable-executable",
         )

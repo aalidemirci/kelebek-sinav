@@ -9,6 +9,7 @@ import { Route, Routes } from "react-router-dom";
 import AppShell from "./AppShell";
 import KurulumKapisi from "./KurulumKapisi";
 import AyarlarPage from "./modules/ayarlar/AyarlarPage";
+import ArsivBakimBanner from "./modules/bakim/ArsivBakimBanner";
 import DersHavuzuPage from "./modules/dersler/DersHavuzuPage";
 import GuvenlikKapisi from "./modules/guvenlik/GuvenlikKapisi";
 import HakkindaPage from "./modules/hakkinda/HakkindaPage";
@@ -26,6 +27,9 @@ export default function App() {
     <AppShell>
       <GuvenlikKapisi>
         <KurulumKapisi>
+          {/* F27/F8: kapıların İÇİNDE — kilit çözülünce mount olur, aday
+              sorgusu 423'e takılmadan koşar (AppShell remount olmaz). */}
+          <ArsivBakimBanner />
           <Routes>
             <Route path="/" element={<PanelPage />} />
             {/* Kurulum sihirbazı — kapının izin verdiği tek rota (bkz. KurulumKapisi). */}
