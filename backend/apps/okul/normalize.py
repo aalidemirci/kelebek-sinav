@@ -35,10 +35,53 @@ _TR_UPPER_MAP = str.maketrans(
 #: Hazırlık sınıfını metinden tanıma deseni ('HAZIRLIK/A', 'HAZ A', 'HZ-B'…).
 _PREP_RE = re.compile(r"\bHA?Z(IRLIK)?\b")
 
+#: Şube harfi için Türkçe büyük harf tablosu: 'i' → 'İ', 'ı' → 'I'.
+#: (Python'un çıplak `.upper()` değeri 'i'yi 'I' yapar — Türkçede yanlıştır.)
+_TR_TITLE_MAP = str.maketrans({"i": "İ", "ı": "I"})
+
+#: Şube harfi olabilecek karakterler (Türk alfabesi + ASCII).
+_SECTION_CHARS = r"A-Za-zÇĞİÖŞÜçğıöşü"
+
 
 def _ascii_upper(value: str) -> str:
-    """Türkçe karakterleri ASCII'ye indirip büyük harfe çevirir (eşleme için)."""
+    """Türkçe karakterleri ASCII'ye indirip büyük harfe çevirir (ANAHTAR KELİME eşlemesi).
+
+    YALNIZ anahtar kelime araması içindir ('HAZIRLIK' tanıma gibi). Şube harfi
+    için KULLANILMAZ: 'İ' ile 'I'yı tek harfe katlar — bkz. `tr_upper`.
+    """
     return value.translate(_TR_UPPER_MAP).upper()
+
+
+def tr_upper(value: str) -> str:
+    """Türkçeye uygun büyük harf ('10/i' → '10/İ', '9/ş' → '9/Ş').
+
+    ŞUBE HARFİ KATLAMASININ TEK DOĞRU YOLU BUDUR. `_ascii_upper` ile katlamak
+    (30.08.2026 öncesi davranış) Türk alfabesinin ayrı harflerini birleştirir:
+    e-Okul sınıf listesi şubeleri Türk alfabesi sırasıyla açar (…G, H, I, İ,
+    J, K…), yani orta ölçekli bir okulda **hem 10/I hem 10/İ** bulunur. ASCII
+    katlaması bu iki şubeyi tek şubeye çökertip iki ayrı sınıfın öğrencilerini
+    sessizce aynı şubeye yazardı — gerçek bir e-Okul ihracında yakalandı.
+    """
+    return value.translate(_TR_TITLE_MAP).upper()
+
+
+#: Türk alfabesi sırası — şube harfi artık katlanmadığı için sıralama da
+#: Türkçeleşmek ZORUNDA: kod noktası sırasında Ç/Ğ/İ/Ö/Ş/Ü harfleri 'Z'den
+#: BÜYÜKTÜR, yani '10/Ç' ile '10/İ' basılan evrakta listenin sonuna düşer ve
+#: '10/I' ile '10/İ' iki uca ayrılırdı.
+_TR_ALFABE = "0123456789ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ"
+_TR_SIRA = {harf: sira for sira, harf in enumerate(_TR_ALFABE)}
+
+
+def tr_sort_key(value: object) -> tuple[int, ...]:
+    """Türk alfabesine göre sıralama anahtarı ('C' < 'Ç' < 'D', 'I' < 'İ' < 'J').
+
+    Alfabede olmayan karakterler (boşluk, '/', latin dışı harf) kararlı biçimde
+    sona düşer. Karşılaştırma büyük harf üzerinden yapılır (`tr_upper`).
+    """
+    buyuk = tr_upper("" if value is None else str(value))
+    son = len(_TR_ALFABE)
+    return tuple(_TR_SIRA.get(ch, son + ord(ch)) for ch in buyuk)
 
 
 def normalize_class_section(
@@ -56,19 +99,26 @@ def normalize_class_section(
         return None
     levels = frozenset(int(v) for v in valid_levels)
     folded = _ascii_upper(s)
-    if 0 in levels and _PREP_RE.search(folded):
-        section_m = re.search(r"[A-Z]+$", re.sub(r"[^A-Z]", " ", _PREP_RE.sub(" ", folded)).strip())
-        if section_m is None:
+    prep = _PREP_RE.search(folded) if 0 in levels else None
+    if prep is not None:
+        # Anahtar kelime KATLANMIŞ metinde bulunur, şube harfi HAM metinden
+        # alınır — 'Hazırlık/İ' şubesi 'I'ya çökmesin (tr_upper gerekçesi).
+        if len(folded) == len(s):  # translate+upper 1:1 kaldıysa konumlar eşleşir
+            kalan = s[: prep.start()] + " " + s[prep.end() :]
+        else:  # savunma dalı: katlama uzunluğu değiştirdiyse ASCII'ye düş
+            kalan = _PREP_RE.sub(" ", folded)
+        harfler = re.sub(rf"[^{_SECTION_CHARS}]", " ", kalan).split()
+        if not harfler:
             return None
-        return 0, section_m.group()
+        return 0, tr_upper(harfler[-1])
     level_m = re.search(r"\d{1,2}", s)
-    section_m2 = re.search(r"[A-Za-zÇĞİÖŞÜçğıöşü]+", s)
+    section_m2 = re.search(rf"[{_SECTION_CHARS}]+", s)
     if level_m is None or section_m2 is None:
         return None
     level = int(level_m.group())
     if level not in levels:
         return None
-    section = _ascii_upper(section_m2.group())
+    section = tr_upper(section_m2.group())
     return level, section
 
 

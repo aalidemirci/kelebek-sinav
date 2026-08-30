@@ -166,7 +166,7 @@ export interface PersonnelListParams {
 }
 
 // ---------------------------------------------------------------------------
-// İçe aktarma (xlsx dosyası VEYA pano metni — tam olarak biri)
+// İçe aktarma (Excel dosyası — e-Okul .xls ya da şablon .xlsx — VEYA pano metni)
 // ---------------------------------------------------------------------------
 
 /** Rapordaki tek satır sorunu (uyarı veya atlanan satır). */

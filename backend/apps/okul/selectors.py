@@ -113,6 +113,21 @@ def class_sections(*, school_year_id: int | None = None) -> QuerySet[ClassSectio
     return qs.filter(school_year=active)
 
 
+def class_sections_sorted(*, school_year_id: int | None = None) -> list[ClassSection]:
+    """Şube kataloğu, TÜRK ALFABESİ sırasıyla (listeleme/görüntü için).
+
+    `ClassSection.Meta.ordering` DB sıralamasıdır ve SQLite karşılaştırması
+    BINARY'dir (UTF-8 bayt = kod noktası sırası). Şube harfi artık ASCII'ye
+    KATLANMADIĞI için orada 'Ç/Ğ/İ/Ö/Ş/Ü' harfleri 'Z'den sonraya düşer —
+    10/I ile 10/İ listenin iki ucuna ayrılırdı. Sıralama bu yüzden Python'da,
+    `normalize.tr_sort_key` ile yapılır (yerel ölçek: ~50 şube).
+    """
+    return sorted(
+        class_sections(school_year_id=school_year_id),
+        key=lambda s: (s.class_level, normalize.tr_sort_key(s.class_section)),
+    )
+
+
 def get_class_section(section_id: int) -> ClassSection | None:
     return ClassSection.objects.filter(pk=section_id).first()
 
@@ -136,9 +151,9 @@ def student_list(
     if class_level is not None:
         qs = qs.filter(class_level=class_level)
     if class_section.strip():
-        # Kayıtlar import/serializer'da _ascii_upper ile katlanır ('ş' → 'S');
+        # Kayıtlar import/serializer'da tr_upper ile büyütülür ('ş' → 'Ş');
         # filtre de AYNI katlamadan geçmeli, yoksa Türkçe harfli şube bulunamaz.
-        qs = qs.filter(class_section=normalize._ascii_upper(class_section.strip()))
+        qs = qs.filter(class_section=normalize.tr_upper(class_section.strip()))
     if search.strip():
         needle = normalize_header(search)
         return [

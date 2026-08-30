@@ -25,6 +25,7 @@ import io
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from apps.okul import normalize as okul_normalize
 from apps.sinav import layout
 from apps.sinav.models import FurnitureKind, SeatStatus
 
@@ -101,10 +102,18 @@ def student_number_sort_key(number: str) -> tuple[int, int | str]:
     return (0, int(number)) if number.isdigit() else (1, number)
 
 
-def class_label_sort_key(label: str) -> tuple[int, int, str]:
-    """Şube sıralaması seviye-sayısal: 9/A < 9/B < 10/B (alfabetik DEĞİL)."""
-    head = label.split("/")[0].strip()
-    return (0, int(head), label) if head.isdigit() else (1, 0, label)
+def class_label_sort_key(label: str) -> tuple[int, int, tuple[int, ...]]:
+    """Şube sıralaması seviye-sayısal, şube harfi TÜRK ALFABESİNE göre.
+
+    9/A < 9/B < 10/B (seviye alfabetik DEĞİL, sayısal) ve 10/C < 10/Ç < 10/D,
+    10/I < 10/İ < 10/J. Şube harfi ASCII'ye katlanmadığı için (`normalize.
+    tr_upper`) kod noktası sıralaması Ç/Ğ/İ/Ö/Ş/Ü'yü 'Z'den sonraya atardı.
+    """
+    head, _, section = label.partition("/")
+    head = head.strip()
+    if head.isdigit():
+        return (0, int(head), okul_normalize.tr_sort_key(section))
+    return (1, 0, okul_normalize.tr_sort_key(label))
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +235,7 @@ def _grouped(
     rows: list[SeatRow],
     *,
     key: Callable[[SeatRow], str],
-    sort_key: Callable[[str], tuple[int, int, str]] | None = None,
+    sort_key: Callable[[str], tuple[int, int, tuple[int, ...]]] | None = None,
 ) -> dict[str, list[SeatRow]]:
     """Anahtar değerine göre gruplar; grup sırası `sort_key` (yoksa alfabetik)."""
     groups: dict[str, list[SeatRow]] = {}

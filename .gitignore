@@ -3,9 +3,19 @@ data/raw/
 backend/data/
 media/
 *.xlsx
+*.XLSX
+# e-Okul ihraçları BÜYÜK harfli .XLS uzantısıyla iner (OOG01001R020_827.XLS);
+# yalnız *.xlsx engellemek gerçek öğrenci/personel listesini korumasız bırakıyordu.
+*.xls
+*.XLS
 *.sqlite3
 *.db
 *.ksbak
+# Tek istisna: testlerin SENTETİK (uydurma adlı) e-Okul biçim örnekleri.
+# İSİM İSİM yazılır, joker KULLANILMAZ: `veri/*.xls` deseni o klasöre bırakılan
+# GERÇEK bir e-Okul ihracını da muaf tutar ve KVKK koruması tam orada delinir.
+!backend/apps/okul/tests/veri/eokul_sinif_listesi.xls
+!backend/apps/okul/tests/veri/eokul_personel_listesi.xls
 
 # Python
 __pycache__/

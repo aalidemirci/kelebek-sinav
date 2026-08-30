@@ -144,6 +144,10 @@ hiddenimports += collect_submodules("waitress")
 hiddenimports += collect_submodules("weasyprint")
 hiddenimports += collect_submodules("fontTools")
 hiddenimports += collect_submodules("openpyxl")
+# e-Okul .xls (BIFF) okuyucusu — `excel_ogrenci._read_xls` içinde YEREL import
+# edilir; PyInstaller'ın statik çözümleyicisi fonksiyon içi importu görse de
+# xlrd alt modüllerini (biffh, compdoc, formula…) kendiliğinden toplamaz.
+hiddenimports += collect_submodules("xlrd")
 hiddenimports += collect_submodules("pypdf")
 hiddenimports += collect_submodules("webview")
 if WINDOWS:

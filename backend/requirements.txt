@@ -18,7 +18,11 @@ argon2-cffi==23.1.0            # yerel kullanıcı şifre hashing (Argon2id)
 cryptography==48.0.1           # Fernet alan-seviyesi şifreleme (varsa hassas alanlar)
 
 # ---------- Belge / Tablo Üretimi ----------
-openpyxl==3.1.5                # Excel içe/dışa aktarma
+openpyxl==3.1.5                # Excel içe/dışa aktarma (.xlsx — üretim + okuma)
+# e-Okul'un "Excel" düğmesi .xlsx DEĞİL, Excel 97-2003 (.xls / BIFF8) üretir;
+# openpyxl bu kabı hiç açamaz. xlrd 2.x yalnız .xls okur (saf Python, ek sistem
+# kütüphanesi yok) — ikisi birlikte gerçek girdilerin tamamını kapsar.
+xlrd==2.0.1                    # e-Okul .xls ihraçlarını okuma
 
 # ---------- Görüntü İşleme ----------
 Pillow==12.3.0                 # ek/fotoğraf normalize (thumbnail, EXIF)

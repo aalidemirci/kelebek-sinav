@@ -9,6 +9,11 @@ ya da uygulama şablonunun şu üçlüsü yeter: Sınıf/Şube · Okul No · Ad-
 Sınıf ayrıştırması okul türünden gelen seviye kümesiyle parametriktir; küme
 `parse_rows`'a dışarıdan verilir (parser saf kalır, DB'siz test edilir).
 DB eşleştirme/yazma `services/imports.py`'dadır.
+
+Girdi biçimi: `read_sheet` hem `.xlsx` (openpyxl) hem Excel 97-2003 `.xls`
+(xlrd) okur — e-Okul ihraçları ikincisidir. e-Okul'a ÖZGÜ yerleşim (şube
+blokları, sayaç dipnotları) burada değil, `apps.okul.eokul` önişleyicisinde
+çözülür; bu modül daima "başlık satırı + veri satırları" varsayar.
 """
 
 from __future__ import annotations
@@ -229,11 +234,73 @@ def parse_rows(
     return parsed
 
 
-def read_sheet(file_bytes: bytes) -> list[list[Any]]:
-    """Excel baytlarını satır-listesine çevirir (etkin sayfa, salt-okunur)."""
+#: OLE2/CFB kap imzası — Excel 97-2003 (.xls, BIFF5/BIFF8) dosyaları bununla başlar.
+_OLE2_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+#: ZIP imzası — .xlsx (OOXML) bir zip kabıdır.
+_ZIP_MAGIC = b"PK\x03\x04"
+
+
+def is_legacy_xls(file_bytes: bytes) -> bool:
+    """Bayt dizisi Excel 97-2003 (.xls) kabı mı? (openpyxl bu biçimi AÇAMAZ.)"""
+    return file_bytes[:8] == _OLE2_MAGIC
+
+
+def _read_xlsx(file_bytes: bytes) -> list[list[Any]]:
     wb = load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
     try:
         ws = wb.active
         return [list(row) for row in ws.iter_rows(values_only=True)]
     finally:
         wb.close()
+
+
+def _read_xls(file_bytes: bytes) -> list[list[Any]]:
+    """Eski BIFF (.xls) baytlarını matrise çevirir — e-Okul ihraçlarının biçimi.
+
+    e-Okul'un "Excel" düğmesi .xlsx DEĞİL, Excel 97-2003 (.xls) üretir; openpyxl
+    bu kabı hiç açmaz (BadZipFile). xlrd 2.x yalnız .xls okur — ikisi birlikte
+    tüm gerçek girdileri kapsar.
+    """
+    import xlrd  # yerel import: xlsx yolunda gereksiz yük olmasın
+
+    try:
+        wb = xlrd.open_workbook(file_contents=file_bytes)
+    except ParserError:
+        raise
+    except Exception as exc:  # noqa: BLE001 — gerekçe aşağıda
+        # GENİŞ yakalama BİLİNÇLİDİR. xlrd bozuk kapta yalnız XLRDError/
+        # CompDocError atmaz: yarım inmiş bir dosyada `struct.error` ve
+        # `IndexError`, kütüphanenin çıplak assert'lerinde `AssertionError`
+        # yükselir. Bunlar ParserError'a dönmezse istek 500 ile düşer —
+        # kullanıcı Türkçe açıklamayı GÖRMEZ ve İçe Aktarma Geçmişi'ne FAILED
+        # izi de yazılmaz (`_student_entry` yalnız ParserError'da iz bırakır).
+        # xlsx yolu aynı sözleşmeyi zaten sağlıyor (BadZipFile/InvalidFile).
+        raise ParserError(
+            "Excel 97-2003 (.xls) dosyası okunamadı; dosya eksik inmiş ya da bozuk olabilir. "
+            "e-Okul'dan yeniden indirip deneyin."
+        ) from exc
+    try:
+        if wb.nsheets == 0:
+            raise ParserError("Excel dosyasında sayfa yok.")
+        sh = wb.sheet_by_index(0)
+        return [[sh.cell_value(r, c) for c in range(sh.ncols)] for r in range(sh.nrows)]
+    except ParserError:
+        raise
+    except Exception as exc:  # noqa: BLE001 — açılış dalıyla aynı gerekçe
+        raise ParserError(
+            "Excel 97-2003 (.xls) dosyasının içeriği okunamadı; dosya bozuk olabilir."
+        ) from exc
+    finally:
+        wb.release_resources()
+
+
+def read_sheet(file_bytes: bytes) -> list[list[Any]]:
+    """Excel baytlarını satır-listesine çevirir (ilk/etkin sayfa, salt-okunur).
+
+    Kap imzasına göre yol seçilir: `.xls` (OLE2) → xlrd, `.xlsx` (zip) → openpyxl.
+    Uzantıya GÜVENİLMEZ — e-Okul dosyaları büyük harfli `.XLS` uzantısıyla iner
+    ve kullanıcılar bunları elle `.xlsx` diye yeniden adlandırabiliyor.
+    """
+    if is_legacy_xls(file_bytes):
+        return _read_xls(file_bytes)
+    return _read_xlsx(file_bytes)

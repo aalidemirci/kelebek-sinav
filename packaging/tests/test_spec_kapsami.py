@@ -30,6 +30,7 @@ DAGITIM_IMPORT_ESLEME = {
     "argon2-cffi": "argon2",
     "cryptography": "cryptography",
     "openpyxl": "openpyxl",
+    "xlrd": "xlrd",
     "pillow": "PIL",
     "weasyprint": "weasyprint",
     "pypdf": "pypdf",

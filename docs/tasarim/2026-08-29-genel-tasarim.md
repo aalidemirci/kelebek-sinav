@@ -173,14 +173,26 @@ DD'nin kanıtlı katmanı taşınır: `shared/crypto.py` (Fernet + Argon2id) +
 
 ## 6. e-Okul içe aktarma planı
 
-- **Öğrenci:** e-Okul sınıf/okul listesi xlsx **veya pano yapıştırma** → aynı
+- **Öğrenci:** e-Okul sınıf/okul listesi **veya pano yapıştırma** → aynı
   `rows` matrisi (DD `read_sheet`/`text_to_grid`). Kritik sütunlar:
   sınıf/şube + okul no + ad-soyad (TCKN'siz). Fuzzy TR sütun eşleme (sinonim
   sıralaması kritik), başlık ilk 10 satırda aranır; `normalize_class_section`
   ("10/A", "10-A", "10 A") — **seviye aralığı okul türünden parametrik** (U4).
-- **Öğretmen:** e-Okul/MEBBİS personel listesi xlsx/pano (e-Okul personel
+- **Öğretmen:** e-Okul/MEBBİS personel listesi (dosya/pano; e-Okul personel
   PDF'inde TCKN/e-posta yok — zaten toplamıyoruz). Upsert anahtarı normalize
   ad-soyad (DD kabulü, ≤100 personel).
+- **Gerçek e-Okul biçimi (30.08.2026 düzeltmesi, F1 varsayımının revizyonu):**
+  e-Okul'un "Excel" düğmesi `.xlsx` DEĞİL, **Excel 97-2003 (.xls / BIFF8)**
+  üretir ve dosya BÜYÜK harfli `.XLS` uzantısıyla iner — openpyxl bu kabı hiç
+  açmaz, bu yüzden `xlrd` eklendi ve `read_sheet` kap imzasına göre yol seçer.
+  Ayrıca **sınıf listesi (OOG01001R020) düz tablo değildir:** tek sayfada şube
+  şube bloklar hâlinde gelir ve **sınıf/şube için sütun yoktur** — bilgi yalnız
+  blok başlığındadır (`AL - 10. Sınıf / A Şubesi …`). Blokları düzleştirip
+  sentetik "Sınıf/Şube" sütunu yazan, sayaç dipnotlarını boşaltan önişleyici:
+  `apps/okul/eokul.py` (satır numaraları korunur — uyarılar Excel'deki satırla
+  aynı kalsın). **Şube harfi ASCII'ye KATLANMAZ:** e-Okul şubeleri Türk
+  alfabesi sırasıyla açar, yani aynı okulda hem `10/I` hem `10/İ` bulunur;
+  katlama iki sınıfı tek şubeye çökertirdi (`normalize.tr_upper`).
 - **Desen:** dry-run (atomic + `set_rollback`) → rapor (`ImportIssue`
   satır/alan/sorun/maskeli değer) → kullanıcı raporu gördükten sonra "Aktar";
   sha256 idempotency **uyarısı**; "boş hücre mevcut veriyi silmez";
