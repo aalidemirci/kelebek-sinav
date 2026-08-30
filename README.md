@@ -28,6 +28,10 @@ kapısı, `.ksbak`/medya sızıntı taraması, `docs/kurulum.md`. Önceki fazlar
 bakım (F8), gözetmen (F7), takvim (F6), kitapçık (F5), evrak seti (F4),
 oturum akışı (F3), salonlar + motor (F2). Kalan saha adımı: gerçek Pardus 21
 masaüstünde pencere/Qt provası (packaging/README.md "doğrulanmamış" listesi).
+F9 sonrası: e-Okul'un **Excel raporları artık değiştirilmeden** yükleniyor —
+sınıf listesi (OOG01001R020) ve personel listesi (OOK01001R1) `.XLS` biçiminde
+iner, şube blokları ve sayaç dipnotları otomatik çözülür; şube harfleri Türk
+alfabesine göre ayrışır (`10/I` ile `10/İ` ayrı sınıflardır).
 Plan: [docs/tasarim/2026-08-29-genel-tasarim.md](docs/tasarim/2026-08-29-genel-tasarim.md)
 
 ## Köken

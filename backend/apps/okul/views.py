@@ -238,7 +238,7 @@ class ClassSectionListCreateView(generics.ListCreateAPIView[ClassSection]):
                 raise serializers.ValidationError(
                     {"school_year": "Ders yılı kimliği sayısal olmalıdır."}
                 ) from exc
-        return selectors.class_sections(school_year_id=school_year_id)
+        return selectors.class_sections_sorted(school_year_id=school_year_id)
 
     def perform_create(self, serializer: serializers.BaseSerializer[ClassSection]) -> None:
         serializer.instance = section_service.create_class_section(

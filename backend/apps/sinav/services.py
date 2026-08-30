@@ -26,6 +26,7 @@ from django.utils import timezone
 
 from apps.dersler import selectors as ders_selectors
 from apps.dersler import services as ders_services
+from apps.okul import normalize as okul_normalize
 from apps.okul import selectors as okul_selectors
 from apps.okul.models import ClassSection, Personnel, SchoolConfig
 from apps.sinav import booklet, engine, layout, participants, reports, validator
@@ -173,9 +174,14 @@ def preview_room_seats(
 
 
 def section_room_name(class_level: int, class_section: str, labels: dict[int, str]) -> str:
-    """Şube derslik salon adı: 'Hazırlık/A Dersliği' veya '9/A Dersliği'."""
+    """Şube derslik salon adı: 'Hazırlık/A Dersliği' veya '9/A Dersliği'.
+
+    Büyütme `tr_upper` iledir — çıplak ``.upper()`` Türkçe metinde 'i'yi 'I'
+    yapar ve '10/i' şubesini var olmayan '10/I' dersliğine bağlardı (CLAUDE.md
+    §2 Türkçe büyük harf tuzağı).
+    """
     label = labels.get(class_level, str(class_level))
-    return f"{label}/{class_section.strip().upper()} Dersliği"
+    return f"{label}/{okul_normalize.tr_upper(class_section.strip())} Dersliği"
 
 
 def _level_labels() -> dict[int, str]:

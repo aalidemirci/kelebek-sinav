@@ -381,8 +381,12 @@ describe("KisilerPage — içe aktarma paneli", () => {
     renderPage();
     await screen.findByText("Ayşe Yılmaz");
 
-    const dosyaAlani = screen.getByLabelText("Dosya (.xlsx)") as HTMLInputElement;
-    await user.upload(dosyaAlani, new File(["x"], "ogrenci.xlsx"));
+    const dosyaAlani = screen.getByLabelText(
+      "Dosya (e-Okul .xls veya şablon .xlsx)",
+    ) as HTMLInputElement;
+    // e-Okul ihracı BÜYÜK harfli .XLS uzantısıyla iner — seçici onu da kabul etmeli.
+    expect(dosyaAlani.accept).toContain(".xls");
+    await user.upload(dosyaAlani, new File(["x"], "OOG01001R020_827.XLS"));
     expect(screen.getByLabelText("Ya da tabloyu yapıştırın")).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: /Dosyayı kaldır/ }));

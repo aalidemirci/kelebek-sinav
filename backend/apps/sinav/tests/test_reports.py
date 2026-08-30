@@ -294,3 +294,38 @@ def test_design_css_ayni_kaldi() -> None:
     icerik = (_TEMPLATES_DIR / "print" / "_design.css").read_text(encoding="utf-8")
     assert "{%" not in icerik and "{{" not in icerik
     assert "--pr-ink" in icerik  # token seti yerinde
+
+
+def test_sube_sirasi_turk_alfabesine_gore() -> None:
+    """R2k/R4 şube sayfaları Türk alfabesi sırasında dizilir (kod noktası DEĞİL).
+
+    Şube harfi artık ASCII'ye katlanmadığı için (gerçek e-Okul verisinde hem
+    10/I hem 10/İ şubesi var), ham `str` karşılaştırması Ç/Ğ/İ/Ö/Ş/Ü'yü 'Z'den
+    sonraya atıyordu: 10/Ç ve 10/İ evrakın sonuna düşer, 10/I ile 10/İ iki uca
+    ayrılırdı.
+    """
+    etiketler = ["10/Z", "10/İ", "10/I", "10/Ç", "10/C", "9/B", "9/A", "11/A"]
+    assert sorted(etiketler, key=reports.class_label_sort_key) == [
+        "9/A",
+        "9/B",
+        "10/C",
+        "10/Ç",
+        "10/I",
+        "10/İ",
+        "10/Z",
+        "11/A",
+    ]
+
+
+def test_sube_sirasi_seviye_sayisal_kalir() -> None:
+    """Seviye sıralaması alfabetik DEĞİL sayısaldır (9 < 10 < 11) — davranış korundu."""
+    assert sorted(["10/A", "9/A", "11/A"], key=reports.class_label_sort_key) == [
+        "9/A",
+        "10/A",
+        "11/A",
+    ]
+    # Sayısal olmayan başlık (Hazırlık) daima sona düşer.
+    assert sorted(["Hazırlık/A", "9/A"], key=reports.class_label_sort_key) == [
+        "9/A",
+        "Hazırlık/A",
+    ]

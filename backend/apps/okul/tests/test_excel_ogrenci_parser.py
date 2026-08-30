@@ -99,10 +99,10 @@ class TestParseRows:
         rows = parse_rows(grid, detect_columns(grid), valid_levels=(9, 10, 11, 12))
         assert rows[0].class_level is None
 
-    def test_turkce_sube_harfi_ascii_katlanir(self) -> None:
+    def test_turkce_sube_harfi_korunur(self) -> None:
         grid = _grid(["Sınıf", "Okul No", "Adı Soyadı"], ["9/Ş", "101", "ALİ VELİ"])
         rows = parse_rows(grid, detect_columns(grid))
-        assert rows[0].class_section == "S"
+        assert rows[0].class_section == "Ş"
 
 
 class TestNormalizeHelpers:

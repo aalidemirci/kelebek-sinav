@@ -5,10 +5,13 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
 
 ## Açık
 
-- **TB1 — e-Okul PDF parser'ları yok (v1 kararı, B18):** şube listesi
-  (OOG01001R070) ve personel listesi (OOK01001R1) PDF'leri v1'de içe
-  aktarılamaz; yol xlsx + pano. Gerekçe: pypdf glif/bitişme riskleri OYS
-  kodunda belgeli. v2 adayı.
+- **TB1 — e-Okul PDF parser'ları yok (v1 kararı, B18):** raporların **PDF**
+  çıktıları içe aktarılamaz; yol e-Okul'un **Excel** ihracı (.xls) + uygulama
+  şablonu (.xlsx) + pano. Gerekçe: pypdf glif/bitişme riskleri OYS kodunda
+  belgeli. Pratik etkisi 30.08.2026'da küçüldü: OOG01001R020 (Sınıf/Şube
+  Öğrenci Listesi) ve OOK01001R1 (Personel Listesi) Excel ihraçları artık
+  **değiştirilmeden** yükleniyor (bkz. `apps/okul/eokul.py`), yani PDF yolu
+  yalnız Excel düğmesi olmayan raporlar için gerekir. v2 adayı.
 - **TB2 — Ders çizelgesi verisi yalnız Anadolu Lisesi (U4):** diğer okul
   türlerinde havuz boş başlar; elle ekleme + md veri dosyası ekleme yolu açık.
 - **TB3 — Şifreli kipte ad-temelli DB sorgusu yok (U3 bedeli):** arama/

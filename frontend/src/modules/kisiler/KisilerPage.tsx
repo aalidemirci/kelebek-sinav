@@ -750,13 +750,13 @@ type ImportKind = "students" | "personnel";
 
 const IMPORT_LABEL: Record<ImportKind, { title: string; hint: string; template: string }> = {
   students: {
-    title: "Excel şablonundan öğrenci aktar",
-    hint: "Şablonda yalnız sınıf, okul numarası, öğrenci adı ve öğrenci soyadı bulunur. Bu bilgiler e-Okul Öğrenci İşlemleri → Raporlar bölümündeki sınıf/okul listesi raporlarından alınabilir; tabloyu doğrudan panoya kopyalayıp yapıştırmak da yeterlidir.",
+    title: "e-Okul raporundan veya şablondan öğrenci aktar",
+    hint: "e-Okul Öğrenci İşlemleri → Raporlar → OOG01001R020 — Sınıf/Şube Öğrenci Listesi raporunu Excel olarak indirip DEĞİŞTİRMEDEN yükleyin: şube blokları, sınıf başlıkları ve sayaç dipnotları otomatik çözülür. Alternatif olarak uygulama şablonu (sınıf, okul numarası, ad, soyad) doldurulabilir ya da tablo doğrudan panoya yapıştırılabilir. Öğrencinin adı-soyadı ve numarası dışındaki sütunlar (cinsiyet, pansiyon) okunmaz.",
     template: STUDENT_TEMPLATE_FILENAME,
   },
   personnel: {
-    title: "Excel şablonundan öğretmen aktar",
-    hint: "Şablonda yalnız ad, soyad, görev ve branş bulunur. Bu bilgiler e-Okul Kurum İşlemleri → Raporlar → OOK01001R1 — Personel Listesi raporundan alınabilir; tabloyu panoya kopyalayıp yapıştırmak da yeterlidir.",
+    title: "e-Okul raporundan veya şablondan öğretmen aktar",
+    hint: "e-Okul Kurum İşlemleri → Raporlar → OOK01001R1 — Personel Listesi raporunu Excel olarak indirip DEĞİŞTİRMEDEN yükleyin (ad-soyad, görev ve branş okunur; sayaç dipnotu atlanır). Alternatif olarak uygulama şablonu doldurulabilir ya da tablo panoya yapıştırılabilir.",
     template: PERSONNEL_TEMPLATE_FILENAME,
   },
 };
@@ -839,14 +839,17 @@ function ImportPanel({ kind, onImported }: { kind: ImportKind; onImported: () =>
 
       <div>
         <label htmlFor={fileId} className="mb-1 block text-label-large text-on-surface-variant">
-          Dosya (.xlsx)
+          Dosya (e-Okul .xls veya şablon .xlsx)
         </label>
         <div className="flex flex-wrap items-center gap-2">
           <input
             id={fileId}
             ref={fileRef}
             type="file"
-            accept=".xlsx"
+            /* e-Okul ihraçları BÜYÜK harfli .XLS uzantısıyla iner; tarayıcı
+               accept eşleşmesi büyük/küçük harfe duyarsızdır ama MIME tipini
+               tanımayan Windows kurulumları için uzantı listesi de verilir. */
+            accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             onChange={(e) => {
               setFile(e.target.files?.[0] ?? null);
               setReport(null);

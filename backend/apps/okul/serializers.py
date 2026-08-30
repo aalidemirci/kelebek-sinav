@@ -104,7 +104,7 @@ class ClassSectionSerializer(serializers.ModelSerializer[ClassSection]):
         return _validate_level(value)
 
     def validate_class_section(self, value: str) -> str:
-        normalized = normalize._ascii_upper(value.strip())
+        normalized = normalize.tr_upper(value.strip())
         if not normalized:
             raise serializers.ValidationError("Şube zorunludur.")
         return normalized
@@ -153,14 +153,14 @@ class StudentSerializer(serializers.ModelSerializer[Student]):
         return _validate_level(value)
 
     def validate_class_section(self, value: str) -> str:
-        # İçe aktarmayla aynı katlama: Türkçe harf → ASCII büyük ('ş' → 'S').
+        # İçe aktarmayla aynı katlama: Türkçe büyük harf ('ş' → 'Ş', 'i' → 'İ').
         if not value.strip():
             return ""
-        return normalize._ascii_upper(value.strip())
+        return normalize.tr_upper(value.strip())
 
 
 class ImportRequestSerializer(serializers.Serializer[dict[str, Any]]):
-    """İçe aktarma girdisi: xlsx dosyası VEYA pano metni (tam olarak biri)."""
+    """İçe aktarma girdisi: Excel dosyası (e-Okul .xls / şablon .xlsx) VEYA pano metni."""
 
     file = serializers.FileField(required=False)
     text = serializers.CharField(required=False, allow_blank=True, trim_whitespace=False)

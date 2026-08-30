@@ -6,8 +6,10 @@ DD `services/imports.py` (OYS kökenli) kalıbından KS'ye uyarlandı (tasarım 
   (aktif canlı kayıtlar arasında; numara alanı düz olduğundan DB filtresi
   şifreli kipte de çalışır — TB3 dolambacı burada gerekmez).
 - Sınıf/şube ayrıştırması okul türünden gelen seviye kümesiyle parametrik (U4).
-- xlsx ve pano yapıştırması AYNI boru hattı: her girişten önce `rows` matrisi
-  üretilir (`read_sheet` / `text_to_grid`), gerisi ortak.
+- Excel (.xlsx ŞABLONU ve e-Okul'un .xls İHRACI) ile pano yapıştırması AYNI
+  boru hattı: her girişten önce `rows` matrisi üretilir (`read_sheet` /
+  `text_to_grid`), ardından `eokul.hazirla_*_matrisi` e-Okul'a özgü blok
+  düzenini/dipnotlarını düzler, gerisi ortak.
 - Idempotency UYARIDIR, ENGEL DEĞİL: aynı içerik (sha256) yeniden commit
   edilebilir — `already_imported=True` uyarısıyla MEVCUT COMPLETED `ImportRun`
   satırı güncellenir (koşullu unique bozulmaz).
@@ -29,7 +31,7 @@ from django.db import transaction
 from django.utils import timezone
 from openpyxl.utils.exceptions import InvalidFileException
 
-from apps.okul import excel_ogrenci, excel_personel
+from apps.okul import eokul, excel_ogrenci, excel_personel
 from apps.okul.excel_ogrenci import ColumnMapping, ParsedRow, ParserError
 from apps.okul.excel_personel import ParsedPersonnelRow, PersonnelColumnMapping
 from apps.okul.models import (
@@ -144,13 +146,13 @@ def text_to_grid(text: str) -> list[list[Any]]:
 
 
 def _grid_from_file(file_bytes: bytes) -> list[list[Any]]:
-    """xlsx baytlarını matrise çevirir; xlsx olmayan içerik ParserError olur."""
+    """Excel baytlarını matrise çevirir (.xlsx ve e-Okul'un .xls'i); okunamazsa ParserError."""
     try:
         return excel_ogrenci.read_sheet(file_bytes)
     except (BadZipFile, InvalidFileException) as exc:
         raise ParserError(
-            "Dosya .xlsx biçiminde okunamadı; uygulamadaki güncel Excel şablonunu kullanın "
-            "(.xls veya CSV desteklenmez)."
+            "Dosya Excel olarak okunamadı. Desteklenen biçimler: e-Okul ihracı (.xls) ve "
+            "uygulama şablonu (.xlsx). CSV ve PDF desteklenmez."
         ) from exc
 
 
@@ -159,22 +161,36 @@ def _valid_levels() -> tuple[int, ...]:
     return SchoolConfig.load().grade_levels
 
 
+#: e-Okul bloğu düzleştirildiğinde sütun başlığı 10. satırdan sonra kalabilir
+#: (kurum başlığı + öğretmen satırları); tarama penceresi o yüzden genişletilir.
+_EOKUL_SCAN_LIMIT = 30
+
+
 def _parse_student_grid(grid: list[list[Any]]) -> tuple[ColumnMapping, list[ParsedRow]]:
-    """Matristen (mapping, satırlar); kritik sütun eksikse ParserError."""
-    mapping = excel_ogrenci.detect_columns(grid)
+    """Matristen (mapping, satırlar); kritik sütun eksikse ParserError.
+
+    Ayrıştırmadan önce e-Okul önişleyicisi çalışır: şube blokları düzleştirilir
+    (sınıf/şube sentetik sütuna yazılır) ve rapor dipnotları boşaltılır.
+    """
+    grid, notes = eokul.hazirla_ogrenci_matrisi(grid)
+    limit = _EOKUL_SCAN_LIMIT if notes else 10
+    mapping = excel_ogrenci.detect_columns(grid, scan_limit=limit)
     if not mapping.is_usable:
         missing = ", ".join(mapping.missing_critical)
         raise ParserError(f"Zorunlu sütun(lar) bulunamadı: {missing}.")
+    mapping.warnings = [*notes, *mapping.warnings]
     return mapping, excel_ogrenci.parse_rows(grid, mapping, valid_levels=_valid_levels())
 
 
 def _parse_personnel_grid(
     grid: list[list[Any]],
 ) -> tuple[PersonnelColumnMapping, list[ParsedPersonnelRow]]:
+    grid, notes = eokul.hazirla_personel_matrisi(grid)
     mapping = excel_personel.detect_columns(grid)
     if not mapping.is_usable:
         missing = ", ".join(mapping.missing_critical)
         raise ParserError(f"Zorunlu sütun(lar) bulunamadı: {missing}.")
+    mapping.warnings = [*notes, *mapping.warnings]
     return mapping, excel_personel.parse_rows(grid, mapping)
 
 

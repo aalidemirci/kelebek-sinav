@@ -69,8 +69,17 @@ cd kelebek-sinav-<sürüm>
 1. Program yerel bir pencere açar (tarayıcı gerekmez; hiçbir port dışarıya
    açılmaz — sunucu yalnız 127.0.0.1'de, rastgele boş bir portta çalışır).
 2. Kurulum sihirbazı okul bilgilerini, ders yılını ve dönemleri sorar.
-3. Öğrenci/öğretmen listelerini e-Okul'dan aldığınız xlsx dosyasıyla veya
-   panoya kopyala-yapıştır ile aktarırsınız (TCKN hiç istenmez ve tutulmaz).
+3. Öğrenci/öğretmen listelerini aktarırsınız (TCKN hiç istenmez ve tutulmaz).
+   En kısa yol, e-Okul raporunu **Excel olarak indirip olduğu gibi yüklemek**:
+   - öğrenci: *Öğrenci İşlemleri → Raporlar → OOG01001R020 — Sınıf/Şube
+     Öğrenci Listesi* (şube blokları ve sayaç dipnotları otomatik çözülür),
+   - öğretmen: *Kurum İşlemleri → Raporlar → OOK01001R1 — Personel Listesi*.
+
+   Dosyayı açıp düzenlemeniz, sütun silmeniz ya da `.xlsx` olarak kaydetmeniz
+   **gerekmez** (e-Okul dosyaları `.XLS` uzantısıyla iner; program ikisini de
+   okur). Alternatifler: uygulamanın kendi Excel şablonu veya tabloyu panoya
+   kopyalayıp yapıştırmak. Aktarmadan önce **Önizle** ile kaç kayıt geleceğini
+   görebilirsiniz — önizleme hiçbir şey yazmaz.
 4. Ders havuzu MEB çizelgesinden kendiliğinden dolar (v1: Anadolu Lisesi).
 5. İsterseniz Ayarlar → Güvenlik'ten **uygulama parolası** kurarsınız: ad-soyad
    alanları şifrelenir, size TEK SEFERLİK bir kurtarma anahtarı verilir —
