@@ -1,8 +1,9 @@
 """`okul` DRF serializer'ları — doğrulama + normalize burada, yazma serviste.
 
 Elle giriş, içe aktarmayla AYNI normalize edicilerden geçer (`apps.okul.normalize`):
-şube harfi ASCII katlaması, seviye kümesi okul türünden (U4). Hatalar Türkçedir
-(`{code, message, fields}` sözleşmesi).
+şube harfi Türkçe büyük harfe çevrilir (`tr_upper` — 'ş' → 'Ş', 'i' → 'İ'; ASCII'ye
+KATLANMAZ, 10/I ile 10/İ ayrı şubelerdir), seviye kümesi okul türünden (U4).
+Hatalar Türkçedir (`{code, message, fields}` sözleşmesi).
 """
 
 from __future__ import annotations

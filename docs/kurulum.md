@@ -171,6 +171,16 @@ kelebek-sinav --pdf-duman deneme.pdf
 Çıkış kodu 0 değilse günlük dosyasıyla birlikte bildirin. Windows'ta bu durum
 genellikle paket bozulmasına işaret eder — programı kaldırıp yeniden kurun.
 
+Paketin eksiksiz kurulup kurulmadığını ayrıca şu komut söyler (PDF üretmez,
+yalnız programın gerekli parçalarını yükler; hızlıdır):
+
+```bash
+kelebek-sinav --bagimlilik-duman
+```
+
+Çıkış kodu 10 ise pakette bir parça eksiktir: kurulum dosyasını yeniden indirip
+kurun. Sorun sürerse çıktıdaki modül adlarını bildirin.
+
 ### 6.6 Program hiç açılmıyor, hata da vermiyor
 
 `logs/uygulama.log` dosyasının son satırlarına bakın ve bilişim sorumlusuna
@@ -195,6 +205,7 @@ aşağıdaki kodlardan biriyle çıkar:
 | 7 | WebView2/pencere motoru yok | §6.1 |
 | 8 | PDF duman testi başarısız | §6.5 |
 | 9 | Geri yükleme (`--geri-yukle`) başarısız | parola/kurtarma anahtarını doğrulayıp yeniden deneyin; `logs/uygulama.log` |
+| 10 | Bağımlılık duman testi başarısız (`--bagimlilik-duman`) | paket eksik üretilmiş; yeniden indirip kurun (§6.5) |
 
 \* Yedekler şifreli de olsa geri yükleme aracı açar — §5.1.
 

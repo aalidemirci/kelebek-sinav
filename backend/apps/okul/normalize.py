@@ -14,7 +14,8 @@ from __future__ import annotations
 import re
 from collections.abc import Collection
 
-# Türkçe karakter → ASCII büyük (şube harfi katlaması ve eşleme karşılaştırmaları).
+# Türkçe karakter → ASCII büyük. YALNIZ anahtar kelime eşlemesi içindir
+# ('HAZIRLIK' tanıma); şube harfine UYGULANMAZ — bkz. `_ascii_upper` / `tr_upper`.
 _TR_UPPER_MAP = str.maketrans(
     {
         "ş": "S",
@@ -73,15 +74,21 @@ _TR_ALFABE = "0123456789ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZ"
 _TR_SIRA = {harf: sira for sira, harf in enumerate(_TR_ALFABE)}
 
 
-def tr_sort_key(value: object) -> tuple[int, ...]:
+def tr_sort_key(value: object) -> tuple[tuple[int, int], ...]:
     """Türk alfabesine göre sıralama anahtarı ('C' < 'Ç' < 'D', 'I' < 'İ' < 'J').
 
-    Alfabede olmayan karakterler (boşluk, '/', latin dışı harf) kararlı biçimde
-    sona düşer. Karşılaştırma büyük harf üzerinden yapılır (`tr_upper`).
+    Yalnız şube harfi için değil, salon adı gibi ÇOK KELİMELİ metinler için de
+    kullanılır. Bu yüzden her karakter (öncelik, değer) ikilisine açılır:
+    alfabe dışı karakterler (boşluk, '/', '-') 0 önceliğiyle harflerden ÖNCE
+    gelir — ASCII sezgisiyle aynı ('A Salonu' < 'AB Salonu'), aksi hâlde ayraç
+    sınırındaki adlar birbirine karışırdı. Karşılaştırma büyük harf üzerinden
+    yapılır (`tr_upper`).
     """
     buyuk = tr_upper("" if value is None else str(value))
-    son = len(_TR_ALFABE)
-    return tuple(_TR_SIRA.get(ch, son + ord(ch)) for ch in buyuk)
+    return tuple(
+        (1, _TR_SIRA[ch]) if ch in _TR_SIRA else (0, ord(ch))  #
+        for ch in buyuk
+    )
 
 
 def normalize_class_section(

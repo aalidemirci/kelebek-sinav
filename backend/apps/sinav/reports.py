@@ -102,7 +102,23 @@ def student_number_sort_key(number: str) -> tuple[int, int | str]:
     return (0, int(number)) if number.isdigit() else (1, number)
 
 
-def class_label_sort_key(label: str) -> tuple[int, int, tuple[int, ...]]:
+def room_name_sort_key(name: str) -> tuple[tuple[int, int], ...]:
+    """Salon adı sıralaması — TÜRK ALFABESİNE göre ('10/I Dersliği' < '10/İ Dersliği').
+
+    Şube derslikleri `services.section_room_name` ile adlandırılır ve şube harfi
+    artık ASCII'ye katlanmadığı için ('10/İ Dersliği') ham `str` karşılaştırması
+    Ç/Ğ/İ/Ö/Ş/Ü'yü 'Z'den sonraya atıyordu: 10/I ile 10/İ dersliğinin sayfaları
+    basılı evrakın iki ucuna düşüyordu.
+
+    Rakam öbeklerini SAYISAL sıralamaz ('10/A' < '9/A' davranışı korunur) —
+    salon adı kelebek düzende serbest metindir ("A-101", "Çok Amaçlı Salon") ve
+    karışık tipli bir anahtar sıralamada çöker. Doğal sıralama ayrı bir karardır
+    ve TÜM salon yüzeylerinde birlikte yapılmalıdır.
+    """
+    return okul_normalize.tr_sort_key(name)
+
+
+def class_label_sort_key(label: str) -> tuple[int, int, tuple[tuple[int, int], ...]]:
     """Şube sıralaması seviye-sayısal, şube harfi TÜRK ALFABESİNE göre.
 
     9/A < 9/B < 10/B (seviye alfabetik DEĞİL, sayısal) ve 10/C < 10/Ç < 10/D,
@@ -188,7 +204,9 @@ def build_room_attendance(rows: list[SeatRow]) -> list[dict[str, object]]:
             "show_room_columns": False,
             "rows": sorted(group, key=lambda r: r.seat_no),
         }
-        for room_name, group in _grouped(rows, key=lambda r: r.room_name).items()
+        for room_name, group in _grouped(
+            rows, key=lambda r: r.room_name, sort_key=room_name_sort_key
+        ).items()
     ]
 
 
@@ -214,7 +232,9 @@ def build_door_lists(rows: list[SeatRow]) -> list[dict[str, object]]:
             "room_name": room_name,
             "rows": sorted(group, key=lambda r: r.seat_no),
         }
-        for room_name, group in _grouped(rows, key=lambda r: r.room_name).items()
+        for room_name, group in _grouped(
+            rows, key=lambda r: r.room_name, sort_key=room_name_sort_key
+        ).items()
     ]
 
 
@@ -235,7 +255,7 @@ def _grouped(
     rows: list[SeatRow],
     *,
     key: Callable[[SeatRow], str],
-    sort_key: Callable[[str], tuple[int, int, tuple[int, ...]]] | None = None,
+    sort_key: Callable[[str], tuple[object, ...]] | None = None,
 ) -> dict[str, list[SeatRow]]:
     """Anahtar değerine göre gruplar; grup sırası `sort_key` (yoksa alfabetik)."""
     groups: dict[str, list[SeatRow]] = {}
@@ -269,7 +289,7 @@ def build_assignment_context(rows: list[ProctorRow]) -> dict[str, object]:
         rows,
         key=lambda r: (
             r.room_name == "",  # yedekler (salonsuz) sona
-            r.room_name,
+            room_name_sort_key(r.room_name),
             _PROCTOR_ROLE_ORDER.get(r.role, 9),
             r.teacher_name,
         ),
@@ -298,7 +318,9 @@ def build_envelope_sheets(rows: list[SeatRow]) -> list[dict[str, object]]:
     ders dağılımı görevlinin deste sayımı içindir.
     """
     sheets: list[dict[str, object]] = []
-    for room_name, group in _grouped(rows, key=lambda r: r.room_name).items():
+    for room_name, group in _grouped(
+        rows, key=lambda r: r.room_name, sort_key=room_name_sort_key
+    ).items():
         course_counts: dict[str, int] = {}
         for row in group:
             course_counts[row.course_name] = course_counts.get(row.course_name, 0) + 1
@@ -330,7 +352,9 @@ def build_handover_rows(
             "registered": len(group),
             "proctor_name": names.get(room_name, ""),
         }
-        for room_name, group in _grouped(rows, key=lambda r: r.room_name).items()
+        for room_name, group in _grouped(
+            rows, key=lambda r: r.room_name, sort_key=room_name_sort_key
+        ).items()
     ]
 
 
@@ -429,7 +453,7 @@ def build_r5_workbook(header: ReportHeader, rows: list[SeatRow]) -> bytes:
         cell.alignment = Alignment(horizontal="center", vertical="center")
 
     ordered = sorted(
-        rows, key=lambda r: (r.room_name, r.seat_no)
+        rows, key=lambda r: (room_name_sort_key(r.room_name), r.seat_no)
     )  # salon + oturma sırası — deste/karşılaştırma kopyası
     for offset, row in enumerate(ordered):
         values = (

@@ -466,7 +466,7 @@ function OgrenciFormDialog({
             value={section}
             onChange={(e) => setSection(e.target.value)}
             error={errors.class_section}
-            helperText="Türkçe harfler ASCII'ye katlanır (ş → S)."
+            helperText="Türkçe harfler korunur ve büyütülür (ş → Ş, i → İ). 10/I ile 10/İ ayrı şubelerdir."
           />
           <Select
             label="Durum"

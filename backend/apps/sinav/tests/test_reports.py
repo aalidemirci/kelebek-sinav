@@ -329,3 +329,47 @@ def test_sube_sirasi_seviye_sayisal_kalir() -> None:
         "9/A",
         "Hazırlık/A",
     ]
+
+
+def test_salon_sirasi_turk_alfabesine_gore() -> None:
+    """Salon sayfaları Türk alfabesi sırasında dizilir (R1/R2/R3/R5/R6/R7/R9).
+
+    Şube derslikleri `section_room_name` ile adlandırılır ve şube harfi artık
+    ASCII'ye katlanmadığı için ('10/İ Dersliği') ham str karşılaştırması
+    Ç/Ğ/İ/Ö/Ş/Ü'yü 'Z'den sonraya atıyordu: 10/I ile 10/İ dersliğinin sayfaları
+    basılı evrakın iki ucuna düşerdi.
+    """
+    salonlar = [
+        "10/Z Dersliği",
+        "10/İ Dersliği",
+        "10/I Dersliği",
+        "10/Ş Dersliği",
+        "10/S Dersliği",
+        "10/Ç Dersliği",
+        "10/C Dersliği",
+    ]
+    assert sorted(salonlar, key=reports.room_name_sort_key) == [
+        "10/C Dersliği",
+        "10/Ç Dersliği",
+        "10/I Dersliği",
+        "10/İ Dersliği",
+        "10/S Dersliği",
+        "10/Ş Dersliği",
+        "10/Z Dersliği",
+    ]
+
+
+def test_salon_sirasi_serbest_metinde_cokmez() -> None:
+    """Kelebek düzende salon adı serbest metindir — anahtar tip hatası vermemeli.
+
+    Rakamla başlayan ve harfle başlayan adlar aynı listede karışabilir; anahtar
+    tek biçimli demet üretmezse `sorted()` TypeError ile PDF üretimini düşürür.
+    """
+    karisik = ["A-101", "3 Nolu Salon", "Çok Amaçlı Salon", "10/İ Dersliği", "Fizik Lab"]
+    sirali = sorted(karisik, key=reports.room_name_sort_key)  # çökmemeli
+    assert set(sirali) == set(karisik)
+    # Ayraç (boşluk/tire) harflerden ÖNCE gelir: 'A Salonu' < 'AB Salonu'.
+    assert sorted(["AB Salonu", "A Salonu"], key=reports.room_name_sort_key) == [
+        "A Salonu",
+        "AB Salonu",
+    ]

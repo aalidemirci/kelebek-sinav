@@ -206,7 +206,10 @@ def generate_section_rooms() -> dict[str, Any]:
     labels = _level_labels()
     created: list[str] = []
     skipped: list[str] = []
-    sections = list(okul_selectors.class_sections())
+    # TÜRK ALFABESİ sırasında üretilir: salon listeleri yer yer oluşturma
+    # sırasına (room_id) düşüyor ve DB sıralaması (SQLite BINARY) Türkçe harfli
+    # şubeleri 'Z'den sonraya atıyordu — 10/İ dersliği panellerin sonunda kalırdı.
+    sections = okul_selectors.class_sections_sorted()
 
     linked_section_ids = set(
         ExamRoom.objects.filter(linked_section__isnull=False).values_list(
@@ -893,7 +896,11 @@ def room_occupancy(session: ExamSession) -> list[dict[str, Any]]:
     # Klasik düzen: yerleşim salonları oturum salon listesinde olmayabilir.
     known = {int(o["room_id"]) for o in result}
     extra_ids = [rid for rid in counts if rid not in known]
-    for room in ExamRoom.objects.filter(pk__in=extra_ids).order_by("name"):
+    # Sıralama Python'da: DB (SQLite BINARY) 'Ç/Ğ/İ/Ö/Ş/Ü'yü 'Z'den sonraya atar
+    # ve şube dersliklerinin adı artık Türkçe harf taşır (reports.room_name_sort_key).
+    for room in sorted(
+        ExamRoom.objects.filter(pk__in=extra_ids), key=lambda r: reports.room_name_sort_key(r.name)
+    ):
         capacity = len(room_seats(room))
         placed_count = counts[room.pk]
         result.append(
@@ -1524,7 +1531,7 @@ def _room_sheets(
     used_names = {r.room_name for r in rows}
     sheets: list[reports.RoomSheet] = []
     session_rooms = ExamSessionRoom.objects.filter(session=session).select_related("room")
-    for sr in sorted(session_rooms, key=lambda sr: sr.room.name):
+    for sr in sorted(session_rooms, key=lambda sr: reports.room_name_sort_key(sr.room.name)):
         room = sr.room
         if room_id is not None and room.pk != room_id:
             continue
@@ -2089,7 +2096,10 @@ def _seated_rooms(session: ExamSession) -> list[ExamRoom]:
     room_ids = (
         SeatAssignment.objects.filter(session=session).values_list("room_id", flat=True).distinct()
     )
-    return list(ExamRoom.objects.filter(pk__in=list(room_ids)).order_by("name"))
+    return sorted(
+        ExamRoom.objects.filter(pk__in=list(room_ids)),
+        key=lambda r: reports.room_name_sort_key(r.name),
+    )
 
 
 @transaction.atomic
