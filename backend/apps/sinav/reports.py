@@ -5,18 +5,34 @@ base.html` — DejaVu Sans (tam Türkçe; kullanıcı kararı: Roboto eklenmedi,
 mevcut OYS evrakıyla tipografik tutarlılık), okul + oturum üst bandı, altbilgi
 "üretim zamanı + Sayfa x/y", A4 ve gri tonlamalı ofis yazıcısı dostu.
 
-Raporlar (R6-R10 → T9):
-- R1  Salon Oturma Planı (kroki) — plan geometrisiyle birebir, salon/sayfa.
-- R2  Salon Yoklama / İmza Listesi — seat_no sırası + evrak sayım satırı.
-- R2k Şube Yoklama Listesi — şube/sayfa, okul no sırası.
-- R3  Salon Kapı Listesi — ad/no/şube/koltuk (TCKN ASLA).
-- R4  Şube Duyuru Listesi — öğrenci → salon + koltuk.
-- R5  Toplu Dağıtım Çizelgesi — Excel (openpyxl), tek sayfa.
+Evrak seti (30.08.2026 sadeleştirmesi — kullanıcı kararı):
+- R1  **Salon Sınav Evrakı** (BİRLEŞİK, salon başına 2 yaprak): oturma planı
+      krokisi + gözetmen kontrol listesi + evrak sayımı + teslim zinciri
+      (yaprak 1) ve yoklama/imza listesi (yaprak 2). Eski R1+R2+R7+R9 yerine
+      geçer; çift yüz basıldığında salon başına TEK yaprak düşer.
+- R4  Şube Sınav Duyurusu — öğrenci → salon + koltuk; sınıf panosuna asılır.
+- R5  Toplu Dağıtım Çizelgesi — Excel (openpyxl), idare çalışma kopyası.
+- R6  Gözetmen Görevlendirme ve Tebliğ-Tebellüğ Belgesi.
+- R7  **Sınav İhlal ve Kopya Tutanağı** — salon başına bir boş form; birleşik
+      salon evrakının tek istisnası (olay tutanağı ayrı yaprak olmak zorunda).
+- R8  Dağıtım Doğrulama Raporu — seed + kısıt metrikleri, idare nüshası.
+- Ayrıca: oturumdan bağımsız boş salon yerleşim planı (`room_layout.html`).
+
+KALDIRILANLAR: R2 (salon yoklama — R1'e girdi), R2k (şube yoklama — duyuru ve
+salon yoklaması ikisini de karşılıyordu), R3 (kapı listesi — kroki + duyuru
+zaten söylüyor), R9 (teslim tutanağı — teslim zinciri R1 yaprak 1'e girdi).
 
 KROKİ GEOMETRİ KURALI: çizim GRID kimliğinden — (desk_row, desk_col, slot);
 `layout.Seat.x/y` ASLA kullanılmaz (komşu sıra koordinatları çakışabilir —
 Tur 223 tuzağı). Bu modül saf veriyle çalışır; DB erişimi services.py'dadır
 (booklet.py deseni).
+
+TAŞMA KURALI (kullanıcı kararı): bir derslikte 40 öğrenci sığmalı, fazlası
+KONTROLSÜZ taşmamalı. İki mekanizma: (a) `kroki_metrics` krokiyi kendisine
+ayrılan kutuya sığdırır — hücre yüksekliği ve punto salonun satır/sütun
+sayısından hesaplanır; (b) `list_row_metrics` yoklama/duyuru satırının punto
+ve dolgusunu SAYFA BÜTÇESİNDEN türetir; şablon başlık yinelemesi + satır
+bölünmezliği listeyi düzgün akıtır. Sayfa sayısı garantileri testte sabittir.
 """
 
 from __future__ import annotations
@@ -29,18 +45,16 @@ from apps.okul import normalize as okul_normalize
 from apps.sinav import layout
 from apps.sinav.models import FurnitureKind, SeatStatus
 
-#: Rapor kodu → (başlık, dosya adı kökü). Sıra: yol haritası §9 tablosu.
+#: Rapor kodu → (başlık, dosya adı kökü). Kodlar sadeleştirme sonrası da
+#: KORUNDU (r1/r4/r5/r6/r7/r8) — uç adresleri ve arşivdeki dosya adları
+#: kırılmasın; r2/r2k/r3/r9 kaldırıldı (modül açıklamasına bakınız).
 REPORT_TITLES: dict[str, tuple[str, str]] = {
-    "r1": ("SALON OTURMA PLANI", "r1_oturma_plani"),
-    "r2": ("SALON YOKLAMA VE İMZA LİSTESİ", "r2_yoklama_listesi"),
-    "r2k": ("ŞUBE YOKLAMA VE İMZA LİSTESİ", "r2k_sube_yoklama"),
-    "r3": ("SALON KAPI LİSTESİ", "r3_kapi_listesi"),
-    "r4": ("ŞUBE DUYURU LİSTESİ", "r4_sube_duyuru"),
+    "r1": ("SALON SINAV EVRAKI", "r1_salon_sinav_evraki"),
+    "r4": ("ŞUBE SINAV DUYURUSU", "r4_sube_duyurusu"),
     "r5": ("TOPLU DAĞITIM ÇİZELGESİ", "r5_dagitim_cizelgesi"),
     "r6": ("GÖZETMEN GÖREVLENDİRME VE TEBLİĞ-TEBELLÜĞ BELGESİ", "r6_gozetmen_gorevlendirme"),
-    "r7": ("SINAV EVRAK ZARFI KAPAĞI / SALON TUTANAĞI", "r7_salon_tutanagi"),
+    "r7": ("SINAV İHLAL VE KOPYA TUTANAĞI", "r7_ihlal_tutanagi"),
     "r8": ("DAĞITIM DOĞRULAMA RAPORU", "r8_dogrulama_raporu"),
-    "r9": ("EVRAK TESLİM / TESLİM ALMA TUTANAĞI", "r9_teslim_tutanagi"),
 }
 
 _FURNITURE_LABELS: dict[str, str] = {
@@ -133,10 +147,107 @@ def class_label_sort_key(label: str) -> tuple[int, int, tuple[tuple[int, int], .
 
 
 # ---------------------------------------------------------------------------
-# R1 — kroki
+# Kroki — geometri + ÖLÇÜ (kontrollü taşma)
 # ---------------------------------------------------------------------------
-def build_room_kroki(sheet: RoomSheet) -> dict[str, object]:
-    """Salon krokisi şablon bağlamı: rows×cols hücre matrisi.
+# BİRİM UYARISI: WeasyPrint'in iç birimi CSS px'tir (1 pt = 4/3 px) ve düzen
+# ölçümleri px cinsinden çıkar. Yükseklik bütçeleri bu yüzden px tutulur ve
+# CSS'e px olarak basılır — "hesapladığım = çıkan" kalsın diye. Punto (font)
+# baskı alışkanlığı gereği pt kalır.
+#
+# ÖLÇÜLMÜŞ TUZAK: tablo hücresine `height` vermek satırı KISALTMAZ, UZATIR
+# (WeasyPrint hücre yüksekliğini içerik yüksekliğinin üzerine ekler). Liste
+# satır ölçüsü bu yüzden PUNTO + DOLGU ile ayarlanır, `height` ile değil.
+
+#: A4 dikey yazım alanı: (297 - 11 - 15) mm × 96/25.4 = 1024 px.
+_BUDGET_PX = 1024.0
+#: A4 dikey yazım genişliği: (210 - 2×13) mm × 96/25.4 = 695 px.
+_CONTENT_WIDTH_PX = 695.0
+#: Bir karakterin punto başına genişliği (px): DejaVu Sans ortalama ~0,58 em,
+#: em = punto × 4/3 px. Hem kroki hem liste punto kapaklarında kullanılır.
+_NAME_CHAR_PX_PER_PT = 0.58 * 4.0 / 3.0
+#: Kroki satırları arası `border-spacing` + hücre çerçevesi (ölçüldü, px/satır).
+_KROKI_ROW_OVERHEAD_PX = 12.5
+#: Bu yüksekliğin altındaki hücreye no + ad + meta üçlüsü sığmaz (meta düşer).
+_KROKI_META_MIN_CELL_PX = 30.0
+#: Hücre dolgusu + çerçeve payı (px).
+_KROKI_CELL_CHROME_PX = 5.0
+#: Ad satırı başına hedeflenen karakter — iki kelimelik ad iki satıra sığsın.
+_KROKI_LINE_CHARS = 15.0
+#: Bir punto başına düşen hücre yüksekliği (px): no + 3 ad satırı (+ meta).
+#: no = ad + 0,7 pt · meta = ad - 0,4 pt · satır aralığı ad 1,12 / öteki 1,2.
+_KROKI_LINES_WITH_META = 7.68
+_KROKI_LINES_COMPACT = 6.08
+
+#: R1 yaprak 1'inde kroki TABLOSUNA ayrılan yükseklik. Yaprağın öteki bölümleri
+#: (künye + kontrol listesi + sayım + teslim zinciri + dayanak) ölçülerek
+#: ~660 px tuttuğundan krokiye bu kadar kalır.
+KROKI_BOX_R1_PX = 340.0
+#: Boş salon planında sayfanın neredeyse tamamı krokinindir.
+KROKI_BOX_LAYOUT_PX = 760.0
+
+
+def kroki_metrics(
+    rows: int, cols: int, max_seats: int, *, box_height_px: float, with_names: bool
+) -> dict[str, object]:
+    """Kroki hücre yüksekliği (px) + puntolarını (pt) geometriden hesaplar.
+
+    Amaç TAŞMAYI ÖNLEMEK: hücre yüksekliği `box_height_px` kutusuna bölünür,
+    punto hem bu yükseklikten hem de bir koltuğa düşen GENİŞLİKTEN sınırlanır
+    (dar sütunda ad taşar). Hücre bir blok kutuya (`.seat-box`) verilir —
+    tablo hücresinin `height`i asgarî davranır, blok kutununki bağlayıcıdır.
+    Taban/tavan sınırına dayanan çok sıralı salonda kroki kutudan taşabilir;
+    taşma KONTROLLÜDÜR (kırpma yok, sonraki bölümler aşağı kayar).
+
+    Değerler METİN döner: TR locale `6.8`'i `6,8` basar ve CSS'te sessizce
+    yutulur (F25/T244 tuzağı) — biçimleme burada, nokta ayraçla yapılır.
+    """
+    rows = max(1, rows)
+    cols = max(1, cols)
+    seats = max(1, max_seats)
+
+    raw_cell = (box_height_px - rows * _KROKI_ROW_OVERHEAD_PX) / rows
+    floor, ceiling = (22.0, 64.0) if with_names else (26.0, 100.0)
+    cell = min(max(raw_cell, floor), ceiling)
+
+    seat_width = (_CONTENT_WIDTH_PX / cols) / seats
+    if with_names:
+        # Punto İKİ kapaktan geçer:
+        #  (1) GENİŞLİK — ad satır başına ~15 karakter alabilmeli ki iki
+        #      kelimelik bir ad ("ZEYNEP GÜLŞAH" + "KARAOĞLU") iki satıra sığsın;
+        #  (2) YÜKSEKLİK — hücre no + ÜÇ ad satırı + meta taşıyabilmeli. Üçüncü
+        #      satır payı bilinçli: uzun adlar sarınca meta satırı kırpılıyordu
+        #      (kutunun `overflow:hidden`i yarım satır bırakıyordu).
+        by_width = (seat_width - _KROKI_CELL_CHROME_PX) / (_KROKI_LINE_CHARS * _NAME_CHAR_PX_PER_PT)
+        lines = _KROKI_LINES_WITH_META if cell >= _KROKI_META_MIN_CELL_PX else _KROKI_LINES_COMPACT
+        by_height = (cell - _KROKI_CELL_CHROME_PX) / lines
+        name = min(max(min(by_height, by_width), 4.6), 7.8)
+        no = min(max(name + 0.7, 5.2), 8.6)
+        meta = min(max(name - 0.4, 4.2), 7.4)
+    else:
+        # Boş planda tek içerik koltuk numarasıdır — olabildiğince büyük basılır
+        # ve hücrede DİKEY ORTALANIR (`line_height` = hücre yüksekliği).
+        name = meta = 0.0
+        no = min(max(min(cell * 0.34, seat_width * 0.22), 8.0), 22.0)
+
+    return {
+        "cell_height": f"{cell:.1f}",  # px
+        "no_font": f"{no:.1f}",  # pt
+        "name_font": f"{name:.1f}",  # pt
+        "meta_font": f"{meta:.1f}",  # pt
+        # Çok sıralı salonda hücre no + ad + meta üçlüsünü taşımaz: meta satırı
+        # (okul no · şube) DÜŞER — bilgi yaprak 2'deki yoklama listesinde
+        # zaten var; kırpmak yerine kasıtlı sadeleşme (kontrollü taşma).
+        "compact": bool(with_names and cell < _KROKI_META_MIN_CELL_PX),
+    }
+
+
+def build_room_kroki(
+    sheet: RoomSheet,
+    *,
+    box_height_px: float = KROKI_BOX_R1_PX,
+    with_names: bool = True,
+) -> dict[str, object]:
+    """Salon krokisi şablon bağlamı: rows×cols hücre matrisi + ölçü sözlüğü.
 
     Hücre türleri: desk (koltuk kutuları slot sırasında), furniture, empty.
     Devre dışı sıra "KULLANIM DIŞI" olarak çizilir (fiziken salonda durur);
@@ -189,64 +300,206 @@ def build_room_kroki(sheet: RoomSheet) -> dict[str, object]:
         "col_width_pct": round(100.0 / plan.cols, 4),
         "student_count": len(sheet.rows),
         "capacity": plan.capacity,
+        "metrics": kroki_metrics(
+            plan.rows,
+            plan.cols,
+            max((d.seat_count for d in plan.desks), default=1),
+            box_height_px=box_height_px,
+            with_names=with_names,
+        ),
     }
 
 
 # ---------------------------------------------------------------------------
-# R2 / R2k / R3 / R4 — liste bağlamları
+# Liste satır ölçüsü — 40 öğrenci tek sayfaya sığsın (kullanıcı kuralı)
 # ---------------------------------------------------------------------------
-def build_room_attendance(rows: list[SeatRow]) -> list[dict[str, object]]:
-    """R2: salon başına sayfa, oturma (seat_no) sırasında."""
-    return [
-        {
-            "scope_prefix": "Salon: ",
-            "scope_label": room_name,
-            "show_room_columns": False,
-            "rows": sorted(group, key=lambda r: r.seat_no),
-        }
-        for room_name, group in _grouped(
-            rows, key=lambda r: r.room_name, sort_key=room_name_sort_key
-        ).items()
-    ]
+#: Listenin DIŞINDA kalan sabit yükseklikler (px) — WeasyPrint kutu ağacından
+#: ÖLÇÜLDÜ, tahmin değil; `test_reports.py` sayfa sayısıyla sabitler:
+#: R1 yaprak 2 = üst bant + bölüm barı + tablo başlığı + imza bloğu + boşluklar.
+_ATT_FIXED_PX = 225.0
+#: R4 = üst bant + salon dağılımı özeti + bölüm barı + tablo başlığı + kurallar.
+_ANN_FIXED_PX = 262.0
+
+#: Ad sütununun sayfa genişliğine oranı (şablondaki sütun yüzdelerinin artığı).
+#: R1 yoklama: Sıra 5 + Koltuk 8 + No 9 + Şube 8 + Yok 7 + İmza 27/17
+#: (+ Ders 16) → ada 36 % (tek ders) veya 30 % (karışık salon).
+#: Şablonda `table-layout: fixed` olduğu için bu oranlar BİREBİR uygulanır.
+_ATT_NAME_RATIO, _ATT_NAME_RATIO_MIXED = 0.36, 0.30
+#: R4 duyuru: Okul No 10 + Salon 22 + Koltuk 13 (+ Ders 22) → ada 55 % / 33 %.
+_ANN_NAME_RATIO, _ANN_NAME_RATIO_MIXED = 0.55, 0.33
+
+#: Satır yüksekliği modeli (ÖLÇÜLDÜ, DejaVu + line-height 1.05, px cinsinden):
+#:     satır ≈ 1.4 × punto(pt) + 2.667 × dolgu(pt) + 0.667
+_ROW_FONT_COEF = 1.4
+_ROW_PAD_COEF = 2.667
+_ROW_BORDER_PX = 0.667
+#: Gerçek tabloda (kutu sütunu, çok sütunlu hizalama) kalan sabit fark — model
+#: ile ölçüm arasındaki artık; kalibrasyonla bulundu.
+_ROW_EXTRA_PX = 0.7
+
+#: Punto sınırları: taban okunaklılık, tavan gereksiz büyümeyi önler.
+_ROW_FONT_MIN_PT, _ROW_FONT_MAX_PT = 7.0, 10.5
+#: Dolgu tavanı — satır seyreltmesi bir yere kadar (px değil, pt).
+_ROW_PAD_MAX_PT = 4.0
+
+#: Ad sütunu TEK SATIRA sığmalı: sarma satırı iki katına çıkarır ve sayfa
+#: garantisini bozar. Uzun bir Türkçe ad-soyad ~28 karakterdir.
+_NAME_MAX_CHARS = 28.0
+#: Hücre yatay dolgusu + çerçeve payı (px).
+_NAME_CELL_CHROME_PX = 14.0
 
 
-def build_section_attendance(rows: list[SeatRow]) -> list[dict[str, object]]:
-    """R2k: şube başına sayfa, okul no sırasında; salon/koltuk sütunlu."""
-    return [
-        {
-            "scope_prefix": "Şube: ",
-            "scope_label": class_label,
-            "show_room_columns": True,
-            "rows": sorted(group, key=lambda r: student_number_sort_key(r.student_number)),
-        }
-        for class_label, group in _grouped(
-            rows, key=lambda r: r.class_label, sort_key=class_label_sort_key
-        ).items()
-    ]
+def list_row_metrics(count: int, *, fixed_px: float, name_col_ratio: float) -> dict[str, str]:
+    """Liste satırının PUNTO ve DOLGU değerlerini sayfa bütçesinden hesaplar.
+
+    Kademeli sınıf yerine sürekli değer: hedef satır = (bütçe - sabitler) / n.
+    Hedefe önce puntoyla, artan boşluğa dolguyla ulaşılır. `height` KULLANILMAZ
+    — WeasyPrint'te hücre yüksekliği satırı uzatır (ölçüldü).
+
+    Punto ayrıca AD SÜTUNU GENİŞLİĞİNDEN sınırlanır (`name_col_ratio`, sayfa
+    genişliğine oran): sarmayan ad = öngörülebilir satır yüksekliği. Ders
+    sütunu açıldığında ad sütunu daralır ve punto kendiliğinden küçülür.
+
+    Böylece 40 öğrenci tek sayfaya SIĞAR (garanti testle sabitlenir); punto
+    tabanına dayanan çok kalabalık salonda liste bölünmeden akar (başlık
+    yinelenir, imza bloğu bütün hâlde kayar) — kontrolsüz taşma olmaz.
+
+    Değerler METİN döner (TR locale ondalığı virgülle basar — CSS yutar).
+    """
+    rows = max(1, count)
+    target = (_BUDGET_PX - fixed_px) / rows
+    by_height = (target - _ROW_EXTRA_PX - _ROW_BORDER_PX) / _ROW_FONT_COEF
+    by_width = (_CONTENT_WIDTH_PX * name_col_ratio - _NAME_CELL_CHROME_PX) / (
+        _NAME_MAX_CHARS * _NAME_CHAR_PX_PER_PT
+    )
+    font = min(max(min(by_height, by_width), _ROW_FONT_MIN_PT), _ROW_FONT_MAX_PT)
+    pad = (target - _ROW_EXTRA_PX - _ROW_FONT_COEF * font - _ROW_BORDER_PX) / _ROW_PAD_COEF
+    pad = min(max(pad, 0.0), _ROW_PAD_MAX_PT)
+    # İşaret kutusu satır kutusunu YÜKSELTMEMELİ: satır içi blok, metin
+    # satırından yüksekse satır kutusunu büyütür (ölçüldü: 8 pt kutu satıra
+    # ~3,3 px ekliyordu). Punto çizgisinin altında kalacak boyut seçilir.
+    box = min(7.5, max(4.5, font * 0.80))
+    return {
+        "font_size": f"{font:.2f}",
+        "padding": f"{pad:.2f}",
+        "box_size": f"{box:.2f}",
+    }
 
 
-def build_door_lists(rows: list[SeatRow]) -> list[dict[str, object]]:
-    """R3: salon başına sayfa, oturma sırasında — ad, no, şube, koltuk."""
+def _course_breakdown(rows: list[SeatRow] | tuple[SeatRow, ...]) -> list[dict[str, object]]:
+    """Ders → kayıtlı sayısı (deste sayımı ve künye özeti için)."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row.course_name or "—"] = counts.get(row.course_name or "—", 0) + 1
+    return [{"course_name": name, "count": count} for name, count in sorted(counts.items())]
+
+
+def _course_summary(courses: list[dict[str, object]]) -> str:
+    """Künye satırı: "Coğrafya (20) · Matematik (18)"."""
+    return " · ".join(f"{c['course_name']} ({c['count']})" for c in courses) or "—"
+
+
+# ---------------------------------------------------------------------------
+# R1 — birleşik salon sınav evrakı (kroki + gözetmen işlemleri + yoklama)
+# ---------------------------------------------------------------------------
+def build_room_documents(
+    sheets: list[RoomSheet], *, proctor_names: dict[str, str] | None = None
+) -> list[dict[str, object]]:
+    """R1: salon başına İKİ yapraklık tek belge bağlamı.
+
+    Yaprak 1 künye + kroki + gözetmen kontrol listesi + evrak sayımı + teslim
+    zinciri; yaprak 2 koltuk sırasında yoklama/imza listesi. `proctor_names`
+    (salon adı → görevli) doluysa gözetmen adı BASILI gelir; boşsa alan elle
+    doldurulur (gözetmen modülü kapalı — K2).
+
+    `sheets` sırası çağıranın verdiği sıradır (services `_room_sheets` salon
+    adını Türk alfabesine göre dizer) — basılı evrağın sayfa sırası budur.
+    """
+    names = proctor_names or {}
+    documents: list[dict[str, object]] = []
+    for sheet in sheets:
+        ordered = sorted(sheet.rows, key=lambda r: r.seat_no)
+        courses = _course_breakdown(ordered)
+        documents.append(
+            {
+                "room_name": sheet.room_name,
+                "block": sheet.block,
+                "kroki": build_room_kroki(sheet, box_height_px=KROKI_BOX_R1_PX),
+                "rows": ordered,
+                "registered": len(ordered),
+                "capacity": sheet.plan.capacity,
+                "courses": courses,
+                "course_summary": _course_summary(courses),
+                # Ders sütunu yalnız KARIŞIK salonda anlamlı — tek derste
+                # sütun yerine imza alanı genişler.
+                "show_course": len(courses) > 1,
+                "row": list_row_metrics(
+                    len(ordered),
+                    fixed_px=_ATT_FIXED_PX,
+                    name_col_ratio=_ATT_NAME_RATIO_MIXED if len(courses) > 1 else _ATT_NAME_RATIO,
+                ),
+                "proctor_name": names.get(sheet.room_name, ""),
+            }
+        )
+    return documents
+
+
+# ---------------------------------------------------------------------------
+# R4 — şube duyurusu · R7 — ihlal tutanağı
+# ---------------------------------------------------------------------------
+def build_announcements(rows: list[SeatRow]) -> list[dict[str, object]]:
+    """R4: şube başına sayfa, okul no sırasında — öğrenci → salon + koltuk.
+
+    `room_summary` duyurunun en çok okunan satırıdır ("şubem nereye dağıldı"):
+    salon adları Türk alfabesi sırasında, yanlarında öğrenci sayısıyla.
+    """
+    sheets: list[dict[str, object]] = []
+    for class_label, group in _grouped(
+        rows, key=lambda r: r.class_label, sort_key=class_label_sort_key
+    ).items():
+        ordered = sorted(group, key=lambda r: student_number_sort_key(r.student_number))
+        mixed = len({row.course_name for row in ordered}) > 1
+        room_counts: dict[str, int] = {}
+        for row in ordered:
+            room_counts[row.room_name] = room_counts.get(row.room_name, 0) + 1
+        sheets.append(
+            {
+                "class_label": class_label,
+                "rows": ordered,
+                "room_summary": " · ".join(
+                    f"{name} ({count})"
+                    for name, count in sorted(
+                        room_counts.items(), key=lambda kv: room_name_sort_key(kv[0])
+                    )
+                ),
+                "row": list_row_metrics(
+                    len(ordered),
+                    fixed_px=_ANN_FIXED_PX,
+                    name_col_ratio=_ANN_NAME_RATIO_MIXED if mixed else _ANN_NAME_RATIO,
+                ),
+                "show_course": mixed,
+            }
+        )
+    return sheets
+
+
+def build_tutanak_sheets(
+    rows: list[SeatRow], *, proctor_names: dict[str, str] | None = None
+) -> list[dict[str, object]]:
+    """R7: salon başına BİR boş ihlal/kopya tutanağı (salon zarfına konur).
+
+    Öğrenci alanları BOŞTUR — olay önceden bilinemez ve kişisel veri basılmaz;
+    yalnız salon/ders künyesi ve (varsa) gözetmen adı basılı gelir.
+    """
+    names = proctor_names or {}
     return [
         {
             "room_name": room_name,
-            "rows": sorted(group, key=lambda r: r.seat_no),
+            "course_summary": _course_summary(_course_breakdown(group)),
+            "proctor_name": names.get(room_name, ""),
         }
         for room_name, group in _grouped(
             rows, key=lambda r: r.room_name, sort_key=room_name_sort_key
-        ).items()
-    ]
-
-
-def build_announcements(rows: list[SeatRow]) -> list[dict[str, object]]:
-    """R4: şube başına sayfa, okul no sırasında — öğrenci → salon + koltuk."""
-    return [
-        {
-            "class_label": class_label,
-            "rows": sorted(group, key=lambda r: student_number_sort_key(r.student_number)),
-        }
-        for class_label, group in _grouped(
-            rows, key=lambda r: r.class_label, sort_key=class_label_sort_key
         ).items()
     ]
 
@@ -305,59 +558,13 @@ def build_assignment_context(rows: list[ProctorRow]) -> dict[str, object]:
         ],
         "duty_count": len(ordered),
         "reserve_count": sum(1 for row in ordered if not row.room_name),
+        "room_count": sum(1 for row in ordered if row.room_name),
     }
 
 
 # ---------------------------------------------------------------------------
-# R7 / R8 / R9 — tutanak bağlamları (T9)
+# R8 — dağıtım doğrulama bağlamı
 # ---------------------------------------------------------------------------
-def build_envelope_sheets(rows: list[SeatRow]) -> list[dict[str, object]]:
-    """R7: salon başına zarf kapağı/tutanak — kayıtlı sayı + ders dağılımı.
-
-    Mevcut/giren/girmeyen sayıları ELLE doldurulur (kutular şablonda);
-    ders dağılımı görevlinin deste sayımı içindir.
-    """
-    sheets: list[dict[str, object]] = []
-    for room_name, group in _grouped(
-        rows, key=lambda r: r.room_name, sort_key=room_name_sort_key
-    ).items():
-        course_counts: dict[str, int] = {}
-        for row in group:
-            course_counts[row.course_name] = course_counts.get(row.course_name, 0) + 1
-        sheets.append(
-            {
-                "room_name": room_name,
-                "registered": len(group),
-                "courses": [
-                    {"course_name": name, "count": count}
-                    for name, count in sorted(course_counts.items())
-                ],
-            }
-        )
-    return sheets
-
-
-def build_handover_rows(
-    rows: list[SeatRow], *, proctor_names: dict[str, str] | None = None
-) -> list[dict[str, object]]:
-    """R9: salon başına tek satır — görevli adı varsayılan ELLE yazılır (K2).
-
-    `proctor_names` (salon adı → görevli adları) doluysa T9b gözetmen
-    modülünün atamaları basılı gelir; şablon değişmez.
-    """
-    names = proctor_names or {}
-    return [
-        {
-            "room_name": room_name,
-            "registered": len(group),
-            "proctor_name": names.get(room_name, ""),
-        }
-        for room_name, group in _grouped(
-            rows, key=lambda r: r.room_name, sort_key=room_name_sort_key
-        ).items()
-    ]
-
-
 def build_validation_context(
     *,
     is_valid: bool,

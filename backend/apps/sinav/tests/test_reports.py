@@ -1,11 +1,13 @@
-"""F4 evrak testleri — R1-R5 + R7-R9 + boş plan + tümü-ZIP (WeasyPrint + pypdf).
+"""F4 evrak testleri — R1 · R4-R8 + boş plan + tümü-ZIP (WeasyPrint + pypdf).
 
 Kapı (tasarım §12 F4):
 - her raporda TR karakter duman testi (DD `test_documents.py` emsali —
   pypdf metin çıkarma; dar kapsama fontta Ğ/Ş/İ sessizce düşer),
 - `text-transform` tarama testi (WeasyPrint TR i→I tuzağı — CLAUDE.md §2),
 - `|unlocalize` denetimi (TR locale ondalığı virgülle basar; CSS genişliği
-  yutulur — OYS F25/T244 bulgusu).
+  yutulur — OYS F25/T244 bulgusu),
+- **SAYFA SAYISI garantisi**: bir derslikte 40 öğrenci sığar ve fazlası
+  kontrolsüz taşmaz (kullanıcı kuralı, 30.08.2026 sadeleştirmesi).
 Durum kapıları (taslak reddi, arşivden yeniden basım) ve R8 seed sözleşmesi
 (CLAUDE.md §3) burada sabitlenir.
 """
@@ -26,7 +28,7 @@ from pypdf import PdfReader
 from rest_framework.test import APIClient
 
 from apps.okul.models import SchoolConfig
-from apps.sinav import reports, services
+from apps.sinav import layout, reports, services
 from apps.sinav.models import ExamSession, ExamSessionRoom
 from apps.sinav.tests.oturum_yardim import dagitilmis_oturum, oturum, salon
 
@@ -37,10 +39,15 @@ TURKCE_DUMAN = "ĞÜŞİÖÇ ığüşiöç"
 OKUL_ADI = f"{TURKCE_DUMAN} Anadolu Lisesi"
 
 #: PDF üreten oturum raporları (r5 Excel, r6 F7'de).
-PDF_CODES = ("r1", "r2", "r2k", "r3", "r4", "r7", "r8", "r9")
+PDF_CODES = ("r1", "r4", "r7", "r8")
+
+#: 30.08.2026 sadeleştirmesinde KALDIRILAN kodlar — geri sızarsa test kırılır.
+KALDIRILAN_CODES = ("r2", "r2k", "r3", "r9")
 
 SESSIONS_URL = "/api/v1/exam-sessions/"
 ROOMS_URL = "/api/v1/exam-rooms/"
+
+_TEMPLATES_DIR = Path(settings.BASE_DIR) / "templates"
 
 
 def _pdf_text(pdf_bytes: bytes) -> str:
@@ -202,6 +209,8 @@ def test_salon_filtresi() -> None:
 
     with pytest.raises(ValidationError, match="salon bazlı"):
         services.render_session_report(session, "r4", room_id=ilk.pk)
+    # R7 tutanağı da salon bazlıdır (salon zarfına konur).
+    services.render_session_report(session, "r7", room_id=ilk.pk)
     with pytest.raises(ValidationError, match="tanımlı değil"):
         services.render_session_report(session, "r1", room_id=999999)
 
@@ -218,7 +227,9 @@ def test_api_rapor_indirme() -> None:
     resp = client.get(f"{SESSIONS_URL}{session.pk}/reports/r1/")
     assert resp.status_code == 200
     assert resp["Content-Type"] == "application/pdf"
-    assert f'filename="r1_oturma_plani_oturum_{session.pk}.pdf"' in resp["Content-Disposition"]
+    assert (
+        f'filename="r1_salon_sinav_evraki_oturum_{session.pk}.pdf"' in resp["Content-Disposition"]
+    )
     assert resp.content.startswith(b"%PDF")
 
     resp = client.get(f"{SESSIONS_URL}{session.pk}/reports/zip/")
@@ -245,11 +256,177 @@ def test_api_bos_salon_plani() -> None:
 
 
 # ===========================================================================
+# SAYFA SAYISI GARANTİSİ — "bir derslikte 40 öğrenci sığsın, fazlası
+# kontrolsüz taşmasın" (kullanıcı kuralı, 30.08.2026 sadeleştirmesi)
+# ===========================================================================
+#
+# Bu blok saf bağlamla (DB'siz) çalışır: kalabalık salon kurmak 40+ öğrenci ve
+# büyük yerleşim planı ister; bunu ORM'den kurmak testi yavaşlatır ve garanti
+# zaten dizgi/ölçü katmanına (reports.py + şablon) aittir.
+
+#: Uzun ama gerçekçi Türkçe adlar — satır sarması en kötü hâlde sınanır.
+_UZUN_ADLAR = (
+    "ZEYNEP GÜLŞAH KARAOĞLU",
+    "MEHMET ALİ ÇAĞLAYANOĞLU",
+    "ABDÜLKADİR ŞAHİNKAYA",
+    "ÖZGE NUR BÜYÜKKAYAOĞLU",
+)
+
+_BASLIK = reports.ReportHeader(
+    school_name=OKUL_ADI,
+    year_label="2026-2027",
+    semester_label="1. Dönem",
+    exam_name="1. Ortak Yazılı Sınav",
+    exam_date="16.11.2026",
+    start_time="09:00",
+    generated_at="30.08.2026 19:45",
+)
+
+
+def _plan(rows: int, cols: int) -> dict[str, Any]:
+    """rows×cols ikili sıra ızgarası (demirbaşsız)."""
+    return {
+        "grid": {"rows": rows, "cols": cols},
+        "desks": [{"row": r, "col": c, "type": "DOUBLE"} for r in range(rows) for c in range(cols)],
+        "furniture": [],
+    }
+
+
+def _satirlar(n: int, *, dersler: tuple[str, ...]) -> list[reports.SeatRow]:
+    return [
+        reports.SeatRow(
+            full_name=_UZUN_ADLAR[i % len(_UZUN_ADLAR)],
+            student_number=str(1200 + i),
+            class_label=f"{9 + i % 4}/{'ABCÇ'[i % 4]}",
+            room_name="D-201 Dersliği",
+            seat_no=i + 1,
+            desk_row=i // 8,
+            desk_col=(i % 8) // 2,
+            slot=i % 2,
+            course_name=dersler[i % len(dersler)],
+            status="NORMAL",
+        )
+        for i in range(n)
+    ]
+
+
+def _sayfa_sayisi(pdf: bytes) -> int:
+    return len(PdfReader(io.BytesIO(pdf)).pages)
+
+
+def _r1_pdf(n: int, rows: int, cols: int, dersler: tuple[str, ...]) -> bytes:
+    sheet = reports.RoomSheet(
+        room_name="D-201 Dersliği",
+        block="A Blok · 2. kat",
+        plan=layout.validate_layout_plan(_plan(rows, cols)),
+        numbering_scheme="S_PATTERN",
+        rows=tuple(_satirlar(n, dersler=dersler)),
+    )
+    return reports.render_pdf(
+        "sinav/reports/r1_salon_evraki.html",
+        {
+            "header": _BASLIK,
+            "title": reports.REPORT_TITLES["r1"][0],
+            "sheets": reports.build_room_documents([sheet]),
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("ogrenci", "rows", "cols", "ders_sayisi"),
+    [
+        (40, 5, 4, 2),  # tipik derslik: 5 sıra × 4 ikili masa
+        (40, 8, 3, 2),  # derin derslik
+        (40, 10, 2, 1),  # dar ve uzun derslik
+        (40, 4, 5, 3),  # geniş derslik + karışık ders (Ders sütunu açılır)
+        (48, 6, 4, 2),  # kapasite üstü — yine iki yaprak
+        (12, 3, 2, 1),  # küçük salon: satırlar seyreler, yine iki yaprak
+    ],
+)
+def test_r1_salon_evraki_iki_yaprak(ogrenci: int, rows: int, cols: int, ders_sayisi: int) -> None:
+    """Salon evrakı HER geometride ve 40 öğrenciye kadar TAM İKİ yaprak olmalı.
+
+    Kullanıcı kuralı: bir derslikte 40 öğrenci sığar, fazlası kontrolsüz
+    taşmaz. İki yaprak = çift yüz basıldığında salon başına tek kâğıt.
+    Kırılırsa bakılacak yer: `reports.KROKI_BOX_R1_PX`, `_ATT_FIXED_PX` ve
+    yaprak 1'in sabit bölümleri (şablon yorumundaki sayfa bütçesi).
+    """
+    dersler = tuple(f"Ders {i}" for i in range(ders_sayisi))
+    pdf = _r1_pdf(ogrenci, rows, cols, dersler)
+    assert (
+        _sayfa_sayisi(pdf) == 2
+    ), f"{ogrenci} öğrenci / {rows}x{cols} salonda yaprak sayısı 2 değil — sayfa bütçesi bozuldu."
+
+
+def test_r1_cok_kalabalik_salonda_satir_kaybi_yok() -> None:
+    """40'ı çok aşan salonda liste TAŞAR ama satır KAYBOLMAZ (kontrollü taşma)."""
+    pdf = _r1_pdf(90, 6, 4, ("Coğrafya",))
+    metin = _pdf_text(pdf)
+    assert _sayfa_sayisi(pdf) > 2, "90 öğrencide listenin akması beklenir"
+    for numara in ("1200", "1245", "1289"):  # ilk, orta, son
+        assert numara in metin, f"{numara} numaralı öğrenci evrakta yok — satır düştü"
+
+
+def test_r4_sube_duyurusu_tek_yaprak() -> None:
+    """Şube duyurusu 40 öğrencide tek sayfa — ders sütunu açıkken de."""
+    for dersler in (("Coğrafya",), ("Coğrafya", "Matematik")):
+        satirlar = [
+            reports.SeatRow(**{**vars(r), "class_label": "9/A", "room_name": f"D-20{i % 3 + 1}"})
+            for i, r in enumerate(_satirlar(40, dersler=dersler))
+        ]
+        pdf = reports.render_pdf(
+            "sinav/reports/r4_announcement.html",
+            {
+                "header": _BASLIK,
+                "title": reports.REPORT_TITLES["r4"][0],
+                "sheets": reports.build_announcements(satirlar),
+            },
+        )
+        assert _sayfa_sayisi(pdf) == 1, f"{len(dersler)} derslik duyuru tek sayfa değil"
+
+
+def test_r1_birlesik_evrak_dort_belgenin_isini_tasir() -> None:
+    """Birleşik evrak eski R1 + R2 + R7 + R9'un işlerini TEK belgede taşımalı."""
+    metin = _pdf_text(_r1_pdf(24, 4, 3, ("Coğrafya",)))
+    for beklenen in (
+        "OTURMA PLANI",  # eski R1 krokisi
+        "YOKLAMA VE İMZA LİSTESİ",  # eski R2
+        "GÖZETMEN İŞLEMLERİ",  # kullanıcı talebi
+        "SINAV EVRAKI SAYIMI",  # eski R7 deste sayımı
+        "EVRAK TESLİM ZİNCİRİ",  # eski R9 teslim tutanağı
+    ):
+        assert beklenen in metin, f"birleşik evrakta eksik bölüm: {beklenen}"
+
+
+def test_r7_tutanak_bos_formdur() -> None:
+    """İhlal tutanağı salon başına tek yaprak; öğrenci verisi BASILMAZ (KVKK)."""
+    pdf = reports.render_pdf(
+        "sinav/reports/r7_tutanak.html",
+        {
+            "header": _BASLIK,
+            "title": reports.REPORT_TITLES["r7"][0],
+            "sheets": reports.build_tutanak_sheets(_satirlar(40, dersler=("Coğrafya",))),
+        },
+    )
+    assert _sayfa_sayisi(pdf) == 1
+    metin = _pdf_text(pdf)
+    assert "D-201 Dersliği" in metin  # salon künyesi basılı gelir
+    for ad in _UZUN_ADLAR:
+        assert ad not in metin, "tutanak boş formdur — öğrenci verisi basılmaz"
+
+
+def test_kaldirilan_rapor_kodlari_geri_gelmedi() -> None:
+    """R2/R2k/R3/R9 kaldırıldı — kod, başlık ve şablon geri sızmamalı."""
+    for code in KALDIRILAN_CODES:
+        assert code not in services.REPORT_CODES
+        assert code not in reports.REPORT_TITLES
+    for sablon in ("r1_kroki.html", "r2_attendance.html", "r3_door.html", "r9_handover.html"):
+        assert not (_TEMPLATES_DIR / "sinav" / "reports" / sablon).exists()
+
+
+# ===========================================================================
 # Şablon tarama kapıları (F4) — dosya sistemi denetimleri
 # ===========================================================================
-
-_TEMPLATES_DIR = Path(settings.BASE_DIR) / "templates"
-
 
 #: Yorum blokları taramadan düşülür — yasak hatırlatma metinleri serbest,
 #: aranan GERÇEK CSS bildirimidir.
@@ -284,8 +461,8 @@ def test_unlocalize_denetimi() -> None:
                 pytest.fail(f"{dosya.name}: unlocalize'sız ondalık değişken: {degisken}")
 
     reports_dir = _TEMPLATES_DIR / "sinav" / "reports"
-    assert "col_width_pct|unlocalize" in (reports_dir / "r1_kroki.html").read_text("utf-8")
-    assert "col_width_pct|unlocalize" in (reports_dir / "room_layout.html").read_text("utf-8")
+    # Kroki artık TEK parçadan gelir (R1 ve boş plan onu paylaşır).
+    assert "col_width_pct|unlocalize" in (reports_dir / "_kroki.html").read_text("utf-8")
     assert "percent|unlocalize" in (reports_dir / "r8_validation.html").read_text("utf-8")
 
 

@@ -1,0 +1,259 @@
+{% extends "sinav/reports/base.html" %}
+{% comment %}R1 — SALON SINAV EVRAKI (birleşik). Salon başına İKİ yaprak, tek
+belge; eski R1 (kroki) + R2 (yoklama/imza) + R7 (zarf kapağı/sayım) + R9
+(teslim tutanağı) yerine geçer. Kullanıcı kararı: "gözetmen işlemleri de bu
+evrakta olsun, ayrıca bir kâğıt israf edilmesin" — çift yüz basıldığında salon
+başına TEK yaprak düşer.
+
+  Yaprak 1  A. salon künyesi · B. oturma planı krokisi · C. gözetmen kontrol
+            listesi (öncesi/sonunda) · D. evrak sayımı · E. teslim zinciri
+  Yaprak 2  F. yoklama ve imza listesi (40 öğrenciye kadar tek sayfa) + imza
+
+ANATOMİ: evrakmotoru SAL-SNV-FR-006 "Salon Yoklama Listesi ve Sınav Evrakı
+Sayım Tutanağı" formundan uyarlandı — okulun basılı form ailesiyle aynı bölüm
+düzeni (A/B/C…), aynı imza üçlüsü, aynı dayanak dipnotu.
+
+SAYFA BÜTÇESİ (WeasyPrint kutu ağacından ÖLÇÜLEREK doğrulandı; A4 dikey yazım
+alanı 1024 px = 768 pt): yaprak 1'in sabit bölümleri krokiye
+`reports.KROKI_BOX_R1_PX` kadar yer bırakır. Yaprak 2'de yoklama satırı
+`reports.list_row_metrics` ile bütçeden türetilir; 40 öğrenci tek sayfaya
+sığar, fazlası bölünmeden akar (başlık yinelenir, imza bloğu bütün hâlde
+kayar). Sayfa sayısı garantisi `test_reports.py`de sabittir.
+
+KONTROL LİSTESİ METİNLERİ TEK SATIRA SIĞACAK UZUNLUKTA TUTULUR (~50 karakter):
+sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% endcomment %}
+{% block extra_style %}
+<style>
+  /* Yoklama satırı ölçüsü SAYFA BÜTÇESİNDEN gelir (reports.list_row_metrics):
+     satır = (1024 px - sabitler) / öğrenci; hedefe önce PUNTO, artan boşluğa
+     DOLGU ile ulaşılır. `height` KULLANILMAZ — WeasyPrint'te hücre yüksekliği
+     satırı uzatır (ölçüldü). Değerler başlıktaki stil bloğunda basılır: gövde
+     içindeki <style> ve inline CSS değişkeni WeasyPrint'te çalışmıyor. */
+  /* Sütun genişlikleri BİLDİRİLDİĞİ gibi uygulansın (reports._ATT_NAME_RATIO). */
+  .att { table-layout: fixed; }
+  .att td { line-height: 1.05; }
+  /* Başlık satırı TEK SATIR kalmalı: ikinci satır ~14 px yer götürür. */
+  .att th { padding: 3pt 4pt; font-size: 7.5pt; line-height: 1.05; }
+  .att .name { font-weight: bold; }
+  /* Beşer beşer okumayı kolaylaştıran koyu ayraç (uzun listede göz kayması). */
+  .att tr.mark5 td { border-bottom: var(--pr-border-outer) solid var(--pr-secondary); }
+
+  .compact td { padding: 1pt 5pt; height: 11pt; line-height: 1.1; }
+  .compact th { padding: 2pt 5pt; line-height: 1.1; }
+  /* Kutulu künye satırları: kutu satır kutusunu yükseltmesin. */
+  .tight td { padding: 1.5pt 5pt; line-height: 1.1; }
+  .tight .box { width: 7pt; height: 7pt; }
+  .courses td.total { font-weight: bold; background: var(--pr-fill); }
+  .chain td { height: 13pt; padding: 1.5pt 5pt; line-height: 1.1; }
+  .chain .box { width: 7pt; height: 7pt; }
+  .chain td.k { background: var(--pr-fill); font-weight: bold;
+                color: var(--pr-label); width: 33%; }
+  .duty-head { background: var(--pr-fill-head); font-weight: bold;
+               color: var(--pr-label); font-size: 7.5pt; text-align: center; }
+
+  /* Salon başına hesaplanan ölçüler — BAŞLIKTA basılmak ZORUNDA (WeasyPrint
+     gövdedeki <style> öğesini yok sayar; ölçüldü). */
+  {% for sheet in sheets %}
+  .att{{ forloop.counter }} td { font-size: {{ sheet.row.font_size }}pt;
+                                 padding: {{ sheet.row.padding }}pt 5pt; }
+  .att{{ forloop.counter }} .box { width: {{ sheet.row.box_size }}pt;
+                                   height: {{ sheet.row.box_size }}pt; }
+  {% include "sinav/reports/_kroki_style.html" with room=sheet.kroki kroki_id=forloop.counter %}
+  {% endfor %}
+</style>
+{% endblock %}
+{% block content %}
+{% for sheet in sheets %}
+
+{# ------------------------------ YAPRAK 1 ------------------------------ #}
+<div class="sheet">
+  {% with scope_line="Salon: "|add:sheet.room_name scope_note="Yaprak 1/2 · Oturma planı ve gözetmen işlemleri" %}
+    {% include "sinav/reports/_head.html" %}
+  {% endwith %}
+
+  <div class="sec">A. SALON VE OTURUM BİLGİLERİ</div>
+  <table class="fields">
+    <colgroup><col style="width: 17%;"><col style="width: 41%;">
+              <col style="width: 17%;"><col style="width: 25%;"></colgroup>
+    <tr>
+      <td class="k">Salon</td>
+      <td>{{ sheet.room_name }}{% if sheet.block %} · {{ sheet.block }}{% endif %}</td>
+      <td class="k">Kayıtlı / kapasite</td>
+      <td>{{ sheet.registered }} / {{ sheet.capacity }}</td>
+    </tr>
+    <tr>
+      <td class="k">Gözetmen öğretmen</td>
+      <td class="fill">{{ sheet.proctor_name }}</td>
+      <td class="k">Ders(ler)</td>
+      <td>{{ sheet.course_summary }}</td>
+    </tr>
+  </table>
+
+  <div class="sec">B. OTURMA PLANI
+    <span class="hint">Öğrenciler bu plana göre oturtulur.</span>
+  </div>
+  {% include "sinav/reports/_kroki.html" with room=sheet.kroki kroki_names=True kroki_id=forloop.counter %}
+
+  <div class="sec">C. GÖZETMEN İŞLEMLERİ
+    <span class="hint">Yapılan işlemi kutucuğu işaretleyerek onaylayınız.</span>
+  </div>
+  <table class="checks tight">
+    <tr>
+      <td class="duty-head" colspan="2">SINAV ÖNCESİ</td>
+      <td class="duty-head" colspan="2">SINAV SONUNDA</td>
+    </tr>
+    <tr>
+      <td class="b"><span class="box"></span></td>
+      <td>Salon düzeni bu plana göre kuruldu.</td>
+      <td class="b"><span class="box"></span></td>
+      <td>Yoklama listesi öğrencilere imzalatıldı.</td>
+    </tr>
+    <tr>
+      <td class="b"><span class="box"></span></td>
+      <td>Öğrenciler plandaki koltuklara oturtuldu.</td>
+      <td class="b"><span class="box"></span></td>
+      <td>Evrak, zümre temsilcisiyle birlikte sayıldı.</td>
+    </tr>
+    <tr>
+      <td class="b"><span class="box"></span></td>
+      <td>Salon zarfı sayılarak teslim alındı.</td>
+      <td class="b"><span class="box"></span></td>
+      <td>İsimsiz/eksik kâğıt tespiti salonda yapıldı.</td>
+    </tr>
+    <tr>
+      <td class="b"><span class="box"></span></td>
+      <td>Sıra üstleri boşaltıldı; bilişim aracı alındı.</td>
+      <td class="b"><span class="box"></span></td>
+      <td>Kopya/ihlal yok (varsa tutanak düzenlendi).</td>
+    </tr>
+    <tr>
+      <td class="b"><span class="box"></span></td>
+      <td>Sınav kuralları ve süresi duyuruldu.</td>
+      <td class="b"><span class="box"></span></td>
+      <td>Evrak ve tutanaklar müdür yrd.na teslim edildi.</td>
+    </tr>
+  </table>
+
+  <div class="sec">D. SINAV EVRAKI SAYIMI
+    <span class="hint">Dağıtılan soru kitapçığı / dönen cevap kâğıdı adedi elle yazılır.</span>
+  </div>
+  <table class="rpt-table compact courses">
+    <thead>
+      <tr>
+        <th>Ders</th>
+        <th class="num" style="width: 16%;">Kayıtlı</th>
+        <th class="num" style="width: 22%;">Dağıtılan</th>
+        <th class="num" style="width: 22%;">Dönen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for course in sheet.courses %}
+      <tr>
+        <td>{{ course.course_name }}</td>
+        <td class="num">{{ course.count }}</td>
+        <td></td><td></td>
+      </tr>
+      {% endfor %}
+      <tr>
+        <td class="total">TOPLAM</td>
+        <td class="num total">{{ sheet.registered }}</td>
+        <td></td><td></td>
+      </tr>
+    </tbody>
+  </table>
+  <table class="fields tight" style="margin-top: 3pt;">
+    <tr>
+      <td class="k">Sınava giren</td><td class="fill"></td>
+      <td class="k">Sınava girmeyen</td><td class="fill"></td>
+    </tr>
+    <tr>
+      <td class="k">İsimsiz kâğıt</td>
+      <td><span class="box"></span> Yok &nbsp; <span class="box"></span> Var — adet: <span class="blank"></span></td>
+      <td class="k">Eksik kâğıt</td>
+      <td><span class="box"></span> Yok &nbsp; <span class="box"></span> Var — adet: <span class="blank"></span></td>
+    </tr>
+  </table>
+
+  <div class="sec">E. EVRAK TESLİM ZİNCİRİ</div>
+  <table class="fields chain">
+    <tr>
+      <td class="k">Sınav öncesi — zarfı gözetmene teslim eden</td>
+      <td style="width: 20%;">Saat: <span class="blank" style="min-width: 30pt;"></span></td>
+      <td>Ad Soyad / İmza:</td>
+    </tr>
+    <tr>
+      <td class="k">Sınav sonrası — evrakı gözetmenden teslim alan</td>
+      <td>Saat: <span class="blank" style="min-width: 30pt;"></span></td>
+      <td>Ad Soyad / İmza:</td>
+    </tr>
+    <tr>
+      <td class="k">Yer değişikliği / olağan dışı durum</td>
+      <td colspan="2"><span class="box"></span> Yok &nbsp;&nbsp;
+        <span class="box"></span> Var — açıklama: <span class="blank" style="min-width: 190pt;"></span></td>
+    </tr>
+  </table>
+
+  <div class="dayanak">
+    <b>DAYANAK:</b> MEB Ortaöğretim Kurumları Yönetmeliği md. 45/1-a, 48/4-5, 86/4 ·
+    MEB Ölçme ve Değerlendirme Yönetmeliği md. 4/1-d · MEB Yazılı ve Uygulamalı
+    Sınavlar Yönergesi md. 5/1-ş, ü. &nbsp;<b>KVKK:</b> Buradaki kişisel veriler 6698
+    sayılı Kanunun 5/2-ç maddesi uyarınca işlenir; yalnız yetkili okul personeli ve
+    denetim mercileriyle paylaşılır.
+  </div>
+</div>
+
+{# ------------------------------ YAPRAK 2 ------------------------------ #}
+<div class="sheet">
+  {% with scope_line="Salon: "|add:sheet.room_name scope_note="Yaprak 2/2 · Yoklama ve imza listesi" %}
+    {% include "sinav/reports/_head.html" %}
+  {% endwith %}
+
+  <div class="sec">F. YOKLAMA VE İMZA LİSTESİ
+    <span class="hint">Koltuk sırasında · &quot;Yok&quot; = sınava girmedi · imzalar SINAV BİTİMİNDE alınır.</span>
+  </div>
+  <table class="rpt-table att att{{ forloop.counter }}">
+    <thead>
+      <tr>
+        <th class="num" style="width: 5%;">Sıra</th>
+        <th class="num" style="width: 8%;">Koltuk</th>
+        <th class="num" style="width: 9%;">No</th>
+        <th style="width: {% if sheet.show_course %}30{% else %}36{% endif %}%;">Adı Soyadı</th>
+        <th class="num" style="width: 8%;">Şube</th>
+        {% if sheet.show_course %}<th style="width: 16%;">Ders</th>{% endif %}
+        <th class="num" style="width: 7%;">Yok</th>
+        <th class="center" style="width: {% if sheet.show_course %}17{% else %}27{% endif %}%;">İmza</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in sheet.rows %}
+      <tr{% if forloop.counter|divisibleby:5 and not forloop.last %} class="mark5"{% endif %}>
+        <td class="num">{{ forloop.counter }}</td>
+        <td class="num">{{ row.seat_no }}</td>
+        <td class="num">{{ row.student_number }}</td>
+        <td class="name">{{ row.full_name }}</td>
+        <td class="num">{{ row.class_label }}</td>
+        {% if sheet.show_course %}<td>{{ row.course_name }}</td>{% endif %}
+        <td class="num"><span class="box"></span></td>
+        <td></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <table class="signs">
+    <tr><td class="date">…… / …… / 20……</td><td class="date">…… / …… / 20……</td>
+        <td class="date">…… / …… / 20……</td></tr>
+    <tr><td class="space"></td><td class="space"></td><td class="space"></td></tr>
+    <tr>
+      <td><div class="line"></div><span class="who">Gözetmen Öğretmen</span><br>
+          <span class="role">Ad Soyad / İmza</span></td>
+      <td><div class="line"></div><span class="who">Evrakı Sayarak Teslim Alan</span><br>
+          <span class="role">Zümre Temsilcisi — Ad Soyad / İmza</span></td>
+      <td><div class="line"></div><span class="who">Nöbetçi Müdür Yardımcısı</span><br>
+          <span class="role">Ad Soyad / İmza</span></td>
+    </tr>
+  </table>
+</div>
+
+{% endfor %}
+{% endblock %}

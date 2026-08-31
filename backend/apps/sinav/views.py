@@ -395,11 +395,11 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
     def reports(
         self, request: Request, pk: str | None = None, code: str | None = None
     ) -> HttpResponse | Response:
-        """Sınav evrakı indirme (F4): R1-R5 + R2k + R7-R9 — senkron PDF/Excel.
+        """Sınav evrakı indirme (F4): R1 · R4-R8 — senkron PDF/Excel.
 
-        `?room_id=` salon bazlı raporları (R1/R2/R3/R7) tek salona daraltır;
-        `code=zip` tüm seti tek arşivde döner. Arşiv oturumdan yeniden basım
-        açıktır (durum kapısı serviste).
+        `?room_id=` salon bazlı evrakı (R1 salon evrakı / R7 tutanak) tek salona
+        daraltır; `code=zip` tüm seti tek arşivde döner. Arşiv oturumdan yeniden
+        basım açıktır (durum kapısı serviste).
         """
         session = self.get_object()
         if code != "zip" and code not in services.REPORT_CODES:

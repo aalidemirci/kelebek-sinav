@@ -278,18 +278,57 @@ export interface BookletRun {
   completed_at: string | null;
 }
 
-/** Evrak paneli katalog satırı — kodlar backend REPORT_CODES ile birebir (OYS AYNEN). */
-export const REPORT_CATALOG: { code: string; title: string; roomScoped: boolean }[] = [
-  { code: "r1", title: "Salon Oturma Planı (kroki)", roomScoped: true },
-  { code: "r2", title: "Salon Yoklama / İmza Listesi", roomScoped: true },
-  { code: "r2k", title: "Şube Yoklama Listesi", roomScoped: false },
-  { code: "r3", title: "Salon Kapı Listesi", roomScoped: true },
-  { code: "r4", title: "Şube Duyuru Listesi", roomScoped: false },
-  { code: "r5", title: "Toplu Dağıtım Çizelgesi (Excel)", roomScoped: false },
-  { code: "r6", title: "Gözetmen Görevlendirme / Tebliğ-Tebellüğ", roomScoped: false },
-  { code: "r7", title: "Sınav Evrak Zarfı Kapağı / Salon Tutanağı", roomScoped: true },
-  { code: "r8", title: "Dağıtım Doğrulama Raporu", roomScoped: false },
-  { code: "r9", title: "Evrak Teslim / Teslim Alma Tutanağı", roomScoped: false },
+/**
+ * Evrak paneli katalog satırı — kodlar backend REPORT_CODES ile birebir.
+ *
+ * 30.08.2026 sadeleştirmesi: salon evrakı TEK belgede birleşti (eski R1 kroki +
+ * R2 yoklama + R7 zarf kapağı + R9 teslim tutanağı); R2k şube yoklaması ve R3
+ * kapı listesi kaldırıldı. `note` satırı, hangi belgenin nereye gittiğini
+ * panelde söyler — evrak seti küçüldüğü için "hangisini basayım" sorusu
+ * listeden değil bu satırdan cevaplanır.
+ */
+export const REPORT_CATALOG: {
+  code: string;
+  title: string;
+  note: string;
+  roomScoped: boolean;
+}[] = [
+  {
+    code: "r1",
+    title: "Salon Sınav Evrakı",
+    note: "Oturma planı · yoklama ve imza · evrak sayımı · teslim zinciri — salon başına 2 yaprak",
+    roomScoped: true,
+  },
+  {
+    code: "r4",
+    title: "Şube Sınav Duyurusu",
+    note: "Öğrenci → salon ve koltuk; sınıf panosuna asılır",
+    roomScoped: false,
+  },
+  {
+    code: "r7",
+    title: "Sınav İhlal ve Kopya Tutanağı",
+    note: "Salon zarfına konan boş form; yalnız olay hâlinde doldurulur",
+    roomScoped: true,
+  },
+  {
+    code: "r6",
+    title: "Gözetmen Görevlendirme / Tebliğ-Tebellüğ",
+    note: "Müdür onaylı görevlendirme yazısı",
+    roomScoped: false,
+  },
+  {
+    code: "r8",
+    title: "Dağıtım Doğrulama Raporu",
+    note: "Seed ve kısıt metrikleri; idare nüshası",
+    roomScoped: false,
+  },
+  {
+    code: "r5",
+    title: "Toplu Dağıtım Çizelgesi (Excel)",
+    note: "İdare çalışma kopyası; basılmaz",
+    roomScoped: false,
+  },
 ];
 
 export const examSessionApi = {

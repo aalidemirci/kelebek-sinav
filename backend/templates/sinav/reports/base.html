@@ -1,14 +1,31 @@
 {% comment %}
-SINAV EVRAKI ORTAK ŞABLONU (T8; Tur 238 — "Kurumsal Sade" tasarım standardı).
-Tüm R1-R9 çıktıları bunu extends eder. Renk + tipografi token'ları tek doğruluk
-kaynağından gelir: templates/print/_design.css (docs/rapor-tasarim-standardi.md).
-DejaVu Sans (tam Türkçe — kullanıcı kararı, Tur 228); nötr slate gri, ofis
-yazıcısı dostu (renkli dolgu YOK); altbilgi: üretim zamanı + Sayfa x/y + sınav adı.
+SINAV EVRAKI ORTAK ŞABLONU — "Kurumsal Sade" tasarım standardı.
+Tüm evrak çıktıları bunu extends eder. Renk + tipografi token'ları tek doğruluk
+kaynağından gelir: templates/print/_design.css.
+DejaVu Sans (tam Türkçe); nötr slate gri, ofis yazıcısı dostu (renkli dolgu
+YOK — bölüm barları ve tablo başlıkları NÖTR koyu gri dolgudur, gri tonlamalı
+lazerde birebir basar); altbilgi: üretim zamanı + Sayfa x/y + sınav adı.
 Resmî yazışma şablonu documents/base.html KASITLI extend edilmez — evrak
 anatomisi farklı (kompakt oturum bandı).
 ÖNEMLİ: text-transform:uppercase YOK — WeasyPrint Türkçe "i→I" tuzağı; büyük
 harfli başlıklar doğrudan büyük yazılır (documents/base.html emsali).
-Her .sheet bir sayfadır (salon/şube başına) ve _head.html bandıyla başlar.
+Her .sheet bir sayfadır (salon/şube/yaprak başına) ve _head.html bandıyla başlar.
+
+BİLEŞEN SÖZLÜĞÜ (evrakmotoru SAL-SNV form ailesinden uyarlandı — kullanıcı
+kararı: okulun mevcut basılı formlarıyla aynı anatomi):
+  .sec        bölüm barı — "A. SALON BİLGİLERİ" (koyu bant, beyaz metin)
+  .fields     etiket/değer künye tablosu
+  .rpt-table  veri tablosu (thead SAYFA BAŞINA YİNELENİR — kontrollü taşma)
+  .checks     kutu + metin kontrol listesi
+  .freebox    serbest metin (elle doldurulur) kutusu
+  .signs      2-3 sütunlu imza bloğu
+  .dayanak    mevzuat dayanağı + KVKK dipnotu
+
+TAŞMA DİSİPLİNİ (kullanıcı kuralı: 40 öğrenci bir sayfaya sığar, fazlası
+kontrolsüz taşmaz): thead display:table-header-group başlığı her sayfada
+yineler, tr break-inside:avoid satırı bölmez, imza/sayım blokları bütün hâlde
+taşar. Yoklama satır yüksekliği ÖĞRENCİ SAYISINA GÖRE kademelidir
+(.att-lg/.att-md/.att-sm — reports.attendance_density).
 {% endcomment %}<!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -32,56 +49,141 @@ Her .sheet bir sayfadır (salon/şube başına) ve _head.html bandıyla başlar.
       }
     }
     body { font-family: "DejaVu Sans", sans-serif; font-size: 9.5pt;
-           color: var(--pr-text); line-height: 1.3; margin: 0; }
+           color: var(--pr-text); line-height: 1.2; margin: 0; }
 
-    /* Sayfa birimi: salon/şube başına bir yaprak */
+    /* Sayfa birimi: salon/şube/yaprak başına bir yaprak */
     .sheet { page-break-after: always; }
     .sheet:last-child { page-break-after: avoid; }
 
-    /* Ortak üst bant (madde 7): okul + rapor adı + oturum bilgisi */
-    .rpt-head { text-align: center; margin-bottom: 6pt; }
+    /* ---- Ortak üst bant (madde 7): okul + belge adı + oturum bilgisi ---- */
+    .rpt-head { text-align: center; margin-bottom: 3pt; }
     .rpt-head .school { font-weight: bold; font-size: var(--pr-size-school);
                         color: var(--pr-ink); }
-    .rpt-head .title { font-weight: bold; font-size: 10.5pt; letter-spacing: 0.6pt;
+    .rpt-head .title { font-weight: bold; font-size: 11pt; letter-spacing: 0.6pt;
                        color: var(--pr-ink); margin-top: 2pt; }
     .rpt-head .session { font-size: var(--pr-size-meta); color: var(--pr-secondary);
-                         margin-top: 1pt; }
-    .rpt-head .scope { font-weight: bold; font-size: 10pt; color: var(--pr-ink);
-                       margin-top: 3pt; }
+                         margin-top: 1.5pt; }
     .rpt-rule { height: var(--pr-rule-strong); background: var(--pr-ink);
-                margin: 4pt 0 6pt; }
+                margin: 4pt 0 0; }
 
-    /* Veri tablosu — hairline slate (yazıcı dostu, kalite hissi) */
-    .rpt-table { width: 100%; border-collapse: collapse;
+    /* Künye şeridi — sol: kapsam, sağ: yaprağın rolü */
+    .rpt-scope { width: 100%; border-collapse: collapse; margin-bottom: 4pt; }
+    .rpt-scope td { padding: 2.5pt 0 0; font-size: 9.5pt; font-weight: bold;
+                    color: var(--pr-ink); vertical-align: baseline; }
+    .rpt-scope .right { text-align: right; font-weight: normal;
+                        font-size: var(--pr-size-meta); color: var(--pr-secondary); }
+
+    /* ---- Bölüm barı — evrakmotoru SAL-SNV deseni (koyu bant / beyaz metin) ---- */
+    .sec { background: var(--pr-bar); color: var(--pr-bar-text);
+           font-weight: bold; font-size: 9pt; letter-spacing: 0.3pt;
+           padding: 2pt 6pt; margin: 5pt 0 3pt;
+           break-after: avoid; page-break-after: avoid; }
+    .sec .hint { float: right; font-weight: normal; font-size: 7.5pt;
+                 color: var(--pr-bar-hint); }
+
+    /* ---- Künye tablosu (etiket / değer) ---- */
+    .fields { width: 100%; border-collapse: collapse; line-height: 1.15;
+              border: var(--pr-border-outer) solid var(--pr-ink);
+              font-size: var(--pr-size-table); }
+    .fields td { border: var(--pr-border) solid var(--pr-line); padding: 2pt 5pt;
+                 vertical-align: middle; }
+    .fields td.k { background: var(--pr-fill); font-weight: bold;
+                   color: var(--pr-label); white-space: nowrap; }
+    .fields tr { break-inside: avoid; page-break-inside: avoid; }
+    .fields .fill { height: 13pt; }
+
+    /* ---- Veri tablosu — hairline slate (yazıcı dostu, kalite hissi) ---- */
+    .rpt-table { width: 100%; border-collapse: collapse; line-height: 1.15;
                  font-size: var(--pr-size-table);
                  border: var(--pr-border-outer) solid var(--pr-ink); }
-    .rpt-table th { background: var(--pr-fill-head); color: var(--pr-ink);
-                    font-weight: bold; letter-spacing: 0.3pt;
-                    border: var(--pr-border) solid var(--pr-line);
-                    border-bottom: var(--pr-border-outer) solid var(--pr-ink);
-                    padding: 3.5pt 5pt; font-size: var(--pr-size-meta); }
+    /* Başlık HER SAYFADA yinelenir — 40'ı aşan liste başlıksız sayfa bırakmaz. */
+    .rpt-table thead { display: table-header-group; }
+    .rpt-table th { background: var(--pr-bar); color: var(--pr-bar-text);
+                    font-weight: bold; letter-spacing: 0.2pt;
+                    border: var(--pr-border) solid var(--pr-bar);
+                    padding: 3.5pt 5pt; font-size: var(--pr-size-meta);
+                    text-align: left; }
     .rpt-table td { border: var(--pr-border) solid var(--pr-line);
                     padding: 3pt 5pt; vertical-align: middle; }
     .rpt-table tr { break-inside: avoid; page-break-inside: avoid; }
-    .rpt-table .num { text-align: center; width: 9%; }
+    .rpt-table .num { text-align: center; }
     .rpt-table .center { text-align: center; }
+    .rpt-table th.num, .rpt-table th.center { text-align: center; }
 
-    /* Evrak sayım + görevli imza bloğu (R2/R2k) */
-    .tally { margin-top: 10pt; border: var(--pr-border-outer) solid var(--pr-ink);
-             padding: 6pt 8pt; font-size: var(--pr-size-table);
+    /* ---- Kontrol listesi (kutu + metin) ---- */
+    .checks { width: 100%; border-collapse: collapse; line-height: 1.15;
+              border: var(--pr-border-outer) solid var(--pr-ink);
+              font-size: var(--pr-size-table); }
+    .checks td { border: var(--pr-border) solid var(--pr-line);
+                 padding: 1.8pt 5pt; vertical-align: top; font-size: 8pt; }
+    .checks td.b { width: 15pt; text-align: center; }
+    .checks td.ref { width: 27%; font-size: 7.2pt; color: var(--pr-muted); }
+    .checks tr { break-inside: avoid; page-break-inside: avoid; }
+    /* İşaret kutusu satır kutusunu YÜKSELTMEMELİ — `vertical-align: middle`
+        ve satır ölçüsüne bağlı boyut (bkz. reports.list_row_metrics). */
+    .box { display: inline-block; width: 8pt; height: 8pt;
+           border: 0.8pt solid var(--pr-ink); vertical-align: middle; }
+
+    /* ---- Serbest metin kutusu (elle doldurulur) ---- */
+    .freebox { border: var(--pr-border-outer) solid var(--pr-ink);
+               padding: 2pt 6pt; break-inside: avoid; page-break-inside: avoid; }
+    .freebox .ln { border-bottom: var(--pr-rule-thin) dotted var(--pr-faint);
+                   height: 15pt; }
+    .freebox .ln:last-child { border-bottom: none; }
+
+    /* Satır içi elle doldurulan boşluk */
+    .blank { display: inline-block; min-width: 46pt;
+             border-bottom: 0.7pt solid var(--pr-ink); }
+
+    /* ---- İmza bloğu ---- */
+    .signs { width: 100%; border-collapse: collapse; margin-top: 8pt;
              break-inside: avoid; page-break-inside: avoid; }
-    .tally .row { margin: 3pt 0; }
-    .tally .blank { display: inline-block; min-width: 46pt;
-                    border-bottom: 0.7pt solid var(--pr-ink); }
-    .officer-grid { width: 100%; border-collapse: collapse; margin-top: 14pt;
-                    break-inside: avoid; page-break-inside: avoid; }
-    .officer-grid td { width: 50%; text-align: center; vertical-align: bottom;
-                       padding: 0 10pt; font-size: var(--pr-size-meta);
-                       color: var(--pr-secondary); }
-    .officer-grid .space { height: 26pt; }
-    .officer-grid .line { border-top: 0.7pt solid var(--pr-ink); margin: 0 6pt 3pt; }
+    .signs td { text-align: center; vertical-align: bottom; padding: 0 8pt;
+                font-size: var(--pr-size-meta); }
+    .signs .date { font-size: 8pt; color: var(--pr-muted); }
+    .signs .space { height: 20pt; }
+    .signs .line { border-top: 0.7pt solid var(--pr-ink); margin: 0 4pt 2.5pt; }
+    .signs .who { font-weight: bold; color: var(--pr-ink); font-size: 8.5pt; }
+    .signs .role { color: var(--pr-muted); font-size: 7.5pt; }
 
+    /* ---- Dayanak / KVKK dipnotu ---- */
+    .dayanak { margin-top: 6pt; font-size: 6.8pt; color: var(--pr-muted);
+               line-height: 1.25; break-inside: avoid; page-break-inside: avoid;
+               border-top: var(--pr-rule-thin) solid var(--pr-line-soft);
+               padding-top: 4pt; }
+    .dayanak b { color: var(--pr-secondary); }
+
+    .note { font-size: var(--pr-size-meta); color: var(--pr-secondary);
+            margin: 4pt 0; }
     .muted { color: var(--pr-muted); }
+
+    /* ---- Kroki (_kroki.html) — R1 ve boş salon planı ortak kullanır ----
+       Ölçüler `room.metrics`ten inline custom property olarak gelir; burada
+       yalnız yapı durur. Böylece geometri stili TEK yerde kalır. */
+    .kroki { width: 100%; border-collapse: separate; border-spacing: 2.5pt;
+             table-layout: fixed; margin-top: 1pt; }
+    .kroki > tr > td, .kroki td.slot { vertical-align: top; padding: 0; }
+    .kroki .cell-desk { border: var(--pr-border-outer) solid var(--pr-ink); }
+    .seat-row { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .seat-row td { border-left: var(--pr-border) solid var(--pr-line);
+                   padding: 0; vertical-align: top; }
+    /* Kroki kutusunun yüksekliği BURADA sabitlenir (blok kutu `height`e uyar;
+       tablo hücresi uymaz — uzun ad krokiyi taşırırdı). */
+    .seat-box { height: 30pt; overflow: hidden; padding: 1.5pt 2pt; }
+    .seat-row td:first-child { border-left: none; }
+    .seat-no { font-weight: bold; font-size: 7.5pt; color: var(--pr-ink); }
+    .seat-name { font-size: 6.8pt; line-height: 1.12; }
+    .seat-meta { font-size: 6.4pt; color: var(--pr-label); }
+    .seat-empty { color: var(--pr-faint); font-size: 6.8pt; font-style: italic; }
+    .cell-furniture { border: var(--pr-border-outer) solid var(--pr-secondary);
+                      background: var(--pr-fill-head); text-align: center;
+                      font-size: 6.6pt; font-weight: bold; color: var(--pr-label);
+                      height: 30pt; overflow: hidden; }
+    .cell-disabled { border: var(--pr-border) dashed var(--pr-faint);
+                     text-align: center; font-size: 6.2pt; color: var(--pr-muted);
+                     height: 30pt; overflow: hidden; }
+    .front-label { text-align: center; font-size: 7pt; color: var(--pr-secondary);
+                   letter-spacing: 1.6pt; margin-bottom: 2pt; }
   </style>
   {% block extra_style %}{% endblock %}
 </head>

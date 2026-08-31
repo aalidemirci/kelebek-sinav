@@ -1,34 +1,97 @@
 {% extends "sinav/reports/base.html" %}
-{% comment %}R4 — Şube Duyuru Listesi. Şube başına sayfa, okul no sırası:
-"hangi öğrenci → hangi salon, hangi koltuk". Sınıf panosuna asılır.{% endcomment %}
+{% comment %}R4 — ŞUBE SINAV DUYURUSU. Şube başına bir sayfa, okul no sırasında:
+"hangi öğrenci → hangi salon, hangi koltuk". Sınıf panosuna asılır; öğrenci
+okur, bu yüzden punto liste evrakından büyüktür ve salon dağılımı özeti en
+üsttedir (öğrenci önce "benim sınıfım nereye dağıldı"ya bakar).
+
+Ders sütunu YALNIZ şubenin birden fazla dersi varsa çıkar (`show_course`) —
+tek derste sütun yerine imza/koltuk alanı genişler.
+
+TAŞMA: satır yüksekliği `density` ile kademeli; 40 öğrenci tek sayfaya sığar,
+fazlası başlık yinelenerek akar (base.html taşma disiplini).{% endcomment %}
+{% block extra_style %}
+<style>
+  /* Satır ölçüsü SAYFA BÜTÇESİNDEN gelir (reports.list_row_metrics); değerler
+     yaprağa özel stil bloğuyla verilir — inline `style` içindeki CSS değişkeni
+     WeasyPrint'te çözülmüyor. */
+  /* Sütun genişlikleri BİLDİRİLDİĞİ gibi uygulansın: punto hesabı ad sütunu
+     genişliğine dayanır (reports._ANN_NAME_RATIO). Otomatik yerleşimde uzun
+     bir ders adı ad sütununu daraltıp satırı iki kata çıkarıyordu. */
+  .ann { table-layout: fixed; }
+  .ann td { line-height: 1.05; }
+  .ann th { padding: 3pt 4pt; font-size: 7.5pt; line-height: 1.05; }
+  .ann .name { font-weight: bold; }
+  .ann .room { font-weight: bold; }
+  .ann .seat { font-weight: bold; }
+  .ann tr.mark5 td { border-bottom: var(--pr-border-outer) solid var(--pr-secondary); }
+
+  /* Salon dağılımı özeti — duyurunun en çok okunan satırı. */
+  .spread { border: var(--pr-border-outer) solid var(--pr-ink); padding: 4pt 8pt;
+            margin-top: 1pt; break-inside: avoid; page-break-inside: avoid; }
+  .spread .lbl { font-size: 8pt; color: var(--pr-secondary); }
+  .spread .val { font-size: 11pt; font-weight: bold; color: var(--pr-ink);
+                 margin-top: 2pt; line-height: 1.35; }
+
+  .rules { margin-top: 6pt; border: var(--pr-border) solid var(--pr-line);
+           padding: 3pt 8pt; font-size: 7.8pt; color: var(--pr-secondary);
+           break-inside: avoid; page-break-inside: avoid; }
+  .rules b { color: var(--pr-ink); }
+  .rules div { margin: 1pt 0; }
+
+  /* Şube başına hesaplanan satır ölçüsü — BAŞLIKTA basılmak ZORUNDA. */
+  {% for sheet in sheets %}
+  .ann{{ forloop.counter }} td { font-size: {{ sheet.row.font_size }}pt;
+                                 padding: {{ sheet.row.padding }}pt 5pt; }
+  {% endfor %}
+</style>
+{% endblock %}
 {% block content %}
 {% for sheet in sheets %}
 <div class="sheet">
-  {% with scope_line="Şube: "|add:sheet.class_label %}
+  {% with scope_line="Şube: "|add:sheet.class_label scope_note="Sınıf panosuna asılır" %}
     {% include "sinav/reports/_head.html" %}
   {% endwith %}
-  <table class="rpt-table">
+
+  <div class="spread">
+    <div class="lbl">{{ sheet.class_label }} şubesi aşağıdaki salonlara dağıtılmıştır
+      ({{ sheet.rows|length }} öğrenci):</div>
+    <div class="val">{{ sheet.room_summary }}</div>
+  </div>
+
+  <div class="sec">ÖĞRENCİ — SINAVA GİRECEĞİ SALON VE KOLTUK
+    <span class="hint">Okul numarası sırasındadır.</span>
+  </div>
+  <table class="rpt-table ann ann{{ forloop.counter }}">
     <thead>
       <tr>
-        <th class="num">Okul No</th>
-        <th>Ad Soyad</th>
-        <th>Ders</th>
-        <th>Salon</th>
-        <th class="num">Koltuk No</th>
+        <th class="num" style="width: 10%;">Okul No</th>
+        <th style="width: {% if sheet.show_course %}33{% else %}55{% endif %}%;">Adı Soyadı</th>
+        {% if sheet.show_course %}<th style="width: 22%;">Ders</th>{% endif %}
+        <th class="center" style="width: 22%;">Salon</th>
+        <th class="num" style="width: 13%;">Koltuk</th>
       </tr>
     </thead>
     <tbody>
       {% for row in sheet.rows %}
-      <tr>
+      <tr{% if forloop.counter|divisibleby:5 and not forloop.last %} class="mark5"{% endif %}>
         <td class="num">{{ row.student_number }}</td>
-        <td>{{ row.full_name }}</td>
-        <td>{{ row.course_name }}</td>
-        <td class="center">{{ row.room_name }}</td>
-        <td class="num">{{ row.seat_no }}</td>
+        <td class="name">{{ row.full_name }}</td>
+        {% if sheet.show_course %}<td>{{ row.course_name }}</td>{% endif %}
+        <td class="center room">{{ row.room_name }}</td>
+        <td class="num seat">{{ row.seat_no }}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+
+  <div class="rules">
+    <div><b>Sınav saatinden en az 10 dakika önce</b> yukarıdaki salonda hazır bulununuz;
+      <b>koltuk numaranızın dışında bir yere oturmayınız.</b></div>
+    <div>Salona cep telefonu ve benzeri bilişim araçlarıyla girilmez; sıranızda yalnız
+      kalem ve silgi bulunur.</div>
+    <div>Sınava katılamayan öğrencinin mazereti <b>en geç 5 iş günü</b> içinde velisince
+      okul müdürlüğüne yazılı olarak bildirilir.</div>
+  </div>
 </div>
 {% endfor %}
 {% endblock %}

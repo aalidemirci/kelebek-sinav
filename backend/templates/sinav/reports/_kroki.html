@@ -1,0 +1,57 @@
+{% load l10n %}{% comment %}ORTAK KROKİ PARÇASI — R1 (salon sınav evrakı) ve boş
+salon yerleşim planı bunu paylaşır; geometri tek yerde kalır.
+
+Bağlam:
+  room         reports.build_room_kroki çıktısı (grid + col_width_pct + metrics),
+  kroki_names  True ise koltuklara ad/no/şube basılır; False ise yalnız koltuk no
+               (oturumdan bağımsız boş plan — kişisel veri İÇERMEZ).
+
+GEOMETRİ KURALI: çizim GRID kimliğinden — (desk_row, desk_col, slot);
+layout.Seat.x/y ASLA kullanılmaz (komşu sıra koordinatları çakışabilir).
+Satır 0 = ön cephe, üstte.
+
+ÖLÇÜ KURALI (kontrollü taşma): hücre yüksekliği ve punto `room.metrics`
+içinden gelir — reports.kroki_metrics() bunları salonun satır/sütun sayısına
+göre hesaplar, böylece çok sıralı bir salon bile ayrılan kutuya sığar ve kroki
+sayfayı taşırmaz. Kurallar `_kroki_style.html` ile BAŞLIKTA basılır (WeasyPrint
+gövdedeki `<style>`ı yok sayar); burada yalnız `k<id>` sınıfı taşınır.
+Değerler Python'da METİN olarak biçimlenir (TR locale ondalığı virgülle basar;
+`6,8pt` CSS'te sessizce yutulur — F25/T244 tuzağı).
+{% endcomment %}
+<div class="front-label">— ÖN CEPHE (tahta / öğretmen masası yönü) —</div>
+<table class="kroki k{{ kroki_id }}">
+  {% for grid_row in room.grid %}
+  <tr>
+    {% for cell in grid_row %}
+    {# Türkçe locale ondalığı virgülle basar — CSS yutulur; unlocalize şart (F25/T244 bulgusu). #}
+    <td style="width: {{ room.col_width_pct|unlocalize }}%;">
+      {% if cell.kind == "desk" %}
+      <table class="seat-row cell-desk"><tr>
+        {% for seat in cell.seats %}
+        <td>
+          <div class="seat-box">
+            <div class="seat-no">{{ seat.seat_no|default_if_none:"–" }}</div>
+            {% if kroki_names %}
+              {% if seat.empty %}
+              <div class="seat-empty">BOŞ</div>
+              {% else %}
+              <div class="seat-name">{{ seat.full_name }}</div>
+              {% if not room.metrics.compact %}
+              <div class="seat-meta">{{ seat.student_number }} · {{ seat.class_label }}</div>
+              {% endif %}
+              {% endif %}
+            {% endif %}
+          </div>
+        </td>
+        {% endfor %}
+      </tr></table>
+      {% elif cell.kind == "disabled_desk" %}
+      <div class="cell-disabled">KULLANIM DIŞI</div>
+      {% elif cell.kind == "furniture" %}
+      <div class="cell-furniture">{{ cell.label }}</div>
+      {% endif %}
+    </td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table>

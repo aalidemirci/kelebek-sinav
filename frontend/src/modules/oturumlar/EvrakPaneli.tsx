@@ -1,8 +1,10 @@
-// Evrak paneli (F4) — OYS RaporlarPaneli'nden UYARLANDI: R1-R5 + R7-R9 tek tek
-// indirme + "tümünü ZIP" (arşivden yeniden basım dahil). R6 yalnız gözetmen
-// ayarı açıkken listelenir (görevlendirme F7'de gelir — o güne dek backend
-// Türkçe hatayla reddeder); salon bazlı raporlar (R1/R2/R3/R7) salon
-// filtresiyle daraltılabilir. Durum kapısı backend'dedir; panel yalnız sunar.
+// Evrak paneli (F4) — tek tek indirme + "tümünü ZIP" (arşivden yeniden basım
+// dahil). 30.08.2026 sadeleştirmesinden sonra katalog altı satırdır: salon
+// evrakı (birleşik), şube duyurusu, ihlal tutanağı, gözetmen görevlendirme,
+// doğrulama raporu, Excel çizelge. Her satır ne işe yaradığını kendi altında
+// söyler. R6 yalnız gözetmen ayarı açıkken listelenir; salon bazlı evrak
+// (salon evrakı ve tutanak) salon filtresiyle daraltılabilir. Durum kapısı
+// backend'dedir; panel yalnız sunar.
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -55,7 +57,7 @@ export default function EvrakPaneli({ session }: { session: ExamSession }) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-3">
         <Select
-          label="Salon filtresi (R1 / R2 / R3 / R7)"
+          label="Salon filtresi (salon evrakı ve tutanak)"
           options={roomOptions}
           placeholder="Tüm salonlar"
           value={roomId}
@@ -78,14 +80,15 @@ export default function EvrakPaneli({ session }: { session: ExamSession }) {
             key={item.code}
             className="flex flex-wrap items-center gap-3 border-b border-outline-variant py-2"
           >
-            <span className="w-10 text-label-large uppercase text-on-surface-variant">
-              {item.code}
-            </span>
-            <span className="text-body-medium text-on-surface">{item.title}</span>
-            {item.roomScoped && roomId !== "" && (
-              <span className="text-body-small text-on-surface-variant">(salon filtreli)</span>
-            )}
-            <span className="ml-auto" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-body-medium text-on-surface">{item.title}</span>
+                {item.roomScoped && roomId !== "" && (
+                  <span className="text-body-small text-on-surface-variant">(salon filtreli)</span>
+                )}
+              </div>
+              <div className="text-body-small text-on-surface-variant">{item.note}</div>
+            </div>
             <Button
               variant="text"
               icon="download"

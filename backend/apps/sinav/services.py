@@ -1424,10 +1424,12 @@ def anonymize_expired_exam_archives(
 # ===========================================================================
 
 #: Geçerli rapor kodları (URL parçası; R10 = kitapçık, F5'te ayrı uç).
-REPORT_CODES: tuple[str, ...] = ("r1", "r2", "r2k", "r3", "r4", "r5", "r6", "r7", "r8", "r9")
+#: 30.08.2026 sadeleştirmesi: r2/r2k/r3/r9 KALDIRILDI — salon evrakı tek belgede
+#: birleşti (reports.py modül açıklaması). Kalan kodlar korundu.
+REPORT_CODES: tuple[str, ...] = ("r1", "r4", "r5", "r6", "r7", "r8")
 
-#: Salon filtresi yalnız salon bazlı çıktılarında anlamlı.
-_ROOM_SCOPED_CODES: frozenset[str] = frozenset({"r1", "r2", "r3", "r7"})
+#: Salon filtresi yalnız salon bazlı çıktılarda anlamlı.
+_ROOM_SCOPED_CODES: frozenset[str] = frozenset({"r1", "r7"})
 
 #: Evrak üretimine açık oturum durumları (ARŞİV dahil — yeniden basım).
 _REPORTABLE_STATUSES: tuple[str, ...] = (
@@ -1486,7 +1488,11 @@ def render_room_layout_pdf(room: ExamRoom) -> ReportFile:
             "generated_at": timezone.localtime().strftime("%d.%m.%Y %H:%M"),
             "exam_name": "",
         },
-        "room": reports.build_room_kroki(sheet),
+        "room": reports.build_room_kroki(
+            sheet,
+            box_height_px=reports.KROKI_BOX_LAYOUT_PX,
+            with_names=False,
+        ),
     }
     return ReportFile(
         filename=f"salon_yerlesim_plani_{room.pk}.pdf",
@@ -1552,7 +1558,7 @@ def _room_sheets(
 def render_session_report(
     session: ExamSession, code: str, *, room_id: int | None = None
 ) -> ReportFile:
-    """Oturum evrakını üretir (R1-R5 + R7-R9; senkron — çıktılar küçük).
+    """Oturum evrakını üretir (R1/R4-R8; senkron — çıktılar küçük).
 
     Ön koşul: dağıtım yapılmış olmalı (DAĞITILDI/ONAYLANDI/ARŞİV — arşivden
     yeniden basım açık). Hata metinlerinde öğrenci adı ASLA (KVKK kuralı).
@@ -1569,7 +1575,7 @@ def render_session_report(
     if room_id is not None:
         if code not in _ROOM_SCOPED_CODES:
             raise ValidationError(
-                "Salon filtresi yalnız salon bazlı raporlarda (R1/R2/R3) geçerli."
+                "Salon filtresi yalnız salon bazlı evrakta (R1 salon evrakı / R7 tutanak) geçerli."
             )
         if not ExamSessionRoom.objects.filter(session=session, room_id=room_id).exists():
             raise ValidationError("Salon bu oturumda tanımlı değil.")
@@ -1589,21 +1595,12 @@ def render_session_report(
 
     context: dict[str, object] = {"header": header, "title": title}
     if code == "r1":
-        template = "r1_kroki.html"
-        context["rooms"] = [
-            reports.build_room_kroki(sheet)
-            for sheet in _room_sheets(session, rows, room_id=room_id)
-        ]
-    elif code in ("r2", "r2k"):
-        template = "r2_attendance.html"
-        context["sheets"] = (
-            reports.build_room_attendance(rows)
-            if code == "r2"
-            else reports.build_section_attendance(rows)
+        # Birleşik salon evrakı: kroki + gözetmen işlemleri + yoklama/imza.
+        template = "r1_salon_evraki.html"
+        context["sheets"] = reports.build_room_documents(
+            _room_sheets(session, rows, room_id=room_id),
+            proctor_names=_proctor_names_by_room(session),
         )
-    elif code == "r3":
-        template = "r3_door.html"
-        context["sheets"] = reports.build_door_lists(rows)
     elif code == "r4":
         template = "r4_announcement.html"
         context["sheets"] = reports.build_announcements(rows)
@@ -1611,17 +1608,13 @@ def render_session_report(
         template = "r6_assignment.html"
         context["duty"] = reports.build_assignment_context(_proctor_rows(session))
     elif code == "r7":
-        template = "r7_envelope.html"
-        context["sheets"] = reports.build_envelope_sheets(rows)
-    elif code == "r8":
-        template = "r8_validation.html"
-        context["report"] = _validation_report_context(session, rows)
-    else:  # r9
-        # Tek tablo: öncesi/sonrası imzaları yan yana sütun (OYS Tur 240).
-        template = "r9_handover.html"
-        context["rows"] = reports.build_handover_rows(
+        template = "r7_tutanak.html"
+        context["sheets"] = reports.build_tutanak_sheets(
             rows, proctor_names=_proctor_names_by_room(session)
         )
+    else:  # r8
+        template = "r8_validation.html"
+        context["report"] = _validation_report_context(session, rows)
 
     return ReportFile(
         filename=f"{stem}_oturum_{session.pk}.pdf",
