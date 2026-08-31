@@ -1,9 +1,12 @@
 """MEB ders çizelgesi dosyası ayrıştırıcısı (K6, ADR-0016).
 
 V1 desteklenen format: **markdown tablo** (`data/ders-cizelgeleri/README.md`).
-Beklenen sütunlar: `| Ders | Seviyeler | Tür |`
+Beklenen sütunlar: `| Ders | Seviyeler | Tür | Sınav |`
 - Seviyeler: virgüllü liste ve/veya aralık — `9, 10` / `9-12` / `9, 11-12`
 - Tür: `ORTAK` veya `SECMELI` (Türkçe; dosya insan elinden çıkar)
+- Sınav: `YAZILI` / `UYGULAMA` / `YOK` — **isteğe bağlı 4. sütun**; yoksa ya da
+  boşsa `YAZILI` varsayılır. Üç sütunlu dosyalar (`cerceveler/*.md`) böylece
+  bozulmadan okunur.
 
 PDF/XLSX çizelgeler gerçek dosyalar temin edildiğinde eklenir (ADR-0016
 riskler). Hatalı satırlar sonucu durdurmaz; satır numarasıyla raporlanır.
@@ -13,13 +16,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from apps.dersler.models import CourseType
+from apps.dersler.models import CourseExamMode, CourseType
 from apps.dersler.services import CourseRow
 
 # Dosyadaki Türkçe tür etiketi (normalize edilmiş: büyük harf, Ç→C, İ→I) → enum.
 _TYPE_MAP: dict[str, str] = {
     "ORTAK": CourseType.COMMON,
     "SECMELI": CourseType.ELECTIVE,
+}
+
+# Sınav biçimi etiketi — AYNI normalize kalıbıyla ('Yazılı'.upper() → 'YAZILI',
+# ı→I zaten doğru; kalıp `_TYPE_MAP` ile birebir tutuluyor ki sonraki okuyucu
+# iki sütunu farklı sansın diye durup düşünmesin).
+_EXAM_MODE_MAP: dict[str, str] = {
+    "YAZILI": CourseExamMode.WRITTEN,
+    "UYGULAMA": CourseExamMode.PRACTICE,
+    "YOK": CourseExamMode.NONE,
 }
 
 
@@ -83,6 +95,8 @@ def parse_markdown_catalog(text: str, *, source_name: str = "") -> ParsedCatalog
             )
             continue
         name, levels_raw, type_raw = cells[0], cells[1], cells[2]
+        # 4. sütun isteğe bağlı — üç sütunlu eski çizelgeler aynen çalışır.
+        exam_raw = cells[3] if len(cells) > 3 else ""
         if not name:
             result.errors.append(f"{prefix}satır {line_no}: ders adı boş.")
             continue
@@ -97,7 +111,26 @@ def parse_markdown_catalog(text: str, *, source_name: str = "") -> ParsedCatalog
                 f"{prefix}satır {line_no}: bilinmeyen tür {type_raw!r} (ORTAK veya SECMELI bekleniyor)."
             )
             continue
-        result.rows.append(CourseRow(name=name, levels=levels, course_type=course_type))
+        # Boş hücre = "belirtilmemiş" → YAZILI. Dolu ama tanınmayan etiket
+        # sessizce YAZILI'ya düşmez: yazım hatası havuzu sessizce şişirirdi.
+        exam_mode: str = CourseExamMode.WRITTEN
+        if exam_raw:
+            eslesen = _EXAM_MODE_MAP.get(exam_raw.upper().replace("İ", "I").replace("Ç", "C"))
+            if eslesen is None:
+                result.errors.append(
+                    f"{prefix}satır {line_no}: bilinmeyen sınav biçimi {exam_raw!r} "
+                    "(YAZILI, UYGULAMA veya YOK bekleniyor)."
+                )
+                continue
+            exam_mode = eslesen
+        result.rows.append(
+            CourseRow(
+                name=name,
+                levels=levels,
+                course_type=course_type,
+                exam_mode=exam_mode,
+            )
+        )
     return result
 
 

@@ -24,6 +24,7 @@ from typing import Any
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import QuerySet
 from django.utils import timezone
 
 from apps.okul import selectors as okul_selectors
@@ -38,6 +39,7 @@ from apps.sinav.models import (
     ExamTrackItem,
     ExamTrackMark,
     ExamTrackMarkStatus,
+    ParticipantType,
 )
 
 # Varsayılan açıklama metni (PDF bunu basar; create sırasında kopyalanır).
@@ -171,9 +173,29 @@ def generate_default_calendars(*, school_year_id: int) -> list[ExamCalendar]:
                 footnote_text=DEFAULT_CALENDAR_FOOTNOTE,
             )
             # OYS D-P1: üretilen takvim havuzu DOLU gelir (yalnız round 1-2).
-            fill_calendar_pool(calendar)
+            # Tohumlama takvimi DÜŞÜREMEZ — `create_exam_calendar` ile aynı
+            # sertlik: katalog boşsa/seviye eşleşmezse hata yutulur ve idareci
+            # havuzu elle doldurur. İki yolun davranışı ayrışmamalı.
+            _seed_pool(calendar)
             created.append(calendar)
     return created
+
+
+def _seed_pool(calendar: ExamCalendar) -> None:
+    """Yeni takvimin havuzunu ZORUNLU derslerle tohumlar (round 1-2; hata yutulur).
+
+    Kendi savepoint'inde koşar: yutulan `ValidationError` dış işlemi kirletmez
+    (Django atomic bloğunda yakalanan hata, savepoint geri alınmadan devam
+    edilirse "broken transaction" üretirdi).
+    """
+    if calendar.round not in (1, 2):
+        return
+    try:
+        with transaction.atomic():
+            fill_calendar_pool(calendar)
+    except ValidationError:
+        # Tohumlama bir KOLAYLIKTIR; başarısızlığı takvim yaratmayı düşürmez.
+        return
 
 
 @transaction.atomic
@@ -185,6 +207,15 @@ def create_exam_calendar(
     end_date: date,
     name: str | None = None,
 ) -> ExamCalendar:
+    """Yeni sınav takvimi; 1. ve 2. turda havuz ZORUNLU derslerle tohumlanır.
+
+    Kullanıcı geri bildirimi (31.08.2026): idareci takvimi yaratır yaratmaz
+    zorunlu yazılı derslerin havuzda hazır olmasını bekliyor — tek tek ekleme
+    "çok uzun sürüyor". Tohumlama `_seed_pool` ile ve HATA YUTULARAK yapılır:
+    katalog boşsa ya da hiçbir seviye eşleşmiyorsa takvim yine yaratılır.
+    3. turda tohumlama YOKTUR (havuzu elle doldurulur — `fill_calendar_pool`
+    o turu zaten reddeder).
+    """
     semester = okul_selectors.get_school_term(semester_id)
     if semester is None:
         raise ValidationError({"semester_id": "Dönem bulunamadı."})
@@ -203,6 +234,7 @@ def create_exam_calendar(
         description_text=DEFAULT_CALENDAR_DESCRIPTION,
         footnote_text=DEFAULT_CALENDAR_FOOTNOTE,
     )
+    _seed_pool(created)
     return created
 
 
@@ -300,6 +332,62 @@ class PlacementResult:
     warnings: list[str] = field(default_factory=list)
 
 
+def _validate_entry_participants(
+    *, level: int, participant_type: str, section_ids: list[int] | None
+) -> tuple[str, list[int]]:
+    """Takvim girdisinin katılımcı kapsamını doğrular → (tip, temiz şube listesi).
+
+    Emsal `services._validate_participant_refs`, ama YÖN TERSTİR: oturum
+    dersinde seviye şubelerden TÜRETİLİR; takvim girdisinde `level` zorunlu
+    alandır ve `(takvim, ders, seviye, tür)` teklik anahtarının parçasıdır —
+    bu yüzden seviye GİRDİ, şubeler ona karşı denetlenir. Mesaj kalıbı oturum
+    tarafıyla aynı tutuldu (idareci aynı cümleyi iki ekranda görsün).
+
+    Canlılık denetimi bedavadır: `get_class_section` soft-delete süzgeçli
+    manager'dan okur, silinmiş şube `None` döner. Şube kimlikleri sıra
+    korunarak teklenir (`dict.fromkeys` — oturum tarafındaki desen).
+    KÜME KİMLİĞİ BURAYA GİRMEZ (CLAUDE.md §3): arayüz kümeyi somut pk
+    listesine açar; kayda yalnız şube pk'leri yazılır.
+    """
+    from apps.dersler.services import level_label
+
+    if participant_type not in ParticipantType.values:
+        raise ValidationError(
+            {"participant_type": f"Geçersiz katılımcı tipi: {participant_type!r}."}
+        )
+    if participant_type == ParticipantType.LEVEL:
+        # Seviye genelinde şube listesi ANLAMSIZDIR — sessizce temizlenir
+        # (tip değiştirilince eski seçim artık kalmasın).
+        return (ParticipantType.LEVEL, [])
+    clean: list[int] = []
+    for raw in section_ids or []:
+        try:
+            clean.append(int(raw))
+        except (TypeError, ValueError):
+            raise ValidationError({"section_ids": f"Geçersiz şube kimliği: {raw!r}."}) from None
+    if not clean:
+        raise ValidationError({"section_ids": "Şube bazlı atamada en az bir şube seçin."})
+    for sid in clean:
+        section = okul_selectors.get_class_section(sid)
+        if section is None:
+            raise ValidationError({"section_ids": f"Şube bulunamadı (id={sid})."})
+        if int(section.class_level) != int(level):
+            raise ValidationError(
+                {
+                    "section_ids": f"'{section.class_label}' şubesi {level_label(level)} "
+                    "seviyesinde değil; her seviye için ayrı girdi ekleyin."
+                }
+            )
+    return (ParticipantType.SECTIONS, list(dict.fromkeys(clean)))
+
+
+def participant_scope_label(participant_type: str, section_ids: list[int] | None) -> str:
+    """Kapsam rozeti metni — ızgara hücresi, havuz tablosu ve API AYNI metni basar."""
+    if participant_type == ParticipantType.SECTIONS:
+        return f"{len(section_ids or [])} şube"
+    return str(ParticipantType.LEVEL.label)
+
+
 @transaction.atomic
 def add_calendar_entry(
     *,
@@ -309,6 +397,8 @@ def add_calendar_entry(
     exam_kind: str = ExamKind.WRITTEN,
     is_butterfly: bool = True,
     authority: str = ExamAuthority.SCHOOL,
+    participant_type: str = ParticipantType.LEVEL,
+    section_ids: list[int] | None = None,
     note: str = "",
 ) -> ExamCalendarEntry:
     _ensure_draft(calendar)
@@ -331,6 +421,11 @@ def add_calendar_entry(
                 "okutulmuyor (havuz tanımı)."
             }
         )
+    # Kapsam doğrulaması ders+seviye uyumundan SONRA: "şube seviyede değil"
+    # hatası ancak seviyenin kendisi geçerliyken anlamlıdır.
+    ptype, sections = _validate_entry_participants(
+        level=level, participant_type=participant_type, section_ids=section_ids
+    )
     if ExamCalendarEntry.objects.filter(
         calendar=calendar, course_id=course_id, level=level, exam_kind=exam_kind
     ).exists():
@@ -342,6 +437,8 @@ def add_calendar_entry(
         exam_kind=exam_kind,
         is_butterfly=is_butterfly,
         authority=authority,
+        participant_type=ptype,
+        section_ids=sections,
         note=note.strip(),
     )
     return entry
@@ -358,15 +455,27 @@ def _validation_text(exc: ValidationError) -> str:
 
 @transaction.atomic
 def fill_calendar_pool(calendar: ExamCalendar) -> dict[str, Any]:
-    """Havuzu okulda okutulabilen derslerle doldurur (OYS Tur 647 / ADR-0044 k. 12).
+    """Havuzu ZORUNLU + YAZILI derslerle doldurur (OYS Tur 647 / ADR-0044 k. 12).
 
     KS sapması (B6/B8): OYS kaynağı canlı ders programıydı; KS'de kaynak
     `dersler.selectors.taught_course_levels` — aktif katalog × (ders seviyeleri
     ∩ okul seviyeleri ∩ öğrencisi olan seviyeler). İdempotent: var olan
     (ders, seviye, YAZILI) `existed`'a düşer; reddedilen çift SESSİZCE
     DÜŞÜRÜLMEZ — `skipped`'a nedeniyle yazılır. Round 3 havuzu ELLE doldurulur.
+
+    SAPMA (31.08.2026 kullanıcı geri bildirimi): kaynak artık kataloğun
+    TAMAMI DEĞİL, yalnız ZORUNLU (`CourseType.COMMON`) ve YAZILI
+    (`CourseExamMode.WRITTEN`) derslerdir. Anadolu Lisesi kataloğunda 19 ortak
+    + 45 seçmeli satır seviyelere açılınca ~175 havuz girdisi oluşuyor, idareci
+    gerçekte sınav yapılacak ~30 tanesi kalana dek satırları tek tek siliyordu.
+    Seçmeli dersler artık `elective_pool_options` + `add_calendar_entries_bulk`
+    ile SEÇİLEREK eklenir; uygulama sınavı yapılan (Beden/Görsel/Müzik/Spor)
+    ve sınavı olmayan (Rehberlik) dersler ise `exam_mode` sayesinde havuza hiç
+    girmez. Kenar durumlar (uygulama sınavı, kelebek-değil, üst makam sınavı)
+    elle ekleme formunda durur. Dönüş sözlüğünün ŞEKLİ DEĞİŞMEDİ.
     """
     from apps.dersler import selectors as ders_selectors
+    from apps.dersler.models import CourseExamMode, CourseType
 
     _ensure_draft(calendar)
     if calendar.round == 3:
@@ -374,7 +483,11 @@ def fill_calendar_pool(calendar: ExamCalendar) -> dict[str, Any]:
             "3. sınav takviminin havuzu elle doldurulur — otomatik doldurma yalnız "
             "1. ve 2. ortak sınav takvimlerinde geçerlidir."
         )
-    pairs = ders_selectors.taught_course_levels(calendar.semester.school_year_id)
+    pairs = ders_selectors.taught_course_levels(
+        calendar.semester.school_year_id,
+        course_types=[CourseType.COMMON],
+        exam_modes=[CourseExamMode.WRITTEN],
+    )
     live_pairs = set(
         ExamCalendarEntry.objects.filter(calendar=calendar, exam_kind=ExamKind.WRITTEN).values_list(
             "course_id", "level"
@@ -404,6 +517,124 @@ def fill_calendar_pool(calendar: ExamCalendar) -> dict[str, Any]:
     }
 
 
+def _bulk_item_int(item: dict[str, Any], key: str) -> int | None:
+    """Toplu ekleme kaleminden tam sayı alan (bozuksa None — kalem skipped'a düşer)."""
+    try:
+        return int(item[key])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+@transaction.atomic
+def add_calendar_entries_bulk(
+    calendar: ExamCalendar, items: list[dict[str, Any]]
+) -> dict[str, list[str]]:
+    """Havuza TOPLU girdi ekler (seçmeli ders seçim diyaloğunun tek çağrısı).
+
+    Kalem şekli: `{"course_id", "level", "participant_type", "section_ids",
+    "exam_kind", "is_butterfly", "authority"}` — `course_id` ve `level` dışı
+    hepsi isteğe bağlıdır (varsayılanlar `add_calendar_entry` ile aynı).
+
+    İdempotent: havuzda ZATEN OLAN (ders, seviye, tür) `existed`'a düşer, hata
+    üretmez — diyalog yeniden kaydedilince kullanıcı hata görmemeli. Her kalem
+    `add_calendar_entry`'nin İÇ İÇE ATOMIC'i (savepoint) içinde koşar: bir
+    kalemin reddi koşunun kalanını geri almaz. Reddedilen kalem SESSİZCE
+    DÜŞMEZ — `skipped`'a nedeniyle yazılır (`fill_calendar_pool` emsali) ve
+    arayüz sonucu snackbar'da özetler.
+    """
+    from apps.dersler import selectors as ders_selectors
+
+    _ensure_draft(calendar)
+    created: list[str] = []
+    existed: list[str] = []
+    skipped: list[str] = []
+    for item in items:
+        course_id = _bulk_item_int(item, "course_id")
+        level = _bulk_item_int(item, "level")
+        if course_id is None or level is None:
+            skipped.append(f"{item!r} (ders ve seviye zorunlu)")
+            continue
+        exam_kind = str(item.get("exam_kind") or ExamKind.WRITTEN)
+        course = ders_selectors.get_course(course_id, active_only=True)
+        # Etiket ders adından gelir; ders yoksa kimlikle yazılır ki kullanıcı
+        # hangi kalemin düştüğünü görebilsin.
+        label = (
+            f"{course.name} — {_level_display(level)}"
+            if course is not None
+            else f"Ders #{course_id} — {_level_display(level)}"
+        )
+        if ExamCalendarEntry.objects.filter(
+            calendar=calendar, course_id=course_id, level=level, exam_kind=exam_kind
+        ).exists():
+            existed.append(label)
+            continue
+        try:
+            add_calendar_entry(
+                calendar=calendar,
+                course_id=course_id,
+                level=level,
+                exam_kind=exam_kind,
+                is_butterfly=bool(item.get("is_butterfly", True)),
+                authority=str(item.get("authority") or ExamAuthority.SCHOOL),
+                participant_type=str(item.get("participant_type") or ParticipantType.LEVEL),
+                section_ids=item.get("section_ids"),
+                note=str(item.get("note") or ""),
+            )
+        except ValidationError as exc:
+            skipped.append(f"{label} ({_validation_text(exc)})")
+            continue
+        created.append(label)
+    return {"created": created, "existed": existed, "skipped": skipped}
+
+
+def elective_pool_options(calendar: ExamCalendar) -> list[dict[str, Any]]:
+    """Seviye bazında seçilebilir SEÇMELİ (yazılı) dersler + havuzda mı bilgisi.
+
+    `fill_calendar_pool` artık yalnız zorunlu dersleri basıyor; seçmeli dersler
+    bu listeden SEÇİLEREK eklenir. Kaynak yine `taught_course_levels` (aktif
+    katalog × okulda öğrencisi olan seviyeler), yalnız `ELECTIVE` + `WRITTEN`
+    süzgeciyle. `in_pool` o takvimde CANLI YAZILI girdi olup olmadığıdır —
+    diyalog o dersi işaretli + kilitli gösterir.
+
+    Ders adları TÜRK ALFABESİ sırasındadır: `taught_course_levels` DB'den
+    `order_by("name")` ile gelir ve SQLite karşılaştırması BINARY'dir
+    (Ç/Ğ/İ/Ö/Ş/Ü 'Z'den sonraya düşer) — sıralama bu yüzden Python'da
+    (`exam_rooms_sorted` emsali). Seviye görünüm etiketi ızgarayla AYNI
+    yardımcıdan (`_level_display`) gelir.
+    """
+    from apps.dersler import selectors as ders_selectors
+    from apps.dersler.models import CourseExamMode, CourseType
+    from apps.okul.normalize import tr_sort_key
+
+    pairs = ders_selectors.taught_course_levels(
+        calendar.semester.school_year_id,
+        course_types=[CourseType.ELECTIVE],
+        exam_modes=[CourseExamMode.WRITTEN],
+    )
+    live_pairs = set(
+        ExamCalendarEntry.objects.filter(calendar=calendar, exam_kind=ExamKind.WRITTEN).values_list(
+            "course_id", "level"
+        )
+    )
+    by_level: dict[int, list[dict[str, Any]]] = {}
+    for pair in pairs:
+        by_level.setdefault(pair.level, []).append(
+            {
+                "id": pair.course_id,
+                "name": pair.course_name,
+                "in_pool": (pair.course_id, pair.level) in live_pairs,
+            }
+        )
+    return [
+        {
+            "value": level,
+            "display_label": _level_display(level),
+            "courses": sorted(courses, key=lambda c: tr_sort_key(str(c["name"]))),
+        }
+        for level, courses in sorted(by_level.items())
+    ]
+
+
 @transaction.atomic
 def update_calendar_entry(
     entry: ExamCalendarEntry,
@@ -411,6 +642,8 @@ def update_calendar_entry(
     is_butterfly: bool | None = None,
     exam_kind: str | None = None,
     authority: str | None = None,
+    participant_type: str | None = None,
+    section_ids: list[int] | None = None,
     note: str | None = None,
 ) -> ExamCalendarEntry:
     _ensure_draft(entry.calendar)
@@ -438,6 +671,17 @@ def update_calendar_entry(
         if authority not in ExamAuthority.values:
             raise ValidationError({"authority": "Geçersiz hazırlayan makam."})
         entry.authority = authority
+    # Kapsam ÇİFTİ birlikte doğrulanır: tip SECTIONS'a çevrilirken şube listesi
+    # zorunlu olur, LEVEL'e dönerken eski liste temizlenir (services.py
+    # `update_session_course`'un `fields.get(..., mevcut)` deseni).
+    if participant_type is not None or section_ids is not None:
+        entry.participant_type, entry.section_ids = _validate_entry_participants(
+            level=entry.level,
+            participant_type=(
+                participant_type if participant_type is not None else entry.participant_type
+            ),
+            section_ids=(section_ids if section_ids is not None else list(entry.section_ids or [])),
+        )
     if note is not None:
         entry.note = note.strip()
     entry.save()
@@ -572,6 +816,25 @@ def _period_start_time(period_no: int) -> time | None:
     return None
 
 
+def _live_section_ids(entry: ExamCalendarEntry) -> tuple[list[int], list[int]]:
+    """Girdinin şube kapsamını canlı/kayıp diye ayırır → (canlı pk'ler, kayıp pk'ler).
+
+    `section_ids` bir JSON listesidir; şube soft-silinince ne FK koruması ne de
+    kayda yansıyan bir temizlik vardır (CLAUDE.md: soft-delete ileri-FK'da
+    süzmez). `get_class_section` soft-delete süzgeçli manager'dan okur, silinmiş
+    şube `None` döner — kayıp pk'ler ÇAĞIRANA bildirilir, sessizce yutulmaz.
+    """
+    canli: list[int] = []
+    kayip: list[int] = []
+    for raw in entry.section_ids or []:
+        sid = int(raw)
+        if okul_selectors.get_class_section(sid) is None:
+            kayip.append(sid)
+        else:
+            canli.append(sid)
+    return canli, kayip
+
+
 @transaction.atomic
 def create_session_from_slot(calendar: ExamCalendar, *, on_date: date, period_no: int) -> Any:
     """Onaylı takvim slotundan (tarih+ders saati) TASLAK kelebek ExamSession üretir.
@@ -600,6 +863,33 @@ def create_session_from_slot(calendar: ExamCalendar, *, on_date: date, period_no
             "Bu slotta oturum üretilecek (kelebek) girdi yok — hepsi zaten oturumlu."
         )
 
+    # Kapsamı SİLİNMİŞ şubeye bakan girdi slotu KİLİTLEMEZ (31.08.2026 denetimi).
+    # Şube pk'si JSON listede durur; şube soft-silinince FK koruması diye bir şey
+    # yoktur ve onaylı takvimde girdi artık düzenlenemez (`_ensure_draft`) —
+    # eskiden `add_session_course` "Şube bulunamadı (id=…)" atıp SLOTUN TAMAMINI
+    # üretilemez yapıyordu (OYS Tur 644'ün kapattığı hata sınıfının onay sonrası
+    # nüksü). Emsal `participants._resolve_sections` / `services._remap_sections`:
+    # kayıp şube ATLANIR, kalanla devam edilir. Kapsamı tümüyle silinmiş girdi
+    # oturuma alınmaz ve oturuma BAĞLANMAZ (şube geri açılınca yeniden üretilir);
+    # sessiz düşmesin diye `calendar_validation` bunu kalıcı uyarı olarak basar.
+    usable: list[tuple[ExamCalendarEntry, list[int] | None]] = []
+    kapsamsiz: list[str] = []
+    for entry in candidates:
+        if entry.participant_type != ParticipantType.SECTIONS:
+            usable.append((entry, None))
+            continue
+        canli, _kayip = _live_section_ids(entry)
+        if not canli:
+            kapsamsiz.append(f"{entry.course.name} — {_level_display(entry.level)}")
+            continue
+        usable.append((entry, canli))
+    if not usable:
+        raise ValidationError(
+            "Bu slottaki girdilerin şube kapsamı silinmiş şubelere bakıyor "
+            f"({', '.join(kapsamsiz)}) — şubeyi yeniden tanımlayın ya da takvimi "
+            "taslağa alıp kapsamı düzeltin."
+        )
+
     start_time = _period_start_time(period_no) or time(8, 0)
     # OYS Tur 644: birleşik ad model sınırını aşarsa takvim-adı parçası kırpılır.
     suffix = f" — {_tr_date(on_date)} {period_no}. Ders"
@@ -614,19 +904,33 @@ def create_session_from_slot(calendar: ExamCalendar, *, on_date: date, period_no
         term_id=calendar.semester_id,
     )
     levels: set[int] = set()
-    for entry in candidates:
+    for entry, sections in usable:
+        # Katılımcı KAPSAMI takvimden oturuma AYNEN taşınır (eskiden "LEVEL"
+        # sabitti): seçmeli ders havuzda şube şube seçilmişse üretilen oturum
+        # dersi de yalnız o şubeleri kapsar, yoksa idareci aynı seçimi her slot
+        # üretiminde yeniden yapardı. `sections` LEVEL kapsamda None'dır —
+        # `add_session_course` o dalda zaten [] yazar.
         services.add_session_course(
-            session, course_id=entry.course_id, participant_type="LEVEL", level=entry.level
+            session,
+            course_id=entry.course_id,
+            participant_type=entry.participant_type,
+            level=entry.level,
+            section_ids=sections,
         )
         levels.add(entry.level)
 
     # Salon ön seçimi: katılımcı seviyelerin şube derslikleri (F3 selector'ı).
+    # ŞUBE kapsamlı girdide de seviyenin TÜM şube derslikleri ön-seçilir —
+    # bilinçli karar (31.08.2026): ön seçim bir kolaylıktır, sihirbazda elle
+    # daraltılır; kapsama göre daraltmak aynı slotta seviye geneli BAŞKA bir
+    # ders varsa onun salonlarını düşürürdü.
     rooms = selectors.section_rooms_for_levels(levels)
     if rooms:
         services.set_session_rooms(session, [{"room_id": r.pk} for r in rooms])
 
-    # Girdileri oturuma bağla.
-    ExamCalendarEntry.objects.filter(pk__in=[e.pk for e in candidates]).update(session=session)
+    # Girdileri oturuma bağla (kapsamı silinmiş girdi BAĞLANMAZ — düzeltilince
+    # aynı slottan yeniden üretilebilsin).
+    ExamCalendarEntry.objects.filter(pk__in=[e.pk for e, _ in usable]).update(session=session)
     return session
 
 
@@ -641,6 +945,23 @@ def calendar_validation(calendar: ExamCalendar) -> dict[str, list[str]]:
     warnings: list[str] = []
     periods = _bell_periods()
     valid_period_nos = {int(p["no"]) for p in periods}
+
+    # Kapsamı silinmiş şubeye bakan girdi: yerleştirilmiş olsun ya da olmasın
+    # uyarılır. Kaynağı önizleme DEĞİL doğrulamadır, çünkü önizlemenin uyarı
+    # kanalı yok — `_section_scope_groups` kayıp şubeyi atlayıp sayıyı sessizce
+    # küçültür, idareci "0 öğrenci"yi ancak burada görebilir. Onay SONRASI
+    # silinen şube oturum üretiminden düşürüldüğü için (bkz.
+    # `create_session_from_slot`) tek görünür iz bu satırdır.
+    for entry in ExamCalendarEntry.objects.filter(
+        calendar=calendar, participant_type=ParticipantType.SECTIONS
+    ).select_related("course"):
+        _, kayip = _live_section_ids(entry)
+        if kayip:
+            warnings.append(
+                f"{entry.course.name} — {_level_display(entry.level)}: kapsamdaki "
+                f"{len(kayip)} şube silinmiş (id={', '.join(str(s) for s in kayip)}); "
+                "kapsamı düzeltin, o şubeler sınava alınmaz."
+            )
 
     placed = ExamCalendarEntry.objects.filter(calendar=calendar, placed_date__isnull=False)
     # Seviye + gün başına ders listesi (öğrenci-bazlı yük için).
@@ -683,11 +1004,18 @@ def calendar_validation(calendar: ExamCalendar) -> dict[str, list[str]]:
 
 
 def _level_display(level: int) -> str:
-    """Seviye görüntü metni: '9. sınıf' / 'Hazırlık' (etiket tutarlılığı)."""
+    """Seviye görüntü metni: '9. Sınıf' / 'Hazırlık' — TEK KAYNAK.
+
+    Havuz etiketleri, doğrulama uyarıları, seçmeli seçim listesi ve ızgara
+    sütun başlığı AYNI metni basmak zorundadır. `level_label` zaten
+    "9. Sınıf"/"Hazırlık" üretiyor; buradaki eski `f"{label}. sınıf"` dalı ÖLÜ
+    KODDU (label hiçbir zaman salt rakam değil) ve `calendar_grid` aynı sonucu
+    AYRI bir inline ifadeyle türetiyordu — iki kaynak sürüklenmesin diye ikisi
+    de buraya bağlandı (çıktı birebir aynı kaldı).
+    """
     from apps.dersler.services import level_label
 
-    label = level_label(level)
-    return f"{label}. sınıf" if label.isdigit() else label
+    return level_label(level)
 
 
 def _daily_exam_load(
@@ -700,6 +1028,14 @@ def _daily_exam_load(
     ADR-0044 karar 13; risk #4: GEVŞETİLEMEZ). KS v1'de ders kayıt verisi hiç
     olmadığından `course_level_student_ids` hep boş döner → yük fiilen o günkü
     ders sayısıdır; algoritma OYS ile birebir korunur (veri gelirse dolar).
+
+    DEĞİŞMEZ — takvim girdisine ŞUBE KAPSAMI (`section_ids`) gelmesi bu hesabı
+    GEVŞETMEZ: kapsam verisi "hangi şubeler sınava girer"i söyler, "hangi
+    ÖĞRENCİ o derse kayıtlı"yı değil. Seçmeli dersin kapsamı 9/A ile 9/B olsa
+    bile o şubelerdeki her öğrencinin dersi seçtiği bilinmez; yükü şube
+    kesişimine indirmek, aynı gün üç sınava giren öğrenciyi görünmez kılardı.
+    Ders kayıt verisi geldiğinde dolacak yer `course_level_student_ids`'tir —
+    burası değil (ADR-0044 karar 13, risk #4).
     """
     from apps.dersler import selectors as ders_selectors
 
@@ -726,6 +1062,44 @@ def _daily_exam_load(
     return (max_specific + full_cover, affected)
 
 
+def _section_student_count(class_level: int, class_section: str) -> int:
+    """Şubedeki AKTİF öğrenci SAYISI — okul köprüsü üzerinden, yalnız COUNT.
+
+    `student_list` arama verilmediğinde QuerySet döndürür; `.count()` saf bir
+    SQL COUNT'tur, roster belleğe alınmaz (veri minimizasyonu — şifreli ad
+    alanları hiç çözülmez). `list` dalı yalnız arama sürümü içindir, buraya
+    düşmez; mypy için yine de karşılanır.
+    """
+    rows = okul_selectors.student_list(
+        class_level=class_level, class_section=class_section, only_active=True
+    )
+    return rows.count() if isinstance(rows, QuerySet) else len(rows)
+
+
+def _section_scope_groups(entry: ExamCalendarEntry) -> list[tuple[str, int]] | None:
+    """ŞUBE kapsamlı girdinin (etiket, sayı) kırılımı; kapsam yoksa None.
+
+    Ders kayıt verisi HÂLÂ YOK (`course_level_student_ids` boş döner), ama
+    kapsam artık girdinin KENDİ şube listesinde duruyor — önizleme onu sayar.
+    Silinmiş/bulunamayan şube atlanır: `get_class_section` soft-delete
+    süzgeçlidir ve önizlemenin uyarı kanalı yoktur (dipnot sayıyı gösterir).
+    """
+    if entry.participant_type != ParticipantType.SECTIONS or not entry.section_ids:
+        return None
+    groups: list[tuple[str, int]] = []
+    for sid in entry.section_ids:
+        section = okul_selectors.get_class_section(int(sid))
+        if section is None:
+            continue
+        groups.append(
+            (
+                section.class_label,
+                _section_student_count(section.class_level, section.class_section),
+            )
+        )
+    return groups
+
+
 def entry_participant_preview(calendar: ExamCalendar) -> dict[int, dict[str, Any]]:
     """entry_id → {student_count, groups:[label], whole} (ızgara dipnotu)."""
     from apps.dersler import selectors as ders_selectors
@@ -733,6 +1107,16 @@ def entry_participant_preview(calendar: ExamCalendar) -> dict[int, dict[str, Any
     on_date = calendar.start_date
     result: dict[int, dict[str, Any]] = {}
     for entry in ExamCalendarEntry.objects.filter(calendar=calendar).select_related("course"):
+        sections = _section_scope_groups(entry)
+        if sections is not None:
+            # ŞUBE kapsamı: sayım girdinin şube listesinden gelir; `whole`
+            # False'tur — "seviyenin tamamı" DEĞİL, seçilen şubelerdir.
+            result[entry.pk] = {
+                "student_count": sum(n for _, n in sections),
+                "whole": False,
+                "groups": [f"{label} ({n})" for label, n in sections],
+            }
+            continue
         groups = ders_selectors.course_level_coverage(
             course_id=entry.course_id,
             level=entry.level,
@@ -773,11 +1157,10 @@ def calendar_grid(calendar: ExamCalendar) -> dict[str, Any]:
         {
             "value": o["value"],
             "label": o["label"],
-            # Sütun başlığı için hazır görüntü etiketi — sayısal etikete
-            # ". Sınıf" eklenir, metin etiket ("Hazırlık") olduğu gibi kalır.
-            "display_label": (
-                f"{o['label']}. Sınıf" if str(o["label"]).isdigit() else str(o["label"])
-            ),
+            # Sütun başlığı için hazır görüntü etiketi — havuz etiketleriyle
+            # AYNI yardımcıdan ("9. Sınıf" / "Hazırlık"); ayrı inline ifade
+            # iki kaynağın sürüklenmesine yol açıyordu.
+            "display_label": _level_display(int(o["value"])),
             "student_count": roster_counts.get(o["value"], 0),
         }
         for o in level_opts
@@ -807,6 +1190,11 @@ def calendar_grid(calendar: ExamCalendar) -> dict[str, Any]:
             "exam_kind": e.exam_kind,
             "is_butterfly": e.is_butterfly,
             "authority": e.authority,
+            # Hücre anahtarı biçimi SABİTTİR (CLAUDE.md §3); sözlüğe alan
+            # EKLENEBİLİR — havuz tablosu ve ızgara kapsamı buradan okur.
+            "participant_type": e.participant_type,
+            "section_ids": list(e.section_ids or []),
+            "participant_label": participant_scope_label(e.participant_type, e.section_ids),
             "session_id": e.session_id,
             "note": e.note,
         }

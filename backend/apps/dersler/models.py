@@ -27,6 +27,21 @@ class CourseType(models.TextChoices):
     ELECTIVE = "ELECTIVE", "Seçmeli"
 
 
+class CourseExamMode(models.TextChoices):
+    """Dersin sınav biçimi — havuz doldurmanın SÜZGECİ.
+
+    Ortak sınav takvimi yalnız YAZILI dersler üzerine kurulur: uygulama sınavı
+    yapılan dersler (Beden Eğitimi, Görsel Sanatlar/Müzik, Spor/Sanat Eğitimi)
+    kelebek düzeninde salon/sıra planı gerektirmez, sınavı hiç olmayan ders
+    (Rehberlik ve Yönlendirme) ise nota dönmez. İkisi de havuza OTOMATİK
+    girmez; idareci kenar durumda (zorunlu hâl) elle ekleyebilir.
+    """
+
+    WRITTEN = "WRITTEN", "Yazılı"
+    PRACTICE = "PRACTICE", "Uygulama"
+    NONE = "NONE", "Sınav yok"
+
+
 class CourseSource(models.TextChoices):
     MEB_CATALOG = "MEB_CATALOG", "MEB çizelgesi"
     MANUAL = "MANUAL", "Elle giriş"
@@ -55,6 +70,16 @@ class Course(BaseModel):
         max_length=10,
         choices=CourseType.choices,
         default=CourseType.COMMON,
+    )
+    exam_mode = models.CharField(
+        "sınav biçimi",
+        max_length=10,
+        choices=CourseExamMode.choices,
+        default=CourseExamMode.WRITTEN,
+        help_text=(
+            "Takvim havuzunun otomatik doldurulması yalnız 'Yazılı' dersleri alır; "
+            "'Uygulama' ve 'Sınav yok' dersleri gerekirse elle eklenir."
+        ),
     )
     source = models.CharField(
         "kaynak",

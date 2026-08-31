@@ -85,6 +85,16 @@
   gelir. Silme her yerde soft olduğundan `on_delete=PROTECT` de hiç
   tetiklenmez. Evrağa ad basan her yol `deleted_at`'i ELLE denetler
   (emsal `services_calendar._chair_name`).
+- **`Course.exam_mode` mevcut kurulumlara VERİ GÖÇÜYLE gelir:**
+  `ensure_meb_catalog` bir tek `MEB_CATALOG` kaydı varsa **hiçbir dosyayı
+  okumadan** döner (`source=MEB_CATALOG` erken dönüşü) — yani çizelgeye "Sınav"
+  sütunu eklemek yalnız sıfırdan kurulan makineleri etkiler. Dolu kurulumları
+  ada göre normalize eşleştiren data migration sınıflar; geri alma `noop`
+  (idarecinin elle verdiği değer silinmesin). Göçteki historical model
+  soft-delete SÜZMEZ (`use_in_migrations` kurulu değil) — silinmiş kayıt da
+  sınıflanır, bu bilinçlidir. İki alanı karıştırma: `exam_mode` çizelge
+  verisidir, import'ta EZİLİR (`levels`/`course_type` sınıfı); `is_active`
+  idari karardır ve import'ta bilinçle KORUNUR.
 - **SQLite:** `levels__contains` yok (Python süzme); yedek daima
   `Connection.backup()` (dosya kopyalama WAL'de yasak).
 - **Kimlik sabitleri:** `KS_*` env, `ks_oturum`, `X-KS-Token`, `.ksbak`,
@@ -114,6 +124,25 @@
   uzaklığı). İkincil hiçbir koşulda ihlal sayısını artıramaz.
 - **Kümeler seçim aracıdır:** şube/derslik kümesi kimliği HİÇBİR oturum
   kaydına yazılmaz; sihirbaz kümeyi somut pk listesine açar.
+- **Takvim girdisi katılımcı kapsamı LEVEL/SECTIONS'tır** (kümeler kuralının
+  takvim ayağı): `ExamCalendarEntry.participant_type` + `section_ids` —
+  ÜÇÜNCÜ TİP YOK, şube kümesi kimliği girdiye YAZILMAZ (arayüz kümeyi somut
+  şube pk listesine açar). `level` zorunlu ve teklik anahtarının parçası
+  olduğundan yön oturum tarafının TERSİDİR: seviye verilir, şubeler ona karşı
+  denetlenir (hepsi o seviyeye ait ve canlı olmalı). Slottan oturum üretilirken
+  kapsam olduğu gibi `ExamSessionCourse`'a taşınır — "LEVEL" sabiti yazılmaz.
+  Kapsamdaki şube SONRADAN silinebilir (JSON liste, FK koruması yok; onaylı
+  takvimde girdi de düzenlenemez): `create_session_from_slot` kayıp şubeyi
+  ATLAR, kapsamı tümüyle silinmiş girdiyi oturuma almaz/BAĞLAMAZ ve slotun
+  kalanını üretir — kilitlemek OYS Tur 644'ün kapattığı hata sınıfını geri
+  getirirdi. Sessiz düşmenin panzehiri `calendar_validation` uyarısıdır.
+- **Havuz otomatik doldurması dar kapsamlıdır:** `fill_calendar_pool` YALNIZ
+  ORTAK + YAZILI dersleri çeker (`course_types=[COMMON]`,
+  `exam_modes=[WRITTEN]`); dönüş sözlüğünün şekli
+  (`created/existed/skipped/total_pairs`) değişmez. Seçmeliler seçim
+  diyaloğundan, uygulama sınavı (`PRACTICE`) ve sınavsız (`NONE`) dersler ELLE
+  eklenir. Tohum tur 1-2'de takvim yaratılırken kendiliğinden koşar, tur 3'te
+  koşmaz; tohum hatası takvim yaratılmasını düşürmez.
 - **Koltuk sabitleme koordinattır:** `(desk_row, desk_col, slot)` — `seat_no`
   numaralandırma düzeni değişince kayar. "Tek başına" kardeş koltukları motor
   girdisinden düşürür; sahte `SeatAssignment` yazılmaz.

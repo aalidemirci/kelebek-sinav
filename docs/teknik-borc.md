@@ -14,6 +14,9 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
   yalnız Excel düğmesi olmayan raporlar için gerekir. v2 adayı.
 - **TB2 — Ders çizelgesi verisi yalnız Anadolu Lisesi (U4):** diğer okul
   türlerinde havuz boş başlar; elle ekleme + md veri dosyası ekleme yolu açık.
+  31.08.2026 eki: yeni çizelgede **"Sınav" sütunu** (YAZILI/UYGULAMA/YOK) da
+  küratörlük ister — doldurulmazsa her ders YAZILI sayılır ve takvim havuzu o
+  okulda yeniden şişer (K19, tasarım §7.1).
 - **TB3 — Şifreli kipte ad-temelli DB sorgusu yok (U3 bedeli):** arama/
   sıralama/teklik selector katmanında Python ile; yeni ad sorgusu ORM
   filtresiyle yazılamaz (DD F5-D5 dersi).
@@ -32,6 +35,21 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
   backend'i (CRUD + dağıtımda PINNED) F3'te tam; OYS'de de FE istemcisi yoktu.
   KS `placementRuleApi` hazır — kural yönetim ekranı F4'te sicil/oturum
   ekranına bağlanacak (kroki PINNED rozetleri şimdiden görünür).
+- **TB10 — Ders kayıt verisi yok; kapsam verisi günlük limite BAĞLANMADI
+  (31.08.2026, K19):** takvim girdisi artık katılımcı kapsamı taşıyor
+  (`participant_type` + `section_ids`), ama `services_calendar._daily_exam_load`
+  bu listeye **bakmaz** ve bakmayacak. Gerekçe: kapsam idarecinin beyanıdır,
+  öğrenci-ders eşleşmesi değil — `dersler.selectors.course_level_student_ids`
+  KS'de hep boş küme döner (B8 sapması), yani şubelerin öğrencisi sayılsa bile
+  "bu öğrenci bu dersi alıyor mu" sorusu cevapsız kalır. Kural "kayıt verisi
+  olmayan ders seviyenin tamamını kapsar" konservatif düşüşünde KALIR
+  (Yönetmelik md. 5/1-k, Yönerge md. 5/1-s; ADR-0044 karar 13, tasarım
+  risk #4). Kapsam verisi şimdilik YALNIZ iki yerde kullanılır: (1) ızgara
+  dipnotundaki katılımcı önizlemesi, (2) slottan oturum üretilirken
+  `ExamSessionCourse`'a taşınan katılımcı tanımı. Gerçek ders kayıt verisi
+  (seçmeli ders grupları) gelirse sıra şudur: önce `okul` tarafına kayıt/grup
+  modeli girer (bkz. TB7), sonra limit hesabı ondan beslenir — tersi mevzuat
+  denetimini deler.
 
 ## Kapanan
 

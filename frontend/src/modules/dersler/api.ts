@@ -5,10 +5,21 @@ import { api } from "../../lib/api";
 
 export type CourseType = "COMMON" | "ELECTIVE";
 export type CourseSource = "MEB_CATALOG" | "MANUAL";
+/** Dersin sınav biçimi — backend `dersler.CourseExamMode` ile birebir. */
+export type CourseExamMode = "WRITTEN" | "PRACTICE" | "NONE";
 
 export const COURSE_TYPE_TR: Record<CourseType, string> = {
   COMMON: "Ortak",
   ELECTIVE: "Seçmeli",
+};
+
+// Takvim havuzunun "Zorunlu dersleri ekle" yolu YALNIZ ortak + YAZILI dersleri
+// çeker; uygulama sınavı yapılan (Beden/Görsel/Müzik) ya da hiç sınavı olmayan
+// (Rehberlik) ders idarecinin tek tek silmesi gereken satır olmaktan çıksın.
+export const COURSE_EXAM_MODE_TR: Record<CourseExamMode, string> = {
+  WRITTEN: "Yazılı",
+  PRACTICE: "Uygulama",
+  NONE: "Sınav yok",
 };
 
 export const COURSE_SOURCE_TR: Record<CourseSource, string> = {
@@ -23,6 +34,9 @@ export interface Course {
   level_labels: string[];
   course_type: CourseType;
   source: CourseSource;
+  exam_mode: CourseExamMode;
+  /** Backend'in hazır Türkçe etiketi — sözlükle çelişirse kaynak gerçek budur. */
+  exam_mode_label: string;
   is_active: boolean;
 }
 
@@ -30,6 +44,7 @@ export interface CourseWriteBody {
   name: string;
   levels: number[];
   course_type?: CourseType;
+  exam_mode?: CourseExamMode;
 }
 
 export interface CourseListParams {

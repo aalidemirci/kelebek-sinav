@@ -11,7 +11,7 @@ from datetime import date, time
 from typing import Any
 
 from apps.dersler import services as ders_services
-from apps.dersler.models import Course
+from apps.dersler.models import Course, CourseExamMode, CourseType
 from apps.okul.models import ClassSection, SchoolTerm, SchoolYear, Student
 from apps.sinav import services
 from apps.sinav.models import DeskType, ExamRoom, ExamSession, ParticipantType
@@ -82,12 +82,28 @@ def sube(
     return kayit
 
 
-def ders(name: str = "Matematik", levels: list[int] | None = None) -> Course:
-    """Havuza ders ekler (varsa mevcut kaydı döndürür)."""
+def ders(
+    name: str = "Matematik",
+    levels: list[int] | None = None,
+    *,
+    course_type: str = CourseType.COMMON,
+    exam_mode: str = CourseExamMode.WRITTEN,
+) -> Course:
+    """Havuza ders ekler (varsa mevcut kaydı döndürür).
+
+    Varsayılan ZORUNLU + YAZILI: takvim havuzunun otomatik doldurma süzgeci
+    (`fill_calendar_pool`) tam olarak bu ikiliyi çeker; seçmeli/uygulama
+    senaryoları parametreleri açıkça verir.
+    """
     mevcut: Course | None = Course.objects.filter(name=name).first()
     if mevcut is not None:
         return mevcut
-    return ders_services.create_course(name=name, levels=levels or [9, 10, 11, 12])
+    return ders_services.create_course(
+        name=name,
+        levels=levels or [9, 10, 11, 12],
+        course_type=course_type,
+        exam_mode=exam_mode,
+    )
 
 
 def salon(

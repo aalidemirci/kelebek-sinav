@@ -6,6 +6,8 @@ OYS `ders_yapisi.services`'ten KELEBEK KESİTİ (tasarım §7 + §11):
   Çevrimdışı güncelleme yolu = uygulama sürümüyle gelen yeni md dosyası (K5).
 - `import_course_rows`: ada göre idempotent upsert; **`is_active` bilinçle
   korunur** — idarenin pasifleştirdiği ders import'la sessizce geri açılmaz.
+  `exam_mode` bu korumanın DIŞINDADIR (çizelge verisidir; gerekçe fonksiyon
+  docstring'inde).
 - `consolidate_duplicate_course`: referans taşıma KS kesitine indirildi
   (takma adlar + sınav dersleri; sınav modeli F3'te geldiğinden `get_model`
   çağrısı yokluğa dayanıklıdır).
@@ -26,6 +28,7 @@ from apps.dersler.models import (
     VALID_COURSE_LEVELS,
     Course,
     CourseAlias,
+    CourseExamMode,
     CourseSource,
     CourseType,
 )
@@ -33,11 +36,17 @@ from apps.dersler.models import (
 
 @dataclass(frozen=True)
 class CourseRow:
-    """Çizelge dosyasından ayrıştırılmış tek ders satırı."""
+    """Çizelge dosyasından ayrıştırılmış tek ders satırı.
+
+    `exam_mode` VARSAYILANLI ve SON alandır: çizelgenin 4. sütunu isteğe
+    bağlıdır (3 sütunlu dosyalar bozulmadan okunmalı) ve mevcut konumsal
+    çağrılar kırılmamalıdır.
+    """
 
     name: str
     levels: tuple[int, ...]
     course_type: str  # CourseType değeri
+    exam_mode: str = CourseExamMode.WRITTEN  # CourseExamMode değeri
 
 
 @dataclass
@@ -81,9 +90,16 @@ def create_course(
     name: str,
     levels: list[int],
     course_type: str = CourseType.COMMON,
+    exam_mode: str = CourseExamMode.WRITTEN,
     source: str = CourseSource.MANUAL,
+    is_active: bool = True,
 ) -> Course:
-    """Havuza yeni ders ekle. Aynı adla canlı kayıt varsa Türkçe hata."""
+    """Havuza yeni ders ekle. Aynı adla canlı kayıt varsa Türkçe hata.
+
+    `is_active` serializer alanları arasında olduğundan burada da KABUL EDİLİR:
+    view `validated_data`'nın tamamını kwargs olarak açar (views.py), imza
+    eksik kalırsa gövdesinde `is_active` gönderen POST 500 verirdi.
+    """
     cleaned = text.normalize_course_name(name)
     if Course.objects.filter(name=cleaned).exists():
         raise ValidationError(f"'{cleaned}' adlı ders zaten havuzda var.")
@@ -91,7 +107,9 @@ def create_course(
         name=cleaned,
         levels=normalize_levels(levels),
         course_type=course_type,
+        exam_mode=exam_mode,
         source=source,
+        is_active=is_active,
     )
     return course
 
@@ -103,6 +121,7 @@ def update_course(
     name: str | None = None,
     levels: list[int] | None = None,
     course_type: str | None = None,
+    exam_mode: str | None = None,
     is_active: bool | None = None,
 ) -> Course:
     """Ders alanlarını güncelle (kısmi). `source` elle değiştirilemez."""
@@ -115,6 +134,8 @@ def update_course(
         course.levels = normalize_levels(levels)
     if course_type is not None:
         course.course_type = course_type
+    if exam_mode is not None:
+        course.exam_mode = exam_mode
     if is_active is not None:
         course.is_active = is_active
     course.save()
@@ -125,9 +146,16 @@ def import_course_rows(rows: list[CourseRow]) -> CatalogImportResult:
     """Çizelge satırlarını kataloğa idempotent uygula.
 
     Eşleştirme canlı kayıtta **ders adına göre**: yoksa oluşturulur
-    (`source=MEB_CATALOG`); varsa seviye/tür farkı güncellenir (elle girilmiş
-    aynı adlı ders MEB kaydına dönüştürülür — MEB kaynağı kazanır); fark yoksa
-    dokunulmaz. `is_active` bilinçle korunur. Hatalı satırlar `errors`'ta.
+    (`source=MEB_CATALOG`); varsa seviye/tür/sınav biçimi farkı güncellenir
+    (elle girilmiş aynı adlı ders MEB kaydına dönüştürülür — MEB kaynağı
+    kazanır); fark yoksa dokunulmaz. `is_active` bilinçle korunur. Hatalı
+    satırlar `errors`'ta.
+
+    `exam_mode` bilerek `is_active` gibi DEĞİL, `levels`/`course_type` gibi
+    davranır: sınav biçimi ÇİZELGE VERİSİDİR (dersin uygulamalı olup olmaması
+    MEB çizelgesinin kararıdır), `is_active` ise idari karardır. Çizelgede
+    'UYGULAMA' yazan ama DB'de 'WRITTEN' duran bir ders karşılaştırmaya
+    girmezse `unchanged` sayılır ve hiç düzelmezdi.
     """
     result = CatalogImportResult()
     with transaction.atomic():
@@ -144,6 +172,7 @@ def import_course_rows(rows: list[CourseRow]) -> CatalogImportResult:
                     name=cleaned,
                     levels=levels,
                     course_type=row.course_type,
+                    exam_mode=row.exam_mode,
                     source=CourseSource.MEB_CATALOG,
                 )
                 result.created += 1
@@ -151,12 +180,14 @@ def import_course_rows(rows: list[CourseRow]) -> CatalogImportResult:
             if (
                 existing.levels == levels
                 and existing.course_type == row.course_type
+                and existing.exam_mode == row.exam_mode
                 and existing.source == CourseSource.MEB_CATALOG
             ):
                 result.unchanged += 1
                 continue
             existing.levels = levels
             existing.course_type = row.course_type
+            existing.exam_mode = row.exam_mode
             existing.source = CourseSource.MEB_CATALOG
             existing.save()
             result.updated += 1

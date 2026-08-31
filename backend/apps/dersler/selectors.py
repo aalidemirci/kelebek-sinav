@@ -9,6 +9,7 @@ kaydını tek başına SQL ile bulamazdı.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -30,6 +31,26 @@ def courses(
     if course_type:
         qs = qs.filter(course_type=course_type)
     return qs.order_by("name")
+
+
+def courses_sorted(
+    *,
+    course_type: str | None = None,
+    include_inactive: bool = False,
+) -> list[Course]:
+    """Ders kataloğu, TÜRK ALFABESİ sırasıyla (kullanıcıya gösterilen listeler).
+
+    `courses()` DB `order_by("name")` kullanır ve SQLite karşılaştırması
+    BINARY'dir: 'Çağdaş…', 'İklim…', 'Ölçme…' gibi adlar Z'den SONRAYA düşer.
+    Emsal `okul.selectors.class_sections_sorted`/`subject_departments_sorted`
+    (CLAUDE.md §2). Katalog ~60 satır — Python tarafı maliyetsiz.
+    """
+    from apps.okul import normalize
+
+    return sorted(
+        courses(course_type=course_type, include_inactive=include_inactive),
+        key=lambda c: normalize.tr_sort_key(c.name),
+    )
 
 
 def courses_for_level(
@@ -244,7 +265,12 @@ class CoverageGroup:
     whole_sections: bool
 
 
-def taught_course_levels(school_year_id: int | None = None) -> list[CourseLevelPair]:
+def taught_course_levels(
+    school_year_id: int | None = None,
+    *,
+    course_types: Sequence[str] | None = None,
+    exam_modes: Sequence[str] | None = None,
+) -> list[CourseLevelPair]:
     """Havuz doldurma kaynağı — KS sapması: program verisi yok (B6/B8).
 
     OYS'de canlı LessonGroup'lardan "fiilen okutulan" çiftler gelirdi; KS'de
@@ -252,15 +278,30 @@ def taught_course_levels(school_year_id: int | None = None) -> list[CourseLevelP
     AKTİF ÖĞRENCİSİ OLAN seviyeler). Öğrenci filtresi havuzu okulda gerçekten
     sınav yapılabilecek seviyelere daraltır; fazlalıklar havuzdan elle silinir.
     `school_year_id` OYS imza uyumu içindir (öğrenci kayıtları tek-yıl yereldir).
+
+    `course_types` / `exam_modes` verilirse katalog o değerlere daraltılır;
+    None = süzme yok (geriye dönük uyumlu). Otomatik havuz doldurma bunlarla
+    "zorunlu + yazılı"ya iner, seçmeli seçim ekranı "seçmeli + yazılı"ya —
+    süzgeç ÇAĞIRANDA, burada politika yok.
+
+    Çıktı TÜRK ALFABESİ sıralıdır (ad, sonra seviye): DB `order_by("name")`
+    SQLite'ta BINARY olduğundan 'Çağdaş…'/'İklim…' listenin sonuna düşerdi ve
+    bu liste doğrudan kullanıcıya (havuz + seçmeli seçim ekranı) gidiyor.
     """
+    from apps.okul import normalize
     from apps.okul import selectors as okul_selectors
 
     del school_year_id  # imza uyumu — KS öğrenci kayıtları aktif yıla aittir
     counts = okul_selectors.active_student_counts_by_level()
     student_levels = {lvl for lvl, n in counts.items() if n > 0}
     school_levels = set(okul_selectors.grade_level_values())
+    qs = Course.objects.filter(is_active=True)
+    if course_types is not None:
+        qs = qs.filter(course_type__in=list(course_types))
+    if exam_modes is not None:
+        qs = qs.filter(exam_mode__in=list(exam_modes))
     pairs: list[CourseLevelPair] = []
-    for course in Course.objects.filter(is_active=True).order_by("name"):
+    for course in sorted(qs, key=lambda c: normalize.tr_sort_key(c.name)):
         for level in sorted(set(course.levels) & school_levels & student_levels):
             pairs.append(CourseLevelPair(course_id=course.pk, course_name=course.name, level=level))
     return pairs

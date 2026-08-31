@@ -6,7 +6,7 @@ from typing import Any
 
 from rest_framework import serializers
 
-from apps.sinav import services
+from apps.sinav import services, services_calendar
 from apps.sinav.models import (
     BookletRun,
     ExamAttendanceRecord,
@@ -531,7 +531,15 @@ class ExamCalendarSerializer(serializers.ModelSerializer[ExamCalendar]):
 
 
 class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]):
+    """Takvim havuzu girdisi — asıl doğrulama services_calendar'da.
+
+    `participant_type` + `section_ids` katılımcı KAPSAMIDIR (seçmeli derste
+    "şube şube"); `participant_label` FE rozetidir ve ızgara hücresiyle AYNI
+    yardımcıdan gelir. Küme kimliği taşınmaz (CLAUDE.md §3).
+    """
+
     course_name = serializers.CharField(source="course.name", read_only=True)
+    participant_label = serializers.SerializerMethodField()
 
     class Meta:
         model = ExamCalendarEntry
@@ -544,6 +552,9 @@ class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]
             "exam_kind",
             "is_butterfly",
             "authority",
+            "participant_type",
+            "section_ids",
+            "participant_label",
             "placed_date",
             "period_no",
             "session",
@@ -553,11 +564,18 @@ class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]
             "id",
             "course_name",
             "calendar",
+            "participant_label",
             "placed_date",
             "period_no",
             "session",
         )
+        # Model teklik doğrulayıcısı KASITLA kapalı: 400 mesajları Türkçe ve
+        # servis katmanından gelir (silme yerine soft-delete olduğu için DRF'in
+        # ürettiği kısıt kontrolü de yanlış eşleşirdi).
         validators: list[object] = []
+
+    def get_participant_label(self, obj: ExamCalendarEntry) -> str:
+        return services_calendar.participant_scope_label(obj.participant_type, obj.section_ids)
 
 
 class ExamTrackItemSerializer(serializers.ModelSerializer[ExamTrackItem]):

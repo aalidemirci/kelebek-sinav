@@ -206,6 +206,25 @@ def calendar_entries(
     return qs.order_by("course__name", "level")
 
 
+def calendar_entries_sorted(
+    calendar_id: int, *, placed: bool | None = None
+) -> list[ExamCalendarEntry]:
+    """Havuz listesi, TÜRK ALFABESİ sırasıyla (kullanıcıya gösterilen tek yol).
+
+    `calendar_entries` DB sırasıdır ve SQLite karşılaştırması BINARY'dir —
+    "Coğrafya, Fizik, İngilizce, Çince, Ölçme" gibi Ç/Ğ/İ/Ö/Ş/Ü'yü 'Z'den
+    sonraya atan bir havuz listesi çıkıyordu. Sıralama ölçütü DB sürümüyle
+    aynı (ders adı, sonra seviye), yalnız karşılaştırma Python'da
+    (`exam_rooms_sorted` emsali; yerel ölçek ≤ birkaç yüz girdi).
+    """
+    from apps.okul import normalize
+
+    return sorted(
+        calendar_entries(calendar_id, placed=placed),
+        key=lambda e: (normalize.tr_sort_key(e.course.name), e.level),
+    )
+
+
 def get_calendar_entry(entry_id: int) -> ExamCalendarEntry | None:
     return (
         ExamCalendarEntry.objects.select_related("calendar", "course").filter(pk=entry_id).first()

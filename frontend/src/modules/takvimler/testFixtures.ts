@@ -4,8 +4,10 @@
 
 import type { Paginated } from "../../lib/pagination";
 import type {
+  BulkEntriesResult,
   CalendarGrid,
   CalendarGridCell,
+  ElectivePoolLevel,
   ExamCalendar,
   ExamCalendarEntryRow,
   ExamTrackMatrix,
@@ -47,12 +49,41 @@ export function makeEntry(overrides: Partial<ExamCalendarEntryRow> = {}): ExamCa
     exam_kind: "WRITTEN",
     is_butterfly: true,
     authority: "SCHOOL",
+    participant_type: "LEVEL",
+    section_ids: [],
+    participant_label: "Seviye geneli",
     placed_date: null,
     period_no: null,
     session: null,
     note: "",
     ...overrides,
   };
+}
+
+/**
+ * Seçmeli ders seçim kaynağı: iki seviye, 9'da biri zaten havuzda olan iki ders.
+ * (Havuzdaki ders dialog'da işaretli + kilitli görünmeli.)
+ */
+export function makeElectiveOptions(): ElectivePoolLevel[] {
+  return [
+    {
+      value: 9,
+      display_label: "9. Sınıf",
+      courses: [
+        { id: 21, name: "Çağdaş Türk ve Dünya Tarihi", in_pool: false },
+        { id: 22, name: "Almanca", in_pool: true },
+      ],
+    },
+    {
+      value: 10,
+      display_label: "10. Sınıf",
+      courses: [{ id: 23, name: "Astronomi ve Uzay Bilimleri", in_pool: false }],
+    },
+  ];
+}
+
+export function makeBulkResult(overrides: Partial<BulkEntriesResult> = {}): BulkEntriesResult {
+  return { created: [], existed: [], skipped: [], ...overrides };
 }
 
 export function makeCell(overrides: Partial<CalendarGridCell> = {}): CalendarGridCell {
@@ -64,6 +95,9 @@ export function makeCell(overrides: Partial<CalendarGridCell> = {}): CalendarGri
     exam_kind: "WRITTEN",
     is_butterfly: true,
     authority: "SCHOOL",
+    participant_type: "LEVEL",
+    section_ids: [],
+    participant_label: "Seviye geneli",
     session_id: null,
     note: "",
     ...overrides,

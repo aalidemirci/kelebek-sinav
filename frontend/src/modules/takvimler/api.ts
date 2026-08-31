@@ -7,8 +7,11 @@
 
 import { api } from "../../lib/api";
 import type { Paginated } from "../../lib/pagination";
+// Katılımcı tipi oturum modülünün kod birliğidir (LEVEL | SECTIONS — TB7);
+// takvim girdisi AYNI birliği kullanır, ikinci bir tanım açılmaz.
+import type { ParticipantTypeCode } from "../oturumlar/api";
 
-export type { Paginated };
+export type { Paginated, ParticipantTypeCode };
 
 export type ExamCalendarStatusCode = "DRAFT" | "SUBMITTED" | "APPROVED";
 export type ExamKindCode = "WRITTEN" | "PRACTICE";
@@ -65,6 +68,12 @@ export interface ExamCalendarEntryRow {
   exam_kind: ExamKindCode;
   is_butterfly: boolean;
   authority: ExamAuthorityCode;
+  /** Katılımcı kapsamı: seviye geneli mi, seçilen şubeler mi (CLAUDE.md §3). */
+  participant_type: ParticipantTypeCode;
+  /** SECTIONS kapsamında somut şube pk'leri — küme kimliği ASLA yazılmaz. */
+  section_ids: number[];
+  /** Backend'in hazır kapsam etiketi ("Seviye geneli" / "3 şube"). */
+  participant_label: string;
   placed_date: string | null;
   period_no: number | null;
   session: number | null;
@@ -93,6 +102,11 @@ export interface CalendarGridCell {
   exam_kind: ExamKindCode;
   is_butterfly: boolean;
   authority: ExamAuthorityCode;
+  // Hücre anahtarı biçimi sabittir, sözlüğe alan eklenebilir (CLAUDE.md §3):
+  // kapsam bilgisi havuz tablosu ile ızgarada AYNI kaynaktan okunur.
+  participant_type: ParticipantTypeCode;
+  section_ids: number[];
+  participant_label: string;
   session_id: number | null;
   note: string;
 }
@@ -126,6 +140,43 @@ export interface FillPoolResult {
   existed: string[];
   skipped: string[];
   total_pairs: number;
+}
+
+/**
+ * Toplu havuz girdisi kalemi — seçmeli ders dialog'unun tek yazma birimi.
+ * Ders alanı `course_id`'dir (tekil `addEntry` gövdesindeki `course` DEĞİL —
+ * ikisi ayrı backend yüzeyi, karıştırma).
+ */
+export interface BulkEntryItem {
+  course_id: number;
+  level: number;
+  participant_type: ParticipantTypeCode;
+  section_ids: number[];
+  exam_kind?: ExamKindCode;
+  is_butterfly?: boolean;
+  authority?: ExamAuthorityCode;
+}
+
+/** Toplu ekleme sonucu — fill-pool ile aynı şekil, `total_pairs` yok. */
+export interface BulkEntriesResult {
+  created: string[];
+  existed: string[];
+  skipped: string[];
+}
+
+export interface ElectivePoolCourse {
+  id: number;
+  name: string;
+  /** O takvimde canlı YAZILI girdisi var mı (işaretli + kilitli gösterilir). */
+  in_pool: boolean;
+}
+
+/** Seviye başına seçilebilir seçmeli dersler (ders adları backend'de TR sıralı). */
+export interface ElectivePoolLevel {
+  value: number;
+  /** Izgara sütun başlığıyla aynı etiket ("9. Sınıf" / "Hazırlık"). */
+  display_label: string;
+  courses: ElectivePoolCourse[];
 }
 
 export interface ExamTrackItemRow {
@@ -203,8 +254,21 @@ export const examCalendarApi = {
       exam_kind?: ExamKindCode;
       is_butterfly?: boolean;
       authority?: ExamAuthorityCode;
+      participant_type?: ParticipantTypeCode;
+      section_ids?: number[];
     },
   ) => api.post<ExamCalendarEntryRow>(`/exam-calendars/${id}/entries/`, payload),
+  /** Seçmeli ders seçimi TEK istekle yazılır (kalem başına savepoint backend'de). */
+  bulkEntries: (id: number, items: BulkEntryItem[]) =>
+    api.post<BulkEntriesResult>(`/exam-calendars/${id}/bulk-entries/`, { items }),
+  // Uç `{"results": [...]}` zarfıyla döner (havuz listesiyle aynı kalıp);
+  // tüketiciler düz dizi görür.
+  electiveOptions: async (id: number): Promise<ElectivePoolLevel[]> => {
+    const data = await api.get<{ results: ElectivePoolLevel[] }>(
+      `/exam-calendars/${id}/elective-options/`,
+    );
+    return data.results ?? [];
+  },
   grid: (id: number) => api.get<CalendarGrid>(`/exam-calendars/${id}/grid/`),
   participantPreview: (id: number) =>
     api.get<Record<string, { student_count: number; whole: boolean; groups: string[] }>>(
@@ -236,6 +300,8 @@ export const examCalendarApi = {
       exam_kind: ExamKindCode;
       authority: ExamAuthorityCode;
       note: string;
+      participant_type: ParticipantTypeCode;
+      section_ids: number[];
     }>,
   ) => api.patch<ExamCalendarEntryRow>(`/exam-calendar-entries/${entryId}/`, payload),
   removeEntry: (entryId: number) => api.del<void>(`/exam-calendar-entries/${entryId}/`),

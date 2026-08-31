@@ -140,18 +140,31 @@ export default function KilavuzPage() {
         </Ipucu>
       </Adim>
 
-      <Adim no={4} icon="menu_book" title="Ders havuzu: okutulmayan dersleri pasif yapın">
+      <Adim no={4} icon="menu_book" title="Ders havuzu: tür ve sınav biçimi">
         <p>
           <Ekran to="/dersler">Ders Havuzu</Ekran>, MEB haftalık ders çizelgesinden okul türünüze
           göre kendiliğinden tohumlanır. Sınav takvimi ve sınav oturumları dersleri bu havuzdan
           seçer. Ders <strong>silinmez</strong>, pasifleştirilir — geçmiş evrak bozulmasın diye.
         </p>
+        <p>
+          Listenin iki sütunu takvim havuzunun nasıl dolacağını belirler. <strong>Tür</strong>{" "}
+          dersin <em>ortak (zorunlu)</em> mu yoksa <em>seçmeli</em> mi olduğunu,{" "}
+          <strong>Sınav</strong> ise dersin sınavının <em>Yazılı</em> mı, <em>Uygulama</em> mı
+          olduğunu ya da o dersin hiç sınavı olmadığını (<em>Sınav yok</em>) söyler. MEB
+          çizelgesinden gelen dersler için bu alanlar hazır doldurulmuştur: Beden Eğitimi ve Spor,
+          Görsel Sanatlar/Müzik, Spor ve Sanat Eğitimi <em>Uygulama</em>, Rehberlik ve Yönlendirme{" "}
+          <em>Sınav yok</em> gelir. Okulunuzun uygulaması farklıysa satırdaki{" "}
+          <strong>Düzenle</strong> düğmesiyle dersin adını, seviyelerini, türünü ve sınav biçimini
+          değiştirebilirsiniz.
+        </p>
         <Ipucu>
           <strong>Önce havuzu okulunuza göre sadeleştirin.</strong> Okulunuzda okutulmayan dersleri
-          ve yalnızca uygulama sınavı yapılan dersleri havuzda <strong>pasif</strong> yapın (satırın
-          sağındaki “Pasifleştir”). Pasif ders takvim havuzuna kendiliğinden eklenmez, elle de
-          seçilemez. Böylece “Katalogdan doldur” sonrası tek tek temizlemeniz gereken satır kalmaz
-          ve <strong>ders eşleştirmesi ilk seferde doğru olur</strong>.
+          havuzda <strong>pasif</strong> yapın (satırın sağındaki “Pasifleştir”); pasif ders takvim
+          havuzuna kendiliğinden eklenmez, elle de seçilemez. Uygulama sınavı yapılan ve sınavı
+          olmayan dersleri pasifleştirmenize <strong>gerek yoktur</strong> — “Sınav” alanları doğru
+          olduğu sürece takvim havuzuna kendiliğinden girmezler. Bu iki alan doğruysa{" "}
+          <strong>ders eşleştirmesi ilk seferde doğru olur</strong> ve takvim havuzunda tek tek
+          silmeniz gereken satır kalmaz.
         </Ipucu>
         <p>
           Listede olmayan bir ders varsa elle ekleyin. Aynı dersin iki farklı yazımı (örneğin “Din
@@ -231,6 +244,38 @@ export default function KilavuzPage() {
           takvimi düzenlemek için önce “Taslağa Al” deyin. Taslak ve onaya sunulmuş takvimlerin
           PDF'inde “TASLAK” filigranı bulunur.
         </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Havuzu doldurmak: zorunlu dersler ve seçmeliler
+        </h3>
+        <p>
+          Havuz sekmesinde iki düğme vardır. <strong>“Zorunlu dersleri ekle”</strong>, ders
+          havuzundaki <em>ortak</em> ve sınavı <em>Yazılı</em> olan dersleri, öğrencisi olan her
+          seviye için tek tıkla havuza koyar; uygulama sınavı yapılan ve sınavı olmayan dersler
+          eklenmez. <strong>“Seçmeli ders seç”</strong> ise seviye sekmeleri açar: her seviyede o
+          seviyede okutulan seçmeli dersleri işaretlersiniz. Havuzda zaten bulunan ders işaretli ve
+          kilitli görünür, ikinci kez eklenmez.
+        </p>
+        <p>
+          İşaretlediğiniz her seçmeli dersin <strong>katılımcı kapsamını</strong> da
+          belirleyebilirsiniz: <em>Seviye geneli</em> (varsayılan) ya da <em>Şube seç</em>. Şube
+          seçerken Ayarlar’daki <strong>şube kümelerini</strong> (SAY, EA, DİL gibi — 8. adımda
+          anlatılır) çipe basarak topluca ekleyebilir, sonra tek tek düzeltebilirsiniz. Küme yalnız
+          seçim kolaylığıdır — takvime kümenin adı değil, seçilen şubeler yazılır. Aynı kapsamı
+          birden çok derse verecekseniz “Seçili derslere topluca kapsam uygula” kısayolunu kullanın.
+        </p>
+        <p>
+          Kapsamı yanlış verdiyseniz girdiyi silmeniz gerekmez: havuz tablosunda{" "}
+          <strong>“Kapsam”</strong> sütunundaki değere basınca kapsam düzenleme penceresi açılır.
+          Takvim taslak olduğu sürece ızgaraya yerleştirilmiş girdinin kapsamı da buradan
+          düzeltilir.
+        </p>
+        <Ipucu>
+          Yeni bir takvim açtığınızda zorunlu dersler <strong>kendiliğinden</strong> havuza gelir
+          (1. ve 2. sınav takvimlerinde). Geriye yalnız seçmelileri işaretlemek ve gerekiyorsa kenar
+          durumları — kendi sınıfında yapılacak sınavlar, uygulama sınavları, Bakanlık/MEM sınavları
+          — havuz formundan elle eklemek kalır.
+        </Ipucu>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
           Günlük sınav sayısı sınırı

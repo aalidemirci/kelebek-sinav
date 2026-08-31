@@ -910,6 +910,18 @@ class ExamCalendarEntry(BaseModel):
     (Ölçme ve Değ. Yön. md. 6). `session` bağı slot→oturum üretiminde
     yazılır (SET_NULL — oturum silinirse slot yeniden üretilebilir). Katılımcı
     listesi anlık türetilir; burada KİŞİSEL VERİ YOK.
+
+    Katılımcı KAPSAMI (`participant_type` + `section_ids`) neden burada?
+    Seçmeli ders bir seviyenin tamamında değil, o dersi seçen ŞUBELERDE
+    okutulur; kapsam takvim havuzunda seçilir ve `create_session_from_slot`
+    ile üretilen `ExamSessionCourse`a AYNEN taşınır (alan kalıbı da onunla
+    birebirdir). Kapsam oturuma bırakılsaydı idareci aynı seçimi her slot
+    üretiminde yeniden yapardı. `default=LEVEL`: `fill_calendar_pool` ve veri
+    göçü girdiyi parametresiz yaratır — ZORUNLU dersler seviye genelidir.
+    ŞUBE KÜMESİ KİMLİĞİ BURAYA YAZILMAZ (CLAUDE.md §3: "kümeler seçim
+    aracıdır"): arayüz kümeyi somut şube pk listesine açar, kayıt yalnız
+    pk'leri görür — aksi hâlde küme sonradan değişince onaylanmış takvimin
+    kapsamı geriye dönük kayardı.
     """
 
     calendar = models.ForeignKey(
@@ -930,6 +942,19 @@ class ExamCalendarEntry(BaseModel):
     )
     is_butterfly = models.BooleanField(
         "kelebek", default=True, help_text="False = kendi sınıfında (Kelebek Değil)."
+    )
+    participant_type = models.CharField(
+        "katılımcı tipi",
+        max_length=10,
+        choices=ParticipantType.choices,
+        default=ParticipantType.LEVEL,
+        help_text="Seviye geneli mi, seçilen şubeler mi (seçmeli derslerde şube kapsamı).",
+    )
+    section_ids = models.JSONField(
+        "şube id'leri",
+        default=list,
+        blank=True,
+        help_text="SECTIONS tipi için okul.ClassSection id (küme kimliği YAZILMAZ).",
     )
     authority = models.CharField(
         "hazırlayan makam",

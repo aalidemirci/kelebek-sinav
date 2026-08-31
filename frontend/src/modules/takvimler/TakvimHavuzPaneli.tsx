@@ -1,10 +1,15 @@
 // Sınav Takvimi — Havuz paneli (F6) — OYS TakvimHavuzPaneli'nden UYARLA.
-// Havuz "Katalogdan Doldur" ile otomatik dolar (KS sapması B6/B8: program
-// verisi yok — kaynak aktif ders kataloğu × öğrencisi olan seviyeler); elle
-// ekleme formu kenar durumlar için kalır. Katılımcı sayısı/kapsam dipnotu
-// önizleme. Yalnız taslakta düzenlenebilir; round 3 havuzu ELLE doldurulur.
+// Havuz iki yoldan dolar: "Zorunlu dersleri ekle" (fill-pool ucu — artık YALNIZ
+// ortak + YAZILI dersler; uygulama sınavı ve sınavsız dersler dışarıda) ve
+// "Seçmeli ders seç" dialog'u (seviye seviye, katılımcı kapsamıyla). Kaynak
+// hâlâ aktif ders kataloğu × öğrencisi olan seviyeler (KS sapması B6/B8:
+// program verisi yok). Elle ekleme formu kenar durumlar için kalır: kelebek
+// olmayan sınav, uygulama sınavı, üst makam sınavı. Katılımcı sayısı/kapsam
+// dipnotu önizleme; "Kapsam" hücresi taslakta DÜZENLEME yoludur
+// (KapsamDuzenleDialog — seçmeli dialog havuzdaki dersi kilitli gösterir). Yalnız taslakta düzenlenebilir; round 3 havuzunda otomatik
+// doldurma yoktur ama seçmeli seçimi çalışır (backend tekil ekleme yolu).
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "../../lib/api";
@@ -20,8 +25,11 @@ import { useConfirm } from "../../ui/ConfirmProvider";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import type { Course } from "../dersler/api";
 import { derslerApi } from "../dersler/api";
+import { PARTICIPANT_TYPE_TR } from "../oturumlar/api";
 import type { ExamAuthorityCode, ExamCalendarEntryRow, ExamKindCode } from "./api";
 import { EXAM_AUTHORITY_TR, examCalendarApi } from "./api";
+import KapsamDuzenleDialog from "./KapsamDuzenleDialog";
+import SecmeliDersSecimDialog from "./SecmeliDersSecimDialog";
 
 export default function TakvimHavuzPaneli({
   calendarId,
@@ -42,6 +50,11 @@ export default function TakvimHavuzPaneli({
   const [kind, setKind] = useState<ExamKindCode>("WRITTEN");
   const [butterfly, setButterfly] = useState(true);
   const [authority, setAuthority] = useState<ExamAuthorityCode>("SCHOOL");
+  const [electiveOpen, setElectiveOpen] = useState(false);
+  // Kapsamı düzenlenen havuz girdisi (null = dialog kapalı).
+  const [kapsamEntry, setKapsamEntry] = useState<ExamCalendarEntryRow | null>(null);
+  // Dialog odak efekti onClose kimliğine bağlı — sabit referans şart.
+  const closeElective = useCallback(() => setElectiveOpen(false), []);
 
   const entriesQuery = useQuery({
     queryKey: ["exam-calendar-entries", calendarId],
@@ -62,6 +75,11 @@ export default function TakvimHavuzPaneli({
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["exam-calendar-entries", calendarId] });
     void queryClient.invalidateQueries({ queryKey: ["exam-calendar-preview", calendarId] });
+    // Seçmeli listesindeki `in_pool` havuzla birlikte kayar — tazelenmezse
+    // dialog yeniden açıldığında eklenen ders hâlâ "kilitsiz" görünürdü.
+    void queryClient.invalidateQueries({
+      queryKey: ["exam-calendar-elective-options", calendarId],
+    });
     onChanged();
   };
 
@@ -98,8 +116,8 @@ export default function TakvimHavuzPaneli({
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Makam değiştirilemedi."),
   });
 
-  // Havuzu katalogdan doldur — idempotent (var olan atlanır); skipped sessiz
-  // düşmez, uyarıyla raporlanır.
+  // Zorunlu (ortak + YAZILI) dersleri ekle — idempotent (var olan atlanır);
+  // skipped sessiz düşmez, uyarıyla raporlanır.
   const fillMutation = useMutation({
     mutationFn: () => examCalendarApi.fillPool(calendarId),
     onSuccess: (result) => {
@@ -122,12 +140,14 @@ export default function TakvimHavuzPaneli({
   const canFill = editable && round !== 3;
   const handleFill = () => {
     void confirm({
-      title: "Havuzu katalogdan doldur",
+      title: "Zorunlu dersleri havuza ekle",
       message:
-        "Aktif ders kataloğundaki dersler, öğrencisi olan seviyeler bazında havuza " +
-        "eklenecek; var olan girdiler atlanır. Tür varsayılanı Yazılı, hazırlayan " +
-        "makam varsayılanı Okul — Bakanlık/MEM sınavlarını taslakta işaretleyin.",
-      confirmLabel: "Doldur",
+        "Ders havuzundaki ZORUNLU (ortak) ve sınavı YAZILI dersler, öğrencisi olan " +
+        "seviyeler bazında takvim havuzuna eklenecek; var olan girdiler atlanır. " +
+        "Uygulama sınavı yapılan ve sınavı olmayan dersler eklenmez — seçmeli dersleri " +
+        "“Seçmeli ders seç” ile seviye seviye işaretleyin. Hazırlayan makam varsayılanı " +
+        "Okul — Bakanlık/MEM sınavlarını taslakta işaretleyin.",
+      confirmLabel: "Ekle",
     }).then((ok) => ok && fillMutation.mutate());
   };
 
@@ -138,15 +158,22 @@ export default function TakvimHavuzPaneli({
 
   return (
     <div>
-      {canFill ? (
-        <div className="mb-3 flex justify-end">
-          <Button
-            variant="tonal"
-            icon="auto_awesome"
-            disabled={fillMutation.isPending}
-            onClick={handleFill}
-          >
-            Katalogdan Doldur
+      {editable ? (
+        <div className="mb-3 flex flex-wrap justify-end gap-2">
+          {canFill ? (
+            <Button
+              variant="tonal"
+              icon="auto_awesome"
+              disabled={fillMutation.isPending}
+              onClick={handleFill}
+            >
+              Zorunlu dersleri ekle
+            </Button>
+          ) : null}
+          {/* Seçmeli seçimi 3. turda da açık: tekil ekleme yolunu kullanır,
+              fill-pool'un round 3 yasağı buraya işlemez. */}
+          <Button variant="tonal" icon="checklist" onClick={() => setElectiveOpen(true)}>
+            Seçmeli ders seç
           </Button>
         </div>
       ) : null}
@@ -158,9 +185,15 @@ export default function TakvimHavuzPaneli({
               placeholder="Ders ara…"
               selected={course}
               search={searchCourses}
-              onSelect={setCourse}
+              onSelect={(c) => {
+                setCourse(c);
+                // Ders havuzunda "Uygulama" işaretli dersin türü kendiliğinden
+                // Uygulama'ya gelir; idareci her seferinde elle çevirmesin.
+                setKind(c.exam_mode === "PRACTICE" ? "PRACTICE" : "WRITTEN");
+              }}
               onClear={() => setCourse(null)}
               getLabel={(c) => c.name}
+              getSublabel={(c) => `${c.level_labels.join(", ")} · ${c.exam_mode_label}`}
               getKey={(c) => c.id}
             />
           </div>
@@ -235,15 +268,19 @@ export default function TakvimHavuzPaneli({
           title="Havuz boş"
           description={
             canFill
-              ? "Katalogdaki dersleri tek tıkla çekin veya yukarıdan elle ekleyin."
+              ? "Zorunlu dersleri tek tıkla ekleyin, seçmelileri seviye seviye seçin; kenar durumlar için yukarıdaki form kalır."
               : editable
-                ? "Yukarıdan ders ekleyin."
+                ? "Seçmeli dersleri seçin ya da yukarıdan elle ekleyin."
                 : "Bu takvime ders eklenmemiş."
           }
           action={
             canFill ? (
               <Button icon="auto_awesome" disabled={fillMutation.isPending} onClick={handleFill}>
-                Katalogdan Doldur
+                Zorunlu dersleri ekle
+              </Button>
+            ) : editable ? (
+              <Button icon="checklist" onClick={() => setElectiveOpen(true)}>
+                Seçmeli ders seç
               </Button>
             ) : undefined
           }
@@ -267,6 +304,33 @@ export default function TakvimHavuzPaneli({
               ),
             },
             { header: "Seviye", cell: (e) => gradeLevelLabel(e.level) },
+            {
+              // Kapsam sayısı katılımcı SAYISINDAN ayrı sütun: "3 şube" ile
+              // "78 öğrenci" aynı hücrede okunamıyordu. Taslakta hücre aynı
+              // zamanda DÜZELTME yoludur (31.08.2026 denetimi): seçmeli dialog
+              // havuzdaki dersi kilitli gösterdiğinden yanlış şube seçimi
+              // eskiden ancak girdiyi silip yeniden ekleyerek düzeliyordu.
+              header: "Kapsam",
+              cell: (e: ExamCalendarEntryRow) => {
+                const etiket =
+                  e.participant_label ||
+                  (e.participant_type === "SECTIONS"
+                    ? `${e.section_ids.length} şube`
+                    : PARTICIPANT_TYPE_TR.LEVEL);
+                return editable ? (
+                  <Button
+                    variant="text"
+                    icon="edit"
+                    aria-label={`${e.course_name} katılımcı kapsamını düzenle`}
+                    onClick={() => setKapsamEntry(e)}
+                  >
+                    {etiket}
+                  </Button>
+                ) : (
+                  etiket
+                );
+              },
+            },
             {
               header: "Hazırlayan",
               cell: (e: ExamCalendarEntryRow) =>
@@ -341,6 +405,28 @@ export default function TakvimHavuzPaneli({
           ]}
         />
       )}
+
+      {kapsamEntry !== null ? (
+        <KapsamDuzenleDialog
+          entry={kapsamEntry}
+          onClose={() => setKapsamEntry(null)}
+          onSaved={() => {
+            setKapsamEntry(null);
+            invalidate();
+          }}
+        />
+      ) : null}
+
+      {electiveOpen ? (
+        <SecmeliDersSecimDialog
+          calendarId={calendarId}
+          onClose={closeElective}
+          onSaved={() => {
+            setElectiveOpen(false);
+            invalidate();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

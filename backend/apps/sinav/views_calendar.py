@@ -115,12 +115,43 @@ class ExamCalendarViewSet(viewsets.ModelViewSet[ExamCalendar]):
 
     @action(detail=True, methods=["post"], url_path="fill-pool")
     def fill_pool(self, request: Request, pk: str | None = None) -> Response:
-        """Havuzu katalogdan doldurur (idempotent; round 3 reddedilir)."""
+        """Havuzu ZORUNLU + YAZILI derslerle doldurur (idempotent; round 3 reddedilir).
+
+        Uç adı ve gövde sözleşmesi değişmedi; DAVRANIŞ daraldı (seçmeliler
+        artık `bulk-entries` ile seçilerek eklenir) — arayüzdeki etiket de
+        "Zorunlu dersleri ekle"dir.
+        """
         try:
             result = services_calendar.fill_calendar_pool(self.get_object())
         except DjangoValidationError as exc:
             _raise_drf(exc)
         return Response(result)
+
+    # DİKKAT (OYS Tur 644): aynı `url_path`li iki @action router'da TEK
+    # pattern'e düşer. "bulk-entries"/"elective-options" mevcut hiçbir action
+    # yoluyla çakışmıyor ("entries" ayrı bir pattern'dir).
+    @action(detail=True, methods=["post"], url_path="bulk-entries")
+    def bulk_entries(self, request: Request, pk: str | None = None) -> Response:
+        """Havuza TOPLU girdi ekler (seçmeli ders diyaloğunun tek çağrısı).
+
+        Gövde: `{"items": [{"course_id", "level", "participant_type",
+        "section_ids", "exam_kind", "is_butterfly", "authority"}]}`.
+        Dönüş created/existed/skipped etiket listeleridir — reddedilen kalem
+        SESSİZCE DÜŞMEZ, arayüz özetler.
+        """
+        items = request.data.get("items")
+        if not isinstance(items, list):
+            raise drf_serializers.ValidationError({"items": "Eklenecek kalem listesi gerekli."})
+        try:
+            result = services_calendar.add_calendar_entries_bulk(self.get_object(), items)
+        except DjangoValidationError as exc:
+            _raise_drf(exc)
+        return Response(result)
+
+    @action(detail=True, methods=["get"], url_path="elective-options")
+    def elective_options(self, request: Request, pk: str | None = None) -> Response:
+        """Seviye bazında seçilebilir SEÇMELİ (yazılı) dersler + `in_pool` bayrağı."""
+        return Response({"results": services_calendar.elective_pool_options(self.get_object())})
 
     # ÇOK METOTLU `@action` — GET ve POST TEK action'da (OYS Tur 644: aynı
     # url_path'li iki action router'da tek pattern'e düşüp GET 405 alıyordu).
@@ -128,7 +159,10 @@ class ExamCalendarViewSet(viewsets.ModelViewSet[ExamCalendar]):
     def entries(self, request: Request, pk: str | None = None) -> Response:
         """Havuz listesi (GET) + havuza girdi ekleme (POST)."""
         if request.method == "GET":
-            rows = selectors.calendar_entries(int(pk) if pk else 0)
+            # Kullanıcıya gösterilen liste TR SIRALI (CLAUDE.md §2): DB
+            # `order_by` SQLite'ta BINARY'dir ve Ç/Ğ/İ/Ö/Ş/Ü'yü Z'den sonraya
+            # atıyordu.
+            rows = selectors.calendar_entries_sorted(int(pk) if pk else 0)
             return Response({"results": ExamCalendarEntrySerializer(rows, many=True).data})
         calendar = self.get_object()
         serializer = ExamCalendarEntrySerializer(data=request.data)
@@ -142,6 +176,8 @@ class ExamCalendarViewSet(viewsets.ModelViewSet[ExamCalendar]):
                 exam_kind=data.get("exam_kind") or "WRITTEN",
                 is_butterfly=data.get("is_butterfly", True),
                 authority=data.get("authority") or "SCHOOL",
+                participant_type=data.get("participant_type") or "LEVEL",
+                section_ids=data.get("section_ids"),
                 note=data.get("note", ""),
             )
         except DjangoValidationError as exc:
@@ -265,6 +301,8 @@ class ExamCalendarEntryViewSet(viewsets.GenericViewSet[ExamCalendarEntry]):
                 is_butterfly=data.get("is_butterfly"),
                 exam_kind=data.get("exam_kind"),
                 authority=data.get("authority"),
+                participant_type=data.get("participant_type"),
+                section_ids=data.get("section_ids"),
                 note=data.get("note"),
             )
         except DjangoValidationError as exc:

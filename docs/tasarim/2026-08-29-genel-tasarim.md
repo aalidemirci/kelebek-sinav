@@ -61,6 +61,7 @@ Geliştirme yalnız Docker'da (host'a Python/Node kurulmaz); kapı zinciri
 | K14 | F27 anonimleştirme (ARŞİV + 730 gün) korunur; Celery beat yerine **açılışta aday tespiti + kullanıcı onaylı geri dönüşsüz tetik** | KVKK saklama süresi gerekçesi geçerli kalır |
 | K16 | Klasik düzen (HOME_CLASSROOM) alınır | Yoklama/kitapçık/tutanak tek SeatAssignment altyapısından; kesmek evrak setini ikiye bölerdi |
 | K17 | Linux pencere motoru **PyQt5 + QtWebEngine** (F9'da kayda geçti — karar F0 paket iskeletinden) | WebKitGTK/PyGObject yolu ELENDİ: typelib paketleme + Pardus 21/23 ABI oynaklığı. PyQt5 tekerlekleri manylinux2014 (glibc 2.17) olduğundan bullseye derlemesi Pardus 21'de çalışır. Qt'nin sistemden beklediği X/GL/ses kütüphaneleri `.deb` Depends'ine girer — tek doğruluk kaynağı `packaging/linux/build.sh::DEPENDS_QT` |
+| K19 | **Takvim havuzu ORTAK + YAZILI derslerle açılır**; seçmeliler seviye/şube kapsamı seçilerek eklenir. `Course.exam_mode` (YAZILI/UYGULAMA/YOK) çizelgenin isteğe bağlı 4. sütunundan gelir (31.08.2026) | Saha geri bildirimi: kataloğun tamamı havuza basılınca ~175 girdi çıkıyor, idareci sınavı yapılacak ~30 girdi kalana dek tek tek siliyordu. Karar gerekçesi, alternatifleri ve sonuçları **§7.1**'de |
 
 ### 2.3 Kimlik sabitleri (F0'da toplu — DD kalıntısı sıfır toleranslı)
 
@@ -118,7 +119,9 @@ okul no, `class_level`, `class_section` — **veli ve TCKN alanları yok**) ·
 kurulu; sınav takvimi imza bloğunun kaynağı, B7 revizyonu).
 
 **Ders havuzu (OYS ders_yapisi'ndan):** `Course` (name, `levels` JSON,
-course_type ORTAK/SECMELI, source MEB/MANUAL, `is_active`) ·
+course_type ORTAK/SECMELI, source MEB/MANUAL, `is_active`, **`exam_mode`
+YAZILI/UYGULAMA/YOK** — 31.08.2026 K19; çizelgenin isteğe bağlı "Sınav"
+sütunundan gelir, varsayılan YAZILI) ·
 `CurriculumFramework` + girdileri (program_key, version — idempotent upsert) ·
 `CourseAlias` (SEED + OPERATOR; OPERATOR SEED'i ezer, tersi asla).
 `VALID_COURSE_LEVELS` **SchoolConfig'den türetilir** (v1: 0=Hazırlık, 9-12).
@@ -142,7 +145,12 @@ odak = öğretmen masası) + `solo_desk` (sıra tek başına; kapasite azalır) 
 `ExamCalendarEntry.authority` (SCHOOL/MINISTRY/PROVINCIAL/DISTRICT — sınavı
 hazırlayan makam; teklik kısıtına GİRMEZ) · `ExamCalendar.footnote_text`
 (düzenlenebilir dipnot, varsayılandan kopyalanır) + `signatory_departments`
-(M2M → `okul.SubjectDepartment`).
+(M2M → `okul.SubjectDepartment`) · `ExamCalendarEntry.participant_type` +
+`section_ids` (LEVEL/SECTIONS — `ExamSessionCourse` ile **birebir aynı kalıp**;
+31.08.2026 K19). Girdinin `level`'ı zorunlu ve teklik anahtarının parçası
+olduğundan yön oturum tarafının TERSİDİR: seviye verilir, şubeler ona karşı
+denetlenir. Şube kümesi kimliği girdiye YAZILMAZ — seçim anında somut şube
+pk listesine açılır (§10 kümeler invariantı).
 
 (*) işaretli alanlar şifrelenir — bkz. §5.
 
@@ -231,10 +239,98 @@ DD'nin kanıtlı katmanı taşınır: `shared/crypto.py` (Fernet + Argon2id) +
 - Parser'lar saf ve aynen taşınır: `catalog_parser`, `curriculum_parser`,
   normalize yardımcıları (`_match_key`, `titlecase_tr`,
   `repair_truncated_course_name` — çıplak `.upper()/.lower()` TR'de yasak).
+- Çizelge tablosunun **isteğe bağlı 4. sütunu "Sınav"**: `YAZILI` / `UYGULAMA` /
+  `YOK`. Sütun yoksa veya hücre boşsa `YAZILI` sayılır — üç sütunlu dosyalar
+  (`cerceveler/*.md` ve elle yazılmış eski çizelgeler) değişmeden çözülür.
+  Tanınmayan etiket satırı, mevcut hata kalıbındaki gibi, `errors`'a düşürür ve
+  satır atlanır.
 - İlk açılışta idempotent tohum; UI: ders havuzu sayfası (liste + elle ekle +
-  pasifleştir + mükerrer tespiti/birleştirme `consolidate_duplicate_course`).
+  **düzenle** + pasifleştir + mükerrer tespiti/birleştirme
+  `consolidate_duplicate_course`). Liste "Sınav" sütununu gösterir; sınav
+  biçimi ders bazında değiştirilebilir (§7.1).
 - Yeni okul türü = yeni md dosyası + `program_key`; kod değişikliği gerekmez
   (U4 altyapı şartı). Seçmeli bütçesi türetilir: 40 − ortak toplam.
+
+### 7.1 Sınav biçimi (`exam_mode`) ve havuz doldurmanın daralması (31.08.2026, K19)
+
+**Sorun (saha geri bildirimi).** Takvim havuzu "Katalogdan Doldur" ile aktif
+kataloğun TAMAMINI (19 ortak + 45 seçmeli satır) okulun öğrencisi olan her
+seviyeye açıyordu: ölçülen **169 (ders, seviye) çifti**. İdareci gerçekte sınav
+yapılacak ~30 girdi kalana dek satırları tek tek siliyor; tek tek ekleme
+(autocomplete) yolu da aynı derecede yavaş kalıyordu. Havuza sınavı hiç olmayan
+ders (Rehberlik ve Yönlendirme) ve uygulama sınavı yapılan dersler (Beden
+Eğitimi ve Spor, Görsel Sanatlar/Müzik, Spor Eğitimi, Sanat Eğitimi) de
+giriyordu.
+
+**Karar.**
+
+1. `Course.exam_mode`: `WRITTEN` (Yazılı, varsayılan) / `PRACTICE` (Uygulama) /
+   `NONE` (Sınav yok). Kaynak çizelgenin "Sınav" sütunu (yukarıdaki madde).
+2. `fill_calendar_pool` yalnız **ORTAK + YAZILI** dersleri çeker
+   (`taught_course_levels(course_types=[COMMON], exam_modes=[WRITTEN])`).
+   Ölçülen etki: 169 → **33 girdi** (hazırlıksız, 9-12 öğrencili okul).
+   Dönüş sözlüğünün şekli değişmez (`created/existed/skipped/total_pairs`).
+3. Seçmeliler ayrı akıştan gelir: seviye sekmeli seçim diyaloğu
+   (`elective-options` ucu, ders adları TR sıralı) + tek çağrılık toplu ekleme
+   (`bulk-entries`). Havuzda olan ders işaretli ve kilitli görünür; reddedilen
+   kalem sessizce düşmez, `skipped` nedeniyle raporlanır.
+4. Takvim girdisi **katılımcı kapsamı** kazanır (`participant_type` +
+   `section_ids`): "Seviye geneli" varsayılan, "Şube seç" seçeneğinde şube
+   kümesi çipleri kümeyi somut şube listesine AÇAR. Dayanak Yönerge md. 5/1-b —
+   okul geneli ortak yazılı sınavlar aynı sınıf düzeyinde birden çok şubesi
+   bulunan okullarda ortak yapılır; yalnız bir-iki şubenin aldığı seçmelide
+   kapsam doğal olarak dardır.
+5. Takvim yaratılırken (yalnız tur 1 ve 2) havuz **kendiliğinden tohumlanır**;
+   tohum hatası takvim yaratılmasını ASLA düşürmez. Tur 3 havuzu elle
+   doldurulur (Yönerge md. 5/1-c: üçüncü sınav il sınıf/alan zümresi kararına
+   bağlıdır — otomatik varsayım yapılamaz).
+6. Elle ekleme formu KALIR ve kenar durumların yoludur: uygulama sınavı,
+   "kelebek değil" ve üst makam sınavı girdileri oradan eklenir. Seçilen dersin
+   `exam_mode`'u UYGULAMA ise formun "Tür" alanı kendiliğinden Uygulama'ya
+   gelir (iki alan ayrı kalır: `exam_mode` dersin niteliği, `ExamKind` o
+   girdinin türüdür).
+
+**Sınıflamanın statüsü — mevzuat değil kürasyon.** Mevzuat hangi dersin yazılı,
+hangisinin uygulamalı sınavla ölçüleceğini ders ders saymaz; Yönetmelik
+md. 5/1-ı ile Yönerge md. 5/1-ğ yalnız Türkçe/Türk dili ve edebiyatı ve yabancı
+dil derslerinde yazılı + uygulamalı iki aşamayı zorunlu kılar. Bu yüzden
+`exam_mode` bir **çizelge kürasyonudur**: varsayılanı yaygın okul pratiğidir ve
+idareci Ders Havuzu ekranından ders bazında değiştirebilir. "Rehberlik ve
+Yönlendirme" satırı kataloğa sınav için değil ders programı doğrulaması için
+girmiştir (çizelge kürasyon notu, Tur 362) → `NONE`.
+
+**Alternatifler ve neden reddedildi.**
+
+- *(a) Bugünkü hâl — her şeyi doldur, idareci silsin.* Ölçülen yük ~135 satır
+  silme; kullanıcı bunu "çok uzun sürüyor, deneyimi zayıflatıyor" diye bildirdi.
+  Reddedildi.
+- *(b) Ders programı / ders kayıt verisinden türetmek (OYS'nin kaynağı).* KS'de
+  ne ders programı ne de ders kaydı verisi var (B6 ve B8 sapmaları, TB4) —
+  türetilecek veri yok. Reddedildi.
+- *(c) Seçmelileri de otomatik doldurup kapsamı sonradan daraltmak.* Bir
+  seçmelinin hangi seviyede fiilen açıldığı okul kararıdır; katalog bunu
+  bilmez — otomatik doldurma (a)'nın seçmeli hâline dönerdi. Reddedildi.
+- *(ç) `ExamKind.PRACTICE`'i ders niteliği olarak yeniden kullanmak.* İkisi
+  ayrı kavram: `ExamKind` bir takvim girdisinin türü, `exam_mode` dersin
+  niteliğidir; birleştirmek "bu ders bu kez uygulamalı sınandı" kaydını
+  imkânsız kılardı. Reddedildi — iki enum ayrı durur.
+
+**Sonuçlar.**
+
+- `exam_mode` MEB kaynağının kazandığı **çizelge verisidir**: import'ta
+  `levels`/`course_type` gibi ezilir. `is_active` ise bilinçle korunur — o idari
+  karardır (K5). İkisi karıştırılmamalı; kod bunu yorumla söylemelidir.
+- Kapsam **kümeler invariantına tabidir**: girdi yalnız LEVEL/SECTIONS tutar,
+  küme kimliği tutmaz (§10) — üçüncü bir katılımcı tipi eklenmez (TB7 kesimi
+  takvim tarafında da geçerlidir).
+- Mevcut kurulumlar için **veri göçü şarttır**: `ensure_meb_catalog` tek bir
+  `MEB_CATALOG` kaydı varsa hiçbir dosyayı okumadan döner, yani çizelgeye sütun
+  eklemek yalnız sıfırdan kurulan makineleri etkiler. Göç ada göre (normalize
+  eşleştirmeyle) sınıflar; geri alma `noop` — idarecinin elle verdiği değerler
+  silinmesin diye.
+- Günlük sınav yükü hesabı **gevşetilmez**: kapsam verisi geldi diye
+  `_daily_exam_load`'un "kayıt verisi olmayan ders seviyenin tamamını kapsar"
+  konservatif düşüşü kaldırılmaz (risk #4, TB10).
 
 ---
 
@@ -251,6 +347,12 @@ Ders Yılları/Şubeler/**Şube Kümeleri**/**Zümreler**/Okul Bilgileri/Güvenl
 Güncelleme) → Oturum Detayı sekmelerine **Yerleştirme Kuralları** eklendi;
 Salonlar ekranında **Kümeler** diyaloğu (toplu atama) →
 **Kullanım Kılavuzu** (`/kilavuz`, statik adım adım anlatım).
+Takvim Detayı → Havuz paneli 31.08.2026'da ikiye ayrıldı (K19, §7.1):
+**"Zorunlu dersleri ekle"** (eski "Katalogdan Doldur" ucu, daraltılmış kapsam) +
+**"Seçmeli ders seç"** diyaloğu (seviye sekmeleri · onay kutulu ders listesi ·
+satır içi katılımcı kapsamı: Seviye geneli / şube kümesi çipleri / tek tek
+şube). Küme çipi şubeleri seçime EKLER, ayrı durum tutmaz — emsal desen
+`SinavSihirbazi.applyGroup`. Havuz tablosunda kapsam sütunu görünür.
 
 Korunan FE desenleri: 5 adımlı sınav sihirbazı (Adım 0 beyanlı nakil onayı) ·
 salon editörü **palet + tıkla-yerleştir** (DnD bilinçli yok — ADR-0016) ·
@@ -350,8 +452,17 @@ varsayılan, ayarla değiştirilebilir" ilkesi.
   kullanıcı `footnote_text` ile değiştirebilir.
 - **Kümeler YALNIZ seçim aracıdır** (31.08.2026): küme kimliği hiçbir oturum
   kaydına yazılmaz; sihirbaz kümeyi yazma anında somut şube/salon pk'lerine
-  açar. Aksi hâlde küme sonradan değişince ONAYLANMIŞ oturumun katılımcı kümesi
+  açar. **Aynı kural takvim girdisine de uygulanır** (31.08.2026 eki):
+  `ExamCalendarEntry` yalnız LEVEL/SECTIONS tutar, küme kimliği tutmaz; slottan
+  oturum üretilirken girdinin kapsamı olduğu gibi `ExamSessionCourse`'a taşınır.
+  Aksi hâlde küme sonradan değişince ONAYLANMIŞ oturumun katılımcı kümesi
   geriye dönük kayar (SNAPSHOT deseni + "aynı seed → aynı dağıtım" ihlali).
+- **Havuz otomatik doldurması dar kapsamlıdır** (31.08.2026, K19):
+  `fill_calendar_pool` yalnız ORTAK + YAZILI dersleri çeker; seçmeliler seçim
+  diyaloğuyla, uygulama sınavı yapılan ve sınavı hiç olmayan dersler ise ELLE
+  eklenir. Sınav biçimi sınıflaması mevzuat hükmü değil çizelge kürasyonudur
+  (§7.1) — idareci ders bazında değiştirebilir, bu yüzden koda gömülü ders adı
+  listesi tutulmaz.
 - **Özel durum yerleştirmesi**: koltuk koordinatı `(desk_row, desk_col, slot)`
   ile tutulur — `seat_no` numaralandırma düzeni değişince kayar, koordinat
   kaymaz. "Tek başına" kardeş koltukları motor girdisinden DÜŞÜRÜR; sahte
@@ -424,6 +535,7 @@ app'i, guardian_* alanları.
 | **F4 Evrak seti** | R1-R5, R7-R9 + boş plan + tümü-ZIP; _design.css; ARCHIVED yeniden basım | Her raporda TR karakter duman testi; `text-transform` tarama testi; `|unlocalize` denetimi |
 | **F5 Kitapçık** | R10 senkron + A4 ±6pt doğrulama + Word şablonu | Bant ≤ 40mm invariantı; sayfa kuralları; 90×4 < 30 sn |
 | **F6 Takvim** | ExamCalendar + statutory_window + grid + günlük limit + slot→oturum + takvim PDF; **30.08.2026 eki:** hazırlayan makam (`authority`), düzenlenebilir dipnot, seçilen zümrelerden imza bloğu | Pencere hesabı + öğrenci-bazlı limit senaryoları; makam ızgara hücresinde + PDF etiketinde; üst makam günü çakışması uyarı üretir; seçili zümre PDF'e başkan adıyla basılır, seçim yoksa yedek dal |
+| **F6 eki (31.08.2026)** | `Course.exam_mode` + çizelgenin isteğe bağlı "Sınav" sütunu + ada göre veri göçü; havuz otomatik doldurması ORTAK+YAZILI'ya daraldı; seçmeli seçim diyaloğu (seviye sekmeleri + kapsam) ve toplu ekleme ucu; takvim girdisinde katılımcı kapsamı (LEVEL/SECTIONS); tur 1-2 takviminde otomatik havuz tohumu (K19, §7.1) | Üç sütunlu çizelgeler DEĞİŞMEDEN çözülür; göç ada göre UYGULAMA/YOK işaretler ve geri alınabilir; fill-pool seçmeli/uygulama/sınavsız dersi ÇEKMEZ; toplu ekleme idempotent ve reddedilen kalem sessizce düşmez; şube kapsamı slottan üretilen oturuma taşınır; tur 3'te tohum koşmaz; `_daily_exam_load` değişmeden yeşil |
 | **F7 Gözetmen** | Elle atama; salon başına 1 + yedek; R6; yeniden dağıtımda sıfırlama | Ayar kapalıyken R6 katalogda görünmez |
 | **F8 Bakım** | Günlük yedek+rotasyon (iki kip); F27 elle-tetik anonimleştirme; surum.json; updates.py+UpdateBanner | Eski exe yeni DB'yi açmaz; anonimleştirme sonrası yeniden basım kırılmaz |
 | **F9 Paketleme** | PyInstaller onedir + Inno (yeni GUID, WebView2 gömülü) + .deb (bullseye; pango/fontconfig Depends); kap-ici-test debian 11+12; veri_sizintisi.py ×2 platform | Temiz Windows 11 ve Pardus 21'de: kurulum → sihirbaz → içe aktarma → dağıtım → R1 PDF uçtan uca |
@@ -438,7 +550,10 @@ app'i, guardian_* alanları.
    atlanan tek sorgu şifreli kipte sessiz boş sonuç verir (DD F5-D5 vakası).
    Selector disiplinini F1'den kurmak şart.
 4. **Konservatif düşüş kaybı:** günlük limitte "kayıtsız ders = seviyenin
-   tamamı" kuralı gevşetilirse mevzuat denetimi delinir.
+   tamamı" kuralı gevşetilirse mevzuat denetimi delinir. **31.08.2026 eki:**
+   takvim girdisine şube kapsamı gelmesi bu kuralı DEĞİŞTİRMEZ — kapsam yalnız
+   katılımcı önizlemesinde ve slottan oturum üretiminde kullanılır;
+   `_daily_exam_load` şube listesine bakmaz (TB10).
 5. **Fontconfig/DejaVu:** fonts.conf'ta DOCTYPE kalırsa sessiz ret → bozuk
    Türkçe evrak; build.ps1 ezme adımı atlanmamalı.
 6. **Kimlik çakışması:** Inno AppId GUID yenilenmez veya `DD_*` kalıntısı
@@ -456,6 +571,10 @@ app'i, guardian_* alanları.
 
 - e-Okul PDF parser'ları (şube listesi, personel) → v2 adayı.
 - Diğer okul türü çizelgeleri (Fen/SB/Meslek/İH) → veri dosyası küratörlüğü.
+  Yeni çizelgede **"Sınav" sütunu** da doldurulmalı: uygulama sınavı yapılan ve
+  sınavı olmayan dersler işaretlenmezse hepsi YAZILI sayılır ve havuz o okulda
+  yeniden şişer (§7.1). Meslek dersleri özel: ortak sınavın en az biri
+  uygulamalı yapılır (Yönetmelik md. 5/1-h) — sınıflama zümre kararına bağlı.
 - Ortaokul/ilkokul kademesi → seviye kümesi parametrik olduğunda değerlendirilir.
 - okulapp.org yayın alanı: sürüm kartı + tanıtım sayfaları (DD deseni;
   `okulapp.org/CLAUDE.md` "Ortak çalışma düzeni"ne tabi).

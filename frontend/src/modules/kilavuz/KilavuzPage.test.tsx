@@ -35,10 +35,22 @@ describe("KilavuzPage", () => {
     );
   });
 
-  it("ders havuzunda pasifleştirme ipucunu anlatır", () => {
+  it("ders havuzunda tür/sınav biçimi ayrımını ve pasifleştirme ipucunu anlatır", () => {
     renderPage();
     expect(screen.getByText(/Okulunuzda okutulmayan dersleri/)).toBeInTheDocument();
     expect(screen.getByText(/ders eşleştirmesi ilk seferde doğru olur/)).toBeInTheDocument();
+    // Sınav biçimi alanı pasifleştirme ihtiyacını kaldırdı — kılavuz bunu söylemeli.
+    expect(screen.getByText(/Rehberlik ve Yönlendirme/)).toBeInTheDocument();
+    expect(screen.getByText(/pasifleştirmenize/)).toBeInTheDocument();
+  });
+
+  it("takvim havuzunun zorunlu/seçmeli ders akışını anlatır", () => {
+    renderPage();
+    expect(screen.getByRole("heading", { level: 3, name: /Havuzu doldurmak/ })).toBeInTheDocument();
+    expect(screen.getByText(/Havuzda zaten bulunan ders işaretli ve/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/takvime kümenin adı değil, seçilen şubeler yazılır/),
+    ).toBeInTheDocument();
   });
 
   it("günlük sınav sayısı sınırını mevzuat dayanağıyla verir", () => {

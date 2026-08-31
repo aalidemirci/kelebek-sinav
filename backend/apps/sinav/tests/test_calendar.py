@@ -22,13 +22,22 @@ from django.core.exceptions import ValidationError
 from pypdf import PdfReader
 from rest_framework.test import APIClient
 
-from apps.okul.models import Personnel, SchoolConfig, SchoolTerm, SubjectDepartment
+from apps.dersler.models import CourseExamMode, CourseType
+from apps.okul.models import (
+    ClassSection,
+    Personnel,
+    SchoolConfig,
+    SchoolTerm,
+    SubjectDepartment,
+)
+from apps.okul.services import sections
 from apps.sinav import services_calendar as takvim
 from apps.sinav.models import (
     ExamAuthority,
     ExamCalendar,
     ExamCalendarEntry,
     ExamCalendarStatus,
+    ExamSession,
     ExamSessionStatus,
 )
 from apps.sinav.tests.oturum_yardim import aktif_yil, ders, donem, salon, sube
@@ -129,22 +138,82 @@ def test_generate_default_calendars_idempotent() -> None:
     assert ExamCalendar.objects.count() == 4
 
 
+def _takvim(round_: int = 1, semester: SchoolTerm | None = None) -> ExamCalendar:
+    """Takvim kurucusu — pencere sabit, tur değişken (tohumlama testleri için)."""
+    guz = semester or _iki_donem()[0]
+    return takvim.create_exam_calendar(
+        semester_id=guz.pk,
+        round=round_,
+        start_date=date(2026, 10, 26),
+        end_date=date(2026, 11, 6),
+    )
+
+
 def test_fill_pool_katalogdan_ogrencili_seviyelerle() -> None:
-    """Havuz = aktif katalog × (ders seviyeleri ∩ öğrencisi olan seviyeler); idempotent."""
+    """Havuz = ZORUNLU+YAZILI katalog × (ders seviyeleri ∩ öğrencisi olan seviyeler)."""
     guz, _ = _iki_donem()
     sube(9, "A", students=2, start_no=101)  # yalnız 9. seviyede öğrenci var
     course = ders("Coğrafya", levels=[9, 10])
-    calendar = takvim.create_exam_calendar(
-        semester_id=guz.pk, round=1, start_date=date(2026, 10, 26), end_date=date(2026, 11, 6)
-    )
+    # Takvim yaratılırken havuz zaten tohumlanır; buradaki çağrı tohumun
+    # İDEMPOTENT olduğunu ve süzgecin aynı çifti verdiğini gösterir.
+    calendar = _takvim(round_=1, semester=guz)
     result = takvim.fill_calendar_pool(calendar)
-    labels = result["created"]
+    labels = result["existed"]
+    assert result["created"] == []
     assert any("Coğrafya" in etiket and "9. Sınıf" in etiket for etiket in labels)
     assert not any("10. Sınıf" in etiket for etiket in labels)  # 10'da öğrenci yok
     assert ExamCalendarEntry.objects.filter(calendar=calendar, course=course, level=9).exists()
-    # İdempotent: ikinci koşuda aynı çift existed'a düşer.
-    tekrar = takvim.fill_calendar_pool(calendar)
-    assert tekrar["created"] == [] and len(tekrar["existed"]) == len(labels)
+
+
+def test_fill_pool_yalniz_zorunlu_ve_yazili_dersleri_ceker() -> None:
+    """Seçmeli · uygulama sınavı · sınavsız dersler otomatik havuza GİRMEZ.
+
+    Kullanıcı geri bildirimi (31.08.2026): tüm katalog basılınca idareci
+    ~175 satırdan ~30'a inene dek tek tek siliyordu. Süzgeç artık
+    (COMMON, WRITTEN) ikilisidir; kalanlar seçim diyaloğundan ya da elle
+    ekleme formundan gelir.
+    """
+    guz, _ = _iki_donem()
+    sube(9, "A", students=2, start_no=101)
+    ders("Matematik", levels=[9])  # zorunlu + yazılı → havuza girer
+    ders("Astronomi ve Uzay Bilimleri", levels=[9], course_type=CourseType.ELECTIVE)
+    ders("Beden Eğitimi ve Spor", levels=[9], exam_mode=CourseExamMode.PRACTICE)
+    ders("Rehberlik ve Yönlendirme", levels=[9], exam_mode=CourseExamMode.NONE)
+
+    calendar = _takvim(round_=1, semester=guz)
+    adlar = set(
+        ExamCalendarEntry.objects.filter(calendar=calendar).values_list("course__name", flat=True)
+    )
+    assert adlar == {"Matematik"}
+
+
+def test_takvim_yaratilinca_havuz_tohumlanir_tur3_bos_kalir() -> None:
+    """Round 1/2 havuzu kendiliğinden dolar; round 3 (elle doldurulan) BOŞ kalır."""
+    guz, bahar = _iki_donem()
+    sube(9, "A", students=2, start_no=101)
+    ders("Matematik", levels=[9])
+
+    birinci = _takvim(round_=1, semester=guz)
+    assert ExamCalendarEntry.objects.filter(calendar=birinci).count() == 1
+
+    ucuncu = _takvim(round_=3, semester=guz)
+    assert ExamCalendarEntry.objects.filter(calendar=ucuncu).count() == 0
+    assert bahar.pk is not None
+
+
+def test_tohumlama_hatasi_takvim_yaratmayi_dusurmez(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Havuz tohumlama bir KOLAYLIKTIR: patlarsa takvim yine yaratılır (hata yutulur)."""
+    guz, _ = _iki_donem()
+    sube(9, "A", students=2, start_no=101)
+    ders("Matematik", levels=[9])
+
+    def _patla(_calendar: ExamCalendar) -> dict[str, object]:
+        raise ValidationError("tohumlama patladı")
+
+    monkeypatch.setattr(takvim, "fill_calendar_pool", _patla)
+    calendar = _takvim(round_=1, semester=guz)
+    assert calendar.pk is not None and calendar.status == ExamCalendarStatus.DRAFT
+    assert ExamCalendarEntry.objects.filter(calendar=calendar).count() == 0
 
 
 def test_fill_pool_round3_reddedilir() -> None:
@@ -420,7 +489,6 @@ def test_track_mark_ve_matris() -> None:
 def test_api_takvim_akisi() -> None:
     guz, _ = _iki_donem()
     sube(9, "A", students=2, start_no=101)
-    course = ders("Coğrafya", levels=[9])
     client = APIClient()
 
     olustur = client.post(
@@ -433,12 +501,19 @@ def test_api_takvim_akisi() -> None:
     assert olustur.data["name"] == "1. Dönem 1. Sınav Takvimi"
     assert olustur.data["school_year_name"] == "2026-2027"
 
+    # Ders takvimden SONRA yaratılır: takvim yaratılışında havuz zorunlu
+    # derslerle kendiliğinden tohumlanıyor (bkz.
+    # test_takvim_yaratilinca_havuz_tohumlanir_tur3_bos_kalir) — elle ekleme
+    # yolu bu akışta ayrıca sınanmalı.
+    course = ders("Coğrafya", levels=[9])
     ekle = client.post(
         f"/api/v1/exam-calendars/{cal_id}/entries/",
         {"course": course.pk, "level": 9},
         format="json",
     )
     assert ekle.status_code == 201
+    assert ekle.data["participant_type"] == "LEVEL"
+    assert ekle.data["participant_label"] == "Seviye geneli"
     entry_id = ekle.data["id"]
     listesi = client.get(f"/api/v1/exam-calendars/{cal_id}/entries/")
     assert listesi.status_code == 200 and len(listesi.data["results"]) == 1
@@ -578,7 +653,6 @@ def test_pdf_makam_etiketi_ve_dipnotu_basiyor() -> None:
 def test_api_makam_dipnot_ve_imza_zumresi_sozlesmesi() -> None:
     guz, _ = _iki_donem()
     sube(9, "A", students=2, start_no=101)
-    course = ders("Coğrafya", levels=[9])
     zumre = SubjectDepartment.objects.create(name="Sosyal Bilimler")
     client = APIClient()
 
@@ -590,6 +664,8 @@ def test_api_makam_dipnot_ve_imza_zumresi_sozlesmesi() -> None:
     cal_id = olustur.data["id"]
     assert olustur.data["footnote_text"] == takvim.DEFAULT_CALENDAR_FOOTNOTE
 
+    # Ders takvimden sonra: otomatik tohumlama aynı çifti önceden eklemesin.
+    course = ders("Coğrafya", levels=[9])
     ekle = client.post(
         f"/api/v1/exam-calendars/{cal_id}/entries/",
         {"course": course.pk, "level": 9, "authority": "DISTRICT"},
@@ -711,3 +787,350 @@ def test_cok_sayfali_takvim_ve_satir_bolunme_korumasi() -> None:
             f"Sayfa {sayfa_no} tablo başlığından sonra tarihsiz ders satırıyla başlıyor "
             f"(satır bölünmüş): {ilk_govde!r}"
         )
+
+
+# ===========================================================================
+# Katılımcı kapsamı + toplu ekleme + seçmeli seçim (31.08.2026 sadeleştirmesi)
+# ===========================================================================
+
+
+def _secmeli_takvim() -> tuple[ExamCalendar, int, int]:
+    """9/A + 9/B şubeli takvim + bir SEÇMELİ yazılı ders → (takvim, ders_pk, 9/A pk)."""
+    guz, _ = _iki_donem()
+    a = sube(9, "A", students=2, start_no=101)
+    sube(9, "B", students=3, start_no=201)
+    calendar = _takvim(round_=1, semester=guz)
+    secmeli = ders("Astronomi ve Uzay Bilimleri", levels=[9], course_type=CourseType.ELECTIVE)
+    return calendar, secmeli.pk, a.pk
+
+
+def test_sube_kapsami_kaydedilir_ve_baska_seviyenin_subesi_reddedilir() -> None:
+    """SECTIONS kapsamı somut şube pk'leriyle yazılır; seviye dışı şube REDDEDİLİR."""
+    calendar, ders_pk, a_pk = _secmeli_takvim()
+    onbir = sube(11, "A", students=2, start_no=301)
+
+    entry = takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=ders_pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[a_pk, a_pk],  # yinelenen id sessizce teklenir
+    )
+    assert entry.participant_type == "SECTIONS" and entry.section_ids == [a_pk]
+
+    # Başka seviyenin şubesi: Türkçe hata, girdi yazılmaz.
+    baska = ders("Seçmeli Fizik", levels=[9], course_type=CourseType.ELECTIVE)
+    with pytest.raises(ValidationError, match="seviyesinde değil"):
+        takvim.add_calendar_entry(
+            calendar=calendar,
+            course_id=baska.pk,
+            level=9,
+            participant_type="SECTIONS",
+            section_ids=[onbir.pk],
+        )
+    assert not ExamCalendarEntry.objects.filter(calendar=calendar, course=baska).exists()
+
+    # Boş şube listesi de reddedilir (oturum tarafıyla aynı cümle).
+    with pytest.raises(ValidationError, match="en az bir şube seçin"):
+        takvim.add_calendar_entry(
+            calendar=calendar,
+            course_id=baska.pk,
+            level=9,
+            participant_type="SECTIONS",
+            section_ids=[],
+        )
+
+
+def test_kapsam_guncellemesi_level_donusunde_sube_listesini_temizler() -> None:
+    """Tip LEVEL'e döndürülünce eski şube seçimi kalıntı bırakmaz."""
+    calendar, ders_pk, a_pk = _secmeli_takvim()
+    entry = takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=ders_pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[a_pk],
+    )
+    takvim.update_calendar_entry(entry, participant_type="LEVEL")
+    entry.refresh_from_db()
+    assert entry.participant_type == "LEVEL" and entry.section_ids == []
+
+    with pytest.raises(ValidationError, match="Geçersiz katılımcı tipi"):
+        takvim.update_calendar_entry(entry, participant_type="GROUPS")
+
+
+def test_bulk_entries_idempotent_ve_reddedileni_raporlar() -> None:
+    """Toplu ekleme: yeni → created, var olan → existed, geçersiz → skipped."""
+    calendar, ders_pk, a_pk = _secmeli_takvim()
+    ikinci = ders("Seçmeli Kimya", levels=[9], course_type=CourseType.ELECTIVE)
+    onbir = sube(11, "A", students=2, start_no=301)
+
+    sonuc = takvim.add_calendar_entries_bulk(
+        calendar,
+        [
+            {
+                "course_id": ders_pk,
+                "level": 9,
+                "participant_type": "SECTIONS",
+                "section_ids": [a_pk],
+            },
+            {"course_id": ikinci.pk, "level": 9},
+            # Ders 11. seviyede okutulmuyor → skipped (koşunun kalanı sürer).
+            {
+                "course_id": ikinci.pk,
+                "level": 11,
+                "participant_type": "SECTIONS",
+                "section_ids": [onbir.pk],
+            },
+            {"level": 9},  # ders kimliği yok
+        ],
+    )
+    assert len(sonuc["created"]) == 2
+    assert sonuc["existed"] == []
+    assert len(sonuc["skipped"]) == 2
+    assert any("okutulmuyor" in s for s in sonuc["skipped"])
+    assert any("ders ve seviye zorunlu" in s for s in sonuc["skipped"])
+
+    # İdempotent: aynı kalemler ikinci koşuda existed'a düşer, hata üretmez.
+    tekrar = takvim.add_calendar_entries_bulk(
+        calendar,
+        [
+            {
+                "course_id": ders_pk,
+                "level": 9,
+                "participant_type": "SECTIONS",
+                "section_ids": [a_pk],
+            },
+            {"course_id": ikinci.pk, "level": 9},
+        ],
+    )
+    assert tekrar["created"] == [] and len(tekrar["existed"]) == 2
+
+
+def test_elective_options_in_pool_bayragi_ve_tr_siralama() -> None:
+    """Seçmeli seçenekleri seviye bazlı gelir; havuzdaki ders işaretli, sıra TR."""
+    guz, _ = _iki_donem()
+    sube(9, "A", students=2, start_no=101)
+    calendar = _takvim(round_=1, semester=guz)
+    ders("Zooloji", levels=[9], course_type=CourseType.ELECTIVE)
+    cince = ders("Çince", levels=[9], course_type=CourseType.ELECTIVE)
+    ders("Sosyoloji", levels=[9], course_type=CourseType.ELECTIVE)
+    ders("Matematik", levels=[9])  # ZORUNLU — seçmeli listesinde görünmemeli
+    ders(
+        "Görsel Sanatlar",
+        levels=[9],
+        course_type=CourseType.ELECTIVE,
+        exam_mode=CourseExamMode.PRACTICE,
+    )  # uygulama sınavı — seçmeli listesinde görünmemeli
+
+    seviyeler = takvim.elective_pool_options(calendar)
+    assert [s["value"] for s in seviyeler] == [9]
+    assert seviyeler[0]["display_label"] == "9. Sınıf"
+    adlar = [c["name"] for c in seviyeler[0]["courses"]]
+    # TR alfabesi: Ç < S < Z (BINARY sırada 'Çince' Z'den sonraya düşerdi).
+    assert adlar == ["Çince", "Sosyoloji", "Zooloji"]
+    assert all(c["in_pool"] is False for c in seviyeler[0]["courses"])
+
+    takvim.add_calendar_entry(calendar=calendar, course_id=cince.pk, level=9)
+    guncel = takvim.elective_pool_options(calendar)[0]["courses"]
+    assert [c["in_pool"] for c in guncel if c["name"] == "Çince"] == [True]
+
+
+def test_create_session_from_slot_kapsami_tasir() -> None:
+    """Havuzdaki şube kapsamı üretilen ExamSessionCourse'a AYNEN geçer."""
+    calendar, ders_pk, a_pk = _secmeli_takvim()
+    salon("9-A Dersliği")
+    entry = takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=ders_pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[a_pk],
+    )
+    gun = date(2026, 10, 27)
+    takvim.place_entry(entry, on_date=gun, period_no=1)
+    takvim.submit_calendar(calendar)
+    takvim.approve_calendar(calendar)
+
+    session = takvim.create_session_from_slot(calendar, on_date=gun, period_no=1)
+    sc = session.courses.get(course_id=ders_pk)
+    assert sc.participant_type == "SECTIONS"
+    assert sc.section_ids == [a_pk]
+    assert sc.level == 9
+
+
+def _kapsami_silinmis_onayli_takvim() -> tuple[ExamCalendar, date, ExamCalendarEntry, int]:
+    """Onaylı takvim: aynı slotta bir SEVİYE girdisi + şubesi SİLİNMİŞ bir ŞUBE girdisi."""
+    calendar, ders_pk, a_pk = _secmeli_takvim()
+    salon("9-A Dersliği")
+    seviye_dersi = ders("Matematik", levels=[9])
+    seviye_girdisi = takvim.add_calendar_entry(
+        calendar=calendar, course_id=seviye_dersi.pk, level=9
+    )
+    sube_girdisi = takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=ders_pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[a_pk],
+    )
+    gun = date(2026, 10, 27)
+    takvim.place_entry(seviye_girdisi, on_date=gun, period_no=1)
+    takvim.place_entry(sube_girdisi, on_date=gun, period_no=1)
+    takvim.submit_calendar(calendar)
+    takvim.approve_calendar(calendar)
+    # Onaydan SONRA şube silinir (soft) — girdi artık düzenlenemez.
+    sections.delete_class_section(ClassSection.objects.get(pk=a_pk))
+    return calendar, gun, sube_girdisi, seviye_dersi.pk
+
+
+def test_silinmis_sube_slotun_tamamini_kilitlemez() -> None:
+    """Kapsamı silinmiş girdi ATLANIR; slottaki sağlam ders yine üretilir."""
+    calendar, gun, sube_girdisi, seviye_ders_pk = _kapsami_silinmis_onayli_takvim()
+
+    session = takvim.create_session_from_slot(calendar, on_date=gun, period_no=1)
+
+    assert [sc.course_id for sc in session.courses.all()] == [seviye_ders_pk]
+    # Atlanan girdi oturuma BAĞLANMAZ: şube geri açılınca yeniden üretilebilir.
+    sube_girdisi.refresh_from_db()
+    assert sube_girdisi.session_id is None
+
+
+def test_kapsami_tumuyle_silinmis_slotta_oksuz_oturum_kalmaz() -> None:
+    """Tek girdi ve o da kapsamsızsa: Türkçe hata + geride ExamSession KALMAZ."""
+    calendar, ders_pk, a_pk = _secmeli_takvim()
+    salon("9-A Dersliği")
+    entry = takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=ders_pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[a_pk],
+    )
+    gun = date(2026, 10, 27)
+    takvim.place_entry(entry, on_date=gun, period_no=1)
+    takvim.submit_calendar(calendar)
+    takvim.approve_calendar(calendar)
+    sections.delete_class_section(ClassSection.objects.get(pk=a_pk))
+
+    with pytest.raises(ValidationError, match="şube kapsamı silinmiş"):
+        takvim.create_session_from_slot(calendar, on_date=gun, period_no=1)
+    assert ExamSession.objects.count() == 0
+    entry.refresh_from_db()
+    assert entry.session_id is None
+
+
+def test_dogrulama_silinmis_kapsam_subesini_uyarir() -> None:
+    """Kayıp şube sessizce düşmez: doğrulama kalıcı uyarı basar (önizleme 0 sayar)."""
+    calendar, gun, sube_girdisi, _ = _kapsami_silinmis_onayli_takvim()
+
+    uyarilar = takvim.calendar_validation(calendar)["warnings"]
+    assert any("şube silinmiş" in u and "Astronomi ve Uzay Bilimleri" in u for u in uyarilar)
+    # Uyarı ERRORS değildir — takvim bloklanmaz (idari düzeltme işi).
+    assert takvim.calendar_validation(calendar)["errors"] == []
+    assert takvim.entry_participant_preview(calendar)[sube_girdisi.pk]["student_count"] == 0
+
+
+def test_katilimci_onizlemesi_sube_kapsamini_sayar() -> None:
+    """SECTIONS girdide önizleme seçilen şubelerin öğrencisini sayar (seviyeyi DEĞİL)."""
+    calendar, ders_pk, a_pk = _secmeli_takvim()  # 9/A: 2 öğrenci, 9/B: 3 öğrenci
+    seviye_dersi = ders("Matematik", levels=[9])
+    seviye_girdisi = takvim.add_calendar_entry(
+        calendar=calendar, course_id=seviye_dersi.pk, level=9
+    )
+    sube_girdisi = takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=ders_pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[a_pk],
+    )
+
+    onizleme = takvim.entry_participant_preview(calendar)
+    assert onizleme[sube_girdisi.pk]["student_count"] == 2
+    assert onizleme[sube_girdisi.pk]["whole"] is False
+    assert onizleme[sube_girdisi.pk]["groups"] == ["9/A (2)"]
+    # Seviye geneli girdi eski davranışta: seviyenin tamamı (2 + 3).
+    assert onizleme[seviye_girdisi.pk]["student_count"] == 5
+    assert onizleme[seviye_girdisi.pk]["whole"] is True
+
+
+def test_izgara_hucresi_kapsam_etiketini_tasir() -> None:
+    """Hücre ANAHTARI biçimi sabit; hücre sözlüğüne kapsam alanları eklendi (§3)."""
+    calendar, ders_pk, a_pk = _secmeli_takvim()
+    entry = takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=ders_pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[a_pk],
+    )
+    gun = date(2026, 10, 27)
+    takvim.place_entry(entry, on_date=gun, period_no=1)
+
+    grid = takvim.calendar_grid(calendar)
+    hucre = grid["cells"][f"{gun.isoformat()}|1|9"][0]
+    assert hucre["participant_type"] == "SECTIONS"
+    assert hucre["section_ids"] == [a_pk]
+    assert hucre["participant_label"] == "1 şube"
+    assert [s["display_label"] for s in grid["levels"] if s["value"] == 9] == ["9. Sınıf"]
+
+
+def test_api_toplu_ekleme_ve_secmeli_secenekleri() -> None:
+    """Yeni uçlar: POST bulk-entries + GET elective-options (url_path çakışması yok)."""
+    guz, _ = _iki_donem()
+    a = sube(9, "A", students=2, start_no=101)
+    client = APIClient()
+    olustur = client.post(
+        "/api/v1/exam-calendars/",
+        {"semester": guz.pk, "round": 1, "start_date": "2026-10-26", "end_date": "2026-11-06"},
+        format="json",
+    )
+    cal_id = olustur.data["id"]
+    secmeli = ders("Çince", levels=[9], course_type=CourseType.ELECTIVE)
+
+    secenekler = client.get(f"/api/v1/exam-calendars/{cal_id}/elective-options/")
+    assert secenekler.status_code == 200
+    assert secenekler.data["results"][0]["courses"][0]["name"] == "Çince"
+    assert secenekler.data["results"][0]["courses"][0]["in_pool"] is False
+
+    toplu = client.post(
+        f"/api/v1/exam-calendars/{cal_id}/bulk-entries/",
+        {
+            "items": [
+                {
+                    "course_id": secmeli.pk,
+                    "level": 9,
+                    "participant_type": "SECTIONS",
+                    "section_ids": [a.pk],
+                }
+            ]
+        },
+        format="json",
+    )
+    assert toplu.status_code == 200 and len(toplu.data["created"]) == 1
+
+    listesi = client.get(f"/api/v1/exam-calendars/{cal_id}/entries/")
+    satir = listesi.data["results"][0]
+    assert satir["participant_type"] == "SECTIONS"
+    assert satir["section_ids"] == [a.pk]
+    assert satir["participant_label"] == "1 şube"
+
+    # PATCH ile kapsam seviye geneline döner (şube listesi temizlenir).
+    duzelt = client.patch(
+        f"/api/v1/exam-calendar-entries/{satir['id']}/",
+        {"participant_type": "LEVEL"},
+        format="json",
+    )
+    assert duzelt.status_code == 200
+    assert duzelt.data["participant_type"] == "LEVEL"
+    assert duzelt.data["section_ids"] == []
+    assert duzelt.data["participant_label"] == "Seviye geneli"
+
+    # Boş liste ile SECTIONS reddi 400 (500 değil) — Türkçe mesaj servisten.
+    hata = client.patch(
+        f"/api/v1/exam-calendar-entries/{satir['id']}/",
+        {"participant_type": "SECTIONS", "section_ids": []},
+        format="json",
+    )
+    assert hata.status_code == 400

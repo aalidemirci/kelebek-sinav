@@ -16,8 +16,8 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import TextField from "../../ui/TextField";
 import { okulApi } from "../okul/api";
 import type { GradeLevelOption } from "../okul/api";
-import { COURSE_SOURCE_TR, COURSE_TYPE_TR, derslerApi } from "./api";
-import type { Course, CourseType, DuplicateCluster } from "./api";
+import { COURSE_EXAM_MODE_TR, COURSE_SOURCE_TR, COURSE_TYPE_TR, derslerApi } from "./api";
+import type { Course, CourseExamMode, CourseType, DuplicateCluster } from "./api";
 
 export default function DersHavuzuPage() {
   const [rows, setRows] = useState<Course[]>([]);
@@ -29,6 +29,9 @@ export default function DersHavuzuPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // Düzenlenen ders — ekleme ile aynı dialog'u besler (iki bileşen olsaydı
+  // seviye çipleri + tür + sınav biçimi iki yerde sürüklenirdi).
+  const [editing, setEditing] = useState<Course | null>(null);
   const [duplicates, setDuplicates] = useState<DuplicateCluster[]>([]);
 
   useEffect(() => {
@@ -70,7 +73,9 @@ export default function DersHavuzuPage() {
           <p className="ks-page-description">
             Sınav oturumları dersleri bu havuzdan seçer. Havuz, MEB haftalık ders çizelgesinden
             (okul türünüze göre) kendiliğinden tohumlanır; listede olmayan dersi elle
-            ekleyebilirsiniz. Ders silinmez — pasifleştirilir.
+            ekleyebilirsiniz. Ders silinmez — pasifleştirilir. <strong>Sınav</strong> sütunu dersin
+            yazılı mı, uygulama mı olduğunu (ya da hiç sınavı olmadığını) söyler; takvim havuzuna
+            zorunlu dersler eklenirken yalnız <em>Yazılı</em> dersler çekilir.
           </p>
         </div>
         <Button icon="add" onClick={() => setAdding(true)}>
@@ -144,6 +149,7 @@ export default function DersHavuzuPage() {
                 <th className="px-4 py-3">Ders</th>
                 <th className="px-4 py-3">Seviyeler</th>
                 <th className="px-4 py-3">Tür</th>
+                <th className="px-4 py-3">Sınav</th>
                 <th className="px-4 py-3">Kaynak</th>
                 <th className="px-4 py-3">Durum</th>
                 <th className="px-4 py-3 text-right">İşlem</th>
@@ -151,19 +157,29 @@ export default function DersHavuzuPage() {
             </thead>
             <tbody>
               {rows.map((course) => (
-                <CourseRow key={course.id} course={course} onChanged={load} />
+                <CourseRow
+                  key={course.id}
+                  course={course}
+                  onEdit={() => setEditing(course)}
+                  onChanged={load}
+                />
               ))}
             </tbody>
           </table>
         </Card>
       )}
 
-      {adding && (
+      {(adding || editing) && (
         <CourseDialog
           levels={levels}
-          onClose={() => setAdding(false)}
+          course={editing}
+          onClose={() => {
+            setAdding(false);
+            setEditing(null);
+          }}
           onSaved={() => {
             setAdding(false);
+            setEditing(null);
             load();
           }}
         />
@@ -172,7 +188,30 @@ export default function DersHavuzuPage() {
   );
 }
 
-function CourseRow({ course, onChanged }: { course: Course; onChanged: () => void }) {
+/** Sınav biçimi rozeti — yazılı olmayan ders takvim havuzuna kendiliğinden girmez. */
+function ExamModeBadge({ course }: { course: Course }) {
+  // Etiket backend'den gelir (exam_mode_label); sözlük yalnız veri eski/eksik
+  // geldiğinde devreye girer — iki kaynak arasında sessiz boşluk kalmasın.
+  const label = course.exam_mode_label || COURSE_EXAM_MODE_TR[course.exam_mode];
+  if (course.exam_mode === "WRITTEN") {
+    return <span className="text-on-surface-variant">{label}</span>;
+  }
+  return (
+    <span className="rounded-shape-sm bg-tertiary-container px-2 py-0.5 text-label-medium text-on-tertiary-container">
+      {label}
+    </span>
+  );
+}
+
+function CourseRow({
+  course,
+  onEdit,
+  onChanged,
+}: {
+  course: Course;
+  onEdit: () => void;
+  onChanged: () => void;
+}) {
   const confirm = useConfirm();
   const snackbar = useSnackbar();
   const [busy, setBusy] = useState(false);
@@ -206,6 +245,9 @@ function CourseRow({ course, onChanged }: { course: Course; onChanged: () => voi
       <td className="px-4 py-3 text-on-surface">{course.name}</td>
       <td className="px-4 py-3 text-on-surface-variant">{course.level_labels.join(", ")}</td>
       <td className="px-4 py-3 text-on-surface-variant">{COURSE_TYPE_TR[course.course_type]}</td>
+      <td className="px-4 py-3">
+        <ExamModeBadge course={course} />
+      </td>
       <td className="px-4 py-3 text-on-surface-variant">{COURSE_SOURCE_TR[course.source]}</td>
       <td className="px-4 py-3">
         {course.is_active ? (
@@ -221,7 +263,17 @@ function CourseRow({ course, onChanged }: { course: Course; onChanged: () => voi
       <td className="px-4 py-3 text-right">
         <Button
           variant="text"
+          icon="edit"
+          aria-label={`${course.name} dersini düzenle`}
+          onClick={onEdit}
+          disabled={busy}
+        >
+          Düzenle
+        </Button>
+        <Button
+          variant="text"
           icon={course.is_active ? "visibility_off" : "visibility"}
+          aria-label={`${course.name} dersini ${course.is_active ? "pasifleştir" : "aktifleştir"}`}
           onClick={toggleActive}
           disabled={busy}
         >
@@ -301,18 +353,27 @@ function DuplicatesPanel({
   );
 }
 
+/**
+ * Ders ekleme/düzenleme dialog'u — TEK bileşen. `course` verilirse düzenleme
+ * kipidir: alanlar mevcut kayıttan dolar, kaydetme `updateCourse`'a gider.
+ * (Sınav biçimi hem MEB tohumunda hem elle girişte değişebilmeli; ayrı bir
+ * "yalnız sınav biçimi" dialog'u üçüncü bir seviye/tür kaynağı doğururdu.)
+ */
 function CourseDialog({
   levels,
+  course,
   onClose,
   onSaved,
 }: {
   levels: GradeLevelOption[];
+  course?: Course | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [name, setName] = useState("");
-  const [selected, setSelected] = useState<number[]>([]);
-  const [courseType, setCourseType] = useState<CourseType>("COMMON");
+  const [name, setName] = useState(course?.name ?? "");
+  const [selected, setSelected] = useState<number[]>(course?.levels ?? []);
+  const [courseType, setCourseType] = useState<CourseType>(course?.course_type ?? "COMMON");
+  const [examMode, setExamMode] = useState<CourseExamMode>(course?.exam_mode ?? "WRITTEN");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const snackbar = useSnackbar();
@@ -336,16 +397,29 @@ function CourseDialog({
     }
     setBusy(true);
     setError(null);
+    const body = {
+      name: name.trim(),
+      levels: selected,
+      course_type: courseType,
+      exam_mode: examMode,
+    };
     try {
-      await derslerApi.createCourse({
-        name: name.trim(),
-        levels: selected,
-        course_type: courseType,
-      });
-      snackbar.success(`'${name.trim()}' havuza eklendi.`);
+      if (course) {
+        await derslerApi.updateCourse(course.id, body);
+        snackbar.success(`'${body.name}' güncellendi.`);
+      } else {
+        await derslerApi.createCourse(body);
+        snackbar.success(`'${body.name}' havuza eklendi.`);
+      }
       onSaved();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Ders eklenemedi.");
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : course
+            ? "Ders güncellenemedi."
+            : "Ders eklenemedi.",
+      );
       setBusy(false);
     }
   };
@@ -354,14 +428,14 @@ function CourseDialog({
     <Dialog
       open
       onClose={onClose}
-      title="Havuza ders ekle"
+      title={course ? `Dersi düzenle: ${course.name}` : "Havuza ders ekle"}
       actions={
         <>
           <Button variant="text" onClick={onClose} disabled={busy}>
             Vazgeç
           </Button>
           <Button icon="check" onClick={save} disabled={busy}>
-            {busy ? "Ekleniyor…" : "Ekle"}
+            {busy ? "Kaydediliyor…" : course ? "Kaydet" : "Ekle"}
           </Button>
         </>
       }
@@ -406,6 +480,18 @@ function CourseDialog({
             { value: "COMMON", label: COURSE_TYPE_TR.COMMON },
             { value: "ELECTIVE", label: COURSE_TYPE_TR.ELECTIVE },
           ]}
+          helperText="Ortak dersler takvim havuzuna topluca eklenir; seçmeliler seviye seviye seçilir."
+        />
+        <Select
+          label="Sınav"
+          value={examMode}
+          onChange={(event) => setExamMode(event.target.value as CourseExamMode)}
+          options={[
+            { value: "WRITTEN", label: COURSE_EXAM_MODE_TR.WRITTEN },
+            { value: "PRACTICE", label: COURSE_EXAM_MODE_TR.PRACTICE },
+            { value: "NONE", label: COURSE_EXAM_MODE_TR.NONE },
+          ]}
+          helperText="Uygulama ve “sınav yok” dersleri takvim havuzuna kendiliğinden eklenmez; gerekirse havuz panelinden elle eklersiniz."
         />
       </div>
     </Dialog>
