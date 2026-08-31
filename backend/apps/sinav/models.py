@@ -35,6 +35,42 @@ class FurnitureKind(models.TextChoices):
     TEACHER_DESK = "TEACHER_DESK", "Öğretmen masası"
 
 
+class ExamRoomGroup(BaseModel):
+    """Derslik kümesi — "Sabah", "Öğle", "Zemin Kat" gibi seçim kolaylığı etiketi.
+
+    GEREKÇE (kullanıcı, 31.08.2026): ikili eğitim yapan okullarda
+    `generate_section_rooms` her şube için bir derslik üretir; salon listesi
+    kalabalıklaşır ve sınav sihirbazında tek tek işaretlemek zorlaşır. Küme
+    çipiyle "Sabah"ın tüm derslikleri tek tıkla seçilir.
+
+    `ExamRoom.block` ile KARIŞTIRILMAZ: blok/kat serbest konum bilgisidir ve
+    resmî salon evrakının başlığına basılır (r1_salon_evraki) — küme adı evraka
+    girmez, yalnız seçim aracıdır. Küme kimliği hiçbir oturum kaydına yazılmaz;
+    `ExamSessionRoom` somut salon satırları tutmaya devam eder.
+
+    Üyelik TEKtir: bir salon en çok bir kümededir (`ExamRoom.group`).
+    Kişisel veri içermez.
+    """
+
+    name = models.CharField("küme adı", max_length=60)
+    order = models.PositiveSmallIntegerField("sıra", default=0)
+
+    class Meta:
+        verbose_name = "derslik kümesi"
+        verbose_name_plural = "derslik kümeleri"
+        ordering = ["order", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_examroomgroup_name_alive",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class ExamRoom(BaseModel):
     """Sınav salonu — 2D yerleşim planı + numaralandırma düzeni.
 
@@ -56,7 +92,16 @@ class ExamRoom(BaseModel):
         max_length=80,
         blank=True,
         default="",
-        help_text="Serbest konum bilgisi (örn. 'A Blok 2. Kat').",
+        help_text="Serbest konum bilgisi (örn. 'A Blok 2. Kat'). Salon evrakına BASILIR.",
+    )
+    group = models.ForeignKey(
+        ExamRoomGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="rooms",
+        verbose_name="derslik kümesi",
+        help_text="Yalnız seçim kolaylığı (ör. Sabah/Öğle); evraka basılmaz.",
     )
     linked_section = models.ForeignKey(
         "okul.ClassSection",
@@ -479,6 +524,19 @@ class RuleType(models.TextChoices):
     FIXED_ROOM = "FIXED_ROOM", "Belirli salon"
     FRONT_ROW = "FRONT_ROW", "Ön sıra"
     SEPARATE_ROOM = "SEPARATE_ROOM", "Ayrı salon"
+    FIXED_SEAT = "FIXED_SEAT", "Belirli koltuk"
+
+
+class SeatPreference(models.TextChoices):
+    """Salon içinde tercih edilen uç — ön/arka ODAK noktasına göre tanımlıdır.
+
+    "Ön" = öğretmen masasına (yoksa tahtaya) en yakın sıra, "arka" = en uzak.
+    `layout.reference_cell` ile aynı odak; mobilyasız planda ön=min(desk_row).
+    """
+
+    NONE = "NONE", "Fark etmez"
+    FRONT = "FRONT", "Ön sıra"
+    BACK = "BACK", "Arka sıra"
 
 
 class RuleReason(models.TextChoices):
@@ -500,6 +558,13 @@ class PlacementRule(BaseModel):
     Kapsam: SESSION → yalnız o oturumda (session zorunlu); PERMANENT → tüm
     oturumlarda (session boş). Oturum kuralı kalıcı kuralı EZER. Dağıtımda
     kural sahibi öğrenci PINNED statüsüyle yerleşir; kelebek motoru taşıyamaz.
+
+    31.08.2026 genişletmesi (engelli/özel durumlu öğrenci): BELIRLI_KOLTUK tipi
+    salon + koordinat üçlüsüyle koltuğu birebir sabitler. Koltuk seçilmezse
+    `seat_preference` (ön/arka) ve `solo_desk` (sıra tek başına) devreye girer;
+    arayüz varsayılanı KENDI_DERSLIGINDE + arka sıra + tek başınadır. Öğrenci
+    başına TEK canlı kural sözleşmesi korunur — koordinat AYRI SATIR DEĞİL,
+    aynı satırın sütunlarıdır.
     """
 
     student = models.ForeignKey(
@@ -533,6 +598,33 @@ class PlacementRule(BaseModel):
         verbose_name="hedef salon",
         help_text="BELIRLI_SALON / AYRI_SALON için zorunlu.",
     )
+    # BELIRLI_KOLTUK için koordinat üçlüsü — plandaki koltuk kimliği
+    # (seat_no DEĞİL: numaralandırma düzeni değişince seat_no kayar, koordinat
+    # kaymaz). Üçü birlikte dolu ya da birlikte boş olur (CheckConstraint).
+    target_desk_row = models.PositiveSmallIntegerField(
+        "sıra satırı", null=True, blank=True, help_text="BELIRLI_KOLTUK için zorunlu."
+    )
+    target_desk_col = models.PositiveSmallIntegerField(
+        "sıra sütunu", null=True, blank=True, help_text="BELIRLI_KOLTUK için zorunlu."
+    )
+    target_slot = models.PositiveSmallIntegerField(
+        "sıra içi pozisyon", null=True, blank=True, help_text="BELIRLI_KOLTUK için zorunlu."
+    )
+    seat_preference = models.CharField(
+        "koltuk tercihi",
+        max_length=6,
+        choices=SeatPreference.choices,
+        default=SeatPreference.NONE,
+        help_text="Koltuk seçilmediğinde salonun hangi ucundan verileceği.",
+    )
+    solo_desk = models.BooleanField(
+        "tek başına otursun",
+        default=False,
+        help_text=(
+            "Sıradaki diğer koltuklar KİMSEYE verilmez — salon kapasitesi sıra "
+            "koltuk sayısı kadar (ikili sırada 2) azalır."
+        ),
+    )
     reason_category = models.CharField(
         "gerekçe kategorisi",
         max_length=10,
@@ -555,6 +647,22 @@ class PlacementRule(BaseModel):
                 fields=["student", "session"],
                 condition=models.Q(deleted_at__isnull=True, session__isnull=False),
                 name="uq_placementrule_session_alive",
+            ),
+            # Koltuk koordinatı üçlüdür: ya üçü de dolu ya da üçü de boş.
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        target_desk_row__isnull=True,
+                        target_desk_col__isnull=True,
+                        target_slot__isnull=True,
+                    )
+                    | models.Q(
+                        target_desk_row__isnull=False,
+                        target_desk_col__isnull=False,
+                        target_slot__isnull=False,
+                    )
+                ),
+                name="ck_placementrule_seat_triplet",
             ),
         ]
 
@@ -679,6 +787,21 @@ class ExamKind(models.TextChoices):
     PRACTICE = "PRACTICE", "Uygulama"
 
 
+class ExamAuthority(models.TextChoices):
+    """Sınavı hazırlayan/yapan makam (Ölçme ve Değ. Yön. md. 5-6; Yönerge md. 5).
+
+    Okul dışı makamların sınavları takvimde AYRI görünür: sınav ve mazeret
+    sınavı tarih/saatleri o makamın kılavuzunda ilan edilir (Yönerge md. 5) ve
+    o günlerde okul geneli ayrıca sınav yapılmaz (aynı madde) — yerleştirme
+    uyarısı bu ayrımdan beslenir.
+    """
+
+    SCHOOL = "SCHOOL", "Okul"
+    MINISTRY = "MINISTRY", "Bakanlık"
+    PROVINCIAL = "PROVINCIAL", "İl MEM"
+    DISTRICT = "DISTRICT", "İlçe MEM"
+
+
 class ExamTrackMarkStatus(models.TextChoices):
     """Süreç takip işareti — 'yapılmadı' = kayıt yokluğu (üçüncü durum tutulmaz)."""
 
@@ -694,9 +817,11 @@ class ExamCalendar(BaseModel):
     onaylayamaz" akışı tek kullanıcıya indi — SUBMITTED tek tıkla geçilir;
     APPROVED kilidi ve onay damgaları (ad-snapshot + zaman) KORUNUR (resmî
     evrak değeri — risk #10). `school_year` FK'sı düştü: dönem (SchoolTerm)
-    yılı zaten taşır, teklik (dönem, tur) üstünden. `description_text` create
-    sırasında varsayılan mevzuat-dayanaklı metinden kopyalanır (şablon
-    güncellenirse eski takvimler etkilenmez).
+    yılı zaten taşır, teklik (dönem, tur) üstünden. `description_text` ve
+    `footnote_text` create sırasında varsayılan mevzuat-dayanaklı metinlerden
+    kopyalanır (şablon güncellenirse eski takvimler etkilenmez); ikisi de
+    kullanıcı tarafından düzenlenebilir. `signatory_departments` boşsa imza
+    bloğu eski B7 dalına düşer (takvimdeki derslerden boş imza çizgileri).
     """
 
     semester = models.ForeignKey(
@@ -728,6 +853,22 @@ class ExamCalendar(BaseModel):
         blank=True,
         default="",
         help_text="Takvim ile imza bloğu arasındaki açıklamalar (mazeret, 'G', vb.).",
+    )
+    footnote_text = models.TextField(
+        "dipnot",
+        blank=True,
+        default="",
+        help_text=(
+            "Açıklamaların altına basılan kısa not (mazeret sınavı takvimi, okul dışı "
+            "makam sınavlarının kılavuz tarihleri). Create sırasında varsayılandan kopyalanır."
+        ),
+    )
+    signatory_departments = models.ManyToManyField(
+        "okul.SubjectDepartment",
+        related_name="exam_calendars",
+        blank=True,
+        verbose_name="imza zümreleri",
+        help_text="İmza bloğunda yer alacak zümreler; boşsa takvimdeki derslerden üretilir.",
     )
     submitted_at = models.DateTimeField("onaya sunulma zamanı", null=True, blank=True)
     approved_by_name = models.CharField(
@@ -764,7 +905,9 @@ class ExamCalendarEntry(BaseModel):
 
     Havuzdayken `placed_date`/`period_no` boştur; ızgaraya yerleştirilince
     ikisi de dolar (CheckConstraint çifti). `is_butterfly=False` "Kelebek Değil"
-    (kendi sınıfında/ders saatinde). `session` bağı slot→oturum üretiminde
+    (kendi sınıfında/ders saatinde). `authority` teklik kısıtına GİRMEZ: bir
+    (ders, seviye, tür) ya okul ya da üst makam sınavıdır, ikisi birden değil
+    (Ölçme ve Değ. Yön. md. 6). `session` bağı slot→oturum üretiminde
     yazılır (SET_NULL — oturum silinirse slot yeniden üretilebilir). Katılımcı
     listesi anlık türetilir; burada KİŞİSEL VERİ YOK.
     """
@@ -787,6 +930,14 @@ class ExamCalendarEntry(BaseModel):
     )
     is_butterfly = models.BooleanField(
         "kelebek", default=True, help_text="False = kendi sınıfında (Kelebek Değil)."
+    )
+    authority = models.CharField(
+        "hazırlayan makam",
+        max_length=10,
+        choices=ExamAuthority.choices,
+        default=ExamAuthority.SCHOOL,
+        db_index=True,
+        help_text="Okul dışı sınavlarda tarih/saat ilgili makamın kılavuzuna göredir.",
     )
     placed_date = models.DateField("yerleştirme tarihi", null=True, blank=True, db_index=True)
     period_no = models.PositiveSmallIntegerField(

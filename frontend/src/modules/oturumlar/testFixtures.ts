@@ -155,6 +155,8 @@ export function makeRoomGeometry(overrides: Partial<ExamRoom> = {}): ExamRoom {
     id: 1,
     name: "D-204",
     block: "",
+    group_id: null,
+    group_name: "",
     linked_section_id: null,
     linked_section_label: "",
     layout_plan: {

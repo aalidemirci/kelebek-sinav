@@ -1,5 +1,7 @@
-// Ayarlar sayfası (DD kalıbından KS'ye) — beş sekme: ders yılları (dönemlerle),
-// şube kataloğu (salon-şube eşlemesi ve R2k bu katalogdan okur), okul bilgileri
+// Ayarlar sayfası (DD kalıbından KS'ye) — yedi sekme: ders yılları (dönemlerle),
+// şube kataloğu (salon-şube eşlemesi ve R2k bu katalogdan okur), şube kümeleri
+// (SAY/EA/DİL — sihirbazda toplu şube seçimi), zümreler (okul
+// zümre başkanları kurulu — sınav takvimi imza bloğunun kaynağı), okul bilgileri
 // (evrak antedi + okul türü, U4), güvenlik (uygulama parolası) ve güncelleme
 // (F8 — GitHub sürüm denetimi). DD'deki tatil sekmesi YOK (iş günü hesabı alınmadı).
 
@@ -22,6 +24,8 @@ import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import type { TabItem } from "../../ui/Tabs";
 import TextField from "../../ui/TextField";
 import UpdatePanel from "../guncelleme/UpdatePanel";
+import SubeKumeleriPaneli from "./SubeKumeleriPaneli";
+import ZumrelerPaneli from "./ZumrelerPaneli";
 import GuvenlikAyarlari from "../guvenlik/GuvenlikAyarlari";
 import { SCHOOL_TYPE_TR, okulApi } from "../okul/api";
 import type {
@@ -32,12 +36,23 @@ import type {
   SchoolYear,
 } from "../okul/api";
 
-const TABS = ["ders-yillari", "subeler", "okul", "guvenlik", "guncelleme"] as const;
+// TABS[0] varsayılan sekmedir (useTabParam fallback) — başa yeni anahtar EKLEME.
+const TABS = [
+  "ders-yillari",
+  "subeler",
+  "sube-kumeleri",
+  "zumreler",
+  "okul",
+  "guvenlik",
+  "guncelleme",
+] as const;
 type TabKey = (typeof TABS)[number];
 
 const TAB_ITEMS: TabItem[] = [
   { key: "ders-yillari", label: "Ders Yılları", icon: "calendar_month" },
   { key: "subeler", label: "Şubeler", icon: "meeting_room" },
+  { key: "sube-kumeleri", label: "Şube Kümeleri", icon: "category" },
+  { key: "zumreler", label: "Zümreler", icon: "groups" },
   { key: "okul", label: "Okul Bilgileri", icon: "apartment" },
   { key: "guvenlik", label: "Güvenlik", icon: "lock" },
   { key: "guncelleme", label: "Güncelleme", icon: "system_update" },
@@ -115,9 +130,9 @@ export default function AyarlarPage() {
         <div>
           <h1 className="ks-page-title">Ayarlar</h1>
           <p className="ks-page-description">
-            Ders yılı, şube kataloğu, okul künyesi ve uygulama parolası burada yönetilir. Okul
-            künyesi salon evrakının antedinde kullanılır; şube kataloğu salon-şube eşlemesini
-            besler.
+            Ders yılı, şube kataloğu, zümreler, okul künyesi ve uygulama parolası burada yönetilir.
+            Okul künyesi salon evrakının antedinde kullanılır; şube kataloğu salon-şube eşlemesini,
+            zümre listesi de sınav takviminin imza bloğunu besler.
           </p>
         </div>
       </div>
@@ -140,6 +155,8 @@ export default function AyarlarPage() {
           />
         )}
         {tab === "subeler" && <SubelerPanel years={years} yearsLoading={yearsLoading} />}
+        {tab === "sube-kumeleri" && <SubeKumeleriPaneli />}
+        {tab === "zumreler" && <ZumrelerPaneli />}
         {tab === "okul" && <OkulBilgileriPanel />}
         {tab === "guvenlik" && <GuvenlikAyarlari okulAdi={okulAdi} />}
         {tab === "guncelleme" && <UpdatePanel />}

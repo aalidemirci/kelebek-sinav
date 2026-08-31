@@ -16,6 +16,7 @@ from contextlib import contextmanager
 from io import BytesIO
 from typing import Any
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import FileResponse
 from rest_framework import generics, serializers
 from rest_framework.generics import get_object_or_404
@@ -25,8 +26,16 @@ from rest_framework.views import APIView
 
 from apps.okul import selectors
 from apps.okul.excel_ogrenci import ParserError
-from apps.okul.models import ClassSection, Personnel, SchoolYear, Student
+from apps.okul.models import (
+    ClassSection,
+    ClassSectionGroup,
+    Personnel,
+    SchoolYear,
+    Student,
+    SubjectDepartment,
+)
 from apps.okul.serializers import (
+    ClassSectionGroupSerializer,
     ClassSectionSerializer,
     ImportRequestSerializer,
     PersonnelSerializer,
@@ -34,9 +43,12 @@ from apps.okul.serializers import (
     SchoolTermConfigurationSerializer,
     SchoolTermSerializer,
     SchoolYearSerializer,
+    SectionGroupAssignSerializer,
     StudentSerializer,
+    SubjectDepartmentSerializer,
 )
 from apps.okul.services import app_password as app_password_service
+from apps.okul.services import departments as department_service
 from apps.okul.services import encrypted_backup as encrypted_backup_service
 from apps.okul.services import imports as import_service
 from apps.okul.services import persons as persons_service
@@ -254,6 +266,86 @@ class ClassSectionDetailView(generics.DestroyAPIView[ClassSection]):
 
     def perform_destroy(self, instance: ClassSection) -> None:
         section_service.delete_class_section(instance)
+
+
+class ClassSectionGroupListCreateView(generics.ListCreateAPIView[ClassSectionGroup]):
+    """Şube kümesi kataloğu — sınav sihirbazında toplu şube seçiminin kaynağı."""
+
+    serializer_class = ClassSectionGroupSerializer
+
+    def get_queryset(self) -> Any:
+        return selectors.class_section_groups_sorted()
+
+    def perform_create(self, serializer: serializers.BaseSerializer[ClassSectionGroup]) -> None:
+        serializer.instance = section_service.create_section_group(
+            **dict(serializer.validated_data)
+        )
+
+
+class ClassSectionGroupDetailView(generics.RetrieveUpdateDestroyAPIView[ClassSectionGroup]):
+    serializer_class = ClassSectionGroupSerializer
+
+    def get_queryset(self) -> Any:
+        return selectors.class_section_groups()
+
+    def perform_update(self, serializer: serializers.BaseSerializer[ClassSectionGroup]) -> None:
+        assert serializer.instance is not None
+        serializer.instance = section_service.update_section_group(
+            serializer.instance, **dict(serializer.validated_data)
+        )
+
+    def perform_destroy(self, instance: ClassSectionGroup) -> None:
+        section_service.delete_section_group(instance)
+
+
+class ClassSectionGroupAssignView(APIView):
+    """`POST /class-section-groups/assign/` — şubeleri topluca kümeye alır."""
+
+    def post(self, request: Request) -> Response:
+        serializer = SectionGroupAssignSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        group = serializer.validated_data["group"]
+        try:
+            updated = section_service.assign_section_group(
+                section_ids=list(serializer.validated_data["section_ids"]),
+                group_id=group.pk if group is not None else None,
+            )
+        except DjangoValidationError as exc:
+            # DRF varsayılan handler'ı Django ValidationError'ı 400'e ÇEVİRMEZ
+            # (yanıt 500 olurdu) — dönüşüm burada elle yapılır.
+            raise serializers.ValidationError(exc.messages) from exc
+        return Response({"updated": updated})
+
+
+class SubjectDepartmentListCreateView(generics.ListCreateAPIView[SubjectDepartment]):
+    """Zümre kataloğu — sınav takvimi imza bloğunun kaynağı (F6/B7 revizyonu)."""
+
+    serializer_class = SubjectDepartmentSerializer
+
+    def get_queryset(self) -> Any:
+        board_only = self.request.query_params.get("board_only", "").strip().lower() in TRUE_VALUES
+        return selectors.subject_departments_sorted(board_only=board_only)
+
+    def perform_create(self, serializer: serializers.BaseSerializer[SubjectDepartment]) -> None:
+        serializer.instance = department_service.create_subject_department(
+            **dict(serializer.validated_data)
+        )
+
+
+class SubjectDepartmentDetailView(generics.RetrieveUpdateDestroyAPIView[SubjectDepartment]):
+    serializer_class = SubjectDepartmentSerializer
+
+    def get_queryset(self) -> Any:
+        return selectors.subject_departments()
+
+    def perform_update(self, serializer: serializers.BaseSerializer[SubjectDepartment]) -> None:
+        assert serializer.instance is not None
+        serializer.instance = department_service.update_subject_department(
+            serializer.instance, **dict(serializer.validated_data)
+        )
+
+    def perform_destroy(self, instance: SubjectDepartment) -> None:
+        department_service.delete_subject_department(instance)
 
 
 # ---------------------------------------------------------------------------

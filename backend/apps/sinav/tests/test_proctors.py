@@ -233,17 +233,18 @@ def test_r6_uretimi_ve_tr_duman() -> None:
     assert not eksik, f"R6'da Türkçe glif kaybı: {eksik}"
 
 
-def test_r6_zip_kosulu_ve_r9_gorevli_adi() -> None:
+def test_r6_zip_kosulu_ve_r1_gorevli_adi() -> None:
     session, hoca = _atamali_oturum()
     # ZIP artık r6 içerir (gözetmen açık + görevlendirme var).
     with zipfile.ZipFile(io.BytesIO(services.render_session_reports_zip(session).content)) as zf:
         assert f"r6_gozetmen_gorevlendirme_oturum_{session.pk}.pdf" in zf.namelist()
-    # R9 görevli sütunu basılı gelir.
-    r9_text = "\n".join(
+    # Gözetmen adı SALON EVRAKININ künyesinde basılı gelir: eski R9 teslim
+    # tutanağının işi 30.08.2026 sadeleştirmesinde birleşik R1'e taşındı.
+    r1_text = "\n".join(
         p.extract_text() or ""
-        for p in PdfReader(io.BytesIO(services.render_session_report(session, "r9").content)).pages
+        for p in PdfReader(io.BytesIO(services.render_session_report(session, "r1").content)).pages
     )
-    assert hoca.get_full_name() in r9_text
+    assert hoca.get_full_name() in r1_text
 
 
 def test_r6_kapali_ve_atamasiz_reddedilir() -> None:

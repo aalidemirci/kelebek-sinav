@@ -7,6 +7,7 @@ from rest_framework.routers import DefaultRouter
 from apps.sinav.views import (
     BookletRunViewSet,
     ExamAttendanceRecordViewSet,
+    ExamRoomGroupViewSet,
     ExamRoomViewSet,
     ExamSessionCourseViewSet,
     ExamSessionViewSet,
@@ -22,6 +23,7 @@ from apps.sinav.views_calendar import (
 
 router = DefaultRouter()
 router.register("exam-rooms", ExamRoomViewSet, basename="exam-room")
+router.register("exam-room-groups", ExamRoomGroupViewSet, basename="exam-room-group")
 router.register("exam-sessions", ExamSessionViewSet, basename="exam-session")
 router.register("exam-session-courses", ExamSessionCourseViewSet, basename="exam-session-course")
 router.register("booklet-runs", BookletRunViewSet, basename="booklet-run")

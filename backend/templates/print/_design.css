@@ -28,7 +28,10 @@
   --pr-line: #cbd5e1;         /* tablo iç çizgileri */
   --pr-line-soft: #e2e8f0;    /* en hafif çerçeve */
   --pr-fill: #f8fafc;         /* etiket hücre dolgusu */
-  --pr-fill-head: #f1f5f9;    /* tablo başlık satırı dolgusu */
+  --pr-fill-head: #f1f5f9;    /* tablo başlık satırı dolgusu (açık) */
+  --pr-bar: #334155;          /* bölüm barı + tablo başlığı dolgusu (koyu nötr) */
+  --pr-bar-text: #ffffff;     /* koyu bant üzerindeki metin */
+  --pr-bar-hint: #cbd5e1;     /* koyu bant üzerindeki ikincil ipucu */
 
   /* Tipografi ölçeği (DejaVu Sans) */
   --pr-size-school: 11.5pt;   /* okul adı (anted/üst bant) */

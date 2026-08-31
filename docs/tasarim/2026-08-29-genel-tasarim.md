@@ -90,7 +90,7 @@ selectors/services `ExamSessionCourse`'a `get_model` ile erişir (ters yönde
 | B4 | Takvim onayında bildirim sinyali (tek dış sinyal) | KALDIR | Snackbar yeter |
 | B5 | `gorevlendirme` köprüsü (`absent_staff_ids`) | KALDIR | Kod köprüsüz boş kümeye zaten zarif düşüyor; havuz = aktif personel − muaf |
 | B6 | `program` köprüsü (`teachers_free_at`, zil çizelgesi) | SADELEŞTİR | Oturum saati serbest giriş + ayarlanabilir varsayılan saat listesi |
-| B7 | `zumre` imza köprüsü | KALDIR | Modülsüz dal (derslerden boş imza çizgileri) kalıcılaşır |
+| B7 | `zumre` imza köprüsü | UYARLA (30.08.2026 revizyonu) | Zümre yapısı okul app'inde yerelleşti (`okul.SubjectDepartment`: ad + başkan→Personnel + kurul üyeliği); imza bloğu takvim başına seçilir (`ExamCalendar.signatory_departments`). Seçim yoksa OYS'nin modülsüz dalı (derslerden boş imza çizgileri) yedek yol olarak DURUR |
 | B8 | `ders_yapisi` köprüsü (Course FK, `course_level_student_ids` vb.) | YERELLEŞTİR | Course yerel tablo (`db_table` bagajı atılır); öğrenci kümesi yerel `(level, section)` kayıtlarından; kayıt verisi yoksa "seviyenin tamamı" **konservatif düşüşü aynen korunur** |
 | B9 | `core` köprüsü (Student/Personnel/SchoolYear/SchoolConfig) | YERELLEŞTİR | DD çekirdeğinden: SchoolConfig(pk=1)+kurulum kapısı, Personnel, Student (veli alanları atılır), ImportRun+parser'lar, SchoolYear |
 | B10 | Nakil ön-kontrolü (sihirbaz Adım 0, Yönerge md. 5/1-v) | SADELEŞTİR | Kullanıcı beyanlı onay kutusu; "kim/ne zaman" damgası korunur |
@@ -112,7 +112,10 @@ selectors/services `ExamSessionCourse`'a `get_model` ile erişir (ters yönde
 `setup_completed`) · `SchoolYear` (tek aktif) · `Personnel` (ad-soyad*, branş,
 unvan, `is_active`, gözetmen muafiyeti ayrı tabloda) · `Student` (ad*, soyad*,
 okul no, `class_level`, `class_section` — **veli ve TCKN alanları yok**) ·
-`ImportRun` (source_type, sha256, koşullu unique).
+`ImportRun` (source_type, sha256, koşullu unique) · `ClassSectionGroup`
+(şube kümesi SAY/EA/DİL — `ClassSection.group` FK, TEK üyelik) · `SubjectDepartment`
+(zümre adı, başkan→`Personnel`, `is_board_member` — okul zümre başkanları
+kurulu; sınav takvimi imza bloğunun kaynağı, B7 revizyonu).
 
 **Ders havuzu (OYS ders_yapisi'ndan):** `Course` (name, `levels` JSON,
 course_type ORTAK/SECMELI, source MEB/MANUAL, `is_active`) ·
@@ -131,6 +134,15 @@ mazeret; arşivde güncellenebilir — MEB 5 iş günü) · `PlacementRule` (4 t
 SESSION > PERMANENT; gerekçe **yalnız kategori** — KVKK md. 6 tasarımı aynen) ·
 `ProctorAssignment`/`ProctorExemption` (U2) · `QuestionDocument` + `BookletRun`
 · `ExamCalendar` + `ExamCalendarEntry` + `ExamTrackItem/Mark` (F6).
+`ExamRoomGroup` (derslik kümesi Sabah/Öğle — `ExamRoom.group` FK, TEK üyelik;
+`block` ALANINDAN AYRI: blok evraka basılır, küme basılmaz) ·
+`PlacementRule` BEŞ tipli (BELIRLI_KOLTUK eklendi) + koltuk koordinatı
+(`target_desk_row/col/slot` — `seat_no` DEĞİL) + `seat_preference` (ön/arka,
+odak = öğretmen masası) + `solo_desk` (sıra tek başına; kapasite azalır) ·
+`ExamCalendarEntry.authority` (SCHOOL/MINISTRY/PROVINCIAL/DISTRICT — sınavı
+hazırlayan makam; teklik kısıtına GİRMEZ) · `ExamCalendar.footnote_text`
+(düzenlenebilir dipnot, varsayılandan kopyalanır) + `signatory_departments`
+(M2M → `okul.SubjectDepartment`).
 
 (*) işaretli alanlar şifrelenir — bkz. §5.
 
@@ -142,6 +154,12 @@ SESSION > PERMANENT; gerekçe **yalnız kategori** — KVKK md. 6 tasarımı ayn
   (Chebyshev ≤ 1) serte çevirir.
 - Determinizm: aynı seed → aynı sonuç; seed yoksa üretilip
   `distribution_params.seed`'e yazılır ve R8'de basılır.
+- **Ceza demeti (31.08.2026, K18):** `_pair_penalty` LEKSİKOGRAFİK ikili döner
+  `(birincil, ikincil)`. Birincil bugünkü skalerin BİT BİT aynısıdır (aynı sıra
+  = ∞ sert kısıt); ikincil yalnız komşu çiftlerde çiftin ODAĞA (öğretmen masası,
+  `layout.reference_cell`) uzaklığıdır. İkincil ancak birincil TAM EŞİTKEN karar
+  verir → ihlal sayısı (birincilin ∞ olduğu çift sayısı) YAPISAL OLARAK artamaz.
+  Yeni rng çekilişi yoktur; determinizm korunur.
 - Çift denetim: motorun her çıktısı **bağımsız `validator.py`**'den geçer;
   onay yalnız ihlal=0 ise.
 
@@ -228,7 +246,11 @@ CSS değişkenleri; ham renk/px yasak; M3 token bütünlüğü testi taşınır)
 Rotalar (tek pencere, lazy): **Hub** → Oturumlar → Oturum Detayı (sekmeler:
 Yerleşim/Gözetmen/Sorular/Yoklama/Çıktılar) → Salonlar (+ Salon Editörü) →
 Ders Havuzu → Takvimler → Takvim Detayı (Havuz/Yerleştirme/Takip) → Kişiler
-(öğrenci/öğretmen + içe aktarma) → Ayarlar/Kurulum sihirbazı.
+(öğrenci/öğretmen + içe aktarma) → Ayarlar/Kurulum sihirbazı (Ayarlar sekmeleri:
+Ders Yılları/Şubeler/**Şube Kümeleri**/**Zümreler**/Okul Bilgileri/Güvenlik/
+Güncelleme) → Oturum Detayı sekmelerine **Yerleştirme Kuralları** eklendi;
+Salonlar ekranında **Kümeler** diyaloğu (toplu atama) →
+**Kullanım Kılavuzu** (`/kilavuz`, statik adım adım anlatım).
 
 Korunan FE desenleri: 5 adımlı sınav sihirbazı (Adım 0 beyanlı nakil onayı) ·
 salon editörü **palet + tıkla-yerleştir** (DnD bilinçli yok — ADR-0016) ·
@@ -246,17 +268,54 @@ Hızlı başlangıç: `generate-section-rooms` — her aktif şubeye 40 koltuklu
 
 ## 9. Evrak kataloğu
 
-R1 salon krokisi · R2 salon yoklama-imza · R2k şube yoklama · R3 kapı listesi ·
-R4 duyuru (okul geneli alfabetik arama) · R5 Excel çizelge (openpyxl) ·
-R6 gözetmen tebliğ-tebellüğ (yalnız gözetmen ayarı açıkken) · R7 zarf
-kapağı/tutanak · R8 dağıtım doğrulama raporu (seed basılır) · R9 teslim
-tutanağı · R10 kişiselleştirilmiş kitapçık ZIP · oturumsuz boş salon planı ·
-resmî takvim PDF (A4 yatay) · Word soru şablonu (stdlib zipfile) · tümü-ZIP.
+**30.08.2026 sadeleştirmesi (kullanıcı kararı).** Basılı set on bir belgeden
+altıya indi; salon evrakı TEK belgede birleşti. Gerekçe: bir salon için R1
+(kroki) + R2 (yoklama) + R3 (kapı listesi) + R7 (zarf kapağı) ayrı ayrı
+basılıyordu — dört yaprak. Artık tek belge, çift yüz basıldığında **salon
+başına bir kâğıt**.
 
-Şablonlar: `templates/sinav_islemleri/reports/` 11 dosya + `booklet_overlay` +
-`calendar_pdf` + **`print/_design.css` ("Kurumsal Sade": `--pr-*` token'ları,
-DejaVu, `text-transform` YASAK — WeasyPrint TR i→I tuzağı, `|unlocalize`
-zorunlu)** birlikte kopyalanır.
+| Kod | Belge | Kapsam | Yaprak |
+|---|---|---|---|
+| R1 | **Salon Sınav Evrakı** — oturma planı krokisi · gözetmen kontrol listesi · evrak sayımı · teslim zinciri (yaprak 1) + yoklama ve imza listesi (yaprak 2) | salon | 2 |
+| R4 | **Şube Sınav Duyurusu** — öğrenci → salon + koltuk; sınıf panosuna asılır | şube | 1 |
+| R5 | Toplu Dağıtım Çizelgesi (openpyxl) — idare çalışma kopyası, basılmaz | oturum | — |
+| R6 | Gözetmen Görevlendirme / Tebliğ-Tebellüğ (yalnız gözetmen ayarı açıkken) | oturum | 1 |
+| R7 | **Sınav İhlal ve Kopya Tutanağı** — salon zarfına konan boş form | salon | 1 |
+| R8 | Dağıtım Doğrulama Raporu (seed basılır) — idare nüshası | oturum | 1 |
+
+Ayrıca: R10 kişiselleştirilmiş kitapçık ZIP · oturumsuz boş salon yerleşim
+planı · resmî takvim PDF (A4 yatay) · Word soru şablonu · tümü-ZIP.
+
+**Takvim PDF'i (30.08.2026 eklentileri):** okul dışı makam sınavları (Bakanlık /
+İl MEM / İlçe MEM) hücrede nötr dolgu + sol kenar çizgisi + makam etiketiyle
+ayrışır — RENKLİ DOLGU YOK (palet nötr slate); tablonun altında lejant satırı ·
+AÇIKLAMALAR bloğunun ardına düzenlenebilir **DİPNOT** bloğu (`footnote_text`) ·
+imza bloğu takvime seçilen zümrelerden üretilir, seçim yoksa derslerden boş
+çizgi (B7 revizyonu). Şablon sözleşmesi değişmedi: `chairs` + `school_chair_name`.
+
+**Kaldırılanlar:** R2 (salon yoklama — R1'e girdi) · R2k (şube yoklama —
+duyuru ve salon yoklaması ikisini de karşılıyordu) · R3 (kapı listesi — kroki
+ve duyuru zaten söylüyor) · R9 (teslim tutanağı — teslim zinciri R1 yaprak
+1'e girdi). Eski R7 (zarf kapağı) içeriği R1'in sayım bölümüne taşındı; R7
+kodu **ihlal/kopya tutanağına** verildi (kaynak: evrakmotoru SAL-SNV-FR-007).
+
+**Sayfa bütçesi (bağlayıcı).** Bir derslikte **40 öğrenci sığar**, fazlası
+**kontrolsüz taşmaz**. İki mekanizma: `reports.kroki_metrics` krokiyi ayrılan
+kutuya sığdırır (hücre yüksekliği + punto salonun satır/sütun sayısından),
+`reports.list_row_metrics` yoklama/duyuru satırının punto ve dolgusunu sayfa
+bütçesinden türetir. Ölçüler WeasyPrint kutu ağacından ÖLÇÜLEREK bulundu;
+garanti `test_reports.py::test_r1_salon_evraki_iki_yaprak` ile sabittir.
+Birim uyarısı: WeasyPrint iç birimi CSS px'tir (1 pt = 4/3 px) ve tablo
+hücresine `height` vermek satırı kısaltmaz, UZATIR.
+
+Şablonlar: `templates/sinav/reports/` (base · _head · _kroki · _kroki_style ·
+r1_salon_evraki · r4_announcement · r6_assignment · r7_tutanak ·
+r8_validation · room_layout) + `booklet_overlay` + `calendar_pdf` +
+**`print/_design.css` ("Kurumsal Sade": `--pr-*` token'ları, DejaVu,
+`text-transform` YASAK — WeasyPrint TR i→I tuzağı, `|unlocalize` zorunlu)**
+birlikte kopyalanır. Hesaplanan CSS kuralları **`<head>` içinde** basılmalıdır:
+WeasyPrint gövdedeki `<style>` öğesini ve inline `style` özniteliğindeki CSS
+değişkenlerini yok sayar (ölçüldü).
 
 Kitapçık invariantları: bant üst 4mm + 32mm ≤ 40mm; soru PDF'i **ölçeklenmez**
 (1:1); A4 dikey ±6pt yükleme doğrulaması; ≤2 sayfa→bant yalnız 1. sayfada,
@@ -280,6 +339,26 @@ varsayılan, ayarla değiştirilebilir" ilkesi.
 - Onay yalnız ihlal=0'da; APPROVED kilidi + onay damgası (tek kullanıcıda da).
 - Nakil ön kontrolü beyanı (md. 5/1-v) damgalı.
 - Uyarı/hata metinlerinde öğrenci ADI asla — okul no kullanılır.
+- **Sınavı hazırlayan makam** (30.08.2026): ülke geneli sınavlar Bakanlıkça,
+  il geneli sınavlar il MEM'ce belirlenen tarih/saatte yapılır ve o tarihlerde
+  başka sınav yapılmaz (Yönerge md. 5) → takvim girdisinde `authority` alanı;
+  aynı gün+seviyede okul sınavı ile üst makam sınavı yan yana düşerse UYARI
+  (sert kısıt değil — "zorunlu hâl" takdiri okul müdürlüğünündür).
+- **Mazeret sınavı takvimi**: mevzuat okul geneli sınavların mazeret işlemlerini
+  okul müdürlüğüne bırakır, TARİH VERMEZ (Yönerge md. 5) → "izleyen hafta"
+  ifadesi varsayılan dipnot metnindedir ve madde numarasına BAĞLANMAZ;
+  kullanıcı `footnote_text` ile değiştirebilir.
+- **Kümeler YALNIZ seçim aracıdır** (31.08.2026): küme kimliği hiçbir oturum
+  kaydına yazılmaz; sihirbaz kümeyi yazma anında somut şube/salon pk'lerine
+  açar. Aksi hâlde küme sonradan değişince ONAYLANMIŞ oturumun katılımcı kümesi
+  geriye dönük kayar (SNAPSHOT deseni + "aynı seed → aynı dağıtım" ihlali).
+- **Özel durum yerleştirmesi**: koltuk koordinatı `(desk_row, desk_col, slot)`
+  ile tutulur — `seat_no` numaralandırma düzeni değişince kayar, koordinat
+  kaymaz. "Tek başına" kardeş koltukları motor girdisinden DÜŞÜRÜR; sahte
+  `SeatAssignment` ASLA yazılmaz (student FK'sı + SNAPSHOT deseni).
+- **İmza bloğu sözleşmesi**: `_calendar_signatures` çıktısı
+  `{"chairs": [{"name", "role"}], "school_chair_name"}` — `calendar_pdf.html`
+  bu iki anahtarı tüketir; kaynak değişse de sözleşme değişmez.
 
 ---
 
@@ -300,13 +379,21 @@ lib/ + KurulumKapisi + queryClient · koruma testleri (format.test.ts tarih
 disiplini, App.test.tsx M3 token bütünlüğü) · updates.py · `shared/crypto.py`
 + `app_password` + GuvenlikKapisi (U3).
 
+> **31.08.2026 sapması:** `engine.py` · `validator.py` · `layout.py` AYNEN
+> sınıfından ÇIKTI. Gerekçe: kaçınılmaz komşu çiftlerin öğretmen masasına
+> çekilmesi (kullanıcı isteği) motorun ceza fonksiyonuna dokunmayı gerektirdi;
+> `layout._reference_cell` public `reference_cell` oldu (ikinci doğruluk
+> kaynağı doğmasın diye). Sert kısıt, determinizm ve doğrulayıcı sözleşmesi
+> DEĞİŞMEDİ — bkz. §4 ceza demeti.
+
 ### UYARLA
 `models.py` (created_by düşer; soft-delete + koşullu unique + SNAPSHOT kalır;
 şifreli alanlar doğuştan; migration 0001'den) · `services.py` 2354 (Celery→
 senkron; 5 köprü yerel arayüze — **fonksiyon imzaları korunarak**) ·
 `services_calendar.py` (çekirdek aynen; onay tek-kullanıcı; bildirim dalı
 silinir) · selectors/serializers/views/urls (izinler düşer; GET+POST tek-action
-— Tur 644 dersi) · `reports.py` (zümre imza dalı → boş çizgi) · FE `api.ts` →
+— Tur 644 dersi) · `reports.py` (zümre imza dalı; takvimde seçilen zümre yoksa
+boş çizgi — B7 revizyonu) · FE `api.ts` →
 DD authsuz istemci · `SinavSihirbazi` (Adım 0 beyan; sectionsApi yerel uca) ·
 GozetmenlerPaneli (havuz = aktif personel − muaf) · SorularPaneli (senkron) ·
 DD `backup.py` (iki kipte de günlük yedek) · DD import çekirdeği (veli/TCKN
@@ -331,10 +418,12 @@ app'i, guardian_* alanları.
 | **F0 İskelet** | DD'den şablon türetme; §2.3 kimlik sabitleri toplu değişimi; boş Django+FE ayakta; WeasyPrint requirements'a **F0'da** girer (hiddenimports/fontconfig erken yakalansın) | Windows exe açılır/kapanır; çıkış kodları 0-8 testleri; `--pdf-duman` (ĞÜŞİÖÇ + DejaVu /BaseFont) geçer; gates.sh yeşil |
 | **F1 Çekirdek veri** | SchoolConfig + kurulum sihirbazı + health ucu; SchoolYear; Personnel; Student; **şifreleme + parola katmanı (doğuştan)**; import boru hattı (şablon + xlsx + pano); Course + MEB tohumu + CourseAlias; şube tohumu | dry-run/commit parite testleri; tohum idempotentliği; TR sütun eşleme; şifreli kipte ad-temelli selector testleri |
 | **F2 Salon + motor** | ExamRoom + plan JSON + RoomEditor + preview-seats; engine/validator/layout/participants kopyası; generate-section-rooms | Saf motor test omurgası yeşil: aynı-seed determinizm, satranç modu, S-rota 2D tuzağı, pin sabitliği, rastgele senaryolarda ihlal=0 |
+| **F2 eki (31.08.2026)** | Derslik kümeleri (Sabah/Öğle) + toplu atama; motor odak altyapısı (`reference_cell` → `RoomSeats.focus`) | Küme CRUD + toplu atama testleri; odak taşınması satranç modunda korunur; mevcut motor testleri DEĞİŞMEDEN yeşil |
 | **F3 Oturum akışı** | 5 adımlı sihirbaz; ExamSession+Course (tek-seviyeli); dağıtım+seed; durum makinesi; PlacementRule 4 tip; takas; yoklama; SNAPSHOT. Sapma: katılımcı tipi yalnız LEVEL/SECTIONS — OYS'deki GROUPS (şube-içi grup) alınmadı (TB7); Adım 0 nakil özeti veri sorgusu yerine beyan + son içe aktarma tazeliği (B10) | Uçtan uca senaryo; onayda ihlal=0 şartı; arşivde mazeret güncellenebilir |
+| **F3 eki (31.08.2026)** | Şube kümeleri; oturum planı kopyalama (`copy-plan`); koltuk sabitleme (BELIRLI_KOLTUK + ön/arka + tek başına); kaçınılmaz komşuların odağa çekilmesi | Küme→şube açılımı seviyeyle kesişir; kopyalama idempotent + şube yıllar arası yeniden eşlenir; sabit koltuk üç seed'de aynı; tek başına kardeş koltuğu kapatır; odak terimi ihlal sayısını ARTIRMAZ ve determinizmi bozmaz |
 | **F4 Evrak seti** | R1-R5, R7-R9 + boş plan + tümü-ZIP; _design.css; ARCHIVED yeniden basım | Her raporda TR karakter duman testi; `text-transform` tarama testi; `|unlocalize` denetimi |
 | **F5 Kitapçık** | R10 senkron + A4 ±6pt doğrulama + Word şablonu | Bant ≤ 40mm invariantı; sayfa kuralları; 90×4 < 30 sn |
-| **F6 Takvim** | ExamCalendar + statutory_window + grid + günlük limit + slot→oturum + takvim PDF | Pencere hesabı + öğrenci-bazlı limit senaryoları |
+| **F6 Takvim** | ExamCalendar + statutory_window + grid + günlük limit + slot→oturum + takvim PDF; **30.08.2026 eki:** hazırlayan makam (`authority`), düzenlenebilir dipnot, seçilen zümrelerden imza bloğu | Pencere hesabı + öğrenci-bazlı limit senaryoları; makam ızgara hücresinde + PDF etiketinde; üst makam günü çakışması uyarı üretir; seçili zümre PDF'e başkan adıyla basılır, seçim yoksa yedek dal |
 | **F7 Gözetmen** | Elle atama; salon başına 1 + yedek; R6; yeniden dağıtımda sıfırlama | Ayar kapalıyken R6 katalogda görünmez |
 | **F8 Bakım** | Günlük yedek+rotasyon (iki kip); F27 elle-tetik anonimleştirme; surum.json; updates.py+UpdateBanner | Eski exe yeni DB'yi açmaz; anonimleştirme sonrası yeniden basım kırılmaz |
 | **F9 Paketleme** | PyInstaller onedir + Inno (yeni GUID, WebView2 gömülü) + .deb (bullseye; pango/fontconfig Depends); kap-ici-test debian 11+12; veri_sizintisi.py ×2 platform | Temiz Windows 11 ve Pardus 21'de: kurulum → sihirbaz → içe aktarma → dağıtım → R1 PDF uçtan uca |

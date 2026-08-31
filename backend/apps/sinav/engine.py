@@ -46,13 +46,32 @@ _SWAP_BUDGET_MAX = 6000
 #: Kurucu fazda kuyruk rotasyonunda denenecek azami aday sayısı.
 _LOOKAHEAD = 24
 
+#: Ceza demeti: (birincil, ikincil). Birincil = sert/yumuşak yakınlık cezası
+#: (bugünkü skaler); ikincil = kaçınılmaz komşu çiftlerin odağa uzaklığı.
+#: Karşılaştırma Python'un doğal leksikografik demet karşılaştırmasıdır.
+Penalty = tuple[float, float]
+
+_ZERO_PENALTY: Penalty = (0.0, 0.0)
+
+
+def _add(a: Penalty, b: Penalty) -> Penalty:
+    return (a[0] + b[0], a[1] + b[1])
+
 
 @dataclass(frozen=True)
 class RoomSeats:
-    """Motor girdisi: bir salonun kullanılabilir koltukları (rota sıralı)."""
+    """Motor girdisi: bir salonun kullanılabilir koltukları (rota sıralı).
+
+    `focus` salonun ODAK noktasıdır — öğretmen masası (yoksa tahta, yoksa
+    (0,0)) — ve EKSEN SIRASI koltuk koordinatlarıyla aynıdır: (x=sütun,
+    y=satır). `layout.reference_cell` (satır, sütun) döndürür; çeviriyi
+    çağıran yapar. Varsayılan (0.0, 0.0) mobilyasız planların bugünkü
+    davranışını korur.
+    """
 
     room_id: int
     seats: tuple[Seat, ...]
+    focus: tuple[float, float] = (0.0, 0.0)
 
 
 @dataclass(frozen=True)
@@ -200,17 +219,38 @@ def _prev_penalty(student: Participant, room_id: int, seat: Seat, prev_seats: Pr
     return 0.0
 
 
-def _pair_penalty(a_seat: Seat, b_seat: Seat) -> float:
-    """Aynı-grup çifti İÇ cezası: aynı sıra = ∞ (sert); 1. halka ağır; diğer 1/d²."""
+def _pair_penalty(a_seat: Seat, b_seat: Seat, focus: tuple[float, float]) -> Penalty:
+    """Aynı-grup çifti İÇ cezası — LEKSİKOGRAFİK İKİLİ (birincil, ikincil).
+
+    BİRİNCİL bugünkü skalerin BİTİ BİTİNE aynısıdır: aynı sıra = ∞ (sert
+    kısıt); 1. halka ağır; diğer 1/d². Sert kısıt gevşetilmez, doğrulayıcıya
+    yeni ihlal eklenmez.
+
+    İKİNCİL yalnız KOMŞU çiftlerde (Chebyshev ≤ 1, aynı masa dâhil) devreye
+    girer ve çiftin odağa (öğretmen masası) toplam uzaklığıdır. Kullanıcı
+    isteği (31.08.2026): "öğrenci sayıları karmaya müsait değilse aynı sınava
+    girip yanyana oturanlar ön sıralarda ve öğretmen masasına yakın olsun."
+
+    Demet karşılaştırması doğal leksikografiktir: ikincil ancak birincil TAM
+    EŞİTKEN karar verir. Bu yüzden bugün kabul edilen her hamle hâlâ kabul
+    edilir ve ihlal sayısı (birincilin ∞ olduğu çift sayısı) YAPISAL OLARAK
+    artamaz.
+    """
     dr = abs(a_seat.desk_row - b_seat.desk_row)
     dc = abs(a_seat.desk_col - b_seat.desk_col)
+    komsu = max(dr, dc) <= 1
+    ikincil = (
+        math.dist((a_seat.x, a_seat.y), focus) + math.dist((b_seat.x, b_seat.y), focus)
+        if komsu
+        else 0.0
+    )
     if dr == 0 and dc == 0:
-        return math.inf
+        return (math.inf, ikincil)
     d2 = (a_seat.x - b_seat.x) ** 2 + (a_seat.y - b_seat.y) ** 2
     base = 1.0 / d2 if d2 > 0 else math.inf
-    if max(dr, dc) <= 1:
-        return base + _FIRST_RING_WEIGHT
-    return base
+    if komsu:
+        return (base + _FIRST_RING_WEIGHT, ikincil)
+    return (base, 0.0)
 
 
 def _placement_penalty(
@@ -219,22 +259,23 @@ def _placement_penalty(
     occupied: list[tuple[Seat, str]],
     *,
     strict: bool,
-) -> float:
-    """Koltuğa bu gruptan öğrenci koymanın mevcut yerleşime göre cezası."""
-    penalty = 0.0
+    focus: tuple[float, float],
+) -> Penalty:
+    """Koltuğa bu gruptan öğrenci koymanın mevcut yerleşime göre ceza demeti."""
+    penalty: Penalty = _ZERO_PENALTY
     for other_seat, other_group in occupied:
         if other_group != group:
             continue
-        p = _pair_penalty(seat, other_seat)
-        if strict and math.isfinite(p):
+        p = _pair_penalty(seat, other_seat, focus)
+        if strict and math.isfinite(p[0]):
             ring = max(
                 abs(seat.desk_row - other_seat.desk_row),
                 abs(seat.desk_col - other_seat.desk_col),
             )
             if ring <= 1:
-                return math.inf
-        penalty += p
-        if math.isinf(penalty):
+                return (math.inf, p[1])
+        penalty = _add(penalty, p)
+        if math.isinf(penalty[0]):
             return penalty
     return penalty
 
@@ -264,19 +305,23 @@ def _constructive_fill(
         if not queue:
             break
         chosen_idx: int | None = None
-        best_idx, best_penalty = 0, math.inf
+        best_idx: int = 0
+        best_penalty: Penalty = (math.inf, math.inf)
         for idx in range(min(len(queue), _LOOKAHEAD)):
-            penalty = _placement_penalty(
-                seat, queue[idx].conflict_group, occupied, strict=strict
-            ) + _prev_penalty(queue[idx], room.room_id, seat, prev)
-            if penalty == 0.0:
+            penalty = _add(
+                _placement_penalty(
+                    seat, queue[idx].conflict_group, occupied, strict=strict, focus=room.focus
+                ),
+                (_prev_penalty(queue[idx], room.room_id, seat, prev), 0.0),
+            )
+            if penalty[0] == 0.0:
                 chosen_idx = idx
                 break
             if penalty < best_penalty:
                 best_idx, best_penalty = idx, penalty
         if chosen_idx is None:
             chosen_idx = best_idx
-            if math.isinf(best_penalty):
+            if math.isinf(best_penalty[0]):
                 warnings.append(
                     f"Salon {room.room_id}: ({seat.desk_row},{seat.desk_col}) sırasında "
                     f"sert kısıt kaçınılmaz oldu (kuyrukta uygun aday yok)."
@@ -289,19 +334,6 @@ def _constructive_fill(
     return placements
 
 
-def _room_score(placements: list[Placement]) -> float:
-    """Salon toplam cezası (aynı-grup çiftleri)."""
-    score = 0.0
-    for i in range(len(placements)):
-        for j in range(i + 1, len(placements)):
-            if placements[i].participant.conflict_group != placements[j].participant.conflict_group:
-                continue
-            score += _pair_penalty(placements[i].seat, placements[j].seat)
-            if math.isinf(score):
-                return score
-    return score
-
-
 def _student_penalty_at(
     placements: list[Placement],
     idx: int,
@@ -310,26 +342,27 @@ def _student_penalty_at(
     fixed: list[tuple[Seat, str]] | None = None,
     room_id: int = 0,
     prev_seats: PrevSeats | None = None,
-) -> float:
-    """idx'teki öğrencinin `seat`e taşınması hâlinde toplam cezası.
+    focus: tuple[float, float] = (0.0, 0.0),
+) -> Penalty:
+    """idx'teki öğrencinin `seat`e taşınması hâlinde toplam ceza demeti.
 
     Hareketli diğer öğrenciler + SABİT yerleşimler (taşınamazlar ama ceza
     üretirler) + önceki-oturum aynı-sıra terimi hesaba katılır.
     """
     student = placements[idx].participant
     me = student.conflict_group
-    total = _prev_penalty(student, room_id, seat, prev_seats or {})
+    total: Penalty = (_prev_penalty(student, room_id, seat, prev_seats or {}), 0.0)
     for k, other in enumerate(placements):
         if k == idx or other.participant.conflict_group != me:
             continue
-        total += _pair_penalty(seat, other.seat)
-        if math.isinf(total):
+        total = _add(total, _pair_penalty(seat, other.seat, focus))
+        if math.isinf(total[0]):
             return total
     for fixed_seat, fixed_group in fixed or []:
         if fixed_group != me:
             continue
-        total += _pair_penalty(seat, fixed_seat)
-        if math.isinf(total):
+        total = _add(total, _pair_penalty(seat, fixed_seat, focus))
+        if math.isinf(total[0]):
             return total
     return total
 
@@ -358,9 +391,15 @@ def _local_search(
     free_seats = [s for s in room.seats if (s.desk_row, s.desk_col, s.slot) not in used]
     budget = min(_SWAP_BUDGET_MAX, _SWAP_BUDGET_PER_SEAT * max(n, len(room.seats)))
 
-    def penalty_at(i: int, seat: Seat) -> float:
+    def penalty_at(i: int, seat: Seat) -> Penalty:
         return _student_penalty_at(
-            placements, i, seat, fixed=fixed, room_id=room.room_id, prev_seats=prev_seats
+            placements,
+            i,
+            seat,
+            fixed=fixed,
+            room_id=room.room_id,
+            prev_seats=prev_seats,
+            focus=room.focus,
         )
 
     for _ in range(budget):
@@ -383,10 +422,10 @@ def _local_search(
         a, b = placements[i], placements[j]
         if a.participant.conflict_group == b.participant.conflict_group:
             continue  # aynı grubun takası skoru değiştirmez (prev terimi hariç — ihmal)
-        before = penalty_at(i, a.seat) + penalty_at(j, b.seat)
+        before = _add(penalty_at(i, a.seat), penalty_at(j, b.seat))
         # Takas sonrası (birbirlerine cezaları her iki yönde de hesaba girer;
         # çifte sayım her iki tarafta simetrik olduğundan karşılaştırma doğru).
-        after = penalty_at(i, b.seat) + penalty_at(j, a.seat)
+        after = _add(penalty_at(i, b.seat), penalty_at(j, a.seat))
         if after < before:
             placements[i] = Placement(participant=a.participant, room_id=a.room_id, seat=b.seat)
             placements[j] = Placement(participant=b.participant, room_id=b.room_id, seat=a.seat)
@@ -402,7 +441,9 @@ def _checkerboard_seats(room: RoomSeats) -> RoomSeats:
             continue
         seen_desks.add(key)
         picked.append(seat)
-    return RoomSeats(room_id=room.room_id, seats=tuple(picked))
+    # focus TAŞINMALI — yeniden kurulan RoomSeats'te düşerse satranç modunda
+    # odak sessizce (0,0)'a döner ve ikincil ceza yanlış ucu seçer.
+    return RoomSeats(room_id=room.room_id, seats=tuple(picked), focus=room.focus)
 
 
 def distribute_butterfly(

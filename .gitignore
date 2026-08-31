@@ -47,3 +47,6 @@ packaging/windows/MicrosoftEdgeWebView2Setup.exe
 .env
 .DS_Store
 Thumbs.db
+
+# Evrak tasarım denemesi çıktısı (manage.py evrak_ornek) — uydurma veri, depoya girmez
+.ornek-evrak/

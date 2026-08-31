@@ -1,83 +1,124 @@
 {% extends "sinav/reports/base.html" %}
 {% load l10n %}
-{% comment %}R8 — Dağıtım Doğrulama Raporu (yol haritası §9). Tek yaprak:
-ihlal=0 beyanı (veya adsız ihlal listesi — doğrulayıcı kişisel veri üretmez),
-mesafe metrikleri (1. halka aynı-grup çifti, grup başına min mesafe ders
-adıyla, yakınlık skoru), dağıtım parametreleri (seed/strict/satranç/düzen),
-üretim zamanı altbilgide. İdare imza bloğu — oturum onayının dayanağıdır.
-{% endcomment %}
+{% comment %}R8 — Dağıtım Doğrulama Raporu. Tek yaprak: ihlal=0 beyanı (veya
+adsız ihlal listesi — doğrulayıcı kişisel veri üretmez), dağıtım parametreleri
+(seed dâhil — "aynı seed → aynı dağıtım" sözleşmesinin yazılı kanıtı), kısıt
+metrikleri ve salon doluluğu. İdare imza bloğu: oturum onayının dayanağıdır.
+
+Bu evrak salona GİTMEZ; idarede dosyalanır — o yüzden gözetmen dili yoktur,
+sayısal denetim dili vardır.{% endcomment %}
 {% block extra_style %}
 <style>
-  .verdict { margin-top: 8pt; border: 1.2pt solid var(--pr-ink); padding: 8pt 10pt;
-             text-align: center; font-size: 11pt; font-weight: bold;
-             break-inside: avoid; page-break-inside: avoid; }
+  .verdict { margin-top: 6pt; border: 1.6pt solid var(--pr-ink); padding: 9pt 10pt;
+             text-align: center; break-inside: avoid; page-break-inside: avoid; }
+  .verdict .head { font-size: 12pt; font-weight: bold; letter-spacing: 0.8pt;
+                   color: var(--pr-ink); }
+  .verdict .sub { margin-top: 3pt; font-size: 8.5pt; color: var(--pr-secondary); }
   .verdict.bad { border-style: dashed; }
-  .violations { margin: 6pt 0 0; padding-left: 14pt; font-size: 8.5pt; }
+  .violations { margin: 5pt 0 0; padding-left: 15pt; font-size: 8.5pt;
+                color: var(--pr-text); }
   .violations li { margin: 2pt 0; }
-  .kv { width: 100%; border-collapse: collapse; margin-top: 8pt; }
-  .kv td { border: 0.6pt solid var(--pr-secondary); padding: 4pt 7pt; font-size: 9pt; }
-  .kv td.k { width: 45%; font-weight: bold; background: var(--pr-fill-head); }
+  .kv td.k { width: 46%; }
+  .kv td.v { font-weight: bold; color: var(--pr-ink); }
+  .occ th { font-size: 8pt; }
+  .occ td { height: 15pt; }
 </style>
 {% endblock %}
 {% block content %}
 <div class="sheet">
-  {% include "sinav/reports/_head.html" %}
+  {% with scope_note="İdare nüshası · oturum onayının dayanağı" %}
+    {% include "sinav/reports/_head.html" %}
+  {% endwith %}
 
   {% if report.is_valid %}
-  <div class="verdict">SERT KISIT İHLALİ YOKTUR (İHLAL = 0)</div>
+  <div class="verdict">
+    <div class="head">SERT KISIT İHLALİ YOKTUR (İHLAL = 0)</div>
+    <div class="sub">Dağıtım, bağımsız doğrulayıcıdan geçmiştir; oturum onaya uygundur.</div>
+  </div>
   {% else %}
-  <div class="verdict bad">DİKKAT: {{ report.violation_count }} SERT KISIT İHLALİ TESPİT EDİLDİ</div>
+  <div class="verdict bad">
+    <div class="head">DİKKAT: {{ report.violation_count }} SERT KISIT İHLALİ TESPİT EDİLDİ</div>
+    <div class="sub">İhlaller giderilmeden oturum onaylanmamalıdır.</div>
+  </div>
   <ul class="violations">
     {% for violation in report.hard_violations %}<li>{{ violation }}</li>{% endfor %}
   </ul>
   {% endif %}
 
-  <table class="kv">
+  <div class="sec">A. DAĞITIM PARAMETRELERİ
+    <span class="hint">Aynı tohum (seed) aynı dağıtımı üretir.</span>
+  </div>
+  <table class="fields kv">
+    <tr><td class="k">Dağıtım düzeni</td><td class="v">{{ report.params.layout_mode_label }}</td></tr>
+    <tr><td class="k">Rastgelelik tohumu (seed)</td><td class="v">{{ report.params.seed }}</td></tr>
+    <tr><td class="k">Katı mod (1. halka sert)</td>
+        <td class="v">{{ report.params.strict|yesno:"Açık,Kapalı" }}</td></tr>
+    <tr><td class="k">Satranç modu</td>
+        <td class="v">{{ report.params.checkerboard|yesno:"Açık,Kapalı" }}</td></tr>
+    <tr><td class="k">Yerleşen öğrenci / sabit kurallı</td>
+        <td class="v">{{ report.params.placed }} / {{ report.params.pinned }}</td></tr>
+  </table>
+
+  <div class="sec">B. KISIT VE YAKINLIK METRİKLERİ</div>
+  <table class="fields kv">
     <tr><td class="k">Birinci halkada aynı-grup çifti (komşu sıra)</td>
-        <td>{{ report.first_ring_pairs }}</td></tr>
-    {% comment %}K1 (Tur 645): GROUPS-tipi açık uç — aynı şubeden farklı-grup
-    komşuluğu (kopya riski düşük: farklı kitapçık; V2 separate_sections girdisi).{% endcomment %}
+        <td class="v">{{ report.first_ring_pairs }}</td></tr>
+    {% comment %}GROUPS-tipi açık uç — aynı şubeden farklı-grup komşuluğu
+    (kopya riski düşük: farklı kitapçık).{% endcomment %}
     <tr><td class="k">Aynı şubeden farklı-grup komşu çifti (1. halka)</td>
-        <td>{{ report.cross_section_pairs }}</td></tr>
+        <td class="v">{{ report.cross_section_pairs }}</td></tr>
     <tr><td class="k">Toplam yakınlık skoru (Σ 1/d² — düşük iyidir)</td>
-        <td>{{ report.proximity_score }}</td></tr>
+        <td class="v">{{ report.proximity_score }}</td></tr>
     {% for metric in report.min_distances %}
     <tr><td class="k">En yakın aynı-grup mesafesi — {{ metric.group_label }}</td>
-        <td>{{ metric.distance }} birim</td></tr>
+        <td class="v">{{ metric.distance }} birim</td></tr>
     {% endfor %}
   </table>
 
   {% if report.occupancy %}
-  {% comment %}K1 (Tur 645): salon doluluk tablosu — kapasite/yerleşen/yüzde.{% endcomment %}
-  <table class="kv">
-    <tr><td class="k">SALON DOLULUK</td><td>Kapasite · Yerleşen · Doluluk</td></tr>
-    {% for row in report.occupancy %}
-    <tr><td class="k">{{ row.room_name }}</td>
-        <td>{{ row.capacity }} · {{ row.placed }} · %{{ row.percent|unlocalize }}</td></tr>
-    {% endfor %}
+  <div class="sec">C. SALON DOLULUĞU</div>
+  <table class="rpt-table occ">
+    <thead>
+      <tr>
+        <th>Salon</th>
+        <th class="num" style="width: 18%;">Kapasite</th>
+        <th class="num" style="width: 18%;">Yerleşen</th>
+        <th class="num" style="width: 18%;">Doluluk</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in report.occupancy %}
+      <tr>
+        <td>{{ row.room_name }}</td>
+        <td class="num">{{ row.capacity }}</td>
+        <td class="num">{{ row.placed }}</td>
+        {# `unlocalize` CSS tuzağı için zorunlu (F25/T244 kuralı); tam sayıya
+           yuvarlamak TR metinde "95.0" gibi nokta ayraçlı okuma bırakmaz. #}
+        <td class="num">%{{ row.percent|unlocalize|floatformat:0 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
   </table>
   {% endif %}
 
-  <table class="kv">
-    <tr><td class="k">Dağıtım düzeni</td><td>{{ report.params.layout_mode_label }}</td></tr>
-    <tr><td class="k">Rastgelelik tohumu (seed)</td><td>{{ report.params.seed }}</td></tr>
-    <tr><td class="k">Katı mod (1. halka sert)</td><td>{{ report.params.strict|yesno:"Açık,Kapalı" }}</td></tr>
-    <tr><td class="k">Satranç modu</td><td>{{ report.params.checkerboard|yesno:"Açık,Kapalı" }}</td></tr>
-    <tr><td class="k">Yerleşen öğrenci / sabit kurallı</td>
-        <td>{{ report.params.placed }} / {{ report.params.pinned }}</td></tr>
-  </table>
-
   {% if report.warnings %}
-  <div class="courses-title" style="font-weight: bold; font-size: 9.5pt; margin-top: 8pt;">DAĞITIM UYARILARI</div>
+  <div class="sec">D. DAĞITIM UYARILARI
+    <span class="hint">Sert kısıt değildir; idarenin değerlendirmesine sunulur.</span>
+  </div>
   <ul class="violations">
     {% for warning in report.warnings %}<li>{{ warning }}</li>{% endfor %}
   </ul>
   {% endif %}
 
-  <table class="officer-grid">
+  <table class="signs">
+    <tr><td class="date">…… / …… / 20……</td><td class="date">…… / …… / 20……</td></tr>
     <tr><td class="space"></td><td class="space"></td></tr>
-    <tr><td><div class="line"></div>Sınav Komisyonu (Ad Soyad / İmza)</td>
-        <td><div class="line"></div>Okul Müdürü (Ad Soyad / İmza)</td></tr>
+    <tr>
+      <td><div class="line"></div><span class="who">Sınav Komisyonu</span><br>
+          <span class="role">Ad Soyad / İmza</span></td>
+      <td><div class="line"></div><span class="who">Okul Müdürü</span><br>
+          <span class="role">Ad Soyad / İmza</span></td>
+    </tr>
   </table>
 </div>
 {% endblock %}

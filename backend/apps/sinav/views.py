@@ -25,6 +25,7 @@ from apps.sinav.models import (
     BookletRunStatus,
     ExamAttendanceRecord,
     ExamRoom,
+    ExamRoomGroup,
     ExamSession,
     ExamSessionCourse,
     PlacementRule,
@@ -34,8 +35,10 @@ from apps.sinav.models import (
 from apps.sinav.serializers import (
     AttendanceMarkSerializer,
     BookletRunSerializer,
+    CopySessionPlanSerializer,
     DistributeSerializer,
     ExamAttendanceRecordSerializer,
+    ExamRoomGroupSerializer,
     ExamRoomSerializer,
     ExamSessionCourseSerializer,
     ExamSessionRoomSerializer,
@@ -47,10 +50,59 @@ from apps.sinav.serializers import (
     ProctorExemptionSerializer,
     QuestionDocumentSerializer,
     QuestionUploadSerializer,
+    RoomGroupAssignSerializer,
     SeatAssignmentSerializer,
     SeatSerializer,
     SessionRoomsUpdateSerializer,
 )
+
+
+class ExamRoomGroupViewSet(viewsets.ModelViewSet[ExamRoomGroup]):
+    """Derslik kümeleri (Sabah/Öğle gibi) — yalnız seçim kolaylığı."""
+
+    serializer_class = ExamRoomGroupSerializer
+    http_method_names = ["get", "post", "patch", "delete"]
+
+    def get_queryset(self):  # type: ignore[no-untyped-def]
+        # DETAY yolları (PATCH/DELETE) QuerySet ister — sıralı LİSTE burada
+        # döndürülemez, `list()` içinde döndürülür.
+        return selectors.exam_room_groups()
+
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Sıralama Türk alfabesiyle Python'da (SQLite BINARY karşılaştırır)."""
+        rows = selectors.exam_room_groups_sorted()
+        page = self.paginate_queryset(rows)
+        if page is not None:
+            return self.get_paginated_response(self.get_serializer(page, many=True).data)
+        return Response(self.get_serializer(rows, many=True).data)
+
+    def perform_create(self, serializer: drf_serializers.BaseSerializer[ExamRoomGroup]) -> None:
+        serializer.instance = services.create_room_group(**dict(serializer.validated_data))
+
+    def perform_update(self, serializer: drf_serializers.BaseSerializer[ExamRoomGroup]) -> None:
+        instance = serializer.instance
+        assert instance is not None
+        serializer.instance = services.update_room_group(
+            instance, **dict(serializer.validated_data)
+        )
+
+    def perform_destroy(self, instance: ExamRoomGroup) -> None:
+        services.delete_room_group(instance)
+
+    @action(detail=False, methods=["post"])
+    def assign(self, request: Request) -> Response:
+        """`POST /exam-room-groups/assign/` — salonları topluca kümeye alır."""
+        serializer = RoomGroupAssignSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        group = serializer.validated_data["group"]
+        try:
+            updated = services.assign_room_group(
+                room_ids=list(serializer.validated_data["room_ids"]),
+                group_id=group.pk if group is not None else None,
+            )
+        except DjangoValidationError as exc:
+            raise drf_serializers.ValidationError(exc.messages) from exc
+        return Response({"updated": updated})
 
 
 class ExamRoomViewSet(viewsets.ModelViewSet[ExamRoom]):
@@ -283,6 +335,28 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
             raise drf_serializers.ValidationError(exc.messages) from exc
         return Response({"rooms": ExamSessionRoomSerializer(rows, many=True).data})
 
+    @action(detail=True, methods=["post"], url_path="copy-plan")
+    def copy_plan(self, request: Request, pk: str | None = None) -> Response:
+        """Başka oturumun ders+şube ve salon planını bu TASLAĞA kopyalar (Ö5).
+
+        Kopya sihirbazın üstüne gelir ve üzerinde değişiklik yapılabilir. Seed,
+        yerleşim, yoklama, gözetmen ve onay damgaları TAŞINMAZ.
+        """
+        session = self.get_object()
+        serializer = CopySessionPlanSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            report = services.copy_session_plan(
+                session,
+                source_id=serializer.validated_data["source_id"],
+                courses=serializer.validated_data["courses"],
+                rooms=serializer.validated_data["rooms"],
+            )
+        except DjangoValidationError as exc:
+            raise drf_serializers.ValidationError(exc.messages) from exc
+        session.refresh_from_db()
+        return Response({"session": ExamSessionSerializer(session).data, "report": report})
+
     @action(detail=True, methods=["get"])
     def participants(self, request: Request, pk: str | None = None) -> Response:
         """Katılımcı çözümü — ders bazlı liste + çakışma/uyarılar (Adım 2/4)."""
@@ -395,11 +469,11 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
     def reports(
         self, request: Request, pk: str | None = None, code: str | None = None
     ) -> HttpResponse | Response:
-        """Sınav evrakı indirme (F4): R1-R5 + R2k + R7-R9 — senkron PDF/Excel.
+        """Sınav evrakı indirme (F4): R1 · R4-R8 — senkron PDF/Excel.
 
-        `?room_id=` salon bazlı raporları (R1/R2/R3/R7) tek salona daraltır;
-        `code=zip` tüm seti tek arşivde döner. Arşiv oturumdan yeniden basım
-        açıktır (durum kapısı serviste).
+        `?room_id=` salon bazlı evrakı (R1 salon evrakı / R7 tutanak) tek salona
+        daraltır; `code=zip` tüm seti tek arşivde döner. Arşiv oturumdan yeniden
+        basım açıktır (durum kapısı serviste).
         """
         session = self.get_object()
         if code != "zip" and code not in services.REPORT_CODES:

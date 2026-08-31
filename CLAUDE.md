@@ -47,9 +47,27 @@
   ikili her derlemede modülleri gerçekten import eder. (`--pdf-duman` yalnız
   WeasyPrint zincirini sınar — 30.08.2026'da `xlrd` eklendiğinde yeni
   bağımlılığı sınayan kapı olmadığı görüldü.)
+- **WeasyPrint ölçü tuzakları (evrak sayfa bütçesi):** iç birim CSS px'tir
+  (1 pt = 4/3 px) · tablo hücresine `height` vermek satırı KISALTMAZ, UZATIR
+  (satır ölçüsü punto + dolgu ile ayarlanır) · gövdedeki `<style>` ve inline
+  `style` özniteliğindeki CSS değişkenleri YOK SAYILIR (hesaplanan kurallar
+  `<head>`e, `extra_style` bloğuna basılır) · sütun genişliği hesabına
+  güveniliyorsa `table-layout: fixed` şart · hücreye BLOK kutu koyan tablolarda
+  `tr { break-inside: avoid }` ŞART: `documents/base.html` bunu `.doc-table`
+  için TANIMLAMAZ (kardeş `sinav/reports/base.html` tanımlar) ve kural yoksa
+  uzun tablo satırı sayfa sınırında bölünüp devam sayfasında satır başlığı
+  (tarih/saat) OLMADAN basılır. Bütçe sabitleri `reports.py`
+  (`KROKI_BOX_*_PX`, `_ATT_FIXED_PX`, `_ANN_FIXED_PX`) — ÖLÇÜLEREK bulundu;
+  garanti `test_reports.py::test_r1_salon_evraki_iki_yaprak` (bir derslikte
+  40 öğrenci sığar, fazlası kontrolsüz taşmaz).
 - **Şifreli alan sorguları:** ad-temelli filtre/sıralama/teklik DB'de
   çalışmaz → selector katmanında Python ile (tasarım §5). Yeni ad sorgusu
   doğrudan ORM filtresiyle yazılmaz.
+- **Soft-delete ileri-FK'da SÜZMEZ:** `obj.fk` erişimi `_base_manager`
+  üzerinden (ve `select_related` JOIN'iyle) çözülür — silinmiş kayıt geri
+  gelir. Silme her yerde soft olduğundan `on_delete=PROTECT` de hiç
+  tetiklenmez. Evrağa ad basan her yol `deleted_at`'i ELLE denetler
+  (emsal `services_calendar._chair_name`).
 - **SQLite:** `levels__contains` yok (Python süzme); yedek daima
   `Connection.backup()` (dosya kopyalama WAL'de yasak).
 - **Kimlik sabitleri:** `KS_*` env, `ks_oturum`, `X-KS-Token`, `.ksbak`,
@@ -67,6 +85,24 @@
   kopyaları arşiv evrakının sabitliği içindir — kaldırılmaz.
 - `ExamSessionCourse` tek-seviyeli; kitapçık sözlüğü grup anahtarıyla
   (OYS Tur 241 dersi).
+- Takvim ızgarası hücre anahtarı `"<iso_tarih>|<period_no>|<level>"` — FE ve
+  PDF ORTAK tüketir; hücre sözlüğüne alan eklenir, anahtar biçimi değişmez.
+- Takvim imza bloğu sözleşmesi `{"chairs": [{"name", "role"}],
+  "school_chair_name"}` (`_calendar_signatures` çıktısı). Kaynak takvime seçilen
+  zümrelerdir (`okul.SubjectDepartment`); seçim yoksa derslerden boş çizgi
+  üretilir (B7 revizyonu) — şablon iki anahtarı görmeye devam eder.
+- **Ceza demeti:** `engine._pair_penalty` leksikografik `(birincil, ikincil)`
+  döner. Birincil sert/yumuşak yakınlık cezasıdır (sert kısıt kaynağı);
+  ikincil YALNIZ eşitlik bozar (kaçınılmaz komşu çiftin öğretmen masasına
+  uzaklığı). İkincil hiçbir koşulda ihlal sayısını artıramaz.
+- **Kümeler seçim aracıdır:** şube/derslik kümesi kimliği HİÇBİR oturum
+  kaydına yazılmaz; sihirbaz kümeyi somut pk listesine açar.
+- **Koltuk sabitleme koordinattır:** `(desk_row, desk_col, slot)` — `seat_no`
+  numaralandırma düzeni değişince kayar. "Tek başına" kardeş koltukları motor
+  girdisinden düşürür; sahte `SeatAssignment` yazılmaz.
+- `ExamCalendarEntry.authority` teklik kısıtına GİRMEZ: bir (ders, seviye, tür)
+  ya okul ya üst makam sınavıdır. Aynı gün+seviyede ikisi birden varsa UYARI
+  üretilir (sert kısıt değil — "zorunlu hâl" takdiri okul müdürlüğünündür).
 
 ## 4. Nasıl koşulur
 

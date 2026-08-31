@@ -97,6 +97,31 @@ describe("TakvimYerlestirmePaneli", () => {
     expect(await screen.findByText(/Oturum üretildi/)).toBeInTheDocument();
   });
 
+  it("okul dışı makam sınavı ders adını bozmadan AYRI rozetle görünür", async () => {
+    calApi.grid.mockResolvedValue(
+      makeGrid({
+        cells: { "2026-10-27|1|9": [makeCell({ authority: "MINISTRY" })] },
+        unplaced: [],
+      }),
+    );
+    renderPanel();
+
+    // Ders adı tam metin eşleşmesini korur (rozet ayrı <span>).
+    expect(await screen.findByText("Coğrafya")).toBeInTheDocument();
+    expect(screen.getByText("BAK")).toBeInTheDocument();
+  });
+
+  it("okul sınavında makam rozeti basılmaz", async () => {
+    calApi.grid.mockResolvedValue(
+      makeGrid({ cells: { "2026-10-27|1|9": [makeCell()] }, unplaced: [] }),
+    );
+    renderPanel();
+
+    expect(await screen.findByText("Coğrafya")).toBeInTheDocument();
+    expect(screen.queryByText("BAK")).not.toBeInTheDocument();
+    expect(screen.queryByText("İL")).not.toBeInTheDocument();
+  });
+
   it("onaylı takvimde yerleştirme/kaldırma denetimleri çizilmez", async () => {
     calApi.grid.mockResolvedValue(
       makeGrid({

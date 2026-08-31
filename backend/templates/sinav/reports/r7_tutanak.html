@@ -1,0 +1,159 @@
+{% extends "sinav/reports/base.html" %}
+{% comment %}R7 — SINAV İHLAL VE KOPYA TUTANAĞI. Salon başına BİR boş form; salon
+zarfına konur ve yalnız olay olduğunda doldurulur. Kullanıcı kararı: birleşik
+salon evrakının (R1) tek istisnası budur — olay tutanağı ayrı yaprak olmak
+zorundadır (imzalanıp müdürlüğe ayrıca gider, sınav evrakıyla dosyalanmaz).
+
+KÖKEN: evrakmotoru SAL-SNV-FR-007 "Sınav İhlal ve Kopya Tutanağı" (kullanıcının
+kendi form ailesi) — bölüm düzeni, fiil/hüküm eşlemesi ve imza üçlüsü oradan
+alındı; yalnız baskı dili "Kurumsal Sade" token'larına uyarlandı.
+
+MADDE NUMARASI: R6'daki "madde no gömme" kısıtından KASITLI ayrılır — ihlalin
+hangi disiplin hükmüne düştüğü tutanağın işlevidir; numaralar kaynak formla
+birebir tutulur ve değişiklikte O FORMLA BİRLİKTE güncellenir.
+
+Salon/oturum künyesi BASILI gelir; öğrenci alanları boştur (olay önceden
+bilinemez — kişisel veri de basılmaz).{% endcomment %}
+{% block extra_style %}
+<style>
+  .ihlal td { height: 14pt; }
+  .tur td { height: 12pt; }
+  .islem td { height: 12pt; }
+  .pre { font-weight: bold; color: var(--pr-ink); }
+</style>
+{% endblock %}
+{% block content %}
+{% for sheet in sheets %}
+<div class="sheet">
+  {% with scope_line="Salon: "|add:sheet.room_name scope_note="Yalnız olay hâlinde doldurulur" %}
+    {% include "sinav/reports/_head.html" %}
+  {% endwith %}
+
+  <p class="note">
+    Kopya çektiği tespit edilen öğrencinin durumu puanla değerlendirilmez; puan hanesine
+    &quot;K&quot; işlenir ve ortalamaya dâhil edilir. Olay tutanakla okul müdürlüğüne
+    bildirilir; fiil, niteliğine göre disiplin işlemlerine konu edilir.
+  </p>
+
+  <div class="sec">A. OLAY BİLGİLERİ</div>
+  <table class="fields ihlal">
+    <colgroup><col style="width: 24%;"><col style="width: 26%;">
+              <col style="width: 24%;"><col style="width: 26%;"></colgroup>
+    <tr>
+      <td class="k">Sınav / tarih / saat</td>
+      <td class="pre" colspan="3">{{ header.exam_name }} · {{ header.exam_date }} · {{ header.start_time }}</td>
+    </tr>
+    <tr>
+      <td class="k">Salon</td><td class="pre">{{ sheet.room_name }}</td>
+      <td class="k">Sınavı yapılan ders(ler)</td><td class="pre">{{ sheet.course_summary }}</td>
+    </tr>
+    <tr>
+      <td class="k">Öğrencinin adı soyadı</td><td class="fill"></td>
+      <td class="k">Okul no / şubesi</td><td class="fill"></td>
+    </tr>
+    <tr>
+      <td class="k">Öğrencinin koltuk numarası</td><td class="fill"></td>
+      <td class="k">Olay saati</td><td class="fill"></td>
+    </tr>
+    <tr>
+      <td class="k">Gözetmen öğretmen</td>
+      <td class="fill" colspan="3">{{ sheet.proctor_name }}</td>
+    </tr>
+  </table>
+
+  <div class="sec">B. OLAYIN TÜRÜ
+    <span class="hint">Tespit edilen fiili işaretleyiniz.</span>
+  </div>
+  <table class="checks tur">
+    <tr>
+      <td class="b"><span class="box"></span></td>
+      <td>Kopya çekmek veya çekilmesine yardımcı olmak</td>
+      <td class="ref">OKY md. 164/1-ı (kınama) + md. 48/4 &quot;K&quot;</td>
+    </tr>
+    <tr>
+      <td class="b"><span class="box"></span></td>
+      <td>Toplu kopya çekmek veya çekilmesine yardımcı olmak</td>
+      <td class="ref">OKY md. 164/2-j (kısa süreli uzaklaştırma) + md. 48/4 &quot;K&quot;</td>
+    </tr>
+    <tr>
+      <td class="b"><span class="box"></span></td>
+      <td>Zor kullanarak veya tehditle kopya çekmek / çekilmesini sağlamak</td>
+      <td class="ref">OKY md. 164/3-ı (okul değiştirme) + md. 48/4 &quot;K&quot;</td>
+    </tr>
+    <tr>
+      <td class="b"><span class="box"></span></td>
+      <td>Yerine başkasını sınava sokmak / başkasının yerine sınava girmek</td>
+      <td class="ref">OKY md. 164/3-j (okul değiştirme)</td>
+    </tr>
+    <tr>
+      <td class="b"><span class="box"></span></td>
+      <td>Sınav salonunda izinsiz bilişim aracı bulundurmak / kullanmak</td>
+      <td class="ref">Öğretmenler kurulunun bilişim araçları kararı; OKY md. 164/1-l, o</td>
+    </tr>
+    <tr>
+      <td class="b"><span class="box"></span></td>
+      <td>Sınav düzenini bozan diğer davranış: <span class="blank" style="min-width: 150pt;"></span></td>
+      <td class="ref">OKY md. 164/1-h</td>
+    </tr>
+  </table>
+
+  <div class="sec">C. OLAYIN AÇIKLAMASI VE DELİLLER
+    <span class="hint">Kopya materyali, yerleşim, tanıklar.</span>
+  </div>
+  <div class="freebox">
+    <div class="ln"></div><div class="ln"></div><div class="ln"></div>
+    <div class="ln"></div><div class="ln"></div><div class="ln"></div>
+    <div class="ln"></div>
+  </div>
+
+  <div class="sec">D. YAPILAN İŞLEMLER</div>
+  <table class="checks islem">
+    <tr>
+      <td class="b"><span class="box"></span></td>
+      <td>Sınav kâğıdına şerh düşüldü; varsa kopya materyali tutanağa eklendi.</td>
+    </tr>
+    <tr>
+      <td class="b"><span class="box"></span></td>
+      <td>Öğrencinin sınavı sonlandırıldı / salon düzeni gözetilerek sınava devamına izin verildi:
+        <span class="blank" style="min-width: 120pt;"></span></td>
+    </tr>
+    <tr>
+      <td class="b"><span class="box"></span></td>
+      <td>Tutanak, sınav evrakıyla birlikte nöbetçi müdür yardımcısına teslim edildi.</td>
+    </tr>
+    <tr>
+      <td class="b"><span class="box"></span></td>
+      <td>Puan hanesine &quot;K&quot; işlenmek üzere okul müdürlüğüne bildirildi.</td>
+    </tr>
+    <tr>
+      <td class="b"><span class="box"></span></td>
+      <td>Disiplin yönünden değerlendirilmek üzere okul müdürlüğüne sevk edildi.</td>
+    </tr>
+  </table>
+
+  <table class="signs">
+    <tr><td class="date">…… / …… / 20……</td><td class="date">…… / …… / 20……</td>
+        <td class="date">…… / …… / 20……</td></tr>
+    <tr><td class="space"></td><td class="space"></td><td class="space"></td></tr>
+    <tr>
+      <td><div class="line"></div><span class="who">Gözetmen Öğretmen</span><br>
+          <span class="role">Ad Soyad / İmza</span></td>
+      <td><div class="line"></div><span class="who">(Varsa) Diğer Görevli / Tanık</span><br>
+          <span class="role">Ad Soyad / İmza</span></td>
+      <td><div class="line"></div><span class="who">Nöbetçi Müdür Yardımcısı</span><br>
+          <span class="role">Ad Soyad / İmza</span></td>
+    </tr>
+  </table>
+
+  <div class="dayanak">
+    <b>DAYANAK:</b> OKY md. 48/4, 164/1-h-ı-l-o, 164/2-j, 164/3-ı-j; YUSY md. 6/1-f;
+    öğretmenler kurulunun bilişim araçları kararı.
+    <br><b>KISALTMA:</b> OKY = MEB Ortaöğretim Kurumları Yönetmeliği ·
+    YUSY = MEB Yazılı ve Uygulamalı Sınavlar Yönergesi.
+    <br><b>KVKK:</b> Bu tutanaktaki kişisel veriler, disiplin ve ölçme-değerlendirme
+    mevzuatının uygulanması amacıyla 6698 sayılı Kanunun 5/2-ç maddesi uyarınca işlenir;
+    yalnızca yetkili okul personeli ve denetim mercileriyle paylaşılır.
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

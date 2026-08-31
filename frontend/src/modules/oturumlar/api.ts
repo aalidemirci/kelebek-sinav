@@ -278,18 +278,57 @@ export interface BookletRun {
   completed_at: string | null;
 }
 
-/** Evrak paneli katalog satırı — kodlar backend REPORT_CODES ile birebir (OYS AYNEN). */
-export const REPORT_CATALOG: { code: string; title: string; roomScoped: boolean }[] = [
-  { code: "r1", title: "Salon Oturma Planı (kroki)", roomScoped: true },
-  { code: "r2", title: "Salon Yoklama / İmza Listesi", roomScoped: true },
-  { code: "r2k", title: "Şube Yoklama Listesi", roomScoped: false },
-  { code: "r3", title: "Salon Kapı Listesi", roomScoped: true },
-  { code: "r4", title: "Şube Duyuru Listesi", roomScoped: false },
-  { code: "r5", title: "Toplu Dağıtım Çizelgesi (Excel)", roomScoped: false },
-  { code: "r6", title: "Gözetmen Görevlendirme / Tebliğ-Tebellüğ", roomScoped: false },
-  { code: "r7", title: "Sınav Evrak Zarfı Kapağı / Salon Tutanağı", roomScoped: true },
-  { code: "r8", title: "Dağıtım Doğrulama Raporu", roomScoped: false },
-  { code: "r9", title: "Evrak Teslim / Teslim Alma Tutanağı", roomScoped: false },
+/**
+ * Evrak paneli katalog satırı — kodlar backend REPORT_CODES ile birebir.
+ *
+ * 30.08.2026 sadeleştirmesi: salon evrakı TEK belgede birleşti (eski R1 kroki +
+ * R2 yoklama + R7 zarf kapağı + R9 teslim tutanağı); R2k şube yoklaması ve R3
+ * kapı listesi kaldırıldı. `note` satırı, hangi belgenin nereye gittiğini
+ * panelde söyler — evrak seti küçüldüğü için "hangisini basayım" sorusu
+ * listeden değil bu satırdan cevaplanır.
+ */
+export const REPORT_CATALOG: {
+  code: string;
+  title: string;
+  note: string;
+  roomScoped: boolean;
+}[] = [
+  {
+    code: "r1",
+    title: "Salon Sınav Evrakı",
+    note: "Oturma planı · yoklama ve imza · evrak sayımı · teslim zinciri — salon başına 2 yaprak",
+    roomScoped: true,
+  },
+  {
+    code: "r4",
+    title: "Şube Sınav Duyurusu",
+    note: "Öğrenci → salon ve koltuk; sınıf panosuna asılır",
+    roomScoped: false,
+  },
+  {
+    code: "r7",
+    title: "Sınav İhlal ve Kopya Tutanağı",
+    note: "Salon zarfına konan boş form; yalnız olay hâlinde doldurulur",
+    roomScoped: true,
+  },
+  {
+    code: "r6",
+    title: "Gözetmen Görevlendirme / Tebliğ-Tebellüğ",
+    note: "Müdür onaylı görevlendirme yazısı",
+    roomScoped: false,
+  },
+  {
+    code: "r8",
+    title: "Dağıtım Doğrulama Raporu",
+    note: "Seed ve kısıt metrikleri; idare nüshası",
+    roomScoped: false,
+  },
+  {
+    code: "r5",
+    title: "Toplu Dağıtım Çizelgesi (Excel)",
+    note: "İdare çalışma kopyası; basılmaz",
+    roomScoped: false,
+  },
 ];
 
 export const examSessionApi = {
@@ -344,6 +383,17 @@ export const examSessionApi = {
     api.del<void>(`/exam-session-courses/${sessionCourseId}/`),
   setRooms: (id: number, rooms: { room_id: number; capacity_override?: number | null }[]) =>
     api.put<{ rooms: ExamSessionRoomRow[] }>(`/exam-sessions/${id}/rooms/`, { rooms }),
+
+  /**
+   * Başka bir oturumun ders+şube ve salon planını bu TASLAĞA kopyalar (Ö5).
+   * "Katılacak sınıf" verisi `ExamSessionCourse.section_ids` içindedir; bu
+   * yüzden `courses` şubeleri de getirir, ayrı kopyalanamaz.
+   */
+  copyPlan: (id: number, payload: { source_id: number; courses?: boolean; rooms?: boolean }) =>
+    api.post<{ session: ExamSession; report: CopyPlanReport }>(
+      `/exam-sessions/${id}/copy-plan/`,
+      payload,
+    ),
 
   participants: (id: number) => api.get<ParticipantsResponse>(`/exam-sessions/${id}/participants/`),
   distribute: (id: number, payload: { seed?: number; strict?: boolean } = {}) =>
@@ -422,7 +472,8 @@ export const proctorExemptionApi = {
 // dağıtımda PINNED yerleşir.
 
 export type RuleScope = "SESSION" | "PERMANENT";
-export type RuleType = "HOME_CLASSROOM" | "FIXED_ROOM" | "FRONT_ROW" | "SEPARATE_ROOM";
+export type RuleType =
+  "HOME_CLASSROOM" | "FIXED_ROOM" | "FRONT_ROW" | "SEPARATE_ROOM" | "FIXED_SEAT";
 export type RuleReason = "DISABILITY" | "IEP" | "HEALTH" | "OTHER";
 
 export const RULE_SCOPE_TR: Record<RuleScope, string> = {
@@ -435,6 +486,16 @@ export const RULE_TYPE_TR: Record<RuleType, string> = {
   FIXED_ROOM: "Belirli salon",
   FRONT_ROW: "Ön sıra",
   SEPARATE_ROOM: "Ayrı salon",
+  FIXED_SEAT: "Belirli koltuk",
+};
+
+/** Koltuk seçilmediğinde salonun hangi ucundan verileceği (odak = öğretmen masası). */
+export type SeatPreference = "NONE" | "FRONT" | "BACK";
+
+export const SEAT_PREFERENCE_TR: Record<SeatPreference, string> = {
+  NONE: "Fark etmez",
+  FRONT: "Ön sıra (öğretmen masasına yakın)",
+  BACK: "Arka sıra",
 };
 
 export const RULE_REASON_TR: Record<RuleReason, string> = {
@@ -443,6 +504,15 @@ export const RULE_REASON_TR: Record<RuleReason, string> = {
   HEALTH: "Sağlık",
   OTHER: "Diğer",
 };
+
+/** Kopyalama raporu — atlananlar SESSİZ düşmez, kullanıcıya listelenir. */
+export interface CopyPlanReport {
+  courses_created: string[];
+  courses_skipped: string[];
+  rooms_created: string[];
+  rooms_skipped: string[];
+  warnings: string[];
+}
 
 export interface PlacementRule {
   id: number;
@@ -453,6 +523,13 @@ export interface PlacementRule {
   rule_type: RuleType;
   target_room_id: number | null;
   target_room_name: string;
+  /** BELIRLI_KOLTUK koordinatı — seat_no DEĞİL (numaralandırma değişince kayar). */
+  target_desk_row: number | null;
+  target_desk_col: number | null;
+  target_slot: number | null;
+  seat_preference: SeatPreference;
+  /** Sıradaki diğer koltuklar kimseye verilmez — kapasite o kadar azalır. */
+  solo_desk: boolean;
   reason_category: RuleReason;
 }
 
@@ -461,7 +538,12 @@ export interface PlacementRulePayload {
   rule_type: RuleType;
   scope?: RuleScope; // varsayılan PERMANENT
   session_id?: number | null; // SESSION kapsamında zorunlu
-  target_room_id?: number | null; // FIXED_ROOM için hedef salon
+  target_room_id?: number | null; // FIXED_ROOM / SEPARATE_ROOM / FIXED_SEAT için
+  target_desk_row?: number | null; // FIXED_SEAT üçlüsü — üçü birlikte
+  target_desk_col?: number | null;
+  target_slot?: number | null;
+  seat_preference?: SeatPreference; // varsayılan NONE
+  solo_desk?: boolean; // varsayılan false
   reason_category?: RuleReason; // varsayılan OTHER
 }
 

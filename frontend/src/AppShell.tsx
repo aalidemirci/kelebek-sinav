@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/kisiler", label: "Kişiler", icon: "group" },
   { to: "/dersler", label: "Ders Havuzu", icon: "menu_book" },
   { to: "/ayarlar", label: "Ayarlar", icon: "settings" },
+  { to: "/kilavuz", label: "Kılavuz", icon: "auto_stories" },
 ];
 
 const PAGE_TITLES: Array<[prefix: string, title: string]> = [
@@ -30,6 +31,7 @@ const PAGE_TITLES: Array<[prefix: string, title: string]> = [
   ["/kisiler", "Kişiler"],
   ["/dersler", "Ders havuzu"],
   ["/ayarlar", "Ayarlar"],
+  ["/kilavuz", "Kullanım Kılavuzu"],
   ["/hakkinda", "Hakkında ve Lisans"],
   ["/kurulum", "Kurulum"],
   ["/", "Genel bakış"],

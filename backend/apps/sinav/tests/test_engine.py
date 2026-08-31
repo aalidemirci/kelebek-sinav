@@ -389,3 +389,82 @@ def test_oversized_section_overflows_to_next_room() -> None:
     spread = _rooms_per_section(result)
     assert spread["9/A"] == 2  # 50 kişi tek salona sığmaz — taşma normal
     assert spread["9/B"] == 1  # küçük şube bütün kalır
+
+
+# ===========================================================================
+# Kaçınılmaz komşuluklar odağa (öğretmen masasına) çekilir — Ö1, 31.08.2026
+# ===========================================================================
+
+
+def _focus_mesafesi(result: engine.DistributionResult, focus: tuple[float, float]) -> float:
+    """Aynı gruptan KOMŞU (Chebyshev ≤ 1) çiftlerin odağa ortalama uzaklığı."""
+    import math
+
+    toplam, adet = 0.0, 0
+    yerlesim = result.placements
+    for i in range(len(yerlesim)):
+        for j in range(i + 1, len(yerlesim)):
+            a, b = yerlesim[i], yerlesim[j]
+            if a.participant.conflict_group != b.participant.conflict_group:
+                continue
+            if (
+                max(
+                    abs(a.seat.desk_row - b.seat.desk_row),
+                    abs(a.seat.desk_col - b.seat.desk_col),
+                )
+                > 1
+            ):
+                continue
+            toplam += math.dist((a.seat.x, a.seat.y), focus)
+            toplam += math.dist((b.seat.x, b.seat.y), focus)
+            adet += 2
+    return toplam / adet if adet else 0.0
+
+
+def test_kacinilmaz_komsuluklar_odaga_cekilir() -> None:
+    """Karma imkânsızken komşu çiftler öğretmen masasına YAKLAŞIR; ihlal ARTMAZ.
+
+    Senaryo tek gruplu ve dar kapasiteli — komşuluk matematiksel olarak
+    kaçınılmaz (`test_single_group_tight_capacity_no_checkerboard` emsali).
+    Odak (0,0) yerine salonun uzak köşesine alınınca çiftlerin o köşeye
+    ortalama uzaklığı KÜÇÜLMELİ.
+    """
+    students = [_participant(i, "1:9") for i in range(1, 12)]  # 11 öğrenci, 6 sıra
+
+    def kos(focus: tuple[float, float]) -> engine.DistributionResult:
+        temel = _grid_room(1, 3, 2, DeskType.DOUBLE)  # 12 koltuk / 6 sıra
+        oda = engine.RoomSeats(room_id=temel.room_id, seats=temel.seats, focus=focus)
+        return engine.distribute_butterfly(students, [oda], seed=17)
+
+    uzak_kose = (1.0, 2.0)  # son satır, son sütun
+    varsayilan = kos((0.0, 0.0))
+    odakli = kos(uzak_kose)
+
+    # Sert ihlal SAYISI artmamalı — ikincil terim yalnız eşitlik bozar.
+    ihlal_varsayilan = len(validator.validate_seating(_placed(varsayilan)).hard_violations)
+    ihlal_odakli = len(validator.validate_seating(_placed(odakli)).hard_violations)
+    assert ihlal_odakli <= ihlal_varsayilan
+
+    # Komşu çiftler odağa YAKLAŞMALI.
+    assert _focus_mesafesi(odakli, uzak_kose) < _focus_mesafesi(varsayilan, uzak_kose)
+
+
+def test_odak_terimi_determinizmi_bozmaz() -> None:
+    """Aynı seed + aynı odak → aynı çıktı (ceza demeti rng akışını kaydırmaz)."""
+    temel = _grid_room(1, 4, 3, DeskType.DOUBLE)
+    oda = engine.RoomSeats(room_id=temel.room_id, seats=temel.seats, focus=(2.0, 3.0))
+    students = [_participant(i, f"{1 + (i % 3)}:9") for i in range(1, 20)]
+
+    def key(r: engine.DistributionResult) -> list[tuple[int, int]]:
+        return [(p.participant.student_id, p.seat.seat_no) for p in r.placements]
+
+    assert key(engine.distribute_butterfly(students, [oda], seed=42)) == key(
+        engine.distribute_butterfly(students, [oda], seed=42)
+    )
+
+
+def test_odak_satranc_modunda_korunur() -> None:
+    """`_checkerboard_seats` RoomSeats'i yeniden kurar — focus DÜŞMEMELİ."""
+    temel = _grid_room(1, 4, 3, DeskType.DOUBLE)
+    oda = engine.RoomSeats(room_id=temel.room_id, seats=temel.seats, focus=(2.0, 3.0))
+    assert engine._checkerboard_seats(oda).focus == (2.0, 3.0)

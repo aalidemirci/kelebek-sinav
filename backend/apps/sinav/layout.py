@@ -255,8 +255,15 @@ _REFERENCE_PRIORITY: tuple[str, ...] = (
 )
 
 
-def _reference_cell(plan: LayoutPlan) -> tuple[int, int]:
-    """Numaralandırma referans hücresi (kural 1)."""
+def reference_cell(plan: LayoutPlan) -> tuple[int, int]:
+    """Salonun ODAK hücresi: öğretmen masası → tahta → akıllı tahta → (0, 0).
+
+    İki tüketicisi vardır ve ikisi de AYNI noktayı kastetmek zorundadır:
+    (1) numaralandırma başlangıcı (kural 1); (2) "ön sıra / öğretmen masasına
+    yakın" kavramı (motor ceza demeti ve yerleştirme kuralları). İkinci bir
+    doğruluk kaynağı doğmasın diye public'tir. Dönüş (satır, sütun) — motorun
+    `focus` alanı (x=sütun, y=satır) EKSEN SIRASI TERSTİR, çeviren taraf dikkat.
+    """
     for kind in _REFERENCE_PRIORITY:
         cells = sorted((f.row, f.col) for f in plan.furniture if f.kind == kind)
         if cells:
@@ -284,7 +291,7 @@ def numbered_seats(plan: LayoutPlan, scheme: str) -> list[Seat]:
     if not active:
         return []
 
-    ref = _reference_cell(plan)
+    ref = reference_cell(plan)
     start = _start_desk(plan, ref)
 
     desk_cols = sorted({d.col for d in active})

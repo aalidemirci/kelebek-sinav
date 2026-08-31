@@ -133,6 +133,37 @@ export interface PersonnelWriteBody {
   is_active?: boolean;
 }
 
+/**
+ * Zümre — okul zümre başkanları kurulunu oluşturan sınıf/alan zümreleri.
+ * Sınav takvimi PDF'inin imza bloğu bu katalogdan seçilir (SubjectDepartmentSerializer).
+ */
+export interface SubjectDepartment {
+  id: number;
+  name: string;
+  head: number | null;
+  /** Başkanın ad-soyadı — backend şifreli alandan çözer (yazma tarafı yalnız `head`). */
+  head_name: string;
+  is_board_member: boolean;
+}
+
+export interface SubjectDepartmentWriteBody {
+  name: string;
+  head?: number | null;
+  is_board_member?: boolean;
+}
+
+/**
+ * Şube kümesi (SAY/EA/DİL gibi) — YALNIZ seçim kolaylığı etiketi.
+ * Küme kimliği hiçbir oturum kaydına yazılmaz; sihirbaz kümeyi yazma anında
+ * somut şube pk'lerine açar.
+ */
+export interface ClassSectionGroup {
+  id: number;
+  name: string;
+  order: number;
+  section_count: number;
+}
+
 /** Şube kataloğu satırı — salon-şube eşlemesi (F2) ve R2k bu katalogdan okur. */
 export interface ClassSection {
   id: number;
@@ -141,6 +172,8 @@ export interface ClassSection {
   class_level: number;
   class_section: string;
   class_label: string;
+  group: number | null;
+  group_name: string;
 }
 
 export interface ClassSectionWriteBody {
@@ -366,6 +399,57 @@ export const okulApi = {
     api.post<ClassSection>("/class-sections/", body),
 
   deleteClassSection: (id: number): Promise<void> => api.del<void>(`/class-sections/${id}/`),
+
+  // --- Şube kümeleri (SAY/EA/DİL — sihirbazda toplu şube seçimi) ---
+
+  listClassSectionGroups: async (): Promise<ClassSectionGroup[]> => {
+    const data = await api.get<Paginated<ClassSectionGroup> | ClassSectionGroup[]>(
+      "/class-section-groups/?limit=200",
+    );
+    return unwrap(data);
+  },
+
+  createClassSectionGroup: (body: { name: string; order?: number }): Promise<ClassSectionGroup> =>
+    api.post<ClassSectionGroup>("/class-section-groups/", body),
+
+  updateClassSectionGroup: (
+    id: number,
+    body: Partial<{ name: string; order: number }>,
+  ): Promise<ClassSectionGroup> =>
+    api.patch<ClassSectionGroup>(`/class-section-groups/${id}/`, body),
+
+  deleteClassSectionGroup: (id: number): Promise<void> =>
+    api.del<void>(`/class-section-groups/${id}/`),
+
+  /** Toplu atama — şube tek tek düzenlenmez. */
+  assignClassSectionGroup: (body: {
+    section_ids: number[];
+    group: number | null;
+  }): Promise<{ updated: number }> =>
+    api.post<{ updated: number }>("/class-section-groups/assign/", body),
+
+  // --- Zümreler (takvim imza bloğunun kaynağı) ---
+
+  /** `limit=500`: DRF varsayılan sayfası 25'tir, zümre listesi sessizce kesilmesin. */
+  listSubjectDepartments: async (boardOnly = false): Promise<SubjectDepartment[]> => {
+    const path = boardOnly
+      ? "/subject-departments/?board_only=true&limit=500"
+      : "/subject-departments/?limit=500";
+    const data = await api.get<Paginated<SubjectDepartment> | SubjectDepartment[]>(path);
+    return unwrap(data);
+  },
+
+  createSubjectDepartment: (body: SubjectDepartmentWriteBody): Promise<SubjectDepartment> =>
+    api.post<SubjectDepartment>("/subject-departments/", body),
+
+  updateSubjectDepartment: (
+    id: number,
+    body: Partial<SubjectDepartmentWriteBody>,
+  ): Promise<SubjectDepartment> =>
+    api.patch<SubjectDepartment>(`/subject-departments/${id}/`, body),
+
+  deleteSubjectDepartment: (id: number): Promise<void> =>
+    api.del<void>(`/subject-departments/${id}/`),
 
   // --- İçe aktarma (önizleme hiçbir şey yazmaz; commit gerçek yazar) ---
 

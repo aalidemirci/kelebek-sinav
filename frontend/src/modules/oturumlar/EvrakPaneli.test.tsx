@@ -44,10 +44,16 @@ describe("EvrakPaneli", () => {
     sessionApi.seating.mockResolvedValue(makeSeating());
     renderPanel(makeSession({ status: "DISTRIBUTED" }));
 
-    expect(await screen.findByText("Salon Oturma Planı (kroki)")).toBeInTheDocument();
+    expect(await screen.findByText("Salon Sınav Evrakı")).toBeInTheDocument();
+    expect(screen.getByText("Şube Sınav Duyurusu")).toBeInTheDocument();
+    expect(screen.getByText("Sınav İhlal ve Kopya Tutanağı")).toBeInTheDocument();
     expect(screen.getByText("Dağıtım Doğrulama Raporu")).toBeInTheDocument();
     expect(screen.getByText("Toplu Dağıtım Çizelgesi (Excel)")).toBeInTheDocument();
     expect(screen.queryByText(/Gözetmen Görevlendirme/)).not.toBeInTheDocument();
+    // 30.08.2026 sadeleştirmesinde kaldırılan belgeler katalogda kalmamalı.
+    for (const kalkan of ["Salon Yoklama", "Şube Yoklama", "Kapı Listesi", "Teslim Alma"]) {
+      expect(screen.queryByText(new RegExp(kalkan))).not.toBeInTheDocument();
+    }
   });
 
   it("R6 gözetmen ayarı açıkken listelenir", async () => {
@@ -82,11 +88,11 @@ describe("EvrakPaneli", () => {
     await screen.findByRole("option", { name: "D-204" });
     await user.selectOptions(screen.getByLabelText(/Salon filtresi/), "1");
 
-    const r1 = screen.getByText("Salon Oturma Planı (kroki)").closest("li");
+    const r1 = screen.getByText("Salon Sınav Evrakı").closest("li");
     await user.click(within(r1 as HTMLElement).getByRole("button", { name: "İndir" }));
     await waitFor(() => expect(sessionApi.reportBlob).toHaveBeenCalledWith(5, "r1", 1));
 
-    const r4 = screen.getByText("Şube Duyuru Listesi").closest("li");
+    const r4 = screen.getByText("Şube Sınav Duyurusu").closest("li");
     await user.click(within(r4 as HTMLElement).getByRole("button", { name: "İndir" }));
     await waitFor(() => expect(sessionApi.reportBlob).toHaveBeenCalledWith(5, "r4", undefined));
   });

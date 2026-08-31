@@ -1,0 +1,13 @@
+{% comment %}Tek salonun kroki ölçü kuralları. `<head>` içindeki
+`extra_style` bloğundan çağrılır — WeasyPrint `<body>` içindeki `<style>`
+öğesini YOK SAYAR (ölçüldü: `height` auto'da kalıyor, kroki kutuyu taşırıyordu),
+inline `style` özniteliğindeki CSS değişkenleri de çözülmüyor. Bu yüzden
+salona özel sınıf (`k<id>`) + başlıkta kural tek çalışan yoldur.
+Bağlam: room (build_room_kroki çıktısı), kroki_id (salon sırası).{% endcomment %}
+.k{{ kroki_id }} .seat-box,
+.k{{ kroki_id }} .cell-furniture,
+.k{{ kroki_id }} .cell-disabled { height: {{ room.metrics.cell_height }}px; }
+.k{{ kroki_id }} .seat-no { font-size: {{ room.metrics.no_font }}pt; }
+.k{{ kroki_id }} .seat-name,
+.k{{ kroki_id }} .seat-empty { font-size: {{ room.metrics.name_font }}pt; }
+.k{{ kroki_id }} .seat-meta { font-size: {{ room.metrics.meta_font }}pt; }

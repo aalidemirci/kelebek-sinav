@@ -15,11 +15,13 @@ from rest_framework import serializers
 from apps.okul import normalize, selectors
 from apps.okul.models import (
     ClassSection,
+    ClassSectionGroup,
     Personnel,
     SchoolConfig,
     SchoolTerm,
     SchoolYear,
     Student,
+    SubjectDepartment,
 )
 
 
@@ -85,9 +87,56 @@ class PersonnelSerializer(serializers.ModelSerializer[Personnel]):
         fields = ["id", "first_name", "last_name", "title", "branch", "is_active", "full_name"]
 
 
+class ClassSectionGroupSerializer(serializers.ModelSerializer[ClassSectionGroup]):
+    """Şube kümesi (SAY/EA/DİL) — YALNIZ seçim kolaylığı etiketi.
+
+    Teklik denetimi burada Türkçe mesajla yapılır; alan elle tanımlanır ki DRF
+    modeldeki tek alanlı UniqueConstraint'ten ALAN düzeyinde bir UniqueValidator
+    türetip İngilizce mesaj basmasın (SubjectDepartmentSerializer emsali).
+    """
+
+    name = serializers.CharField(max_length=60, validators=[])
+    section_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ClassSectionGroup
+        validators: list[Any] = []
+        fields = ["id", "name", "order", "section_count"]
+
+    def get_section_count(self, obj: ClassSectionGroup) -> int:
+        return int(obj.sections.count())
+
+    def validate_name(self, value: str) -> str:
+        cleaned = " ".join(value.split())
+        if not cleaned:
+            raise serializers.ValidationError("Küme adı zorunludur.")
+        return cleaned
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        instance = self.instance if isinstance(self.instance, ClassSectionGroup) else None
+        name = attrs.get("name", getattr(instance, "name", ""))
+        if name:
+            duplicate = ClassSectionGroup.objects.filter(name=name)
+            if instance is not None:
+                duplicate = duplicate.exclude(pk=instance.pk)
+            if duplicate.exists():
+                raise serializers.ValidationError({"name": "Bu küme zaten kayıtlı."})
+        return attrs
+
+
+class SectionGroupAssignSerializer(serializers.Serializer[dict[str, Any]]):
+    """Toplu küme ataması — asıl seçim maliyetini düşüren uç."""
+
+    section_ids = serializers.ListField(child=serializers.IntegerField(), allow_empty=True)
+    group = serializers.PrimaryKeyRelatedField(
+        queryset=ClassSectionGroup.objects.all(), allow_null=True
+    )
+
+
 class ClassSectionSerializer(serializers.ModelSerializer[ClassSection]):
     school_year_name = serializers.CharField(source="school_year.name", read_only=True)
     class_label = serializers.CharField(read_only=True)
+    group_name = serializers.SerializerMethodField()
 
     class Meta:
         model = ClassSection
@@ -99,7 +148,12 @@ class ClassSectionSerializer(serializers.ModelSerializer[ClassSection]):
             "class_level",
             "class_section",
             "class_label",
+            "group",
+            "group_name",
         ]
+
+    def get_group_name(self, obj: ClassSection) -> str:
+        return obj.group.name if obj.group is not None else ""
 
     def validate_class_level(self, value: int) -> int:
         return _validate_level(value)
@@ -127,6 +181,50 @@ class ClassSectionSerializer(serializers.ModelSerializer[ClassSection]):
                 raise serializers.ValidationError(
                     {"class_section": "Bu ders yılı için şube zaten kayıtlı."}
                 )
+        return attrs
+
+
+class SubjectDepartmentSerializer(serializers.ModelSerializer[SubjectDepartment]):
+    """Zümre — okul zümre başkanları kurulu üyeliği + başkan seçimi.
+
+    Başkan adı şifreli alandan türetilir (`Personnel.full_name`); yazma tarafı
+    yalnız `head` pk'sini alır. Zümre adı BÜYÜK HARFE ÇEVRİLMEZ (`tr_upper` şube
+    harfine özgüdür) — yalnız fazla boşluk katlanır.
+    """
+
+    # DRF, modeldeki tek alanlı UniqueConstraint'ten ALAN düzeyinde bir
+    # UniqueValidator türetir; `Meta.validators = []` yalnız Meta düzeyindekini
+    # (unique_together) siler. Alan burada elle tanımlanır ki teklik mesajı
+    # depo üslubunda Türkçe olsun (`validate` içinde) — ham DRF çevirisi değil.
+    name = serializers.CharField(max_length=80, validators=[])
+    # `CharField(source="head.full_name", default="")` DEĞİL: `head` boşken DRF
+    # `get_default()`e düşer ve partial (PATCH) serializer'da SkipField fırlatır —
+    # anahtar yanıttan tamamen kaybolurdu. Method alanı her durumda dizge döner.
+    head_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SubjectDepartment
+        validators: list[Any] = []
+        fields = ["id", "name", "head", "head_name", "is_board_member"]
+
+    def get_head_name(self, obj: SubjectDepartment) -> str:
+        return obj.head.full_name if obj.head is not None else ""
+
+    def validate_name(self, value: str) -> str:
+        cleaned = " ".join(value.split())
+        if not cleaned:
+            raise serializers.ValidationError("Zümre adı zorunludur.")
+        return cleaned
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        instance = self.instance if isinstance(self.instance, SubjectDepartment) else None
+        name = attrs.get("name", getattr(instance, "name", ""))
+        if name:
+            duplicate = SubjectDepartment.objects.filter(name=name)
+            if instance is not None:
+                duplicate = duplicate.exclude(pk=instance.pk)
+            if duplicate.exists():
+                raise serializers.ValidationError({"name": "Bu zümre zaten kayıtlı."})
         return attrs
 
 

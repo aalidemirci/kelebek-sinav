@@ -13,11 +13,28 @@ export type { Paginated };
 export type ExamCalendarStatusCode = "DRAFT" | "SUBMITTED" | "APPROVED";
 export type ExamKindCode = "WRITTEN" | "PRACTICE";
 export type ExamTrackStatusCode = "DONE" | "NOT_APPLICABLE";
+/** Sınavı hazırlayan/yapan makam — backend ExamAuthority ile birebir. */
+export type ExamAuthorityCode = "SCHOOL" | "MINISTRY" | "PROVINCIAL" | "DISTRICT";
 
 export const CALENDAR_STATUS_TR: Record<ExamCalendarStatusCode, string> = {
   DRAFT: "Taslak",
   SUBMITTED: "Onaya Sunuldu",
   APPROVED: "Onaylandı",
+};
+
+export const EXAM_AUTHORITY_TR: Record<ExamAuthorityCode, string> = {
+  SCHOOL: "Okul",
+  MINISTRY: "Bakanlık",
+  PROVINCIAL: "İl MEM",
+  DISTRICT: "İlçe MEM",
+};
+
+/** Izgara hücresi dar — rozet kısaltması ("Okul" rozeti hiç basılmaz). */
+export const EXAM_AUTHORITY_SHORT_TR: Record<ExamAuthorityCode, string> = {
+  SCHOOL: "",
+  MINISTRY: "BAK",
+  PROVINCIAL: "İL",
+  DISTRICT: "İLÇE",
 };
 
 export interface ExamCalendar {
@@ -31,6 +48,9 @@ export interface ExamCalendar {
   end_date: string;
   status: ExamCalendarStatusCode;
   description_text: string;
+  footnote_text: string;
+  signatory_departments: number[];
+  signatory_department_names: string[];
   submitted_at: string | null;
   approved_by_name: string;
   approved_at: string | null;
@@ -44,6 +64,7 @@ export interface ExamCalendarEntryRow {
   level: number;
   exam_kind: ExamKindCode;
   is_butterfly: boolean;
+  authority: ExamAuthorityCode;
   placed_date: string | null;
   period_no: number | null;
   session: number | null;
@@ -71,6 +92,7 @@ export interface CalendarGridCell {
   level: number;
   exam_kind: ExamKindCode;
   is_butterfly: boolean;
+  authority: ExamAuthorityCode;
   session_id: number | null;
   note: string;
 }
@@ -159,6 +181,8 @@ export const examCalendarApi = {
       start_date: string;
       end_date: string;
       description_text: string;
+      footnote_text: string;
+      signatory_departments: number[];
     }>,
   ) => api.patch<ExamCalendar>(`/exam-calendars/${id}/`, payload),
   remove: (id: number) => api.del<void>(`/exam-calendars/${id}/`),
@@ -167,12 +191,19 @@ export const examCalendarApi = {
       school_year_id: schoolYearId,
     }),
   defaultDescription: () => api.get<{ text: string }>("/exam-calendars/default-description/"),
+  defaultFootnote: () => api.get<{ text: string }>("/exam-calendars/default-footnote/"),
   fillPool: (id: number) => api.post<FillPoolResult>(`/exam-calendars/${id}/fill-pool/`, {}),
   entries: (id: number) =>
     api.get<{ results: ExamCalendarEntryRow[] }>(`/exam-calendars/${id}/entries/`),
   addEntry: (
     id: number,
-    payload: { course: number; level: number; exam_kind?: ExamKindCode; is_butterfly?: boolean },
+    payload: {
+      course: number;
+      level: number;
+      exam_kind?: ExamKindCode;
+      is_butterfly?: boolean;
+      authority?: ExamAuthorityCode;
+    },
   ) => api.post<ExamCalendarEntryRow>(`/exam-calendars/${id}/entries/`, payload),
   grid: (id: number) => api.get<CalendarGrid>(`/exam-calendars/${id}/grid/`),
   participantPreview: (id: number) =>
@@ -200,7 +231,12 @@ export const examCalendarApi = {
   ) => api.post<{ cell: ExamTrackCell }>(`/exam-calendars/${id}/track/mark/`, payload),
   patchEntry: (
     entryId: number,
-    payload: Partial<{ is_butterfly: boolean; exam_kind: ExamKindCode; note: string }>,
+    payload: Partial<{
+      is_butterfly: boolean;
+      exam_kind: ExamKindCode;
+      authority: ExamAuthorityCode;
+      note: string;
+    }>,
   ) => api.patch<ExamCalendarEntryRow>(`/exam-calendar-entries/${entryId}/`, payload),
   removeEntry: (entryId: number) => api.del<void>(`/exam-calendar-entries/${entryId}/`),
   placeEntry: (entryId: number, payload: { date: string; period_no: number }) =>

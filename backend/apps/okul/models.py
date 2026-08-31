@@ -14,6 +14,11 @@ DD (disiplin-defteri-codex) `apps/okul/models.py` kalıbından KS'ye uyarlandı
   kataloğu. Salon-şube eşlemesi (`ExamRoom.linked_section`, F2) ve R2k şube
   yoklaması bu kataloğa bağlanır; import sonrası görülen (seviye, şube)
   çiftleri tohumlanır.
+- `ClassSectionGroup`: şube kümesi (SAY/EA/DİL gibi) — YALNIZ seçim kolaylığı;
+  şube en çok bir kümededir ve küme kimliği oturum kaydına yazılmaz.
+- `SubjectDepartment`: okul zümre başkanları kurulunun zümreleri; başkan
+  `Personnel`'e FK'dır. Sınav takvimi imza bloğu buradan seçilir (B7 revizyonu —
+  "her ders bir zümre" varsayımı kalktı).
 - `SchoolConfig.school_type/has_prep_class`: U4 — geçerli sınıf seviyeleri okul
   türünden türetilir; v1'de tek tür (Anadolu Lisesi) ama sabit kod 9-12 YOKTUR.
 - Koşullu UniqueConstraint'ler SQLite partial index ile çalışır (DD'de kanıtlı).
@@ -226,6 +231,41 @@ class Personnel(BaseModel):
         return self.full_name
 
 
+class ClassSectionGroup(BaseModel):
+    """Şube kümesi — "Sayısal", "Eşit Ağırlık", "Dil" gibi seçim kolaylığı etiketi.
+
+    AMACI YALNIZ SEÇİM MALİYETİNİ DÜŞÜRMEKTİR: sınav sihirbazında şubeler tek
+    tek işaretlenmek yerine küme çipiyle topluca eklenir. Küme kimliği HİÇBİR
+    oturum kaydına yazılmaz — `ExamSessionCourse.section_ids` somut şube
+    pk'leri tutmaya devam eder. Aksi hâlde küme sonradan değişince ONAYLANMIŞ
+    oturumun katılımcı kümesi geriye dönük kayar; bu SNAPSHOT desenini ve
+    "aynı seed → aynı dağıtım" sözleşmesini bozardı.
+
+    Üyelik TEKtir (kullanıcı kararı 31.08.2026): bir şube en çok bir kümededir
+    (`ClassSection.group`). Küme yıldan bağımsızdır — "Sayısal" her yıl aynı
+    kümedir; yıla bağlanan şubenin kendisidir. Kişisel veri içermez.
+    """
+
+    name = models.CharField("küme adı", max_length=60)
+    order = models.PositiveSmallIntegerField("sıra", default=0)
+
+    class Meta:
+        verbose_name = "şube kümesi"
+        verbose_name_plural = "şube kümeleri"
+        # Görüntü sıralaması Türk alfabesiyle selector'da; DB sırası kararlı olsun.
+        ordering = ["order", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_classsectiongroup_name_alive",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class ClassSection(BaseModel):
     """Şube kataloğu — ders yılı içinde görülen (seviye, şube) çiftleri.
 
@@ -242,6 +282,15 @@ class ClassSection(BaseModel):
     )
     class_level = models.PositiveSmallIntegerField("sınıf")
     class_section = models.CharField("şube", max_length=8)
+    group = models.ForeignKey(
+        ClassSectionGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sections",
+        verbose_name="şube kümesi",
+        help_text="Yalnız seçim kolaylığı; oturum kaydına küme kimliği YAZILMAZ.",
+    )
 
     class Meta:
         verbose_name = "şube"
@@ -269,6 +318,58 @@ class ClassSection(BaseModel):
         if self.class_level == 0:
             return f"Hz/{self.class_section}"
         return f"{self.class_level}/{self.class_section}"
+
+
+class SubjectDepartment(BaseModel):
+    """Zümre — okul zümre başkanları kurulunu oluşturan sınıf/alan zümreleri.
+
+    Mevzuat karşılığı "eğitim kurumu sınıf/alan zümresi": aynı sınıfı okutan
+    veya alanı aynı olan öğretmenlerden oluşan zümre (Ölçme ve Değerlendirme
+    Yönetmeliği md. 3; Yazılı ve Uygulamalı Sınavlar Yönergesi md. 4). Okul
+    geneli ortak yazılı sınavların soru/uygulama/değerlendirme sorumluluğu bu
+    zümrelerdedir (Yönerge md. 5), imza bloğu da buradan beslenir.
+
+    B7 revizyonu: sınav takvimi PDF'inin imza bloğu artık "her ders bir zümre"
+    varsaymaz — takvime SEÇİLEN zümreler basılır (`ExamCalendar
+    .signatory_departments`). Zümre seçilmemiş takvimlerde eski dal (takvimdeki
+    derslerden boş imza çizgileri) yedek yol olarak durur.
+
+    Başkan adı `Personnel` üzerindeki ŞİFRELİ alandan okunur; bu modelde ad
+    kopyası TUTULMAZ. Zümre adı düz metindir — teklik kısıtı DB'de çalışır.
+    """
+
+    name = models.CharField("zümre adı", max_length=80)
+    head = models.ForeignKey(
+        "okul.Personnel",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="chaired_departments",
+        verbose_name="zümre başkanı",
+        help_text="Personel sicilinden seçilir; boş bırakılırsa evrakta noktalı çizgi basılır.",
+    )
+    is_board_member = models.BooleanField(
+        "kurul üyesi",
+        default=True,
+        help_text="Okul zümre başkanları kuruluna katılan zümre.",
+    )
+
+    class Meta:
+        verbose_name = "zümre"
+        verbose_name_plural = "zümreler"
+        # Ad ŞİFRELİ DEĞİL — Personnel'deki Python dolambacı burada gerekmez.
+        # Görüntü sıralaması yine de Python'da (Türk alfabesi, selectors).
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["name"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_subjectdepartment_name_alive",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class StudentStatus(models.TextChoices):

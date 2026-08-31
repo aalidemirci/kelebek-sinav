@@ -17,6 +17,7 @@ from apps.okul import normalize
 from apps.okul.excel_ogrenci import normalize_header
 from apps.okul.models import (
     ClassSection,
+    ClassSectionGroup,
     ImportRun,
     Personnel,
     SchoolConfig,
@@ -24,6 +25,7 @@ from apps.okul.models import (
     SchoolYear,
     Student,
     StudentStatus,
+    SubjectDepartment,
 )
 
 
@@ -104,7 +106,7 @@ def personnel_sorted(*, only_active: bool = False) -> list[Personnel]:
 
 def class_sections(*, school_year_id: int | None = None) -> QuerySet[ClassSection]:
     """Şube kataloğu; yıl verilmezse aktif yıl kullanılır."""
-    qs = ClassSection.objects.select_related("school_year")
+    qs = ClassSection.objects.select_related("school_year", "group")
     if school_year_id is not None:
         return qs.filter(school_year_id=school_year_id)
     active = active_school_year()
@@ -130,6 +132,52 @@ def class_sections_sorted(*, school_year_id: int | None = None) -> list[ClassSec
 
 def get_class_section(section_id: int) -> ClassSection | None:
     return ClassSection.objects.filter(pk=section_id).first()
+
+
+def class_section_groups() -> QuerySet[ClassSectionGroup]:
+    """Şube kümesi kataloğu (sıra + pk)."""
+    return ClassSectionGroup.objects.all()
+
+
+def class_section_groups_sorted() -> list[ClassSectionGroup]:
+    """Şube kümeleri: önce elle verilen sıra, eşitlikte TÜRK ALFABESİ.
+
+    SQLite karşılaştırması BINARY'dir (Ç/Ğ/İ/Ö/Ş/Ü kod noktası olarak Z'den
+    sonra düşer) — ada göre sıralama bu yüzden Python'da (ClassSection emsali).
+    """
+    return sorted(
+        class_section_groups(),
+        key=lambda g: (g.order, normalize.tr_sort_key(g.name)),
+    )
+
+
+def get_class_section_group(group_id: int) -> ClassSectionGroup | None:
+    return ClassSectionGroup.objects.filter(pk=group_id).first()
+
+
+def subject_departments(*, board_only: bool = False) -> QuerySet[SubjectDepartment]:
+    """Zümre kataloğu (başkan bağıyla)."""
+    qs = SubjectDepartment.objects.select_related("head")
+    if board_only:
+        qs = qs.filter(is_board_member=True)
+    return qs
+
+
+def subject_departments_sorted(*, board_only: bool = False) -> list[SubjectDepartment]:
+    """Zümre kataloğu, TÜRK ALFABESİ sırasıyla (liste ekranı + imza bloğu).
+
+    `Meta.ordering` pk'dir; zümre adı düz metin olsa da SQLite karşılaştırması
+    BINARY'dir (Ç/Ğ/İ/Ö/Ş/Ü kod noktası olarak Z'den sonra) — sıralama bu yüzden
+    Python'da, `normalize.tr_sort_key` ile (ClassSection emsali).
+    """
+    return sorted(
+        subject_departments(board_only=board_only),
+        key=lambda d: normalize.tr_sort_key(d.name),
+    )
+
+
+def get_subject_department(department_id: int) -> SubjectDepartment | None:
+    return SubjectDepartment.objects.filter(pk=department_id).first()
 
 
 def student_list(

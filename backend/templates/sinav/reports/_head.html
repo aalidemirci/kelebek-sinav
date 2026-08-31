@@ -1,11 +1,22 @@
 {% comment %}Yaprak üst bandı — her .sheet'in başında yinelenir (madde 7 ortak
-üst bilgi). Bağlam: header (ReportHeader), title (rapor adı), scope_line
-(opsiyonel: "Salon: D-204" / "Şube: 9/A").{% endcomment %}
+üst bilgi). Bağlam:
+  header      ReportHeader (okul/oturum künyesi),
+  title       belge adı (REPORT_TITLES),
+  scope_line  opsiyonel sol künye ("Salon: D-204" / "Şube: 9/A"),
+  scope_note  opsiyonel sağ künye (yaprağın rolü: "Sayfa 1/2 · Oturma planı").
+Künye şeridi ana çizginin ALTINDADIR: başlık bloğu (okul+belge+oturum) sabit
+kalır, yaprağa özgü bilgi ayrı bir bantta okunur — çok yapraklı belgede
+(R1 gibi) sayfanın hangi işe ait olduğu bir bakışta görülür.{% endcomment %}
 <div class="rpt-head">
   <div class="school">{{ header.school_name }}</div>
   <div class="title">{{ title }}</div>
   <div class="session">{{ header.exam_name }} · {{ header.exam_date }} {{ header.start_time }} ·
     {{ header.year_label }} {{ header.semester_label }}</div>
-  {% if scope_line %}<div class="scope">{{ scope_line }}</div>{% endif %}
 </div>
 <div class="rpt-rule"></div>
+{% if scope_line or scope_note %}
+<table class="rpt-scope"><tr>
+  <td class="left">{{ scope_line }}</td>
+  <td class="right">{{ scope_note }}</td>
+</tr></table>
+{% endif %}

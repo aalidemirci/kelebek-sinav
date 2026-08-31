@@ -1,46 +1,58 @@
 {% extends "sinav/reports/base.html" %}
-{% comment %}R6 — Gözetmen Görevlendirme ve Tebliğ-Tebellüğ Belgesi (yol haritası
-§9, K2 — yalnız gözetmen modülü açıkken). Resmî yazı formatı: görevlendirme
-metni + tablo (görevli / görev / salon / tebellüğ imzası) + müdür UYGUNDUR
-onay bloku (mevzuat: görevlendirmelerin müdür onayıyla imza karşılığı tebliği —
-Ortaöğretim Kurumları Yönetmeliği; madde no kasıtlı gömülmedi, Tur 219 emsali).
-Yedek görevliler salonsuz ("—") listelenir. Tek yaprak; satırlar bölünmez.
+{% comment %}R6 — Gözetmen Görevlendirme ve Tebliğ-Tebellüğ Belgesi (yalnız
+gözetmen modülü açıkken). Resmî yazı formatı: görevlendirme metni + tablo
+(görevli / görev / salon / tebellüğ imzası) + müdür UYGUNDUR onay bloku.
+Yedek görevliler salonsuz ("—") listelenir.
+
+MADDE NUMARASI KASITLI GÖMÜLMEDİ (Tur 219 emsali): dayanak dipnotta yönetmelik
+ADIYLA anılır — görevlendirme hükmünün madde numarası değişikliklerde kayar ve
+basılı evrakı yanlışlar. R7 tutanağı bundan ayrılır (orada hüküm eşlemesi
+belgenin işlevidir).
+
+TAŞMA: görevli sayısı arttıkça tablo başlığı yinelenir; onay bloğu bölünmez.
 {% endcomment %}
 {% block extra_style %}
 <style>
-  .duty-text { font-size: 9.5pt; margin: 4pt 0 8pt; text-align: justify; }
-  .duty td { height: 20pt; }
-  .duty .ack { width: 22%; }
-  .duty-counts { margin-top: 6pt; font-size: 8.5pt; color: var(--pr-label); }
-  .approve-block { margin-top: 22pt; text-align: center; break-inside: avoid;
-                   page-break-inside: avoid; }
-  .approve-block .label { font-weight: bold; font-size: 11pt;
-                          letter-spacing: 1pt; }
-  .approve-block .date { margin-top: 4pt; font-size: 9pt; }
-  .approve-block .sign { margin-top: 26pt; font-size: 9pt; }
+  .duty-text { font-size: 9.5pt; margin: 6pt 0 2pt; text-align: justify;
+               line-height: 1.4; }
+  .duty td { height: 21pt; }
+  .duty .ack { width: 24%; }
+  .approve { margin-top: 20pt; text-align: center;
+             break-inside: avoid; page-break-inside: avoid; }
+  .approve .label { font-weight: bold; font-size: 12pt; letter-spacing: 1.5pt;
+                    color: var(--pr-ink); }
+  .approve .date { margin-top: 4pt; font-size: 9pt; color: var(--pr-secondary); }
+  .approve .sign { margin-top: 30pt; font-size: 9pt; }
+  .approve .sign b { font-size: 9.5pt; color: var(--pr-ink); }
+  .summary { margin-top: 5pt; font-size: 8.5pt; color: var(--pr-label); }
 </style>
 {% endblock %}
 {% block content %}
 <div class="sheet">
-  {% include "sinav/reports/_head.html" %}
+  {% with scope_note="Tebliğ-tebellüğ · imza karşılığı" %}
+    {% include "sinav/reports/_head.html" %}
+  {% endwith %}
 
   <p class="duty-text">
-    Okulumuzda yapılacak "{{ header.exam_name }}" sınavında
+    Okulumuzda yapılacak &quot;{{ header.exam_name }}&quot; sınavında
     ({{ header.exam_date }} günü, başlangıç saati {{ header.start_time }})
     aşağıda adı yazılı öğretmenler karşılarında belirtilen salonlarda
-    görevlendirilmiştir. Görevin imza karşılığı tebliği rica olunur.
-    (Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği — sınav
-    görevlendirmelerinin okul müdürünün onayıyla imza karşılığı tebliği)
+    gözetmen olarak görevlendirilmiştir. Görevli öğretmenler, sınav saatinden
+    <b>en az on beş dakika önce</b> görevli oldukları salonda hazır bulunur;
+    salon zarfını sayarak teslim alır, salon sınav evrakını (oturma planı ·
+    yoklama ve imza listesi · evrak sayımı) usulüne göre doldurur ve sınav
+    sonunda evrakı sayarak teslim eder. Görevin imza karşılığı tebliği rica olunur.
   </p>
 
+  <div class="sec">GÖREVLENDİRME ÇİZELGESİ</div>
   <table class="rpt-table duty">
     <thead>
       <tr>
-        <th class="num">Sıra</th>
+        <th class="num" style="width: 6%;">Sıra</th>
         <th>Görevli Adı Soyadı</th>
-        <th style="width: 18%;">Görevi</th>
-        <th style="width: 20%;">Salon</th>
-        <th class="ack">Tebellüğ (İmza / Tarih)</th>
+        <th style="width: 17%;">Görevi</th>
+        <th class="center" style="width: 20%;">Salon</th>
+        <th class="ack center">Tebellüğ (İmza / Tarih)</th>
       </tr>
     </thead>
     <tbody>
@@ -55,14 +67,24 @@ Yedek görevliler salonsuz ("—") listelenir. Tek yaprak; satırlar bölünmez.
       {% endfor %}
     </tbody>
   </table>
-  <div class="duty-counts">
-    Toplam görevli: {{ duty.duty_count }} (yedek: {{ duty.reserve_count }})
+  <div class="summary">
+    Toplam görevli: <b>{{ duty.duty_count }}</b> · Salon görevlisi:
+    <b>{{ duty.room_count }}</b> · Yedek: <b>{{ duty.reserve_count }}</b>
   </div>
 
-  <div class="approve-block">
+  <div class="approve">
     <div class="label">UYGUNDUR</div>
-    <div class="date">.... / .... / ........</div>
-    <div class="sign">Okul Müdürü<br>(Ad Soyad / İmza / Mühür)</div>
+    <div class="date">…… / …… / 20……</div>
+    <div class="sign"><b>Okul Müdürü</b><br>
+      <span class="muted">Ad Soyad / İmza / Mühür</span></div>
+  </div>
+
+  <div class="dayanak">
+    <b>DAYANAK:</b> MEB Ortaöğretim Kurumları Yönetmeliği (sınav görevlendirmelerinin
+    okul müdürünün onayıyla imza karşılığı tebliği) · MEB Yazılı ve Uygulamalı Sınavlar
+    Yönergesi · MEB Ölçme ve Değerlendirme Yönetmeliği.
+    <br><b>KVKK:</b> Bu belgedeki personel verileri, görevlendirme ve tebligat
+    yükümlülüğü kapsamında 6698 sayılı Kanunun 5/2-ç maddesi uyarınca işlenir.
   </div>
 </div>
 {% endblock %}
