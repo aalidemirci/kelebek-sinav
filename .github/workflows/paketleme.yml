@@ -221,7 +221,12 @@ jobs:
           rm -f pdf-duman.pdf
           for paket in *~*.deb; do
             [ -e "${paket}" ] || continue
-            mv -- "${paket}" "${paket//~/.}"
+            # Tilde TIRNAKLI olmak ZORUNDA: bash `${degisken//desen/…}` içindeki
+            # deseni sözcük genişletmesinden geçirir, çıplak `~` `$HOME`a dönüşür
+            # ve hiçbir şey eşleşmez. İlk etiketli koşu (v2026.8.0-beta.1) tam
+            # buradan `mv: … are the same file` ile kırıldı — `yayin` işi yalnız
+            # `v*` etiketinde koştuğu için PR/dispatch kapıları bunu göremiyordu.
+            mv -- "${paket}" "${paket//'~'/.}"
           done
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
