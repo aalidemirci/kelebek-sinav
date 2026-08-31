@@ -206,6 +206,7 @@ function KuralEkleDialog({
   return (
     <Dialog
       open
+      wide
       onClose={onClose}
       title="Yerleştirme kuralı ekle"
       actions={

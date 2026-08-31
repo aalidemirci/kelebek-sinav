@@ -126,7 +126,7 @@ export default function SalonlarPage() {
             <h1 className="text-headline-medium text-on-surface">Sınav Salonları</h1>
             <span className="ml-auto" />
             <Button variant="text" icon="category" onClick={() => setGroupsOpen(true)}>
-              Kümeler
+              Derslik Kümeleri
             </Button>
             <Button
               variant="tonal"

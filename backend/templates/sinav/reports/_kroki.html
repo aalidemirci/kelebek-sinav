@@ -18,7 +18,8 @@ gövdedeki `<style>`ı yok sayar); burada yalnız `k<id>` sınıfı taşınır.
 Değerler Python'da METİN olarak biçimlenir (TR locale ondalığı virgülle basar;
 `6,8pt` CSS'te sessizce yutulur — F25/T244 tuzağı).
 {% endcomment %}
-<div class="front-label">— ÖN CEPHE (tahta / öğretmen masası yönü) —</div>
+<div class="front-label">ÖN CEPHE · TAHTA VE ÖĞRETMEN MASASI YÖNÜ</div>
+<div class="front-rule"></div>
 <table class="kroki k{{ kroki_id }}">
   {% for grid_row in room.grid %}
   <tr>
@@ -55,3 +56,4 @@ Değerler Python'da METİN olarak biçimlenir (TR locale ondalığı virgülle b
   </tr>
   {% endfor %}
 </table>
+<div class="kroki-legend">Salonun arka duvarı · Numaralar öğretmen masasına en yakın sıradan başlar</div>

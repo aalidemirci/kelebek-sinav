@@ -17,6 +17,12 @@ fazlası başlık yinelenerek akar (base.html taşma disiplini).{% endcomment %}
   /* Sütun genişlikleri BİLDİRİLDİĞİ gibi uygulansın: punto hesabı ad sütunu
      genişliğine dayanır (reports._ANN_NAME_RATIO). Otomatik yerleşimde uzun
      bir ders adı ad sütununu daraltıp satırı iki kata çıkarıyordu. */
+  /* KUTU MODELİ (31.08.2026, ÖLÇÜLDÜ): `table-layout: fixed` + sütun yüzdeleri
+     content-box'ta hücre DOLGUSUNU yüzdenin dışına ekliyor; tablo sayfa içerik
+     alanını 57pt taşırıyordu (saha bulgusu: "çerçeveler sağa taşmış, biri
+     geniş biri dar"). Kural bu tabloya SINIRLI — global border-box R1 yoklama
+     ve R4 duyuru satır ölçülerini bozuyor (denendi, beş test kırmızı). */
+  .ann, .ann th, .ann td { box-sizing: border-box; }
   .ann { table-layout: fixed; }
   .ann td { line-height: 1.05; }
   .ann th { padding: 3pt 4pt; font-size: 7.5pt; line-height: 1.05; }

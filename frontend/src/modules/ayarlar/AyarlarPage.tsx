@@ -130,9 +130,11 @@ export default function AyarlarPage() {
         <div>
           <h1 className="ks-page-title">Ayarlar</h1>
           <p className="ks-page-description">
-            Ders yılı, şube kataloğu, zümreler, okul künyesi ve uygulama parolası burada yönetilir.
-            Okul künyesi salon evrakının antedinde kullanılır; şube kataloğu salon-şube eşlemesini,
-            zümre listesi de sınav takviminin imza bloğunu besler.
+            Ders yılı, şube kataloğu, şube kümeleri, zümreler, okul künyesi ve uygulama parolası
+            burada yönetilir. Okul künyesi salon evrakının antedinde kullanılır; şube kataloğu
+            salon-şube eşlemesini, şube kümeleri sihirbazdaki toplu şube seçimini, zümre listesi de
+            sınav takviminin imza bloğunu besler. Derslik kümeleri (Sabah/Öğle) Salonlar
+            ekranındadır.
           </p>
         </div>
       </div>

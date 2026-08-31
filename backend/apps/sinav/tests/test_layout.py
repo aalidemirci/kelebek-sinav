@@ -54,7 +54,8 @@ def _seat_route(
 
 def test_validate_default_plan() -> None:
     plan = layout.validate_layout_plan(layout.DEFAULT_LAYOUT_PLAN)
-    assert plan.rows == 5 and plan.cols == 4
+    # 6 satır = ön cephe bandı (satır 0) + 5 sıra öğrenci alanı.
+    assert plan.rows == 6 and plan.cols == 4
     assert plan.capacity == 0
 
 

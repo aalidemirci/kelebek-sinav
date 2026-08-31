@@ -42,14 +42,32 @@ def get_exam_room_group(group_id: int) -> ExamRoomGroup | None:
 
 
 def exam_rooms(*, include_inactive: bool = False) -> QuerySet[ExamRoom]:
-    """Salon listesi (ada göre sıralı; linked_section join'li).
+    """Salon QuerySet'i (DB sıralı; linked_section/group join'li).
 
     Varsayılan yalnız aktif salonlar — oturum planlaması bunlardan seçer.
+    DİKKAT: buradaki sıra DB sırasıdır ve SQLite karşılaştırması BINARY'dir.
+    KULLANICIYA GÖSTERİLECEK liste `exam_rooms_sorted` ile alınır.
     """
     qs = ExamRoom.objects.select_related("linked_section", "group")
     if not include_inactive:
         qs = qs.filter(is_active=True)
     return qs.order_by("name")
+
+
+def exam_rooms_sorted(*, include_inactive: bool = False) -> list[ExamRoom]:
+    """Salon listesi, TÜRK ALFABESİ sırasıyla (tüm görünür listeler).
+
+    `Meta.ordering`/`order_by("name")` DB sırasıdır; SQLite BINARY karşılaştırır
+    ve Ç/Ğ/İ/Ö/Ş/Ü kod noktası olarak 'Z'den sonraya düşer — "10/I, 10/J, 10/K,
+    10/İ" gibi. Sıralama bu yüzden Python'da yapılır (ClassSection ve zümre
+    emsali; yerel ölçek ≤ birkaç yüz salon).
+    """
+    from apps.okul import normalize
+
+    return sorted(
+        exam_rooms(include_inactive=include_inactive),
+        key=lambda r: normalize.tr_sort_key(r.name),
+    )
 
 
 def get_exam_room(room_id: int) -> ExamRoom | None:

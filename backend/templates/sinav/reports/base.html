@@ -160,30 +160,64 @@ taşar. Yoklama satır yüksekliği ÖĞRENCİ SAYISINA GÖRE kademelidir
     /* ---- Kroki (_kroki.html) — R1 ve boş salon planı ortak kullanır ----
        Ölçüler `room.metrics`ten inline custom property olarak gelir; burada
        yalnız yapı durur. Böylece geometri stili TEK yerde kalır. */
-    .kroki { width: 100%; border-collapse: separate; border-spacing: 2.5pt;
+    /* ÖLÇÜLDÜ (31.08.2026): `border-collapse: separate` + `border-spacing`
+       WeasyPrint'te `width: 100%`in DIŞINA eklenir — 4 sütunlu kroki içerik
+       alanını 24,7pt sağa taşırıyordu (saha bulgusu: "çerçeveler sağa taşmış,
+       biri geniş biri dar"). Boşluk artık hücre DOLGUSUYLA verilir; tablo
+       genişliği tam 100% kalır ve diğer bloklarla hizalanır. */
+    .kroki { width: 100%; border-collapse: collapse;
              table-layout: fixed; margin-top: 1pt; }
-    .kroki > tr > td, .kroki td.slot { vertical-align: top; padding: 0; }
-    .kroki .cell-desk { border: var(--pr-border-outer) solid var(--pr-ink); }
+    /* KUTU MODELİ — YALNIZ KROKİ ALT AĞACINDA. Ölçüldü (31.08.2026): iç
+       `.cell-desk` tablosu `width:100%` + çerçeve + boşlukla content-box'ta
+       her sütunda ~2pt taşıyor, 4 sütunda kroki içerik alanını 8pt aşıyordu.
+       Kural GLOBAL VERİLEMEZ: R1 yoklama ve R4 duyuru satır ölçüleri
+       content-box'a göre ÖLÇÜLEREK kalibre edildi (CLAUDE.md §2 sayfa
+       bütçesi); global border-box sütunları daraltıp metni sardırıyor ve
+       belgeler ikinci sayfaya taşıyor (denendi, R1×4 + R4 kırmızı). */
+    .kroki, .kroki td, .kroki .seat-row, .kroki .seat-box,
+    .kroki .cell-desk, .kroki .cell-furniture,
+    .kroki .cell-disabled { box-sizing: border-box; }
+    /* Sıralar arası boşluk hücre dolgusundan; border-box sayesinde `width: %`
+       hesabına EK YAPMAZ. */
+    .kroki > tr > td, .kroki td.slot { vertical-align: top; padding: 1.25pt; }
+    /* Sıra kutusu: yumuşak köşe + ince dış çerçeve. Kapıya asılan belge
+       olduğu için okunurluk hiyerarşisi net tutulur (31.08.2026 saha
+       geri bildirimi: "1960'ta hazırlanmış gibi duruyor"). */
+    .kroki .cell-desk { border: var(--pr-border) solid var(--pr-ink);
+                        border-radius: 3pt; overflow: hidden; }
     .seat-row { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .seat-row td { border-left: var(--pr-border) solid var(--pr-line);
+    /* Aynı sıradaki iki koltuk arası AYIRICI ince ve kesikli — dış çerçeveyle
+       yarışmaz, "masa tek parça, koltuk iki" okuması güçlenir. */
+    .seat-row td { border-left: var(--pr-border) dotted var(--pr-line);
                    padding: 0; vertical-align: top; }
     /* Kroki kutusunun yüksekliği BURADA sabitlenir (blok kutu `height`e uyar;
        tablo hücresi uymaz — uzun ad krokiyi taşırırdı). */
     .seat-box { height: 30pt; overflow: hidden; padding: 1.5pt 2pt; }
     .seat-row td:first-child { border-left: none; }
-    .seat-no { font-weight: bold; font-size: 7.5pt; color: var(--pr-ink); }
-    .seat-name { font-size: 6.8pt; line-height: 1.12; }
+    /* Koltuk numarası künye rozetidir: adla yarışmaz, uzaktan seçilir. */
+    .seat-no { font-weight: bold; font-size: 7.5pt; color: var(--pr-ink);
+               letter-spacing: 0.2pt; }
+    .seat-name { font-size: 6.8pt; line-height: 1.12; color: var(--pr-ink); }
     .seat-meta { font-size: 6.4pt; color: var(--pr-label); }
     .seat-empty { color: var(--pr-faint); font-size: 6.8pt; font-style: italic; }
-    .cell-furniture { border: var(--pr-border-outer) solid var(--pr-secondary);
-                      background: var(--pr-fill-head); text-align: center;
-                      font-size: 6.6pt; font-weight: bold; color: var(--pr-label);
-                      height: 30pt; overflow: hidden; }
+    .cell-furniture { border: var(--pr-border) solid var(--pr-secondary);
+                      border-radius: 3pt; background: var(--pr-fill-head);
+                      text-align: center; font-size: 6.6pt; font-weight: bold;
+                      color: var(--pr-label); height: 30pt; overflow: hidden;
+                      letter-spacing: 0.3pt; }
     .cell-disabled { border: var(--pr-border) dashed var(--pr-faint);
-                     text-align: center; font-size: 6.2pt; color: var(--pr-muted);
-                     height: 30pt; overflow: hidden; }
-    .front-label { text-align: center; font-size: 7pt; color: var(--pr-secondary);
-                   letter-spacing: 1.6pt; margin-bottom: 2pt; }
+                     border-radius: 3pt; text-align: center; font-size: 6.2pt;
+                     color: var(--pr-muted); height: 30pt; overflow: hidden; }
+    /* ÖN CEPHE şeridi: ince metin yerine tam genişlikte bant — belgeye bakan
+       kişi salonun hangi ucunun tahta/öğretmen tarafı olduğunu bir bakışta
+       görür. Altındaki kalın kural "duvar" okuması verir. */
+    .front-label { text-align: center; font-size: 6.8pt; font-weight: bold;
+                   color: var(--pr-secondary); letter-spacing: 2pt;
+                   background: var(--pr-fill); border-radius: 3pt;
+                   padding: 2pt 0; margin-bottom: 1pt; }
+    .front-rule { border-top: 1.2pt solid var(--pr-ink); margin-bottom: 3pt; }
+    .kroki-legend { margin-top: 3pt; font-size: 6.4pt; color: var(--pr-muted);
+                    text-align: center; letter-spacing: 0.2pt; }
   </style>
   {% block extra_style %}{% endblock %}
 </head>

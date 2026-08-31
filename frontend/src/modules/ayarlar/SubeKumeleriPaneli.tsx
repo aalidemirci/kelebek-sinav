@@ -157,8 +157,9 @@ export default function SubeKumeleriPaneli() {
           </ul>
         )}
 
-        <div className="mt-5 grid grid-cols-1 items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="mt-5 flex flex-wrap items-end gap-3">
           <TextField
+            className="min-w-48 grow"
             label="Küme adı"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -207,8 +208,9 @@ export default function SubeKumeleriPaneli() {
           </div>
         )}
 
-        <div className="mt-5 grid grid-cols-1 items-end gap-3 sm:grid-cols-[18rem_auto_auto]">
+        <div className="mt-5 flex flex-wrap items-end gap-3">
           <Select
+            className="min-w-48 grow sm:grow-0 sm:basis-72"
             label="Küme"
             value={hedefGrup}
             onChange={(e) => setHedefGrup(e.target.value)}
@@ -219,11 +221,11 @@ export default function SubeKumeleriPaneli() {
             onClick={() => void topluAta()}
             disabled={busy || secili.length === 0}
           >
-            Seçilenleri ata ({secili.length})
+            Ata ({secili.length})
           </Button>
           {secili.length > 0 ? (
             <Button variant="text" onClick={() => setSecili([])}>
-              Seçimi temizle
+              Temizle
             </Button>
           ) : null}
         </div>

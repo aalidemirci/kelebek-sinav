@@ -346,7 +346,12 @@ _ROW_PAD_MAX_PT = 4.0
 #: garantisini bozar. Uzun bir Türkçe ad-soyad ~28 karakterdir.
 _NAME_MAX_CHARS = 28.0
 #: Hücre yatay dolgusu + çerçeve payı (px).
-_NAME_CELL_CHROME_PX = 14.0
+#: 31.08.2026: `.att`/`.ann` tabloları `box-sizing: border-box` oldu (sütun
+#: yüzdeleri content-box'ta dolguyu dışarı ekleyip tabloyu sayfadan taşırıyordu
+#: — R1'de 91pt, R4'te 57pt ÖLÇÜLDÜ). Artık yatay dolgu (5pt + 5pt = 13,3px)
+#: sütunun İÇİNDEN çıkıyor; ad genişliği payı o kadar büyütüldü. Küçülen payla
+#: punto da küçülür — yön GÜVENLİ taraftadır (satır kısalır).
+_NAME_CELL_CHROME_PX = 14.0 + 10.0 * 4.0 / 3.0
 
 
 def list_row_metrics(count: int, *, fixed_px: float, name_col_ratio: float) -> dict[str, str]:

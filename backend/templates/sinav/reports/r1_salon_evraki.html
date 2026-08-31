@@ -30,6 +30,12 @@ sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% en
      satırı uzatır (ölçüldü). Değerler başlıktaki stil bloğunda basılır: gövde
      içindeki <style> ve inline CSS değişkeni WeasyPrint'te çalışmıyor. */
   /* Sütun genişlikleri BİLDİRİLDİĞİ gibi uygulansın (reports._ATT_NAME_RATIO). */
+  /* KUTU MODELİ (31.08.2026, ÖLÇÜLDÜ): `table-layout: fixed` + sütun yüzdeleri
+     content-box'ta hücre DOLGUSUNU yüzdenin dışına ekliyor; tablo sayfa içerik
+     alanını 91pt taşırıyordu (saha bulgusu: "çerçeveler sağa taşmış, biri
+     geniş biri dar"). Kural bu tabloya SINIRLI — global border-box R1 yoklama
+     ve R4 duyuru satır ölçülerini bozuyor (denendi, beş test kırmızı). */
+  .att, .att th, .att td { box-sizing: border-box; }
   .att { table-layout: fixed; }
   .att td { line-height: 1.05; }
   /* Başlık satırı TEK SATIR kalmalı: ikinci satır ~14 px yer götürür. */

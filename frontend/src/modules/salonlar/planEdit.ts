@@ -111,7 +111,28 @@ export function resizeGrid(plan: LayoutPlan, rows: number, cols: number): Layout
   };
 }
 
-/** Yeni salon için boş varsayılan plan (backend DEFAULT_LAYOUT_PLAN ile aynı). */
+/**
+ * ÖN CEPHE BANDI — ızgaranın 0. satırı: öğretmen masası, tahta ve kapının
+ * yeri. Öğrenci sırası ALANI 1. satırdan başlar.
+ *
+ * Sözleşme `layout.py` başlığındandır ("satır 0 üst = ön cephe") ve
+ * `default_section_plan` mobilyayı tam olarak buraya koyar. Saha bulgusu
+ * (31.08.2026): editörün "Satır" alanı bu bandı da sayıyordu (5 sıralık
+ * derslikte "6" yazıyordu) ve kullanıcı bunu öğrenci alanı sanıyordu.
+ */
+export const FRONT_BAND_ROWS = 1;
+
+/** Öğrenci sırası satır sayısı (ön cephe bandı hariç). */
+export function deskRowCount(plan: LayoutPlan): number {
+  return Math.max(0, plan.grid.rows - FRONT_BAND_ROWS);
+}
+
+/** ÖĞRENCİ ALANINI boyutlandırır; ön cephe bandı korunur. */
+export function resizeDeskArea(plan: LayoutPlan, deskRows: number, cols: number): LayoutPlan {
+  return resizeGrid(plan, deskRows + FRONT_BAND_ROWS, cols);
+}
+
+/** Yeni salon için boş varsayılan plan (ön cephe bandı + 5 sıra öğrenci alanı). */
 export function emptyPlan(): LayoutPlan {
-  return { grid: { rows: 5, cols: 4 }, desks: [], furniture: [] };
+  return { grid: { rows: 5 + FRONT_BAND_ROWS, cols: 4 }, desks: [], furniture: [] };
 }

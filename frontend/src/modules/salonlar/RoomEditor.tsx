@@ -28,7 +28,8 @@ import {
   applyTool,
   capacityOf,
   cellContent,
-  resizeGrid,
+  deskRowCount,
+  resizeDeskArea,
 } from "./planEdit";
 
 interface RoomEditorProps {
@@ -100,7 +101,8 @@ const PALETTE: PaletteItem[] = [
 /** Hücrenin ekran okuyucu etiketi — konum + içerik. */
 function cellLabel(plan: LayoutPlan, row: number, col: number): string {
   const { desk, furniture } = cellContent(plan, row, col);
-  const pos = `Satır ${row + 1}, sütun ${col + 1}`;
+  // Ön cephe bandı (satır 0) ayrı adlandırılır; öğrenci sıraları 1'den sayılır.
+  const pos = row === 0 ? `Ön cephe, sütun ${col + 1}` : `Sıra ${row}, sütun ${col + 1}`;
   if (desk) {
     return `${pos} — ${DESK_LABELS[desk.type]}${desk.disabled ? " (kullanım dışı)" : ""}`;
   }
@@ -158,9 +160,11 @@ export default function RoomEditor({ room, sectionOptions, onSaved, onBack }: Ro
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Salon kaydedilemedi."),
   });
 
-  const handleResize = (rows: number, cols: number) => {
-    if (rows < 1 || rows > 30 || cols < 1 || cols > 30) return;
-    setPlan((p) => resizeGrid(p, rows, cols));
+  // Kullanıcının girdiği sayılar ÖĞRENCİ ALANINI tarif eder; ön cephe bandı
+  // (öğretmen masası/tahta/kapı satırı) sayıma girmez (saha bulgusu).
+  const handleResize = (deskRows: number, cols: number) => {
+    if (deskRows < 1 || deskRows > 29 || cols < 1 || cols > 30) return;
+    setPlan((p) => resizeDeskArea(p, deskRows, cols));
   };
 
   const renderCell = (row: number, col: number) => {
@@ -174,11 +178,11 @@ export default function RoomEditor({ room, sectionOptions, onSaved, onBack }: Ro
           <span className="text-label-small">Kullanım dışı</span>
         </span>
       ) : (
-        <span className="flex gap-1">
+        <span className="flex gap-0.5">
           {Array.from({ length: size }, (_, slot) => (
             <span
               key={slot}
-              className="flex h-8 w-8 items-center justify-center rounded-shape-xs border border-outline bg-surface text-label-medium text-on-surface"
+              className="flex h-9 w-9 items-center justify-center rounded-shape-sm border border-outline-variant bg-surface-container-lowest text-label-medium font-semibold tabular-nums text-on-surface shadow-sm"
             >
               {showNumbers ? (seatNoByKey.get(`${row}:${col}:${slot}`) ?? "·") : "·"}
             </span>
@@ -213,7 +217,7 @@ export default function RoomEditor({ room, sectionOptions, onSaved, onBack }: Ro
         type="button"
         aria-label={cellLabel(plan, row, col)}
         onClick={() => setPlan((p) => applyTool(p, row, col, tool))}
-        className={`flex min-h-9 min-w-9 items-center justify-center rounded-shape-sm border border-outline-variant p-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary hover:bg-on-surface/5 ${surface}`}
+        className={`flex min-h-11 min-w-11 items-center justify-center rounded-shape-md border border-outline-variant p-1.5 transition hover:border-outline hover:bg-on-surface/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${surface}`}
       >
         {body}
       </button>
@@ -334,22 +338,24 @@ export default function RoomEditor({ room, sectionOptions, onSaved, onBack }: Ro
         <Card elevation={1} className="p-4">
           <div className="mb-3 flex flex-wrap items-end gap-3">
             <TextField
-              label="Satır"
+              label="Sıra satırı"
               type="number"
               min={1}
-              max={30}
-              value={plan.grid.rows}
+              max={29}
+              value={deskRowCount(plan)}
               onChange={(e) => handleResize(Number(e.target.value), plan.grid.cols)}
-              className="w-24"
+              className="w-28"
+              helperText="Öğrenci sırası"
             />
             <TextField
-              label="Sütun"
+              label="Sıra sütunu"
               type="number"
               min={1}
               max={30}
               value={plan.grid.cols}
-              onChange={(e) => handleResize(plan.grid.rows, Number(e.target.value))}
-              className="w-24"
+              onChange={(e) => handleResize(deskRowCount(plan), Number(e.target.value))}
+              className="w-28"
+              helperText="Öğrenci sırası"
             />
             <label className="ml-auto flex min-h-9 cursor-pointer items-center gap-3 text-body-medium text-on-surface">
               <input
@@ -370,24 +376,45 @@ export default function RoomEditor({ room, sectionOptions, onSaved, onBack }: Ro
             </p>
           )}
           <p className="mb-2 text-body-small text-on-surface-variant">
-            Üst kenar salonun ön cephesidir (kroki R1 ile birebir). Numaralar öğretmen masasına en
-            yakın sıradan başlar.
+            En üstteki şerit salonun <strong>ön cephesidir</strong> — öğretmen masası, tahta ve kapı
+            oraya konur ve <strong>satır sayımına girmez</strong>. Numaralar öğretmen masasına en
+            yakın sıradan başlar; çizim kroki (R1) ile birebirdir.
           </p>
           <div className="overflow-x-auto pb-2">
             {/* Sütun sayısı kullanıcı verisi (1-30) — Tailwind sınıfı dinamik
                 üretilemez; yapısal grid şablonu inline verilir (renk/ölçü token
                 ihlali değil; 3rem = 48px dokunma hedefi tabanı). */}
-            <div
-              role="group"
-              aria-label={`Salon planı: ${plan.grid.rows} satır × ${plan.grid.cols} sütun`}
-              className="grid w-max gap-1"
-              style={{
-                gridTemplateColumns: `repeat(${plan.grid.cols}, minmax(3rem, max-content))`,
-              }}
-            >
-              {Array.from({ length: plan.grid.rows }, (_, row) =>
-                Array.from({ length: plan.grid.cols }, (_, col) => renderCell(row, col)),
-              )}
+            <div className="w-max">
+              {/* ÖN CEPHE bandı — ızgaranın 0. satırı; öğrenci alanından
+                  görsel olarak ayrılır ki satır sayımıyla karışmasın. */}
+              <p className="mb-1 text-center text-label-small font-semibold uppercase tracking-widest text-on-surface-variant">
+                Ön cephe · tahta ve öğretmen masası
+              </p>
+              <div
+                role="group"
+                aria-label="Ön cephe: öğretmen masası, tahta ve kapı"
+                className="grid gap-1 rounded-shape-md bg-surface-container-low p-1"
+                style={{
+                  gridTemplateColumns: `repeat(${plan.grid.cols}, minmax(3.25rem, max-content))`,
+                }}
+              >
+                {Array.from({ length: plan.grid.cols }, (_, col) => renderCell(0, col))}
+              </div>
+
+              <div className="my-2 border-t-2 border-dashed border-outline-variant" />
+
+              <div
+                role="group"
+                aria-label={`Öğrenci sıraları: ${deskRowCount(plan)} satır × ${plan.grid.cols} sütun`}
+                className="grid gap-1"
+                style={{
+                  gridTemplateColumns: `repeat(${plan.grid.cols}, minmax(3.25rem, max-content))`,
+                }}
+              >
+                {Array.from({ length: deskRowCount(plan) }, (_, i) =>
+                  Array.from({ length: plan.grid.cols }, (_, col) => renderCell(i + 1, col)),
+                )}
+              </div>
             </div>
           </div>
         </Card>

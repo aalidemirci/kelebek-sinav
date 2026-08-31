@@ -52,8 +52,11 @@ _ALLOWED_DESK_KEYS = frozenset({"row", "col", "type", "disabled"})
 _ALLOWED_FURNITURE_KEYS = frozenset({"kind", "row", "col", "facing"})
 
 #: Boş salon için geçerli asgari plan (yeni kayıt varsayılanı).
+#: 6 satır = 1 ÖN CEPHE bandı (satır 0: öğretmen masası/tahta/kapı) + 5 sıra
+#: öğrenci alanı. Arayüzdeki "Sıra satırı" alanı bandı SAYMAZ (31.08.2026 saha
+#: bulgusu); `planEdit.emptyPlan` bu şemayla birebir kalmalıdır.
 DEFAULT_LAYOUT_PLAN: dict[str, object] = {
-    "grid": {"rows": 5, "cols": 4},
+    "grid": {"rows": 6, "cols": 4},
     "desks": [],
     "furniture": [],
 }

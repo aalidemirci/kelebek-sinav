@@ -112,7 +112,7 @@ describe("SalonlarPage", () => {
       expect(exam.create).toHaveBeenCalledWith({
         name: "Yeni-1",
         block: "",
-        layout_plan: { grid: { rows: 5, cols: 4 }, desks: [], furniture: [] },
+        layout_plan: { grid: { rows: 6, cols: 4 }, desks: [], furniture: [] },
       }),
     );
   });
@@ -148,9 +148,9 @@ describe("SalonlarPage", () => {
     expect(await screen.findByText("Kapasite: 0")).toBeInTheDocument();
 
     // Varsayılan araç ikili sıra; sol-üst hücreye yerleştir.
-    await user.click(screen.getByRole("button", { name: "Satır 1, sütun 1 — boş" }));
+    await user.click(screen.getByRole("button", { name: "Ön cephe, sütun 1 — boş" }));
     expect(
-      await screen.findByRole("button", { name: "Satır 1, sütun 1 — İkili sıra" }),
+      await screen.findByRole("button", { name: "Ön cephe, sütun 1 — İkili sıra" }),
     ).toBeInTheDocument();
     expect(await screen.findByText("Kapasite: 2")).toBeInTheDocument();
     // Backend'den gelen koltuk numaraları hücrede görünür.
@@ -166,14 +166,14 @@ describe("SalonlarPage", () => {
 
     await user.click(await screen.findByRole("button", { name: /D-204/ }));
     await user.click(await screen.findByRole("radio", { name: "Öğretmen masası" }));
-    await user.click(screen.getByRole("button", { name: "Satır 1, sütun 2 — boş" }));
+    await user.click(screen.getByRole("button", { name: "Ön cephe, sütun 2 — boş" }));
     expect(
-      screen.getByRole("button", { name: "Satır 1, sütun 2 — Öğretmen masası" }),
+      screen.getByRole("button", { name: "Ön cephe, sütun 2 — Öğretmen masası" }),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: "Sil" }));
-    await user.click(screen.getByRole("button", { name: "Satır 1, sütun 2 — Öğretmen masası" }));
-    expect(screen.getByRole("button", { name: "Satır 1, sütun 2 — boş" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Ön cephe, sütun 2 — Öğretmen masası" }));
+    expect(screen.getByRole("button", { name: "Ön cephe, sütun 2 — boş" })).toBeInTheDocument();
   });
 
   it("kaydet: planı + şube eşlemesini doğru gövdeyle gönderir", async () => {
@@ -185,7 +185,7 @@ describe("SalonlarPage", () => {
     renderPage();
 
     await user.click(await screen.findByRole("button", { name: /D-204/ }));
-    await user.click(screen.getByRole("button", { name: "Satır 2, sütun 1 — boş" }));
+    await user.click(screen.getByRole("button", { name: "Sıra 1, sütun 1 — boş" }));
     await user.selectOptions(screen.getByLabelText(/bağlı şube/i), "7");
     await user.click(screen.getByRole("button", { name: /kaydet/i }));
 
@@ -222,7 +222,7 @@ describe("SalonlarPage", () => {
     await user.click(screen.getByLabelText(/koltuk numarası önizlemesi/i));
     exam.previewSeats.mockClear();
 
-    await user.click(screen.getByRole("button", { name: "Satır 1, sütun 1 — boş" }));
+    await user.click(screen.getByRole("button", { name: "Ön cephe, sütun 1 — boş" }));
     expect(await screen.findByText("Kapasite: 2")).toBeInTheDocument(); // yerel toplam (ikili)
     expect(exam.previewSeats).not.toHaveBeenCalled();
   });

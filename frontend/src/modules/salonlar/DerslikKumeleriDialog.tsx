@@ -101,8 +101,9 @@ export default function DerslikKumeleriDialog({
   return (
     <Dialog
       open
+      wide
       onClose={onClose}
-      title="Derslik kümeleri"
+      title="Derslik kümeleri (Sabah / Öğle)"
       actions={
         <Button variant="text" onClick={onClose}>
           Kapat
@@ -114,6 +115,9 @@ export default function DerslikKumeleriDialog({
           Salonları "Sabah", "Öğle" gibi kümelere ayırın; sınav sihirbazında tek tek işaretlemek
           yerine küme düğmesiyle topluca seçersiniz. Küme yalnız seçim kolaylığıdır — salon evrakına
           basılan bilgi "blok/kat" alanıdır, küme değil.
+          <br />
+          <strong>Bunlar DERSLİK kümeleridir.</strong> Şubeleri (Sayısal, Eşit Ağırlık, Dil…)
+          kümelemek ayrı bir listedir: Ayarlar → Şube Kümeleri.
         </p>
 
         {gruplar.isPending ? (
@@ -142,8 +146,9 @@ export default function DerslikKumeleriDialog({
           </ul>
         )}
 
-        <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="flex flex-wrap items-end gap-3">
           <TextField
+            className="min-w-48 grow"
             label="Küme adı"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -183,8 +188,11 @@ export default function DerslikKumeleriDialog({
               ))}
             </div>
           </div>
-          <div className="mt-3 grid grid-cols-1 items-end gap-3 sm:grid-cols-[16rem_auto_auto]">
+          {/* Dar ekranda alt alta akar; düğme metinleri kırpılmasın diye
+              sabit sütun genişliği YOK (saha bulgusu 31.08.2026). */}
+          <div className="mt-3 flex flex-wrap items-end gap-3">
             <Select
+              className="min-w-48 grow"
               label="Küme"
               value={hedef}
               onChange={(e) => setHedef(e.target.value)}
@@ -195,11 +203,11 @@ export default function DerslikKumeleriDialog({
               onClick={() => ata.mutate()}
               disabled={ata.isPending || secili.length === 0}
             >
-              Seçilenleri ata ({secili.length})
+              Ata ({secili.length})
             </Button>
             {secili.length > 0 ? (
               <Button variant="text" onClick={() => setSecili([])}>
-                Seçimi temizle
+                Temizle
               </Button>
             ) : null}
           </div>

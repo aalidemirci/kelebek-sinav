@@ -4,7 +4,16 @@
 import { describe, expect, it } from "vitest";
 
 import type { LayoutPlan } from "./api";
-import { applyTool, capacityOf, cellContent, emptyPlan, resizeGrid } from "./planEdit";
+import {
+  FRONT_BAND_ROWS,
+  applyTool,
+  capacityOf,
+  cellContent,
+  deskRowCount,
+  emptyPlan,
+  resizeDeskArea,
+  resizeGrid,
+} from "./planEdit";
 
 function planWith(partial: Partial<LayoutPlan> = {}): LayoutPlan {
   return { grid: { rows: 3, cols: 3 }, desks: [], furniture: [], ...partial };
@@ -79,6 +88,43 @@ describe("resizeGrid", () => {
 
 describe("emptyPlan", () => {
   it("backend DEFAULT_LAYOUT_PLAN ile aynı boş şemayı üretir", () => {
-    expect(emptyPlan()).toEqual({ grid: { rows: 5, cols: 4 }, desks: [], furniture: [] });
+    // 6 satır = ÖN CEPHE bandı (satır 0) + 5 sıra öğrenci alanı; backend
+    // `layout.DEFAULT_LAYOUT_PLAN` ile birebir kalmalı.
+    expect(emptyPlan()).toEqual({ grid: { rows: 6, cols: 4 }, desks: [], furniture: [] });
+  });
+});
+
+describe("ön cephe bandı (31.08.2026 saha bulgusu)", () => {
+  it("satır sayımı ÖĞRENCİ sıralarını verir, bandı saymaz", () => {
+    // default_section_plan: 1 band + 5 sıra = 6 ızgara satırı.
+    expect(deskRowCount({ grid: { rows: 6, cols: 4 }, desks: [], furniture: [] })).toBe(5);
+    expect(FRONT_BAND_ROWS).toBe(1);
+  });
+
+  it("öğrenci alanı büyürken ön cephe bandı korunur", () => {
+    const plan = {
+      grid: { rows: 6, cols: 4 },
+      desks: [{ row: 1, col: 0, type: "DOUBLE" as const }],
+      furniture: [{ kind: "TEACHER_DESK" as const, row: 0, col: 3 }],
+    };
+    const buyuk = resizeDeskArea(plan, 8, 4);
+    expect(buyuk.grid.rows).toBe(9); // 8 sıra + 1 band
+    expect(buyuk.furniture).toHaveLength(1); // band öğesi DURUYOR
+    expect(deskRowCount(buyuk)).toBe(8);
+  });
+
+  it("öğrenci alanı küçülünce taşan sıralar düşer, band düşmez", () => {
+    const plan = {
+      grid: { rows: 6, cols: 4 },
+      desks: [
+        { row: 1, col: 0, type: "DOUBLE" as const },
+        { row: 5, col: 0, type: "DOUBLE" as const },
+      ],
+      furniture: [{ kind: "DOOR" as const, row: 0, col: 0 }],
+    };
+    const kucuk = resizeDeskArea(plan, 2, 4);
+    expect(kucuk.grid.rows).toBe(3);
+    expect(kucuk.desks).toHaveLength(1); // satır 5 kırpıldı
+    expect(kucuk.furniture).toHaveLength(1);
   });
 });

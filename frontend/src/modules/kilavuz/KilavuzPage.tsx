@@ -187,6 +187,11 @@ export default function KilavuzPage() {
           salonu kullanır.
         </p>
         <p>
+          Planın en üstündeki şerit salonun <strong>ön cephesidir</strong> — öğretmen masası, tahta
+          ve kapı oraya konur. Bu şerit <strong>satır sayımına girmez</strong>: “Sıra satırı” ve
+          “Sıra sütunu” alanları yalnız öğrenci sıralarını sayar.
+        </p>
+        <p>
           Salon planı bir kez çizilir, her sınavda yeniden kullanılır. Boş yerleşim planını PDF
           olarak alıp kapıya asabilirsiniz.
         </p>

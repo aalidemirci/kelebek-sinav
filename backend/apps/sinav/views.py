@@ -116,9 +116,21 @@ class ExamRoomViewSet(viewsets.ModelViewSet[ExamRoom]):
     http_method_names = ["get", "post", "patch"]
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
+        # DETAY yolları (PATCH, seats, layout-pdf) QuerySet ister; Türkçe sıralı
+        # LİSTE `list()` içinde döndürülür (ExamRoomGroupViewSet emsali).
         return selectors.exam_rooms(
             include_inactive=self.request.query_params.get("include_inactive") == "true"
         )
+
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Salon listesi TÜRK ALFABESİ sırasıyla (SQLite BINARY karşılaştırır)."""
+        rows = selectors.exam_rooms_sorted(
+            include_inactive=request.query_params.get("include_inactive") == "true"
+        )
+        page = self.paginate_queryset(rows)
+        if page is not None:
+            return self.get_paginated_response(self.get_serializer(page, many=True).data)
+        return Response(self.get_serializer(rows, many=True).data)
 
     def perform_create(self, serializer: drf_serializers.BaseSerializer[ExamRoom]) -> None:
         data: dict[str, Any] = dict(serializer.validated_data or {})

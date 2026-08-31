@@ -287,3 +287,28 @@ def test_default_section_plan_shape() -> None:
     furniture = {f.kind: (f.row, f.col) for f in plan.furniture}
     assert furniture["DOOR"] == (0, 0)
     assert furniture["TEACHER_DESK"] == (0, plan.cols - 1)
+
+
+def test_salon_listesi_turk_alfabesine_gore_siralanir() -> None:
+    """`10/I` sonrası `10/İ` gelir — SQLite BINARY sırası 'İ'yi 'Z'den sonraya atardı.
+
+    Saha bulgusu (31.08.2026): derslik kümeleri diyaloğunda sıra
+    "10/I · 10/J · 10/K · 10/İ" görünüyordu.
+    """
+    for harf in ("I", "J", "K", "İ", "H"):
+        services.create_exam_room(name=f"10/{harf} Dersliği")
+
+    adlar = [r.name for r in selectors.exam_rooms_sorted()]
+    assert adlar == [
+        "10/H Dersliği",
+        "10/I Dersliği",
+        "10/İ Dersliği",
+        "10/J Dersliği",
+        "10/K Dersliği",
+    ]
+
+    client = APIClient()
+    yanit = client.get("/api/v1/exam-rooms/?limit=200")
+    assert yanit.status_code == 200
+    satirlar = yanit.data["results"] if isinstance(yanit.data, dict) else yanit.data
+    assert [r["name"] for r in satirlar] == adlar

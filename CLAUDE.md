@@ -63,6 +63,23 @@
 - **Şifreli alan sorguları:** ad-temelli filtre/sıralama/teklik DB'de
   çalışmaz → selector katmanında Python ile (tasarım §5). Yeni ad sorgusu
   doğrudan ORM filtresiyle yazılmaz.
+- **`table-layout: fixed` + sütun yüzdesi = content-box tuzağı:** hücre dolgusu
+  yüzdenin DIŞINA eklenir ve tablo sayfayı taşırır (ölçüldü: R1 yoklama +91pt,
+  R4 duyuru +57pt). Çözüm `box-sizing: border-box`'u O TABLOYA vermek; ama o
+  zaman ad sütununun içi dolgu kadar daralır — `_NAME_CELL_CHROME_PX` yatay
+  dolguyu da içermek ZORUNDA, yoksa adlar sarar ve sayfa bütçesi kırılır.
+- **Kroki kutu modeli:** `box-sizing: border-box` YALNIZ `.kroki` alt ağacına
+  verilir. GLOBAL verilirse sütunlar daralır, metin sarar ve R1 yoklama + R4
+  duyuru ikinci sayfaya taşar (denendi, beş test kırmızı) — o ölçüler
+  content-box'a göre kalibre edildi.
+- **Salon planında ÖN CEPHE bandı:** ızgaranın 0. satırı öğretmen masası/tahta/
+  kapı içindir ve arayüzdeki "Sıra satırı" sayımına GİRMEZ (`planEdit
+  .FRONT_BAND_ROWS`). `layout.DEFAULT_LAYOUT_PLAN` (6×4) ile `planEdit
+  .emptyPlan()` BİREBİR aynı kalmalı — test ikisini karşılaştırır.
+- **Kullanıcıya gösterilen her katalog listesi TR sıralanır:** DB `order_by`
+  SQLite'ta BINARY'dir (Ç/Ğ/İ/Ö/Ş/Ü, Z'den sonra). ViewSet'lerde `get_queryset`
+  QuerySet döndürür (detay yolları için), sıralı liste `list()` override'ında
+  `*_sorted()` selector'ıyla verilir.
 - **Soft-delete ileri-FK'da SÜZMEZ:** `obj.fk` erişimi `_base_manager`
   üzerinden (ve `select_related` JOIN'iyle) çözülür — silinmiş kayıt geri
   gelir. Silme her yerde soft olduğundan `on_delete=PROTECT` de hiç

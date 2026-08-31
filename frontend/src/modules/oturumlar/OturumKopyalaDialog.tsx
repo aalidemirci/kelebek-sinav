@@ -64,6 +64,7 @@ export default function OturumKopyalaDialog({
   return (
     <Dialog
       open
+      wide
       onClose={onClose}
       title="Başka oturumdan kopyala"
       actions={

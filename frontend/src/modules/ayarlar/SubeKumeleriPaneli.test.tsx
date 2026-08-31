@@ -82,7 +82,7 @@ describe("SubeKumeleriPaneli", () => {
     await user.click(await screen.findByRole("checkbox", { name: /11\/A/ }));
     await user.click(screen.getByRole("checkbox", { name: /11\/B/ }));
     await user.selectOptions(screen.getByLabelText("Küme"), "3");
-    await user.click(screen.getByRole("button", { name: /Seçilenleri ata/ }));
+    await user.click(screen.getByRole("button", { name: /^Ata \(/ }));
 
     await waitFor(() =>
       expect(okulApiMock.assignClassSectionGroup).toHaveBeenCalledWith({
@@ -102,7 +102,7 @@ describe("SubeKumeleriPaneli", () => {
     renderPanel();
 
     await user.click(await screen.findByRole("checkbox", { name: /11\/A/ }));
-    await user.click(screen.getByRole("button", { name: /Seçilenleri ata/ }));
+    await user.click(screen.getByRole("button", { name: /^Ata \(/ }));
 
     await waitFor(() =>
       expect(okulApiMock.assignClassSectionGroup).toHaveBeenCalledWith({
