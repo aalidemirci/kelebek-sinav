@@ -20,6 +20,7 @@ from apps.okul.models import (
     SchoolTerm,
     SchoolYear,
     Student,
+    SubjectDepartment,
 )
 
 
@@ -127,6 +128,50 @@ class ClassSectionSerializer(serializers.ModelSerializer[ClassSection]):
                 raise serializers.ValidationError(
                     {"class_section": "Bu ders yılı için şube zaten kayıtlı."}
                 )
+        return attrs
+
+
+class SubjectDepartmentSerializer(serializers.ModelSerializer[SubjectDepartment]):
+    """Zümre — okul zümre başkanları kurulu üyeliği + başkan seçimi.
+
+    Başkan adı şifreli alandan türetilir (`Personnel.full_name`); yazma tarafı
+    yalnız `head` pk'sini alır. Zümre adı BÜYÜK HARFE ÇEVRİLMEZ (`tr_upper` şube
+    harfine özgüdür) — yalnız fazla boşluk katlanır.
+    """
+
+    # DRF, modeldeki tek alanlı UniqueConstraint'ten ALAN düzeyinde bir
+    # UniqueValidator türetir; `Meta.validators = []` yalnız Meta düzeyindekini
+    # (unique_together) siler. Alan burada elle tanımlanır ki teklik mesajı
+    # depo üslubunda Türkçe olsun (`validate` içinde) — ham DRF çevirisi değil.
+    name = serializers.CharField(max_length=80, validators=[])
+    # `CharField(source="head.full_name", default="")` DEĞİL: `head` boşken DRF
+    # `get_default()`e düşer ve partial (PATCH) serializer'da SkipField fırlatır —
+    # anahtar yanıttan tamamen kaybolurdu. Method alanı her durumda dizge döner.
+    head_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SubjectDepartment
+        validators: list[Any] = []
+        fields = ["id", "name", "head", "head_name", "is_board_member"]
+
+    def get_head_name(self, obj: SubjectDepartment) -> str:
+        return obj.head.full_name if obj.head is not None else ""
+
+    def validate_name(self, value: str) -> str:
+        cleaned = " ".join(value.split())
+        if not cleaned:
+            raise serializers.ValidationError("Zümre adı zorunludur.")
+        return cleaned
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        instance = self.instance if isinstance(self.instance, SubjectDepartment) else None
+        name = attrs.get("name", getattr(instance, "name", ""))
+        if name:
+            duplicate = SubjectDepartment.objects.filter(name=name)
+            if instance is not None:
+                duplicate = duplicate.exclude(pk=instance.pk)
+            if duplicate.exists():
+                raise serializers.ValidationError({"name": "Bu zümre zaten kayıtlı."})
         return attrs
 
 

@@ -25,7 +25,7 @@ from rest_framework.views import APIView
 
 from apps.okul import selectors
 from apps.okul.excel_ogrenci import ParserError
-from apps.okul.models import ClassSection, Personnel, SchoolYear, Student
+from apps.okul.models import ClassSection, Personnel, SchoolYear, Student, SubjectDepartment
 from apps.okul.serializers import (
     ClassSectionSerializer,
     ImportRequestSerializer,
@@ -35,8 +35,10 @@ from apps.okul.serializers import (
     SchoolTermSerializer,
     SchoolYearSerializer,
     StudentSerializer,
+    SubjectDepartmentSerializer,
 )
 from apps.okul.services import app_password as app_password_service
+from apps.okul.services import departments as department_service
 from apps.okul.services import encrypted_backup as encrypted_backup_service
 from apps.okul.services import imports as import_service
 from apps.okul.services import persons as persons_service
@@ -254,6 +256,37 @@ class ClassSectionDetailView(generics.DestroyAPIView[ClassSection]):
 
     def perform_destroy(self, instance: ClassSection) -> None:
         section_service.delete_class_section(instance)
+
+
+class SubjectDepartmentListCreateView(generics.ListCreateAPIView[SubjectDepartment]):
+    """Zümre kataloğu — sınav takvimi imza bloğunun kaynağı (F6/B7 revizyonu)."""
+
+    serializer_class = SubjectDepartmentSerializer
+
+    def get_queryset(self) -> Any:
+        board_only = self.request.query_params.get("board_only", "").strip().lower() in TRUE_VALUES
+        return selectors.subject_departments_sorted(board_only=board_only)
+
+    def perform_create(self, serializer: serializers.BaseSerializer[SubjectDepartment]) -> None:
+        serializer.instance = department_service.create_subject_department(
+            **dict(serializer.validated_data)
+        )
+
+
+class SubjectDepartmentDetailView(generics.RetrieveUpdateDestroyAPIView[SubjectDepartment]):
+    serializer_class = SubjectDepartmentSerializer
+
+    def get_queryset(self) -> Any:
+        return selectors.subject_departments()
+
+    def perform_update(self, serializer: serializers.BaseSerializer[SubjectDepartment]) -> None:
+        assert serializer.instance is not None
+        serializer.instance = department_service.update_subject_department(
+            serializer.instance, **dict(serializer.validated_data)
+        )
+
+    def perform_destroy(self, instance: SubjectDepartment) -> None:
+        department_service.delete_subject_department(instance)
 
 
 # ---------------------------------------------------------------------------

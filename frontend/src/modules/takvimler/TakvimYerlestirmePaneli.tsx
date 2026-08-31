@@ -3,7 +3,9 @@
 // dialog'da (tıkla-yerleştir, DnD yok); dolu hücre çipi + kaldır. Onaylı
 // takvimde satırda "Oturum Üret". Uyarı üç-kanalı: grid.errors bandı /
 // grid.warnings bandı / placeEntry warnings snackbar'ı — kural hesabı
-// backend'dedir, FE yalnız sunar. M3 token'ları.
+// backend'dedir, FE yalnız sunar. Okul dışı makam (Bakanlık/İl MEM/İlçe MEM)
+// sınavları çipte AYRI rozetle görünür — rozet ders adı span'ının DIŞINDADIR
+// (ders adının tam metin eşleşmesi bozulmasın). M3 token'ları.
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,7 +19,7 @@ import { SkeletonList } from "../../ui/Skeleton";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import { formatDate } from "../oturumlar/oturumEtiket";
 import type { CalendarGrid, ExamCalendarStatusCode } from "./api";
-import { examCalendarApi } from "./api";
+import { EXAM_AUTHORITY_SHORT_TR, EXAM_AUTHORITY_TR, examCalendarApi } from "./api";
 
 interface SlotTarget {
   date: string;
@@ -163,6 +165,14 @@ export default function TakvimYerlestirmePaneli({
                             {c.exam_kind === "PRACTICE" ? " [U]" : ""}
                             {!c.is_butterfly ? " (KD)" : ""}
                           </span>
+                          {c.authority !== "SCHOOL" ? (
+                            <span
+                              title={`${EXAM_AUTHORITY_TR[c.authority]} sınavı`}
+                              className="rounded-full bg-tertiary-container px-1.5 text-label-small text-on-tertiary-container"
+                            >
+                              {EXAM_AUTHORITY_SHORT_TR[c.authority]}
+                            </span>
+                          ) : null}
                           {editable ? (
                             <button
                               type="button"
@@ -222,6 +232,12 @@ export default function TakvimYerlestirmePaneli({
         </table>
       </div>
 
+      <p className="mt-2 text-body-small text-on-surface-variant">
+        BAK / İL / İLÇE rozetli sınavlar Bakanlık ya da İl/İlçe Millî Eğitim Müdürlüğünce yapılır;
+        tarih ve saatleri ilgili makamın kılavuzuna göredir ve o günlerde okul geneli ayrıca sınav
+        yapılmaz.
+      </p>
+
       {pickSlot ? (
         <Dialog
           open
@@ -255,6 +271,7 @@ export default function TakvimYerlestirmePaneli({
                   <span>
                     {c.course_name}
                     {c.exam_kind === "PRACTICE" ? " [Uygulama]" : ""}
+                    {c.authority !== "SCHOOL" ? ` — ${EXAM_AUTHORITY_TR[c.authority]}` : ""}
                   </span>
                   <Icon name="add_circle" />
                 </button>

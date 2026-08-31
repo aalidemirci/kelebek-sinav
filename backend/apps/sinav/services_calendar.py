@@ -4,8 +4,9 @@ OYS `services_calendar.py`'den UYARLA (tasarım §11: "çekirdek aynen; onay
 tek-kullanıcı; bildirim dalı silinir"). View katmanı yalnız bu modülü çağırır.
 KS kesimleri:
 - `_notify_calendar_event` + çağrıları KESİLDİ (B4 — snackbar yeter).
-- Zümre imza köprüsü KESİLDİ (B7) — OYS'nin "modül yoksa" dalı (derslerden boş
-  imza çizgileri) kalıcı yol oldu.
+- Zümre imza köprüsü UYARLANDI (B7 revizyonu): zümre yapısı okul app'inde
+  (`okul.SubjectDepartment`) ve takvim başına seçilir; seçim yoksa OYS'nin
+  "modül yoksa" dalı (derslerden boş imza çizgileri) yedek yol olarak durur.
 - Tatil/kapalı-gün uyarısı KESİLDİ (DD Holiday motoru ALMA) — hafta sonu
   uyarısı durur; `place_entry` imzası değişmedi.
 - Zil çizelgesi köprüsü (B6 SADELEŞTİR): `SchoolConfig.bell_schedule` +
@@ -28,6 +29,7 @@ from django.utils import timezone
 from apps.okul import selectors as okul_selectors
 from apps.okul.models import SchoolConfig
 from apps.sinav.models import (
+    ExamAuthority,
     ExamCalendar,
     ExamCalendarEntry,
     ExamCalendarStatus,
@@ -39,8 +41,9 @@ from apps.sinav.models import (
 )
 
 # Varsayılan açıklama metni (PDF bunu basar; create sırasında kopyalanır).
+# "AÇIKLAMALAR" başlığı metnin İÇİNDE DEĞİL: şablon bölüm başlığını kendisi basar
+# (`calendar_pdf.html` section-title) — metne de yazılırsa başlık iki kez çıkardı.
 DEFAULT_CALENDAR_DESCRIPTION = (
-    "AÇIKLAMALAR\n"
     "1. Ortak yazılı sınavlar, zümrelerce ilan edilen Konu Soru Dağılım (KSD) "
     "tablolarına uygun olarak hazırlanır ve okul genelinde ortak yapılır (MEB Ölçme "
     "ve Değerlendirme Yönetmeliği md. 5; Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5).\n"
@@ -62,6 +65,21 @@ DEFAULT_CALENDAR_DESCRIPTION = (
     "duyurulur ve e-Okul sistemine işlenir (OKY md. 49).\n"
     "8. Sınav günü ve saatlerinde gerekli tedbirler okul müdürlüğünce alınır; takvimde "
     "zorunlu değişiklikler ilgili mevzuat çerçevesinde ayrıca duyurulur."
+)
+
+# Varsayılan dipnot — takvim tablosunun altına, açıklamalardan sonra basılır ve
+# kullanıcı tarafından düzenlenebilir. AÇIKLAMALAR maddeleriyle çakışmasın diye
+# yalnız MAZERET TAKVİMİNİ ve okul dışı makam sınavlarının saatini söyler.
+# "İzleyen hafta" bir mevzuat hükmü DEĞİL, okul müdürlüğünün takdiridir
+# (Yönerge md. 5: okul geneli sınavların mazeret işlemleri okul müdürlüğünce
+# yürütülür) — bu yüzden ona madde numarası bağlanmaz.
+DEFAULT_CALENDAR_FOOTNOTE = (
+    "Okulumuzda yapılan sınavların mazeret sınavları, bu sınav takvimini izleyen "
+    "hafta içerisinde okul müdürlüğünce belirlenip duyurulan tarih ve saatlerde "
+    "yapılır. Bakanlık ya da İl/İlçe Millî Eğitim Müdürlüğü tarafından yapılan "
+    "sınavlar ile bunların mazeret sınavları, ilgili makamın kılavuzunda ilan "
+    "edilen tarih ve saatlerde uygulanır (Yazılı ve Uygulamalı Sınavlar "
+    "Yönergesi md. 5)."
 )
 
 # Dönem + tur → pencere başı ayı (Ölçme Yön. md. 5/1-ç).
@@ -150,6 +168,7 @@ def generate_default_calendars(*, school_year_id: int) -> list[ExamCalendar]:
                 start_date=start,
                 end_date=end,
                 description_text=DEFAULT_CALENDAR_DESCRIPTION,
+                footnote_text=DEFAULT_CALENDAR_FOOTNOTE,
             )
             # OYS D-P1: üretilen takvim havuzu DOLU gelir (yalnız round 1-2).
             fill_calendar_pool(calendar)
@@ -182,6 +201,7 @@ def create_exam_calendar(
         start_date=start_date,
         end_date=end_date,
         description_text=DEFAULT_CALENDAR_DESCRIPTION,
+        footnote_text=DEFAULT_CALENDAR_FOOTNOTE,
     )
     return created
 
@@ -199,6 +219,7 @@ def update_exam_calendar(
     start_date: date | None = None,
     end_date: date | None = None,
     description_text: str | None = None,
+    footnote_text: str | None = None,
 ) -> ExamCalendar:
     _ensure_draft(calendar)
     if name is not None:
@@ -211,6 +232,8 @@ def update_exam_calendar(
         raise ValidationError({"end_date": "Bitiş tarihi başlangıçtan önce olamaz."})
     if description_text is not None:
         calendar.description_text = description_text
+    if footnote_text is not None:
+        calendar.footnote_text = footnote_text
     calendar.save()
     return calendar
 
@@ -285,11 +308,14 @@ def add_calendar_entry(
     level: int,
     exam_kind: str = ExamKind.WRITTEN,
     is_butterfly: bool = True,
+    authority: str = ExamAuthority.SCHOOL,
     note: str = "",
 ) -> ExamCalendarEntry:
     _ensure_draft(calendar)
     if exam_kind not in ExamKind.values:
         raise ValidationError({"exam_kind": "Geçersiz sınav türü."})
+    if authority not in ExamAuthority.values:
+        raise ValidationError({"authority": "Geçersiz hazırlayan makam."})
     # OYS Tur 644: ders + seviye uyumu HAVUZA EKLENİRKEN doğrulanır — uyumsuzluk
     # onay SONRASI oturum üretiminde patlayıp slotun tamamını engelliyordu.
     from apps.dersler import selectors as ders_selectors
@@ -315,6 +341,7 @@ def add_calendar_entry(
         level=level,
         exam_kind=exam_kind,
         is_butterfly=is_butterfly,
+        authority=authority,
         note=note.strip(),
     )
     return entry
@@ -383,6 +410,7 @@ def update_calendar_entry(
     *,
     is_butterfly: bool | None = None,
     exam_kind: str | None = None,
+    authority: str | None = None,
     note: str | None = None,
 ) -> ExamCalendarEntry:
     _ensure_draft(entry.calendar)
@@ -406,6 +434,10 @@ def update_calendar_entry(
         ):
             raise ValidationError({"exam_kind": "Bu ders + seviye + tür havuzda zaten var."})
         entry.exam_kind = exam_kind
+    if authority is not None:
+        if authority not in ExamAuthority.values:
+            raise ValidationError({"authority": "Geçersiz hazırlayan makam."})
+        entry.authority = authority
     if note is not None:
         entry.note = note.strip()
     entry.save()
@@ -424,6 +456,24 @@ def _bell_periods() -> list[dict[str, Any]]:
     raw = SchoolConfig.load().bell_schedule
     schedule = raw if isinstance(raw, list) and raw else DEFAULT_BELL_SCHEDULE
     return [dict(p) for p in schedule]
+
+
+def _external_authority_clash(entry: ExamCalendarEntry, on_date: date) -> bool:
+    """Aynı gün+seviyede OKUL sınavı ile ÜST MAKAM sınavı yan yana mı düşüyor?
+
+    İki yön de uyarı üretir: okul sınavı üst makam gününe konursa da, üst makam
+    sınavı okul sınavı olan güne konursa da (Yönerge md. 5 aynı yasağı anlatır).
+    Yasağın konusu OKUL–ÜST MAKAM çiftidir: aynı güne iki üst makam sınavı
+    düşmesi bu maddenin kapsamında DEĞİLDİR, uyarı üretmez (aksi hâlde
+    `calendar_validation` kolu ile çelişirdi — orada koşul "kümede hem SCHOOL
+    hem başka makam var").
+    """
+    same_day = ExamCalendarEntry.objects.filter(
+        calendar=entry.calendar, level=entry.level, placed_date=on_date
+    ).exclude(pk=entry.pk)
+    if entry.authority == ExamAuthority.SCHOOL:
+        return same_day.exclude(authority=ExamAuthority.SCHOOL).exists()
+    return same_day.filter(authority=ExamAuthority.SCHOOL).exists()
 
 
 @transaction.atomic
@@ -451,6 +501,16 @@ def place_entry(entry: ExamCalendarEntry, *, on_date: date, period_no: int) -> P
 
     if on_date.weekday() >= 5:
         warnings.append("Seçilen tarih hafta sonuna denk geliyor.")
+
+    # Yönerge md. 5: ülke/il/ilçe geneli ortak yazılı sınavların yapılacağı
+    # tarihlerde başka sınav yapılmaz. Sert kısıt DEĞİL (zorunlu hâl takdiri
+    # okul müdürlüğünün) — üç kanallı uyarı desenine uyar.
+    if _external_authority_clash(entry, on_date):
+        warnings.append(
+            "Bu gün ve seviyede Bakanlık/İl MEM/İlçe MEM sınavı var — üst makam "
+            "sınavlarının yapılacağı tarihlerde okul geneli ayrıca sınav yapılmaz "
+            "(Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5)."
+        )
 
     # Günlük sınav yükü ÖĞRENCİ bazlı (OYS Tur 648, ADR-0044 karar 13): kural
     # öğrencinin gireceği sınav sayısıdır (OKY md. 45 "bir sınıfta bir günde
@@ -585,6 +645,8 @@ def calendar_validation(calendar: ExamCalendar) -> dict[str, list[str]]:
     placed = ExamCalendarEntry.objects.filter(calendar=calendar, placed_date__isnull=False)
     # Seviye + gün başına ders listesi (öğrenci-bazlı yük için).
     per_day: dict[tuple[int, date], list[int]] = {}
+    # Seviye + gün başına makam kümesi (Yönerge md. 5 — üst makam günü çakışması).
+    authorities_per_day: dict[tuple[int, date], set[str]] = {}
     for e in placed:
         if valid_period_nos and e.period_no not in valid_period_nos:
             errors.append(f"Girdi #{e.pk}: ders saati listede yok.")
@@ -594,6 +656,16 @@ def calendar_validation(calendar: ExamCalendar) -> dict[str, list[str]]:
             warnings.append(f"Girdi #{e.pk}: tarih takvim aralığı dışında.")
         if e.placed_date is not None:
             per_day.setdefault((e.level, e.placed_date), []).append(e.course_id)
+            authorities_per_day.setdefault((e.level, e.placed_date), set()).add(e.authority)
+    for (level, day), makamlar in sorted(
+        authorities_per_day.items(), key=lambda kv: (kv[0][1], kv[0][0])
+    ):
+        if ExamAuthority.SCHOOL in makamlar and len(makamlar) > 1:
+            warnings.append(
+                f"{_level_display(level)} {day}: aynı güne hem okul hem üst makam "
+                "sınavı yerleştirilmiş — üst makam sınav günlerinde okul geneli "
+                "ayrıca sınav yapılmaz (Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5)."
+            )
     for (level, day), course_ids in per_day.items():
         max_load, affected = _daily_exam_load(calendar, level, day, course_ids)
         if max_load == 3:
@@ -734,6 +806,7 @@ def calendar_grid(calendar: ExamCalendar) -> dict[str, Any]:
             "level": e.level,
             "exam_kind": e.exam_kind,
             "is_butterfly": e.is_butterfly,
+            "authority": e.authority,
             "session_id": e.session_id,
             "note": e.note,
         }
@@ -767,7 +840,7 @@ def calendar_grid(calendar: ExamCalendar) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- #
-# Resmî PDF — imza bloğu derslerden boş çizgilerle (B7: zümre modülü yok)
+# Resmî PDF — imza bloğu takvime seçilen zümrelerden (B7 revizyonu)
 # --------------------------------------------------------------------------- #
 
 # Türkçe ay adları (WeasyPrint locale bağımsız — |date filtresi TR locale tuzağı).
@@ -793,13 +866,46 @@ def _tr_date(d: date) -> str:
     return f"{d.day} {_TR_MONTHS[d.month]} {d.year} {_TR_WEEKDAYS[d.weekday()]}"
 
 
-def _calendar_signatures(calendar: ExamCalendar) -> dict[str, Any]:
-    """İmza bloğu: takvimdeki derslerden BOŞ imza çizgileri (B7).
+def _chair_name(department: Any) -> str:
+    """Zümre başkanının adı; kayıt SİLİNMİŞSE boş (evrakta noktalı çizgi).
 
-    OYS'de zümre modülü kuruluysa gerçek başkan adları basılırdı; KS'de o modül
-    hiç yok — OYS'nin "modülsüz" zarif-bozulma dalı kalıcı yol oldu. Okul zümre
-    başkanı adı boş (noktalı çizgi).
+    `head` ileri-FK erişimi `_base_manager` üzerinden (ve burada `select_related`
+    JOIN'iyle) çözülür — ikisi de soft-delete süzgeci UYGULAMAZ. Personel silme
+    soft-delete olduğundan (`services/persons.py`) `on_delete=PROTECT` hiç
+    tetiklenmez; süzgeç bu yüzden burada elle konur, yoksa okuldan ayrılmış
+    öğretmen resmî takvimde imzacı görünürdü.
     """
+    head = department.head
+    if head is None or head.deleted_at is not None:
+        return ""
+    return str(head.get_full_name())
+
+
+def _calendar_signatures(calendar: ExamCalendar) -> dict[str, Any]:
+    """İmza bloğu: takvime SEÇİLEN zümreler; seçim yoksa derslerden boş çizgiler.
+
+    B7 revizyonu: OYS'de zümre modülü kuruluysa gerçek başkan adları basılırdı;
+    KS'de zümre yapısı Ayarlar'da tanımlanır (`okul.SubjectDepartment`) ve
+    takvim başına seçilir — seçilen zümrenin başkanı varsa adı basılır, yoksa
+    noktalı çizgi kalır. Zümre seçilmemiş (ve eski) takvimlerde OYS'nin
+    "modülsüz" dalı yedek yoldur: takvimdeki her dersten bir imza çizgisi.
+
+    Başkan adı ŞİFRELİ alandan çözülür → sıralama DB'de değil, zümre adına göre
+    Python'da (Türk alfabesi). Sözleşme: `{"chairs": [{"name", "role"}],
+    "school_chair_name": str}` — şablon bu iki anahtarı tüketir.
+    """
+    from apps.okul.normalize import tr_sort_key
+
+    departments = list(calendar.signatory_departments.select_related("head").all())
+    if departments:
+        departments.sort(key=lambda d: tr_sort_key(d.name))
+        return {
+            "chairs": [
+                {"name": _chair_name(d), "role": f"{d.name} Zümre Başkanı"} for d in departments
+            ],
+            "school_chair_name": "",
+        }
+
     from apps.dersler import selectors as ders_selectors
 
     course_ids = list(
@@ -813,7 +919,7 @@ def _calendar_signatures(calendar: ExamCalendar) -> dict[str, Any]:
         {"name": "", "role": f"{course_names.get(course_id, '')} Zümre Başkanı"}
         for course_id in course_ids
     ]
-    chairs.sort(key=lambda c: c["role"])
+    chairs.sort(key=lambda c: tr_sort_key(c["role"]))
     return {"chairs": chairs, "school_chair_name": ""}
 
 
@@ -865,6 +971,7 @@ def render_calendar_pdf(calendar: ExamCalendar) -> bytes:
         "levels": grid["levels"],
         "day_rows": day_rows,
         "description_lines": calendar.description_text.split("\n"),
+        "footnote_lines": [ln for ln in calendar.footnote_text.split("\n") if ln.strip()],
         "chairs": signatures["chairs"],
         "school_chair_name": signatures["school_chair_name"],
         "principal_name": config.principal_name,

@@ -679,6 +679,21 @@ class ExamKind(models.TextChoices):
     PRACTICE = "PRACTICE", "Uygulama"
 
 
+class ExamAuthority(models.TextChoices):
+    """Sınavı hazırlayan/yapan makam (Ölçme ve Değ. Yön. md. 5-6; Yönerge md. 5).
+
+    Okul dışı makamların sınavları takvimde AYRI görünür: sınav ve mazeret
+    sınavı tarih/saatleri o makamın kılavuzunda ilan edilir (Yönerge md. 5) ve
+    o günlerde okul geneli ayrıca sınav yapılmaz (aynı madde) — yerleştirme
+    uyarısı bu ayrımdan beslenir.
+    """
+
+    SCHOOL = "SCHOOL", "Okul"
+    MINISTRY = "MINISTRY", "Bakanlık"
+    PROVINCIAL = "PROVINCIAL", "İl MEM"
+    DISTRICT = "DISTRICT", "İlçe MEM"
+
+
 class ExamTrackMarkStatus(models.TextChoices):
     """Süreç takip işareti — 'yapılmadı' = kayıt yokluğu (üçüncü durum tutulmaz)."""
 
@@ -694,9 +709,11 @@ class ExamCalendar(BaseModel):
     onaylayamaz" akışı tek kullanıcıya indi — SUBMITTED tek tıkla geçilir;
     APPROVED kilidi ve onay damgaları (ad-snapshot + zaman) KORUNUR (resmî
     evrak değeri — risk #10). `school_year` FK'sı düştü: dönem (SchoolTerm)
-    yılı zaten taşır, teklik (dönem, tur) üstünden. `description_text` create
-    sırasında varsayılan mevzuat-dayanaklı metinden kopyalanır (şablon
-    güncellenirse eski takvimler etkilenmez).
+    yılı zaten taşır, teklik (dönem, tur) üstünden. `description_text` ve
+    `footnote_text` create sırasında varsayılan mevzuat-dayanaklı metinlerden
+    kopyalanır (şablon güncellenirse eski takvimler etkilenmez); ikisi de
+    kullanıcı tarafından düzenlenebilir. `signatory_departments` boşsa imza
+    bloğu eski B7 dalına düşer (takvimdeki derslerden boş imza çizgileri).
     """
 
     semester = models.ForeignKey(
@@ -728,6 +745,22 @@ class ExamCalendar(BaseModel):
         blank=True,
         default="",
         help_text="Takvim ile imza bloğu arasındaki açıklamalar (mazeret, 'G', vb.).",
+    )
+    footnote_text = models.TextField(
+        "dipnot",
+        blank=True,
+        default="",
+        help_text=(
+            "Açıklamaların altına basılan kısa not (mazeret sınavı takvimi, okul dışı "
+            "makam sınavlarının kılavuz tarihleri). Create sırasında varsayılandan kopyalanır."
+        ),
+    )
+    signatory_departments = models.ManyToManyField(
+        "okul.SubjectDepartment",
+        related_name="exam_calendars",
+        blank=True,
+        verbose_name="imza zümreleri",
+        help_text="İmza bloğunda yer alacak zümreler; boşsa takvimdeki derslerden üretilir.",
     )
     submitted_at = models.DateTimeField("onaya sunulma zamanı", null=True, blank=True)
     approved_by_name = models.CharField(
@@ -764,7 +797,9 @@ class ExamCalendarEntry(BaseModel):
 
     Havuzdayken `placed_date`/`period_no` boştur; ızgaraya yerleştirilince
     ikisi de dolar (CheckConstraint çifti). `is_butterfly=False` "Kelebek Değil"
-    (kendi sınıfında/ders saatinde). `session` bağı slot→oturum üretiminde
+    (kendi sınıfında/ders saatinde). `authority` teklik kısıtına GİRMEZ: bir
+    (ders, seviye, tür) ya okul ya da üst makam sınavıdır, ikisi birden değil
+    (Ölçme ve Değ. Yön. md. 6). `session` bağı slot→oturum üretiminde
     yazılır (SET_NULL — oturum silinirse slot yeniden üretilebilir). Katılımcı
     listesi anlık türetilir; burada KİŞİSEL VERİ YOK.
     """
@@ -787,6 +822,14 @@ class ExamCalendarEntry(BaseModel):
     )
     is_butterfly = models.BooleanField(
         "kelebek", default=True, help_text="False = kendi sınıfında (Kelebek Değil)."
+    )
+    authority = models.CharField(
+        "hazırlayan makam",
+        max_length=10,
+        choices=ExamAuthority.choices,
+        default=ExamAuthority.SCHOOL,
+        db_index=True,
+        help_text="Okul dışı sınavlarda tarih/saat ilgili makamın kılavuzuna göredir.",
     )
     placed_date = models.DateField("yerleştirme tarihi", null=True, blank=True, db_index=True)
     period_no = models.PositiveSmallIntegerField(

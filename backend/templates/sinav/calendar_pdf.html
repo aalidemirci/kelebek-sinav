@@ -2,10 +2,26 @@
 {% comment %}Resmî sınav takvimi (ADR-0044, FAZ T3). documents/base.html anteti +
 .sig-grid TABLO imza deseni (float-altbilgi tuzağı yok). text-transform YOK —
 başlıklar doğrudan büyük harf (WeasyPrint TR "i" tuzağı). Onaysız takvimde
-"TASLAK" filigranı. Tur 644: plan gereği A4 YATAY (seviye sütunları geniş).{% endcomment %}
+"TASLAK" filigranı. Tur 644: plan gereği A4 YATAY (seviye sütunları geniş).
+Okul dışı makam (Bakanlık/İl MEM/İlçe MEM) sınavları nötr dolgu + sol kenar
+çizgisi + makam etiketiyle ayrılır; renkli dolgu YOK (nötr slate paleti).
+İmza bloğu `chairs`/`school_chair_name` sözleşmesini tüketir — kaynağı takvime
+seçilen zümreler, seçim yoksa takvimdeki dersler.{% endcomment %}
 {% block extra_style %}
 <style>
   @page { size: A4 landscape; }
+  /* Okul dışı makam sınavı — RENKLİ DOLGU YOK (print/_design.css nötr slate
+     paleti): nötr dolgu + sol kalın kenar + küçük punto makam etiketi. */
+  /* Hücre içeriği artık blok kutu (makam etiketi için) — blok kutular satır
+     içinde sayfa kırılma noktası yaratır ve documents/base.html'in .doc-table
+     kuralında `tr { break-inside: avoid }` YOKTUR (kardeş şablon
+     sinav/reports/base.html'de var). Kural olmadan uzun takvimde bir <tr>
+     ortasından bölünür ve sınav, tarih sütunu boş kalmış bir satırda basılır. */
+  .doc-table tr { break-inside: avoid; page-break-inside: avoid; }
+  .cal-cell { padding: 0.5pt 0; }
+  .cal-dis { background: var(--pr-fill); border-left: 2.5pt solid var(--pr-ink); padding-left: 2pt; }
+  .cal-makam { font-size: 7pt; color: var(--pr-secondary); letter-spacing: 0.2pt; }
+  .cal-legend { margin-top: 4pt; font-size: 7.5pt; color: var(--pr-secondary); }
 </style>
 {% endblock %}
 {% block content %}
@@ -15,7 +31,7 @@ başlıklar doğrudan büyük harf (WeasyPrint TR "i" tuzağı). Onaysız takvim
                 transform: rotate(-20deg); z-index: -1;">TASLAK</div>
   {% endif %}
 
-  <div class="doc-title">{{ calendar.school_year.name }} EĞİTİM ÖĞRETİM YILI</div>
+  <div class="doc-title">{{ calendar.semester.school_year.name }} EĞİTİM ÖĞRETİM YILI</div>
   <div class="doc-title" style="margin-top: 0;">{{ calendar_title }}</div>
   <div class="doc-subtitle">
     {{ calendar.start_date|date:"d.m.Y" }} – {{ calendar.end_date|date:"d.m.Y" }}
@@ -36,12 +52,20 @@ başlıklar doğrudan büyük harf (WeasyPrint TR "i" tuzağı). Onaysız takvim
           <tr>
             <td>
               {% if forloop.first %}<strong>{{ day.label }}</strong><br>{% endif %}
-              {{ pc.period.name }}. Ders
+              {% comment %}`period.name` zaten "1. Ders" biçimindedir (zil çizelgesi
+              sözleşmesi, DEFAULT_BELL_SCHEDULE); ayrıca ". Ders" eklenince
+              "1. Ders. Ders" basılıyordu.{% endcomment %}
+              {{ pc.period.name }}
             </td>
             {% for cell_list in pc.level_cells %}
               <td style="text-align: center;">
                 {% for cell in cell_list %}
-                  {{ cell.course_name }}{% if cell.exam_kind == "PRACTICE" %} [UYGULAMA]{% endif %}{% if not cell.is_butterfly %} (Kendi sınıfında){% endif %}{% if not forloop.last %}<br>{% endif %}
+                  <div class="cal-cell{% if cell.authority != "SCHOOL" %} cal-dis{% endif %}">
+                    {{ cell.course_name }}{% if cell.exam_kind == "PRACTICE" %} [UYGULAMA]{% endif %}{% if not cell.is_butterfly %} (Kendi sınıfında){% endif %}
+                    {% if cell.authority == "MINISTRY" %}<div class="cal-makam">BAKANLIK SINAVI</div>
+                    {% elif cell.authority == "PROVINCIAL" %}<div class="cal-makam">İL MEM SINAVI</div>
+                    {% elif cell.authority == "DISTRICT" %}<div class="cal-makam">İLÇE MEM SINAVI</div>{% endif %}
+                  </div>
                 {% endfor %}
               </td>
             {% endfor %}
@@ -55,10 +79,24 @@ başlıklar doğrudan büyük harf (WeasyPrint TR "i" tuzağı). Onaysız takvim
     </tbody>
   </table>
 
+  <div class="cal-legend">
+    Gölgeli ve sol kenarı kalın çizgili hücreler Bakanlık ya da İl/İlçe Millî
+    Eğitim Müdürlüğünce yapılan sınavlardır; tarih ve saatleri ilgili makamın
+    kılavuzuna göredir.
+  </div>
+
   {% if description_lines %}
     <div class="section flow" style="margin-top: 12pt;">
       <div class="section-title">AÇIKLAMALAR</div>
       <div class="field-box" style="border-top: 0.75pt solid var(--pr-line);">{% for line in description_lines %}{{ line }}
+{% endfor %}</div>
+    </div>
+  {% endif %}
+
+  {% if footnote_lines %}
+    <div class="section flow" style="margin-top: 8pt;">
+      <div class="section-title">DİPNOT</div>
+      <div class="field-box" style="border-top: 0.75pt solid var(--pr-line);">{% for line in footnote_lines %}{{ line }}
 {% endfor %}</div>
     </div>
   {% endif %}

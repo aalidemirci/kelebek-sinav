@@ -381,6 +381,8 @@ class ExamCalendarSerializer(serializers.ModelSerializer[ExamCalendar]):
     # OYS Tur 644: elle override modelin max_length'ini düşürmüştü; tur 1-3'e sabit.
     name = serializers.CharField(required=False, allow_blank=True, max_length=120)
     round = serializers.IntegerField(min_value=1, max_value=3)
+    # İmza bloğu zümreleri: yazmada pk listesi, okumada ad listesi (FE rozeti).
+    signatory_department_names = serializers.SerializerMethodField()
 
     class Meta:
         model = ExamCalendar
@@ -395,6 +397,9 @@ class ExamCalendarSerializer(serializers.ModelSerializer[ExamCalendar]):
             "end_date",
             "status",
             "description_text",
+            "footnote_text",
+            "signatory_departments",
+            "signatory_department_names",
             "submitted_at",
             "approved_by_name",
             "approved_at",
@@ -403,12 +408,16 @@ class ExamCalendarSerializer(serializers.ModelSerializer[ExamCalendar]):
             "id",
             "school_year_name",
             "semester_name",
+            "signatory_department_names",
             "status",
             "submitted_at",
             "approved_by_name",
             "approved_at",
         )
         validators: list[object] = []
+
+    def get_signatory_department_names(self, obj: ExamCalendar) -> list[str]:
+        return [d.name for d in obj.signatory_departments.all()]
 
 
 class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]):
@@ -424,6 +433,7 @@ class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]
             "level",
             "exam_kind",
             "is_butterfly",
+            "authority",
             "placed_date",
             "period_no",
             "session",

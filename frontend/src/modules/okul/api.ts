@@ -133,6 +133,25 @@ export interface PersonnelWriteBody {
   is_active?: boolean;
 }
 
+/**
+ * Zümre — okul zümre başkanları kurulunu oluşturan sınıf/alan zümreleri.
+ * Sınav takvimi PDF'inin imza bloğu bu katalogdan seçilir (SubjectDepartmentSerializer).
+ */
+export interface SubjectDepartment {
+  id: number;
+  name: string;
+  head: number | null;
+  /** Başkanın ad-soyadı — backend şifreli alandan çözer (yazma tarafı yalnız `head`). */
+  head_name: string;
+  is_board_member: boolean;
+}
+
+export interface SubjectDepartmentWriteBody {
+  name: string;
+  head?: number | null;
+  is_board_member?: boolean;
+}
+
 /** Şube kataloğu satırı — salon-şube eşlemesi (F2) ve R2k bu katalogdan okur. */
 export interface ClassSection {
   id: number;
@@ -366,6 +385,29 @@ export const okulApi = {
     api.post<ClassSection>("/class-sections/", body),
 
   deleteClassSection: (id: number): Promise<void> => api.del<void>(`/class-sections/${id}/`),
+
+  // --- Zümreler (takvim imza bloğunun kaynağı) ---
+
+  /** `limit=500`: DRF varsayılan sayfası 25'tir, zümre listesi sessizce kesilmesin. */
+  listSubjectDepartments: async (boardOnly = false): Promise<SubjectDepartment[]> => {
+    const path = boardOnly
+      ? "/subject-departments/?board_only=true&limit=500"
+      : "/subject-departments/?limit=500";
+    const data = await api.get<Paginated<SubjectDepartment> | SubjectDepartment[]>(path);
+    return unwrap(data);
+  },
+
+  createSubjectDepartment: (body: SubjectDepartmentWriteBody): Promise<SubjectDepartment> =>
+    api.post<SubjectDepartment>("/subject-departments/", body),
+
+  updateSubjectDepartment: (
+    id: number,
+    body: Partial<SubjectDepartmentWriteBody>,
+  ): Promise<SubjectDepartment> =>
+    api.patch<SubjectDepartment>(`/subject-departments/${id}/`, body),
+
+  deleteSubjectDepartment: (id: number): Promise<void> =>
+    api.del<void>(`/subject-departments/${id}/`),
 
   // --- İçe aktarma (önizleme hiçbir şey yazmaz; commit gerçek yazar) ---
 

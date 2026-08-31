@@ -24,6 +24,7 @@ from apps.okul.models import (
     SchoolYear,
     Student,
     StudentStatus,
+    SubjectDepartment,
 )
 
 
@@ -130,6 +131,31 @@ def class_sections_sorted(*, school_year_id: int | None = None) -> list[ClassSec
 
 def get_class_section(section_id: int) -> ClassSection | None:
     return ClassSection.objects.filter(pk=section_id).first()
+
+
+def subject_departments(*, board_only: bool = False) -> QuerySet[SubjectDepartment]:
+    """Zümre kataloğu (başkan bağıyla)."""
+    qs = SubjectDepartment.objects.select_related("head")
+    if board_only:
+        qs = qs.filter(is_board_member=True)
+    return qs
+
+
+def subject_departments_sorted(*, board_only: bool = False) -> list[SubjectDepartment]:
+    """Zümre kataloğu, TÜRK ALFABESİ sırasıyla (liste ekranı + imza bloğu).
+
+    `Meta.ordering` pk'dir; zümre adı düz metin olsa da SQLite karşılaştırması
+    BINARY'dir (Ç/Ğ/İ/Ö/Ş/Ü kod noktası olarak Z'den sonra) — sıralama bu yüzden
+    Python'da, `normalize.tr_sort_key` ile (ClassSection emsali).
+    """
+    return sorted(
+        subject_departments(board_only=board_only),
+        key=lambda d: normalize.tr_sort_key(d.name),
+    )
+
+
+def get_subject_department(department_id: int) -> SubjectDepartment | None:
+    return SubjectDepartment.objects.filter(pk=department_id).first()
 
 
 def student_list(

@@ -42,6 +42,17 @@ urlpatterns = [
         views.ClassSectionDetailView.as_view(),
         name="class-section-detail",
     ),
+    # Zümreler (okul zümre başkanları kurulu — takvim imza bloğunun kaynağı)
+    path(
+        "subject-departments/",
+        views.SubjectDepartmentListCreateView.as_view(),
+        name="subject-department-list",
+    ),
+    path(
+        "subject-departments/<int:pk>/",
+        views.SubjectDepartmentDetailView.as_view(),
+        name="subject-department-detail",
+    ),
     # İçe aktarma (dosya veya pano metni)
     path(
         "imports/students/preview/",

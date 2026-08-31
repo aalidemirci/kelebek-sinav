@@ -77,9 +77,14 @@ class ExamCalendarViewSet(viewsets.ModelViewSet[ExamCalendar]):
                 start_date=data.get("start_date"),
                 end_date=data.get("end_date"),
                 description_text=data.get("description_text"),
+                footnote_text=data.get("footnote_text"),
             )
         except DjangoValidationError as exc:
             _raise_drf(exc)
+        # M2M servis imzasına girmez (DRF nesne listesi döndürür); taslak kilidi
+        # yukarıdaki servis çağrısında zaten koştu.
+        if "signatory_departments" in data:
+            calendar.signatory_departments.set(data["signatory_departments"])
         return Response(self.get_serializer(calendar).data)
 
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
@@ -102,6 +107,11 @@ class ExamCalendarViewSet(viewsets.ModelViewSet[ExamCalendar]):
     def default_description(self, request: Request) -> Response:
         """Varsayılan açıklama metni (Önizleme sekmesi "Varsayılan metne dön")."""
         return Response({"text": services_calendar.DEFAULT_CALENDAR_DESCRIPTION})
+
+    @action(detail=False, methods=["get"], url_path="default-footnote")
+    def default_footnote(self, request: Request) -> Response:
+        """Varsayılan dipnot metni (Önizleme sekmesi "Varsayılan metne dön")."""
+        return Response({"text": services_calendar.DEFAULT_CALENDAR_FOOTNOTE})
 
     @action(detail=True, methods=["post"], url_path="fill-pool")
     def fill_pool(self, request: Request, pk: str | None = None) -> Response:
@@ -131,6 +141,7 @@ class ExamCalendarViewSet(viewsets.ModelViewSet[ExamCalendar]):
                 level=data["level"],
                 exam_kind=data.get("exam_kind") or "WRITTEN",
                 is_butterfly=data.get("is_butterfly", True),
+                authority=data.get("authority") or "SCHOOL",
                 note=data.get("note", ""),
             )
         except DjangoValidationError as exc:
@@ -253,6 +264,7 @@ class ExamCalendarEntryViewSet(viewsets.GenericViewSet[ExamCalendarEntry]):
                 entry,
                 is_butterfly=data.get("is_butterfly"),
                 exam_kind=data.get("exam_kind"),
+                authority=data.get("authority"),
                 note=data.get("note"),
             )
         except DjangoValidationError as exc:

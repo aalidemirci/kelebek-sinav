@@ -13,6 +13,7 @@ import ArsivBakimBanner from "./modules/bakim/ArsivBakimBanner";
 import DersHavuzuPage from "./modules/dersler/DersHavuzuPage";
 import GuvenlikKapisi from "./modules/guvenlik/GuvenlikKapisi";
 import HakkindaPage from "./modules/hakkinda/HakkindaPage";
+import KilavuzPage from "./modules/kilavuz/KilavuzPage";
 import KisilerPage from "./modules/kisiler/KisilerPage";
 import KurulumPage from "./modules/kurulum/KurulumPage";
 import OturumDetayPage from "./modules/oturumlar/OturumDetayPage";
@@ -48,6 +49,8 @@ export default function App() {
             <Route path="/takvimler/:id" element={<TakvimDetayPage />} />
             {/* Ders yılı, şubeler, okul künyesi, güvenlik. */}
             <Route path="/ayarlar" element={<AyarlarPage />} />
+            {/* Adım adım kullanım kılavuzu (statik içerik, çevrimdışı). */}
+            <Route path="/kilavuz" element={<KilavuzPage />} />
             <Route path="/hakkinda" element={<HakkindaPage />} />
           </Routes>
         </KurulumKapisi>

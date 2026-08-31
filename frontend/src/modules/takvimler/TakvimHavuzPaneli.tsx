@@ -20,8 +20,8 @@ import { useConfirm } from "../../ui/ConfirmProvider";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import type { Course } from "../dersler/api";
 import { derslerApi } from "../dersler/api";
-import type { ExamCalendarEntryRow, ExamKindCode } from "./api";
-import { examCalendarApi } from "./api";
+import type { ExamAuthorityCode, ExamCalendarEntryRow, ExamKindCode } from "./api";
+import { EXAM_AUTHORITY_TR, examCalendarApi } from "./api";
 
 export default function TakvimHavuzPaneli({
   calendarId,
@@ -41,6 +41,7 @@ export default function TakvimHavuzPaneli({
   const [level, setLevel] = useState("9");
   const [kind, setKind] = useState<ExamKindCode>("WRITTEN");
   const [butterfly, setButterfly] = useState(true);
+  const [authority, setAuthority] = useState<ExamAuthorityCode>("SCHOOL");
 
   const entriesQuery = useQuery({
     queryKey: ["exam-calendar-entries", calendarId],
@@ -71,6 +72,7 @@ export default function TakvimHavuzPaneli({
         level: Number(level),
         exam_kind: kind,
         is_butterfly: butterfly,
+        authority,
       }),
     onSuccess: () => {
       snackbar.success("Ders havuza eklendi.");
@@ -84,6 +86,16 @@ export default function TakvimHavuzPaneli({
     mutationFn: (entryId: number) => examCalendarApi.removeEntry(entryId),
     onSuccess: invalidate,
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Kaldırılamadı."),
+  });
+
+  // Var olan girdinin makamı satır içinde değişir (Bakanlık/MEM duyurusu
+  // takvim hazırlandıktan sonra gelebilir — girdiyi silip yeniden eklemek
+  // yerleşimi de kaybettirirdi).
+  const authorityMutation = useMutation({
+    mutationFn: (p: { entryId: number; authority: ExamAuthorityCode }) =>
+      examCalendarApi.patchEntry(p.entryId, { authority: p.authority }),
+    onSuccess: invalidate,
+    onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Makam değiştirilemedi."),
   });
 
   // Havuzu katalogdan doldur — idempotent (var olan atlanır); skipped sessiz
@@ -113,8 +125,8 @@ export default function TakvimHavuzPaneli({
       title: "Havuzu katalogdan doldur",
       message:
         "Aktif ders kataloğundaki dersler, öğrencisi olan seviyeler bazında havuza " +
-        "eklenecek; var olan girdiler atlanır. Tür varsayılanı Yazılı — gerekirse " +
-        "taslakta düzenleyin.",
+        "eklenecek; var olan girdiler atlanır. Tür varsayılanı Yazılı, hazırlayan " +
+        "makam varsayılanı Okul — Bakanlık/MEM sınavlarını taslakta işaretleyin.",
       confirmLabel: "Doldur",
     }).then((ok) => ok && fillMutation.mutate());
   };
@@ -174,6 +186,18 @@ export default function TakvimHavuzPaneli({
               ]}
               value={kind}
               onChange={(e) => setKind(e.target.value as ExamKindCode)}
+            />
+          </div>
+          <div className="w-44">
+            <Select
+              label="Hazırlayan"
+              options={Object.entries(EXAM_AUTHORITY_TR).map(([value, label]) => ({
+                value,
+                label,
+              }))}
+              value={authority}
+              onChange={(e) => setAuthority(e.target.value as ExamAuthorityCode)}
+              helperText="Bakanlık/MEM sınavı takvimde ayrı görünür."
             />
           </div>
           <label className="flex min-h-9 items-center gap-2 text-body-medium text-on-surface">
@@ -243,6 +267,38 @@ export default function TakvimHavuzPaneli({
               ),
             },
             { header: "Seviye", cell: (e) => gradeLevelLabel(e.level) },
+            {
+              header: "Hazırlayan",
+              cell: (e: ExamCalendarEntryRow) =>
+                editable ? (
+                  <Select
+                    label=""
+                    aria-label={`${e.course_name} hazırlayan makam`}
+                    options={Object.entries(EXAM_AUTHORITY_TR).map(([value, label]) => ({
+                      value,
+                      label,
+                    }))}
+                    value={e.authority}
+                    disabled={authorityMutation.isPending}
+                    onChange={(ev) =>
+                      authorityMutation.mutate({
+                        entryId: e.id,
+                        authority: ev.target.value as ExamAuthorityCode,
+                      })
+                    }
+                  />
+                ) : (
+                  <span
+                    className={
+                      e.authority === "SCHOOL"
+                        ? "text-on-surface-variant"
+                        : "rounded-full bg-tertiary-container px-2 py-0.5 text-label-small text-on-tertiary-container"
+                    }
+                  >
+                    {EXAM_AUTHORITY_TR[e.authority]}
+                  </span>
+                ),
+            },
             {
               header: "Katılımcı",
               cell: (e) => {

@@ -134,7 +134,7 @@ describe("App — kabuk gezinmesi", () => {
   it("ana bölüm bağlantılarını gösterir", async () => {
     ekranaBas("/");
     await screen.findByRole("heading", { name: "Panel" });
-    for (const ad of ["Panel", "Salonlar", "Kişiler", "Ders Havuzu", "Ayarlar"]) {
+    for (const ad of ["Panel", "Salonlar", "Kişiler", "Ders Havuzu", "Ayarlar", "Kılavuz"]) {
       expect(screen.getByRole("link", { name: ad })).toBeInTheDocument();
     }
     expect(screen.getByRole("link", { name: "Hakkında ve Lisans" })).toHaveAttribute(
@@ -157,6 +157,15 @@ describe("App — kabuk gezinmesi", () => {
     expect(await screen.findByRole("heading", { name: "Hakkında ve Lisans" })).toBeInTheDocument();
     expect(screen.getByText("Ahmet Ali DEMİRCİ")).toBeInTheDocument();
     expect(screen.getByText(/PolyForm Noncommercial License 1.0.0/)).toBeInTheDocument();
+  });
+
+  it("Kılavuz bağlantısı adım adım kullanım kılavuzunu açar", async () => {
+    const user = userEvent.setup();
+    ekranaBas("/");
+    await user.click(await screen.findByRole("link", { name: "Kılavuz" }));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Kullanım Kılavuzu" }),
+    ).toBeInTheDocument();
   });
 
   it("DD'den gelen iş bağlantıları iskelete sızmadı", async () => {
