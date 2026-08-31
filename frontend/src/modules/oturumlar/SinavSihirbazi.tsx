@@ -27,7 +27,8 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import type { Course } from "../dersler/api";
 import { derslerApi } from "../dersler/api";
 import { okulApi } from "../okul/api";
-import { examRoomApi } from "../salonlar/api";
+import { examRoomApi, examRoomGroupApi } from "../salonlar/api";
+import OturumKopyalaDialog from "./OturumKopyalaDialog";
 import type { ExamSession, LayoutModeCode, ParticipantTypeCode } from "./api";
 import { examSessionApi } from "./api";
 
@@ -290,6 +291,8 @@ function CoursesStep({
   const [level, setLevel] = useState("");
   const [ptype, setPtype] = useState<ParticipantTypeCode>("LEVEL");
   const [sectionIds, setSectionIds] = useState<number[]>([]);
+  const [copyOpen, setCopyOpen] = useState(false);
+  const closeCopy = useCallback(() => setCopyOpen(false), []);
   const [sharedBooklet, setSharedBooklet] = useState(false);
 
   const courses = useQuery({ queryKey: ["courses"], queryFn: () => derslerApi.listCourses() });
@@ -310,6 +313,12 @@ function CoursesStep({
     [courses.data],
   );
   // Şube seçimi okul modülünün şube kataloğundan (F1).
+  // Şube kümeleri (SAY/EA/DİL) — çip yalnız `sectionIds`'i besler, AYRI durum
+  // TUTMAZ: "gruptan gelen" ile "elle seçilen" için ikinci kaynak-gerçek doğardı.
+  const sectionGroups = useQuery({
+    queryKey: ["class-section-groups"],
+    queryFn: () => okulApi.listClassSectionGroups(),
+  });
   const sections = useQuery({
     queryKey: ["class-sections"],
     queryFn: () => okulApi.listClassSections(),
@@ -373,6 +382,19 @@ function CoursesStep({
   const toggleSection = (id: number) =>
     setSectionIds((prev) => (prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]));
 
+  /**
+   * Küme çipi: kümedeki şubeleri seçime EKLER. Seçili seviyeyle KESİŞTİRİLİR —
+   * "Eşit Ağırlık" 10-11-12'yi kapsayabilir ama bir oturum dersi TEK seviyeye
+   * bağlıdır (backend karışık seviyeyi 400 ile reddeder).
+   */
+  const applyGroup = (groupId: number) => {
+    const lv = level === "" ? null : Number(level);
+    const ids = (sections.data ?? [])
+      .filter((sec) => sec.group === groupId && (lv === null || sec.class_level === lv))
+      .map((sec) => sec.id);
+    setSectionIds((prev) => [...new Set([...prev, ...ids])]);
+  };
+
   return (
     <Card elevation={1} className="flex flex-col gap-4 p-5">
       <div className="flex flex-wrap items-center gap-3">
@@ -383,6 +405,9 @@ function CoursesStep({
             Toplam katılımcı: {participants.data.total_count}
           </span>
         )}
+        <Button variant="text" icon="content_copy" onClick={() => setCopyOpen(true)}>
+          Başka oturumdan kopyala
+        </Button>
         <Button variant="tonal" icon="add" onClick={() => setAddOpen(true)}>
           Ders ekle
         </Button>
@@ -526,6 +551,21 @@ function CoursesStep({
               <legend className="mb-1 text-label-large text-on-surface-variant">
                 Şubeler{level !== "" && ` (${gradeLevelLabel(Number(level))})`}
               </legend>
+              {(sectionGroups.data ?? []).length > 0 && (
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span className="text-body-small text-on-surface-variant">Kümeden ekle:</span>
+                  {(sectionGroups.data ?? []).map((g) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => applyGroup(g.id)}
+                      className="min-h-8 rounded-full bg-secondary-container px-3 text-label-medium text-on-secondary-container hover:bg-secondary-container/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    >
+                      {g.name}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="grid max-h-48 grid-cols-3 gap-1 overflow-y-auto">
                 {(sections.data ?? [])
                   .filter((s) => level === "" || s.class_level === Number(level))
@@ -557,6 +597,17 @@ function CoursesStep({
           </label>
         </div>
       </Dialog>
+
+      {copyOpen ? (
+        <OturumKopyalaDialog
+          sessionId={session.id}
+          onClose={closeCopy}
+          onCopied={() => {
+            onChanged();
+            void qc.invalidateQueries({ queryKey: ["exam-participants", session.id] });
+          }}
+        />
+      ) : null}
     </Card>
   );
 }
@@ -572,6 +623,11 @@ function RoomsStep({
 }: SihirbazProps & { onNext: () => void; onBack: () => void }) {
   const snackbar = useSnackbar();
   const rooms = useQuery({ queryKey: ["exam-rooms"], queryFn: () => examRoomApi.list(false) });
+  // Derslik kümeleri (Sabah/Öğle) — ikili eğitimde salon listesi kalabalıklaşır.
+  const roomGroups = useQuery({
+    queryKey: ["exam-room-groups"],
+    queryFn: () => examRoomGroupApi.list(),
+  });
   const participants = useQuery({
     queryKey: ["exam-participants", session.id, session.courses.length],
     queryFn: () => examSessionApi.participants(session.id),
@@ -628,6 +684,29 @@ function RoomsStep({
           </p>
         )}
       </div>
+      {(roomGroups.data?.results ?? []).length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-body-small text-on-surface-variant">Kümeden ekle:</span>
+          {(roomGroups.data?.results ?? []).map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() =>
+                // Pasif salon `set_session_rooms`'ta 400 verir → aktif listeyle kesiştir.
+                setSelected((prev) => [
+                  ...new Set([
+                    ...prev,
+                    ...roomList.filter((r) => r.group_id === g.id).map((r) => r.id),
+                  ]),
+                ])
+              }
+              className="min-h-8 rounded-full bg-secondary-container px-3 text-label-medium text-on-secondary-container hover:bg-secondary-container/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              {g.name} ({roomList.filter((r) => r.group_id === g.id).length})
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex gap-2">
         <Button
           variant="text"

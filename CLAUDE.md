@@ -91,6 +91,15 @@
   "school_chair_name"}` (`_calendar_signatures` çıktısı). Kaynak takvime seçilen
   zümrelerdir (`okul.SubjectDepartment`); seçim yoksa derslerden boş çizgi
   üretilir (B7 revizyonu) — şablon iki anahtarı görmeye devam eder.
+- **Ceza demeti:** `engine._pair_penalty` leksikografik `(birincil, ikincil)`
+  döner. Birincil sert/yumuşak yakınlık cezasıdır (sert kısıt kaynağı);
+  ikincil YALNIZ eşitlik bozar (kaçınılmaz komşu çiftin öğretmen masasına
+  uzaklığı). İkincil hiçbir koşulda ihlal sayısını artıramaz.
+- **Kümeler seçim aracıdır:** şube/derslik kümesi kimliği HİÇBİR oturum
+  kaydına yazılmaz; sihirbaz kümeyi somut pk listesine açar.
+- **Koltuk sabitleme koordinattır:** `(desk_row, desk_col, slot)` — `seat_no`
+  numaralandırma düzeni değişince kayar. "Tek başına" kardeş koltukları motor
+  girdisinden düşürür; sahte `SeatAssignment` yazılmaz.
 - `ExamCalendarEntry.authority` teklik kısıtına GİRMEZ: bir (ders, seviye, tür)
   ya okul ya üst makam sınavıdır. Aynı gün+seviyede ikisi birden varsa UYARI
   üretilir (sert kısıt değil — "zorunlu hâl" takdiri okul müdürlüğünündür).

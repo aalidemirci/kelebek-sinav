@@ -18,6 +18,7 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import { okulApi } from "../okul/api";
 import type { ExamRoom } from "./api";
 import { examRoomApi } from "./api";
+import DerslikKumeleriDialog from "./DerslikKumeleriDialog";
 import RoomEditor from "./RoomEditor";
 import { emptyPlan } from "./planEdit";
 
@@ -29,6 +30,8 @@ export default function SalonlarPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newBlock, setNewBlock] = useState("");
+  const [groupsOpen, setGroupsOpen] = useState(false);
+  const closeGroups = useCallback(() => setGroupsOpen(false), []);
   // Dialog odak efekti onClose kimliğine bağlı — inline arrow her render'da
   // yenilenir ve yazarken odağı panele geri çalar; sabit referans şart.
   const closeCreate = useCallback(() => setCreateOpen(false), []);
@@ -122,6 +125,9 @@ export default function SalonlarPage() {
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <h1 className="text-headline-medium text-on-surface">Sınav Salonları</h1>
             <span className="ml-auto" />
+            <Button variant="text" icon="category" onClick={() => setGroupsOpen(true)}>
+              Kümeler
+            </Button>
             <Button
               variant="tonal"
               icon="domain_add"
@@ -136,7 +142,8 @@ export default function SalonlarPage() {
           </div>
           <p className="mb-4 text-body-medium text-on-surface-variant">
             Salon planları kroki (R1) ve kelebek dağıtımının temelidir. Bir salonu şubeye bağlamak
-            klasik (kendi dersliğinde) düzeni mümkün kılar.
+            klasik (kendi dersliğinde) düzeni mümkün kılar. Salon sayısı kalabalıksa (ikili eğitim)
+            "Kümeler" ile Sabah/Öğle gibi kümeler tanımlayın — sihirbazda tek tıkla seçilirler.
           </p>
 
           {rooms.isPending && <SkeletonList rows={4} />}
@@ -238,6 +245,8 @@ export default function SalonlarPage() {
               </p>
             </div>
           </Dialog>
+
+          {groupsOpen ? <DerslikKumeleriDialog rooms={list} onClose={closeGroups} /> : null}
         </>
       )}
     </div>

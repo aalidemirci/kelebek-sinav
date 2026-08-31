@@ -21,7 +21,17 @@ raporlarından (xlsx/pano) içe aktarılır; ders havuzu MEB ders çizelgesinden
 okul türü ve kademeye göre tohumlanır. Opsiyonel uygulama parolası ile alan
 şifrelemesi ve şifreli yedek.
 
-**Durum:** Sınav takvimi genişletildi (30.08.2026): takvim girdisine **sınavı
+**Durum:** Yerleşim ve seçim akışı genişletildi (31.08.2026): şubeler
+(Sayısal/Eşit Ağırlık/Dil) ve derslikler (Sabah/Öğle — ikili eğitimde salon
+listesi kalabalıklaşıyor) **kümelenebiliyor** ve sihirbazda tek tıkla
+seçiliyor; engelli ya da özel durumu olan öğrencilerin **salonu ve koltuğu
+sabitlenebiliyor** (seçim yapılmazsa kendi dersliğinde, arka sırada, tek
+başına); bir oturumun ders + şube ve derslik planı **başka oturumdan
+kopyalanabiliyor**; öğrenci sayıları karışmaya elverişli olmadığında aynı
+sınava giren kaçınılmaz komşuluklar **öğretmen masasına en yakın sıralara**
+çekiliyor (sert kısıt ve determinizm değişmedi).
+
+Önceki durum: Sınav takvimi genişletildi (30.08.2026): takvim girdisine **sınavı
 hazırlayan makam** eklendi (Okul / Bakanlık / İl MEM / İlçe MEM) — üst makam
 sınavları ızgarada rozetle, PDF'te ayrı biçimde görünür ve aynı güne okul sınavı
 konursa program uyarır; takvimin altına kullanıcı tarafından düzenlenebilir bir

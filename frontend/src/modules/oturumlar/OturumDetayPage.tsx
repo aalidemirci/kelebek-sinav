@@ -26,6 +26,7 @@ import GozetmenlerPaneli from "./GozetmenlerPaneli";
 import { formatDate, StatusBadge } from "./oturumEtiket";
 import SinavSihirbazi from "./SinavSihirbazi";
 import SorularPaneli from "./SorularPaneli";
+import KurallarPaneli from "./KurallarPaneli";
 import YerlesimPaneli from "./YerlesimPaneli";
 import YoklamaPaneli from "./YoklamaPaneli";
 
@@ -98,6 +99,7 @@ export default function OturumDetayPage() {
   // Evrak DRAFT dışı her durumda (dağıtımdan itibaren; arşivden yeniden basım).
   const tabs = [
     { key: "yerlesim", label: "Yerleşim", icon: "grid_on" },
+    { key: "kurallar", label: "Yerleştirme Kuralları", icon: "accessible" },
     { key: "gozetmenler", label: "Gözetmenler", icon: "supervisor_account" },
     { key: "sorular", label: "Sorular ve Kitapçıklar", icon: "description" },
     { key: "evrak", label: "Evrak", icon: "print" },
@@ -179,6 +181,7 @@ export default function OturumDetayPage() {
           <Tabs items={tabs} active={tab} onChange={setTab} idBase="oturum-detay" />
           <div {...tabPanelProps("oturum-detay", tab)}>
             {tab === "yerlesim" && <YerlesimPaneli session={data} />}
+            {tab === "kurallar" && <KurallarPaneli sessionId={data.id} />}
             {tab === "gozetmenler" && <GozetmenlerPaneli session={data} />}
             {tab === "sorular" && <SorularPaneli session={data} />}
             {tab === "evrak" && <EvrakPaneli session={data} />}

@@ -53,6 +53,18 @@ describe("KilavuzPage", () => {
     expect(screen.getByText(/Dördüncü sınavı hiç kabul etmez/)).toBeInTheDocument();
   });
 
+  it("küme, koltuk sabitleme ve kopyalama adımlarını anlatır", () => {
+    renderPage();
+    expect(screen.getByText(/İkili eğitim yapıyorsanız derslikleri kümeleyin/)).toBeInTheDocument();
+    expect(screen.getByText(/kendi dersliğinde, arka sırada ve tek başına/)).toBeInTheDocument();
+    expect(screen.getByText(/tanı ya da rapor bilgisi hiç kaydedilmez/)).toBeInTheDocument();
+    expect(screen.getByText(/öğretmen masasına en yakın sıralara/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ayarlar → Şube Kümeleri" })).toHaveAttribute(
+      "href",
+      "/ayarlar?tab=sube-kumeleri",
+    );
+  });
+
   it("Bakanlık/MEM sınavlarının takvimde ayrı göründüğünü söyler", () => {
     renderPage();
     expect(screen.getByText(/BAK \/ İL \/ İLÇE/)).toBeInTheDocument();

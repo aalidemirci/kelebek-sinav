@@ -30,10 +30,23 @@ export interface LayoutPlan {
   furniture: FurnitureCell[];
 }
 
+/**
+ * Derslik kümesi (Sabah/Öğle gibi) — YALNIZ seçim kolaylığı etiketi.
+ * `block` ile karıştırılmaz: blok resmî salon evrakına basılır, küme basılmaz.
+ */
+export interface ExamRoomGroup {
+  id: number;
+  name: string;
+  order: number;
+  room_count: number;
+}
+
 export interface ExamRoom {
   id: number;
   name: string;
   block: string;
+  group_id: number | null;
+  group_name: string;
   linked_section_id: number | null;
   linked_section_label: string;
   layout_plan: LayoutPlan;
@@ -55,6 +68,7 @@ export interface SeatPreview {
 export interface ExamRoomPayload {
   name?: string;
   block?: string;
+  group_id?: number | null;
   linked_section_id?: number | null;
   layout_plan?: LayoutPlan;
   numbering_scheme?: NumberingSchemeCode;
@@ -67,6 +81,22 @@ export interface GenerateSectionRoomsResult {
   orphan_rooms: string[];
   sections_total: number;
 }
+
+export const examRoomGroupApi = {
+  list: () => api.get<Paginated<ExamRoomGroup>>("/exam-room-groups/?limit=200"),
+
+  create: (payload: { name: string; order?: number }) =>
+    api.post<ExamRoomGroup>("/exam-room-groups/", payload),
+
+  update: (id: number, payload: Partial<{ name: string; order: number }>) =>
+    api.patch<ExamRoomGroup>(`/exam-room-groups/${id}/`, payload),
+
+  remove: (id: number) => api.del<void>(`/exam-room-groups/${id}/`),
+
+  /** Toplu atama — ikili eğitimde asıl seçim maliyetini düşüren uç. */
+  assign: (payload: { room_ids: number[]; group: number | null }) =>
+    api.post<{ updated: number }>("/exam-room-groups/assign/", payload),
+};
 
 export const examRoomApi = {
   // Okul salon sayısı küçüktür (≈30-60); tek sayfada tümü (limit=200).
@@ -87,5 +117,14 @@ export const examRoomApi = {
   generateSectionRooms: () =>
     api.post<GenerateSectionRoomsResult>("/exam-rooms/generate-section-rooms/", {}),
   // Boş yerleşim planı PDF'i (F4) — oturumdan bağımsız, kişisel veri yok.
+  /** Kayıtlı salonun numaralandırılmış koltukları (koltuk seçici + kroki). */
+  seats: (id: number) =>
+    api.get<{
+      room_id: number;
+      numbering_scheme: NumberingSchemeCode;
+      capacity: number;
+      seats: SeatPreview[];
+    }>(`/exam-rooms/${id}/seats/`),
+
   layoutPdfBlob: (id: number) => api.getBlob(`/exam-rooms/${id}/layout-pdf/`),
 };

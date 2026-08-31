@@ -13,6 +13,7 @@ from apps.sinav.models import (
     ExamCalendar,
     ExamCalendarEntry,
     ExamRoom,
+    ExamRoomGroup,
     ExamSession,
     ExamSessionCourse,
     ExamSessionRoom,
@@ -23,9 +24,68 @@ from apps.sinav.models import (
     ProctorExemption,
     ProctorRole,
     QuestionDocument,
+    RuleType,
     ScoreMode,
     SeatAssignment,
 )
+
+
+class CopySessionPlanSerializer(serializers.Serializer[dict[str, Any]]):
+    """Başka oturumdan plan kopyalama girdisi (Ö5).
+
+    `courses` şubeleri de getirir — "katılacak sınıf" verisi fiziksel olarak
+    `ExamSessionCourse.section_ids` içindedir, ayrı kopyalanamaz.
+    """
+
+    source_id = serializers.IntegerField()
+    courses = serializers.BooleanField(required=False, default=True)
+    rooms = serializers.BooleanField(required=False, default=True)
+
+
+class ExamRoomGroupSerializer(serializers.ModelSerializer[ExamRoomGroup]):
+    """Derslik kümesi (Sabah/Öğle gibi) — YALNIZ seçim kolaylığı etiketi.
+
+    Teklik Türkçe mesajla burada denetlenir; alan elle tanımlanır ki DRF
+    modeldeki tek alanlı UniqueConstraint'ten alan düzeyinde UniqueValidator
+    türetip İngilizce mesaj basmasın (SubjectDepartmentSerializer emsali).
+    """
+
+    name = serializers.CharField(max_length=60, validators=[])
+    room_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ExamRoomGroup
+        fields = ("id", "name", "order", "room_count")
+        validators: list[object] = []
+
+    def get_room_count(self, obj: ExamRoomGroup) -> int:
+        return int(obj.rooms.count())
+
+    def validate_name(self, value: str) -> str:
+        cleaned = " ".join(value.split())
+        if not cleaned:
+            raise serializers.ValidationError("Küme adı zorunludur.")
+        return cleaned
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        instance = self.instance if isinstance(self.instance, ExamRoomGroup) else None
+        name = attrs.get("name", getattr(instance, "name", ""))
+        if name:
+            duplicate = ExamRoomGroup.objects.filter(name=name)
+            if instance is not None:
+                duplicate = duplicate.exclude(pk=instance.pk)
+            if duplicate.exists():
+                raise serializers.ValidationError({"name": "Bu küme zaten kayıtlı."})
+        return attrs
+
+
+class RoomGroupAssignSerializer(serializers.Serializer[dict[str, Any]]):
+    """Toplu küme ataması — ikili eğitimde asıl seçim maliyetini düşüren uç."""
+
+    room_ids = serializers.ListField(child=serializers.IntegerField(), allow_empty=True)
+    group = serializers.PrimaryKeyRelatedField(
+        queryset=ExamRoomGroup.objects.all(), allow_null=True
+    )
 
 
 class ExamRoomSerializer(serializers.ModelSerializer[ExamRoom]):
@@ -38,6 +98,8 @@ class ExamRoomSerializer(serializers.ModelSerializer[ExamRoom]):
     """
 
     capacity = serializers.SerializerMethodField()
+    group_id = serializers.IntegerField(allow_null=True, required=False)
+    group_name = serializers.SerializerMethodField()
     linked_section_id = serializers.IntegerField(allow_null=True, required=False)
     linked_section_label = serializers.SerializerMethodField()
     numbering_scheme = serializers.ChoiceField(
@@ -50,6 +112,8 @@ class ExamRoomSerializer(serializers.ModelSerializer[ExamRoom]):
             "id",
             "name",
             "block",
+            "group_id",
+            "group_name",
             "linked_section_id",
             "linked_section_label",
             "layout_plan",
@@ -57,13 +121,16 @@ class ExamRoomSerializer(serializers.ModelSerializer[ExamRoom]):
             "is_active",
             "capacity",
         )
-        read_only_fields = ("id", "capacity", "linked_section_label")
+        read_only_fields = ("id", "capacity", "linked_section_label", "group_name")
 
     def get_capacity(self, obj: ExamRoom) -> int:
         return services.room_capacity(obj)
 
     def get_linked_section_label(self, obj: ExamRoom) -> str:
         return obj.linked_section.class_label if obj.linked_section is not None else ""
+
+    def get_group_name(self, obj: ExamRoom) -> str:
+        return obj.group.name if obj.group is not None else ""
 
 
 class SeatSerializer(serializers.Serializer[Any]):
@@ -259,6 +326,11 @@ class PlacementRuleSerializer(serializers.ModelSerializer[PlacementRule]):
             "rule_type",
             "target_room_id",
             "target_room_name",
+            "target_desk_row",
+            "target_desk_col",
+            "target_slot",
+            "seat_preference",
+            "solo_desk",
             "reason_category",
         )
         read_only_fields = ("id", "student_name", "target_room_name")
@@ -269,6 +341,44 @@ class PlacementRuleSerializer(serializers.ModelSerializer[PlacementRule]):
 
     def get_target_room_name(self, obj: PlacementRule) -> str:
         return obj.target_room.name if obj.target_room is not None else ""
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        """Tip ↔ hedef tutarlılığı; koltuk koordinatı üçlü ve salonun planında olmalı.
+
+        Koordinat `seat_no` DEĞİL (numaralandırma düzeni değişince seat_no
+        kayar, koordinat kaymaz) — plan doğrulaması burada yapılır ki kural
+        kaydedilirken hata alınsın, dağıtım anında değil.
+        """
+        instance = self.instance if isinstance(self.instance, PlacementRule) else None
+
+        def mevcut(alan: str) -> Any:
+            return attrs.get(alan, getattr(instance, alan, None))
+
+        rule_type = mevcut("rule_type")
+        room_id = mevcut("target_room_id") or getattr(instance, "target_room_id", None)
+        koordinat = (mevcut("target_desk_row"), mevcut("target_desk_col"), mevcut("target_slot"))
+
+        if rule_type in (RuleType.FIXED_ROOM, RuleType.SEPARATE_ROOM, RuleType.FIXED_SEAT):
+            if not room_id:
+                raise serializers.ValidationError({"target_room_id": "Salon seçin."})
+        if rule_type == RuleType.FIXED_SEAT:
+            if any(v is None for v in koordinat):
+                raise serializers.ValidationError(
+                    {"target_desk_row": "Belirli koltuk kuralında koltuk seçin."}
+                )
+            room = ExamRoom.objects.filter(pk=room_id).first()
+            if room is None:
+                raise serializers.ValidationError({"target_room_id": "Salon bulunamadı."})
+            seats = services.room_seats(room)
+            if not any((s.desk_row, s.desk_col, s.slot) == koordinat for s in seats):
+                raise serializers.ValidationError(
+                    {"target_desk_row": "Seçilen koltuk salonun planında yok."}
+                )
+        elif any(v is not None for v in koordinat):
+            raise serializers.ValidationError(
+                {"target_desk_row": "Koltuk koordinatı yalnız 'Belirli koltuk' kuralında verilir."}
+            )
+        return attrs
 
 
 class ExamAttendanceRecordSerializer(serializers.ModelSerializer[ExamAttendanceRecord]):

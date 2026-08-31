@@ -12,6 +12,7 @@ from apps.sinav.models import (
     ExamCalendar,
     ExamCalendarEntry,
     ExamRoom,
+    ExamRoomGroup,
     ExamSession,
     ExamSessionCourse,
     ExamSessionRoom,
@@ -24,19 +25,35 @@ from apps.sinav.models import (
 )
 
 
+def exam_room_groups() -> QuerySet[ExamRoomGroup]:
+    """Derslik kümesi kataloğu (sıra + pk)."""
+    return ExamRoomGroup.objects.all()
+
+
+def exam_room_groups_sorted() -> list[ExamRoomGroup]:
+    """Derslik kümeleri: önce elle verilen sıra, eşitlikte TÜRK ALFABESİ."""
+    from apps.okul import normalize
+
+    return sorted(exam_room_groups(), key=lambda g: (g.order, normalize.tr_sort_key(g.name)))
+
+
+def get_exam_room_group(group_id: int) -> ExamRoomGroup | None:
+    return ExamRoomGroup.objects.filter(pk=group_id).first()
+
+
 def exam_rooms(*, include_inactive: bool = False) -> QuerySet[ExamRoom]:
     """Salon listesi (ada göre sıralı; linked_section join'li).
 
     Varsayılan yalnız aktif salonlar — oturum planlaması bunlardan seçer.
     """
-    qs = ExamRoom.objects.select_related("linked_section")
+    qs = ExamRoom.objects.select_related("linked_section", "group")
     if not include_inactive:
         qs = qs.filter(is_active=True)
     return qs.order_by("name")
 
 
 def get_exam_room(room_id: int) -> ExamRoom | None:
-    return ExamRoom.objects.select_related("linked_section").filter(pk=room_id).first()
+    return ExamRoom.objects.select_related("linked_section", "group").filter(pk=room_id).first()
 
 
 def section_rooms_for_levels(levels: set[int]) -> list[ExamRoom]:

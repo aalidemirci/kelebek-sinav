@@ -152,6 +152,18 @@ export interface SubjectDepartmentWriteBody {
   is_board_member?: boolean;
 }
 
+/**
+ * Şube kümesi (SAY/EA/DİL gibi) — YALNIZ seçim kolaylığı etiketi.
+ * Küme kimliği hiçbir oturum kaydına yazılmaz; sihirbaz kümeyi yazma anında
+ * somut şube pk'lerine açar.
+ */
+export interface ClassSectionGroup {
+  id: number;
+  name: string;
+  order: number;
+  section_count: number;
+}
+
 /** Şube kataloğu satırı — salon-şube eşlemesi (F2) ve R2k bu katalogdan okur. */
 export interface ClassSection {
   id: number;
@@ -160,6 +172,8 @@ export interface ClassSection {
   class_level: number;
   class_section: string;
   class_label: string;
+  group: number | null;
+  group_name: string;
 }
 
 export interface ClassSectionWriteBody {
@@ -385,6 +399,34 @@ export const okulApi = {
     api.post<ClassSection>("/class-sections/", body),
 
   deleteClassSection: (id: number): Promise<void> => api.del<void>(`/class-sections/${id}/`),
+
+  // --- Şube kümeleri (SAY/EA/DİL — sihirbazda toplu şube seçimi) ---
+
+  listClassSectionGroups: async (): Promise<ClassSectionGroup[]> => {
+    const data = await api.get<Paginated<ClassSectionGroup> | ClassSectionGroup[]>(
+      "/class-section-groups/?limit=200",
+    );
+    return unwrap(data);
+  },
+
+  createClassSectionGroup: (body: { name: string; order?: number }): Promise<ClassSectionGroup> =>
+    api.post<ClassSectionGroup>("/class-section-groups/", body),
+
+  updateClassSectionGroup: (
+    id: number,
+    body: Partial<{ name: string; order: number }>,
+  ): Promise<ClassSectionGroup> =>
+    api.patch<ClassSectionGroup>(`/class-section-groups/${id}/`, body),
+
+  deleteClassSectionGroup: (id: number): Promise<void> =>
+    api.del<void>(`/class-section-groups/${id}/`),
+
+  /** Toplu atama — şube tek tek düzenlenmez. */
+  assignClassSectionGroup: (body: {
+    section_ids: number[];
+    group: number | null;
+  }): Promise<{ updated: number }> =>
+    api.post<{ updated: number }>("/class-section-groups/assign/", body),
 
   // --- Zümreler (takvim imza bloğunun kaynağı) ---
 

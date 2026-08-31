@@ -17,6 +17,7 @@ from apps.okul import normalize
 from apps.okul.excel_ogrenci import normalize_header
 from apps.okul.models import (
     ClassSection,
+    ClassSectionGroup,
     ImportRun,
     Personnel,
     SchoolConfig,
@@ -105,7 +106,7 @@ def personnel_sorted(*, only_active: bool = False) -> list[Personnel]:
 
 def class_sections(*, school_year_id: int | None = None) -> QuerySet[ClassSection]:
     """Şube kataloğu; yıl verilmezse aktif yıl kullanılır."""
-    qs = ClassSection.objects.select_related("school_year")
+    qs = ClassSection.objects.select_related("school_year", "group")
     if school_year_id is not None:
         return qs.filter(school_year_id=school_year_id)
     active = active_school_year()
@@ -131,6 +132,27 @@ def class_sections_sorted(*, school_year_id: int | None = None) -> list[ClassSec
 
 def get_class_section(section_id: int) -> ClassSection | None:
     return ClassSection.objects.filter(pk=section_id).first()
+
+
+def class_section_groups() -> QuerySet[ClassSectionGroup]:
+    """Şube kümesi kataloğu (sıra + pk)."""
+    return ClassSectionGroup.objects.all()
+
+
+def class_section_groups_sorted() -> list[ClassSectionGroup]:
+    """Şube kümeleri: önce elle verilen sıra, eşitlikte TÜRK ALFABESİ.
+
+    SQLite karşılaştırması BINARY'dir (Ç/Ğ/İ/Ö/Ş/Ü kod noktası olarak Z'den
+    sonra düşer) — ada göre sıralama bu yüzden Python'da (ClassSection emsali).
+    """
+    return sorted(
+        class_section_groups(),
+        key=lambda g: (g.order, normalize.tr_sort_key(g.name)),
+    )
+
+
+def get_class_section_group(group_id: int) -> ClassSectionGroup | None:
+    return ClassSectionGroup.objects.filter(pk=group_id).first()
 
 
 def subject_departments(*, board_only: bool = False) -> QuerySet[SubjectDepartment]:

@@ -190,6 +190,14 @@ export default function KilavuzPage() {
           Salon planı bir kez çizilir, her sınavda yeniden kullanılır. Boş yerleşim planını PDF
           olarak alıp kapıya asabilirsiniz.
         </p>
+        <Ipucu>
+          <strong>İkili eğitim yapıyorsanız derslikleri kümeleyin.</strong> “Şube dersliklerini
+          oluştur” her şube için bir derslik üretir; ikili eğitimde liste kalabalıklaşır ve
+          sihirbazda tek tek işaretlemek zorlaşır. Salonlar ekranındaki <strong>Kümeler</strong>{" "}
+          düğmesiyle “Sabah”, “Öğle” gibi kümeler tanımlayıp salonları topluca atayın — sınav
+          sihirbazında kümenin tamamı tek tıkla seçilir. Küme yalnız seçim kolaylığıdır; evrağa
+          basılan konum bilgisi salonun “blok/kat” alanıdır.
+        </Ipucu>
       </Adim>
 
       <Adim no={7} icon="event_note" title="Sınav takvimi">
@@ -311,11 +319,56 @@ export default function KilavuzPage() {
         </p>
         <p>
           Dağıtımı başlattığınızda program öğrencileri salonlara “kelebek” düzende yerleştirir: aynı
-          dersi aynı seviyede alan öğrenciler yan yana ve ön arkaya düşmez. Özel durumlar için
-          yerleştirme kuralı tanımlayabilirsiniz (belirli salona alma, belirli öğrencileri ayırma).
-          Sonuç bağımsız bir doğrulayıcıdan geçer;{" "}
-          <strong>ihlal sıfır değilse onay verilmez</strong>. Aynı çekirdek sayı (seed) aynı
-          dağıtımı üretir ve bu sayı doğrulama raporuna basılır.
+          dersi aynı seviyede alan öğrenciler yan yana ve ön arkaya düşmez. Sonuç bağımsız bir
+          doğrulayıcıdan geçer; <strong>ihlal sıfır değilse onay verilmez</strong>. Aynı çekirdek
+          sayı (seed) aynı dağıtımı üretir ve bu sayı doğrulama raporuna basılır.
+        </p>
+        <p>
+          Öğrenci sayıları karışmaya elverişli değilse — örneğin salonda tek ders varsa — aynı
+          sınava giren öğrencilerin yan yana düşmesi matematiksel olarak kaçınılmaz olabilir. Bu
+          durumda program o çiftleri <strong>öğretmen masasına en yakın sıralara</strong> çeker;
+          gözetim en zor olan yerler öğretmenin önünde kalır. Bu yalnız bir tercihtir: kaçınılmaz
+          olmayan hiçbir komşuluğu yaratmaz ve ihlal sayısını artırmaz.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Şube ve derslik kümeleriyle hızlı seçim
+        </h3>
+        <p>
+          Sihirbazın katılımcı adımında{" "}
+          <Ekran to="/ayarlar?tab=sube-kumeleri">Ayarlar → Şube Kümeleri</Ekran> ekranında
+          tanımladığınız kümeler (Sayısal, Eşit Ağırlık, Dil…) çip olarak görünür; çipe basınca o
+          kümenin şubeleri seçime eklenir. Küme seçili sınıf düzeyiyle kesiştirilir — bir oturum
+          dersi tek seviyeye bağlıdır. Salon adımında da derslik kümeleri düğme olarak çıkar.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Özel durumlu öğrencilerin yerini sabitleme
+        </h3>
+        <p>
+          Oturum detayındaki <strong>Yerleştirme Kuralları</strong> sekmesinde engelli ya da özel
+          durumu olan öğrencilerin yerini sabitlersiniz. “Yerini ben seçeyim” demezseniz öğrenci{" "}
+          <strong>kendi dersliğinde, arka sırada ve tek başına</strong> oturur. İsterseniz salonu ve
+          koltuğu birebir seçebilirsiniz. “Tek başına” seçeneği sıradaki diğer koltukları kimseye
+          vermez; salon kapasitesi o kadar azalır (ikili sırada iki koltuk), kalabalık oturumda ek
+          salon gerekebilir. Kural sahibi öğrenciyi kelebek motoru taşıyamaz.
+        </p>
+        <p>
+          Gerekçe olarak yalnız kategori seçilir (engel durumu, BEP, sağlık, diğer);{" "}
+          <strong>tanı ya da rapor bilgisi hiç kaydedilmez</strong> — programda böyle bir alan
+          bilinçli olarak yoktur.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Başka oturumdan kopyalama
+        </h3>
+        <p>
+          Benzer bir oturum daha önce tanımlandıysa sihirbazın ders adımındaki{" "}
+          <strong>“Başka oturumdan kopyala”</strong> düğmesiyle o oturumun derslerini, katılacak
+          şubelerini ve kullanılacak dersliklerini bu taslağa aktarabilir, sonra üzerinde değişiklik
+          yapabilirsiniz. Zaten ekli olanlar atlanır ve size listelenir. Sınav tarihi ve saati,
+          dağıtım (seed), yerleşim, yoklama, gözetmen görevlendirmesi ve onay damgaları kopyalanmaz
+          — bunlar her oturuma özgüdür.
         </p>
       </Adim>
 

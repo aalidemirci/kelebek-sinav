@@ -32,6 +32,7 @@ from apps.sinav.models import (
     RuleScope,
     RuleType,
     SeatAssignment,
+    SeatPreference,
     SeatStatus,
 )
 from apps.sinav.tests.oturum_yardim import ders, oturum, salon, sube
@@ -299,3 +300,131 @@ def test_api_crud() -> None:
 
     assert client.delete(f"{URL}{rule_id}/").status_code == 204
     assert PlacementRule.objects.count() == 0
+
+
+# ===========================================================================
+# Koltuk sabitleme + ön/arka tercihi + tek başına oturma (31.08.2026, Ö4)
+# ===========================================================================
+
+
+def test_fixed_seat_rule_exact_coordinates() -> None:
+    """BELIRLI_KOLTUK: seçilen koltuk HER seed'de birebir aynı."""
+    session = _kelebek_oturumu()
+    sid = _ilk_ogrenci_id()
+    room = ExamRoom.objects.get(name="D-201")
+    services.create_placement_rule(
+        student_id=sid,
+        rule_type=RuleType.FIXED_SEAT,
+        target_room_id=room.pk,
+        target_desk_row=2,
+        target_desk_col=1,
+        target_slot=1,
+    )
+    for seed in (3, 11, 29):
+        services.distribute_session(session, seed=seed)
+        row = SeatAssignment.objects.get(session=session, student_id=sid)
+        assert (row.desk_row, row.desk_col, row.slot) == (2, 1, 1)
+        assert row.status == SeatStatus.PINNED
+
+
+def test_fixed_seat_plan_disi_koordinat_reddedilir() -> None:
+    _kelebek_oturumu()
+    sid = _ilk_ogrenci_id()
+    room = ExamRoom.objects.get(name="D-201")
+    with pytest.raises(ValidationError, match="planında yok"):
+        services.create_placement_rule(
+            student_id=sid,
+            rule_type=RuleType.FIXED_SEAT,
+            target_room_id=room.pk,
+            target_desk_row=9,
+            target_desk_col=9,
+            target_slot=0,
+        )
+
+
+def test_koltuk_koordinati_yalniz_belirli_koltukta_verilir() -> None:
+    _kelebek_oturumu()
+    sid = _ilk_ogrenci_id()
+    with pytest.raises(ValidationError, match="yalnız 'Belirli koltuk'"):
+        services.create_placement_rule(
+            student_id=sid,
+            rule_type=RuleType.HOME_CLASSROOM,
+            target_desk_row=0,
+            target_desk_col=0,
+            target_slot=0,
+        )
+
+
+def test_arka_sira_tercihi_odaga_en_uzak_sirayi_secer() -> None:
+    """Mobilyasız planda arka = en büyük desk_row (ön tercihinin simetriği)."""
+    session = _kelebek_oturumu()
+    sid = _ilk_ogrenci_id()
+    room = ExamRoom.objects.get(name="D-201")
+    services.create_placement_rule(
+        student_id=sid,
+        rule_type=RuleType.FIXED_ROOM,
+        target_room_id=room.pk,
+        seat_preference=SeatPreference.BACK,
+    )
+    services.distribute_session(session, seed=5)
+    row = SeatAssignment.objects.get(session=session, student_id=sid)
+    assert row.desk_row == 2  # PLAN_3X2_DOUBLE'da en arka sıra
+    assert row.status == SeatStatus.PINNED
+
+
+def test_solo_desk_kardes_koltugu_kapatir_ve_kapasiteyi_dusurur() -> None:
+    """ "Tek başına": sıradaki diğer koltuk KİMSEYE verilmez (kapasite -1)."""
+    session = _kelebek_oturumu(student_count=8)
+    sid = _ilk_ogrenci_id()
+    room = ExamRoom.objects.get(name="D-201")
+    services.create_placement_rule(
+        student_id=sid,
+        rule_type=RuleType.FIXED_ROOM,
+        target_room_id=room.pk,
+        seat_preference=SeatPreference.BACK,
+        solo_desk=True,
+    )
+    _, result, _ = services.distribute_session(session, seed=5)
+
+    pin = SeatAssignment.objects.get(session=session, student_id=sid)
+    komsular = SeatAssignment.objects.filter(
+        session=session, room_id=room.pk, desk_row=pin.desk_row, desk_col=pin.desk_col
+    ).exclude(student_id=sid)
+    assert komsular.count() == 0  # sıra gerçekten tek başına
+    assert any("koltuğu kapattı" in w for w in result.warnings)
+    # 12 koltuklu salonda 1 koltuk bloke → 8 öğrenci hâlâ sığar, hepsi yerleşti.
+    assert SeatAssignment.objects.filter(session=session).count() == 8
+
+
+def test_varsayilan_kural_kendi_dersliginde_arka_sira_tek_basina() -> None:
+    """Arayüz varsayılanı: koltuk seçilmezse kendi dersliği + arka sıra + solo."""
+    session = _kelebek_oturumu()
+    sid = _ilk_ogrenci_id()
+    ogrenci = Student.objects.get(pk=sid)
+    kendi_derslik = salon(
+        f"{ogrenci.class_level}-{ogrenci.class_section} Dersliği", plan=PLAN_3X2_DOUBLE
+    )
+    section = ClassSection.objects.get(
+        class_level=ogrenci.class_level, class_section=ogrenci.class_section
+    )
+    services.update_exam_room(kendi_derslik, linked_section_id=section.pk)
+
+    services.create_placement_rule(
+        student_id=sid,
+        rule_type=RuleType.HOME_CLASSROOM,
+        seat_preference=SeatPreference.BACK,
+        solo_desk=True,
+        reason_category=RuleReason.DISABILITY,
+    )
+    services.distribute_session(session, seed=13)
+
+    row = SeatAssignment.objects.get(session=session, student_id=sid)
+    assert row.room_id == kendi_derslik.pk
+    assert row.desk_row == 2  # arka sıra
+    assert row.status == SeatStatus.PINNED
+    assert (
+        SeatAssignment.objects.filter(
+            session=session, room_id=row.room_id, desk_row=row.desk_row, desk_col=row.desk_col
+        ).count()
+        == 1
+    )

@@ -384,6 +384,17 @@ export const examSessionApi = {
   setRooms: (id: number, rooms: { room_id: number; capacity_override?: number | null }[]) =>
     api.put<{ rooms: ExamSessionRoomRow[] }>(`/exam-sessions/${id}/rooms/`, { rooms }),
 
+  /**
+   * Başka bir oturumun ders+şube ve salon planını bu TASLAĞA kopyalar (Ö5).
+   * "Katılacak sınıf" verisi `ExamSessionCourse.section_ids` içindedir; bu
+   * yüzden `courses` şubeleri de getirir, ayrı kopyalanamaz.
+   */
+  copyPlan: (id: number, payload: { source_id: number; courses?: boolean; rooms?: boolean }) =>
+    api.post<{ session: ExamSession; report: CopyPlanReport }>(
+      `/exam-sessions/${id}/copy-plan/`,
+      payload,
+    ),
+
   participants: (id: number) => api.get<ParticipantsResponse>(`/exam-sessions/${id}/participants/`),
   distribute: (id: number, payload: { seed?: number; strict?: boolean } = {}) =>
     api.post<DistributeResult>(`/exam-sessions/${id}/distribute/`, payload),
@@ -461,7 +472,8 @@ export const proctorExemptionApi = {
 // dağıtımda PINNED yerleşir.
 
 export type RuleScope = "SESSION" | "PERMANENT";
-export type RuleType = "HOME_CLASSROOM" | "FIXED_ROOM" | "FRONT_ROW" | "SEPARATE_ROOM";
+export type RuleType =
+  "HOME_CLASSROOM" | "FIXED_ROOM" | "FRONT_ROW" | "SEPARATE_ROOM" | "FIXED_SEAT";
 export type RuleReason = "DISABILITY" | "IEP" | "HEALTH" | "OTHER";
 
 export const RULE_SCOPE_TR: Record<RuleScope, string> = {
@@ -474,6 +486,16 @@ export const RULE_TYPE_TR: Record<RuleType, string> = {
   FIXED_ROOM: "Belirli salon",
   FRONT_ROW: "Ön sıra",
   SEPARATE_ROOM: "Ayrı salon",
+  FIXED_SEAT: "Belirli koltuk",
+};
+
+/** Koltuk seçilmediğinde salonun hangi ucundan verileceği (odak = öğretmen masası). */
+export type SeatPreference = "NONE" | "FRONT" | "BACK";
+
+export const SEAT_PREFERENCE_TR: Record<SeatPreference, string> = {
+  NONE: "Fark etmez",
+  FRONT: "Ön sıra (öğretmen masasına yakın)",
+  BACK: "Arka sıra",
 };
 
 export const RULE_REASON_TR: Record<RuleReason, string> = {
@@ -482,6 +504,15 @@ export const RULE_REASON_TR: Record<RuleReason, string> = {
   HEALTH: "Sağlık",
   OTHER: "Diğer",
 };
+
+/** Kopyalama raporu — atlananlar SESSİZ düşmez, kullanıcıya listelenir. */
+export interface CopyPlanReport {
+  courses_created: string[];
+  courses_skipped: string[];
+  rooms_created: string[];
+  rooms_skipped: string[];
+  warnings: string[];
+}
 
 export interface PlacementRule {
   id: number;
@@ -492,6 +523,13 @@ export interface PlacementRule {
   rule_type: RuleType;
   target_room_id: number | null;
   target_room_name: string;
+  /** BELIRLI_KOLTUK koordinatı — seat_no DEĞİL (numaralandırma değişince kayar). */
+  target_desk_row: number | null;
+  target_desk_col: number | null;
+  target_slot: number | null;
+  seat_preference: SeatPreference;
+  /** Sıradaki diğer koltuklar kimseye verilmez — kapasite o kadar azalır. */
+  solo_desk: boolean;
   reason_category: RuleReason;
 }
 
@@ -500,7 +538,12 @@ export interface PlacementRulePayload {
   rule_type: RuleType;
   scope?: RuleScope; // varsayılan PERMANENT
   session_id?: number | null; // SESSION kapsamında zorunlu
-  target_room_id?: number | null; // FIXED_ROOM için hedef salon
+  target_room_id?: number | null; // FIXED_ROOM / SEPARATE_ROOM / FIXED_SEAT için
+  target_desk_row?: number | null; // FIXED_SEAT üçlüsü — üçü birlikte
+  target_desk_col?: number | null;
+  target_slot?: number | null;
+  seat_preference?: SeatPreference; // varsayılan NONE
+  solo_desk?: boolean; // varsayılan false
   reason_category?: RuleReason; // varsayılan OTHER
 }
 

@@ -42,6 +42,22 @@ urlpatterns = [
         views.ClassSectionDetailView.as_view(),
         name="class-section-detail",
     ),
+    # Şube kümeleri (SAY/EA/DİL — sihirbazda toplu şube seçimi)
+    path(
+        "class-section-groups/",
+        views.ClassSectionGroupListCreateView.as_view(),
+        name="class-section-group-list",
+    ),
+    path(
+        "class-section-groups/assign/",
+        views.ClassSectionGroupAssignView.as_view(),
+        name="class-section-group-assign",
+    ),
+    path(
+        "class-section-groups/<int:pk>/",
+        views.ClassSectionGroupDetailView.as_view(),
+        name="class-section-group-detail",
+    ),
     # Zümreler (okul zümre başkanları kurulu — takvim imza bloğunun kaynağı)
     path(
         "subject-departments/",
