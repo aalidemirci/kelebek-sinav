@@ -17,6 +17,7 @@ const exam = vi.hoisted(() => ({
   update: vi.fn(),
   previewSeats: vi.fn(),
   defaultPlan: vi.fn(),
+  applyDefaultPlan: vi.fn(),
   generateSectionRooms: vi.fn(),
   layoutPdfBlob: vi.fn(),
 }));
@@ -74,6 +75,17 @@ function templatePlan(deskRows = 5, cols = 4): LayoutPlan {
       Array.from({ length: cols }, (_, c) => ({ row: r + 1, col: c, type: "DOUBLE" as const })),
     ).flat(),
     furniture: [{ kind: "TEACHER_DESK" as const, row: 0, col: 0 }],
+  };
+}
+
+/** 02.09.2026 öncesi düzen: kapı sol-ön, öğretmen masası SAĞ-ön. */
+function eskiDuzenPlan(): LayoutPlan {
+  return {
+    ...templatePlan(),
+    furniture: [
+      { kind: "DOOR", row: 0, col: 0 },
+      { kind: "TEACHER_DESK", row: 0, col: 3 },
+    ],
   };
 }
 
@@ -261,6 +273,34 @@ describe("SalonlarPage", () => {
     await user.click(screen.getByRole("button", { name: "Ön cephe, sütun 1 — boş" }));
     expect(await screen.findByText("Kapasite: 2")).toBeInTheDocument(); // yerel toplam (ikili)
     expect(exam.previewSeats).not.toHaveBeenCalled();
+  });
+
+  it("'Şablonu topluca uygula': eski düzendekiler işaretli gelir, onayla uygulanır", async () => {
+    // 02.09.2026: şablon değişti; önceden kurulmuş okullardaki derslikler eski
+    // düzende kaldı. Ön seçim eski düzendekileri işaretler, uygun olanı bırakır.
+    const user = userEvent.setup();
+    exam.list.mockResolvedValue(
+      paginated([
+        makeRoom({ id: 1, name: "9/A Dersliği", layout_plan: eskiDuzenPlan() }),
+        makeRoom({ id: 2, name: "9/B Dersliği", layout_plan: templatePlan() }),
+      ]),
+    );
+    exam.applyDefaultPlan.mockResolvedValue({
+      updated: ["9/A Dersliği"],
+      unchanged: [],
+      skipped_in_use: [],
+    });
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: /Şablonu topluca uygula/ }));
+    expect(await screen.findByRole("checkbox", { name: /9\/A Dersliği/ })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /9\/B Dersliği/ })).not.toBeChecked();
+
+    await user.click(screen.getByRole("button", { name: /Uygula \(1\)/ }));
+    await user.click(await screen.findByRole("button", { name: "Uygula" })); // onay dialogu
+
+    await waitFor(() => expect(exam.applyDefaultPlan).toHaveBeenCalledWith([1]));
+    expect(await screen.findByText(/1 salon güncellendi/)).toBeInTheDocument();
   });
 
   it("'Şube dersliklerini oluştur' onaylanınca üretim ucunu çağırır (Tur 637)", async () => {

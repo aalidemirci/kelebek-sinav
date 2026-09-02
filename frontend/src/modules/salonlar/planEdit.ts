@@ -136,3 +136,21 @@ export function resizeDeskArea(plan: LayoutPlan, deskRows: number, cols: number)
 export function emptyPlan(): LayoutPlan {
   return { grid: { rows: 5 + FRONT_BAND_ROWS, cols: 4 }, desks: [], furniture: [] };
 }
+
+/**
+ * Plan varsayılan şablona uyuyor mu? — öğretmen masası ön-sol (0, 0), başka
+ * mobilya yok, öğrenci alanının HER hücresi kullanımdaki ikili sıra.
+ *
+ * Bu bir ÖN SEÇİM SEZGİSİdir: toplu şablon diyaloğunda hangi salonun kutusunun
+ * işaretli açılacağını belirler, iş kuralı DEĞİLDİR. Yetki backend'dedir —
+ * zaten uygun olan salonu uç "unchanged" diye raporlar, yanlış işaretleme veri
+ * bozmaz (`services.apply_default_plan_to_rooms`).
+ */
+export function matchesDefaultTemplate(plan: LayoutPlan): boolean {
+  const deskRows = deskRowCount(plan);
+  if (deskRows < 1 || plan.grid.cols < 1) return false;
+  const masa = plan.furniture.length === 1 ? plan.furniture[0] : undefined;
+  if (!masa || masa.kind !== "TEACHER_DESK" || masa.row !== 0 || masa.col !== 0) return false;
+  if (plan.desks.length !== deskRows * plan.grid.cols) return false;
+  return plan.desks.every((d) => d.type === "DOUBLE" && !d.disabled && d.row >= FRONT_BAND_ROWS);
+}

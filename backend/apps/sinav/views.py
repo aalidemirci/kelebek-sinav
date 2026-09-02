@@ -33,6 +33,7 @@ from apps.sinav.models import (
     ProctorExemption,
 )
 from apps.sinav.serializers import (
+    ApplyDefaultPlanSerializer,
     AttendanceMarkSerializer,
     BookletRunSerializer,
     CopySessionPlanSerializer,
@@ -199,6 +200,30 @@ class ExamRoomViewSet(viewsets.ModelViewSet[ExamRoom]):
         except DjangoValidationError as exc:
             raise drf_serializers.ValidationError(exc.messages) from exc
         return Response({"layout_plan": plan, "capacity": capacity})
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="apply-default-plan",
+        serializer_class=ApplyDefaultPlanSerializer,
+    )
+    def apply_default_plan(self, request: Request) -> Response:
+        """`POST /exam-rooms/apply-default-plan/` — seçili salonlara şablonu uygular.
+
+        Gövde `{"room_ids": [...]}`. 02.09.2026 öncesinde üretilmiş dersliklerin
+        eski düzenini (kapı sol-ön, masa sağ-ön) toplu düzeltmek içindir; şablon
+        her salonun kendi ızgara ölçüsünde kurulur. Yerleşimi yapılmış salonlar
+        ATLANIR. Yanıt: {updated, unchanged, skipped_in_use}.
+        """
+        serializer = ApplyDefaultPlanSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            result = services.apply_default_plan_to_rooms(
+                list(serializer.validated_data["room_ids"])
+            )
+        except DjangoValidationError as exc:
+            raise drf_serializers.ValidationError(exc.messages) from exc
+        return Response(result)
 
     @action(detail=True, methods=["get"], url_path="layout-pdf")
     def layout_pdf(self, request: Request, pk: str | None = None) -> HttpResponse:

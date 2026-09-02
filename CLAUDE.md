@@ -87,6 +87,13 @@
   (`services.default_room_plan`) çağırır — hem "Yeni salon" hem editördeki
   "Varsayılan şablon" düğmesi. Şablon `desk_rows`/`cols` alır: 4×5 sabit
   değildir, editör açık salonun ızgarasını gönderir (okullar arası fark).
+  Eski kurulumlar için toplu düzeltme `POST /exam-rooms/apply-default-plan/`
+  (`apply_default_plan_to_rooms`): her salon KENDİ ölçüsünde şablona çekilir
+  (kapasite korunur), bozuk/boş plan 5×4'e kurtarılır ve **yerleşimi yapılmış
+  salon ATLANIR** — `SeatAssignment` koltuğu `(desk_row, desk_col, slot)` +
+  `seat_no` ile saklar, numaralandırma yönü değişirse basılmış evrakla plan
+  çelişir. Editörden tek tek değiştirmek yine serbesttir (bilinçli karar);
+  atlama yalnız KÖRLEMESİNE toplu iş içindir.
 - **Kullanıcıya gösterilen her katalog listesi TR sıralanır:** DB `order_by`
   SQLite'ta BINARY'dir (Ç/Ğ/İ/Ö/Ş/Ü, Z'den sonra). ViewSet'lerde `get_queryset`
   QuerySet döndürür (detay yolları için), sıralı liste `list()` override'ında

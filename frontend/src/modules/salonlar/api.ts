@@ -81,6 +81,13 @@ export interface DefaultPlanResult {
   capacity: number;
 }
 
+/** Toplu şablon uygulaması sonucu — hepsi salon adı listesi (TR sıralı). */
+export interface ApplyDefaultPlanResult {
+  updated: string[];
+  unchanged: string[];
+  skipped_in_use: string[];
+}
+
 export interface GenerateSectionRoomsResult {
   created: string[];
   skipped: string[];
@@ -133,6 +140,14 @@ export const examRoomApi = {
       `/exam-rooms/default-plan/${suffix === "" ? "" : `?${suffix}`}`,
     );
   },
+  /**
+   * Seçili salonlara varsayılan şablonu TOPLUCA uygular — 02.09.2026 öncesi
+   * eski düzende (kapı sol-ön, masa sağ-ön) üretilmiş derslikleri düzeltmek
+   * için. Her salon kendi ızgara ölçüsünde kalır; yerleşimi yapılmış salonlar
+   * backend'de atlanır (`skipped_in_use`).
+   */
+  applyDefaultPlan: (roomIds: number[]) =>
+    api.post<ApplyDefaultPlanResult>("/exam-rooms/apply-default-plan/", { room_ids: roomIds }),
   // Her aktif şube için 40 koltuklu derslik salonu üret (idempotent).
   generateSectionRooms: () =>
     api.post<GenerateSectionRoomsResult>("/exam-rooms/generate-section-rooms/", {}),

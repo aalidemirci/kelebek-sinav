@@ -88,6 +88,12 @@ class RoomGroupAssignSerializer(serializers.Serializer[dict[str, Any]]):
     )
 
 
+class ApplyDefaultPlanSerializer(serializers.Serializer[dict[str, Any]]):
+    """Toplu şablon uygulaması — seçili salonların planı varsayılana çekilir."""
+
+    room_ids = serializers.ListField(child=serializers.IntegerField(), allow_empty=True)
+
+
 class ExamRoomSerializer(serializers.ModelSerializer[ExamRoom]):
     """Sınav salonu kaydı.
 

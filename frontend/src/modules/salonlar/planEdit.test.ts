@@ -11,9 +11,21 @@ import {
   cellContent,
   deskRowCount,
   emptyPlan,
+  matchesDefaultTemplate,
   resizeDeskArea,
   resizeGrid,
 } from "./planEdit";
+
+/** Varsayılan şablonun aynası (backend `layout.default_section_plan`). */
+function sablon(deskRows = 5, cols = 4): LayoutPlan {
+  return {
+    grid: { rows: deskRows + 1, cols },
+    desks: Array.from({ length: deskRows }, (_, r) =>
+      Array.from({ length: cols }, (_, c) => ({ row: r + 1, col: c, type: "DOUBLE" as const })),
+    ).flat(),
+    furniture: [{ kind: "TEACHER_DESK" as const, row: 0, col: 0 }],
+  };
+}
 
 function planWith(partial: Partial<LayoutPlan> = {}): LayoutPlan {
   return { grid: { rows: 3, cols: 3 }, desks: [], furniture: [], ...partial };
@@ -83,6 +95,40 @@ describe("resizeGrid", () => {
     expect(resized.grid).toEqual({ rows: 2, cols: 2 });
     expect(resized.desks).toEqual([{ row: 0, col: 0, type: "SINGLE" }]);
     expect(resized.furniture).toEqual([]);
+  });
+});
+
+describe("matchesDefaultTemplate (toplu şablon ön seçimi)", () => {
+  it("şablonun kendisini ve büyütülmüş ölçüsünü uygun sayar", () => {
+    expect(matchesDefaultTemplate(sablon())).toBe(true);
+    expect(matchesDefaultTemplate(sablon(7, 5))).toBe(true);
+  });
+
+  it("eski düzeni (kapı + masa sağda) uygun SAYMAZ", () => {
+    const eski = sablon();
+    eski.furniture = [
+      { kind: "DOOR", row: 0, col: 0 },
+      { kind: "TEACHER_DESK", row: 0, col: 3 },
+    ];
+    expect(matchesDefaultTemplate(eski)).toBe(false);
+  });
+
+  it("eksik/farklı sıra ya da kullanım dışı hücre uygun DEĞİLDİR", () => {
+    const eksik = sablon();
+    eksik.desks = eksik.desks.slice(1);
+    expect(matchesDefaultTemplate(eksik)).toBe(false);
+
+    const tekli = sablon();
+    tekli.desks = tekli.desks.map((d, i) => (i === 0 ? { ...d, type: "SINGLE" as const } : d));
+    expect(matchesDefaultTemplate(tekli)).toBe(false);
+
+    const kapali = sablon();
+    kapali.desks = kapali.desks.map((d, i) => (i === 0 ? { ...d, disabled: true } : d));
+    expect(matchesDefaultTemplate(kapali)).toBe(false);
+  });
+
+  it("boş plan uygun değildir (mobilya yok)", () => {
+    expect(matchesDefaultTemplate(emptyPlan())).toBe(false);
   });
 });
 

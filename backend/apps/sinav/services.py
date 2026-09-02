@@ -217,6 +217,61 @@ def default_room_plan(desk_rows: object = None, cols: object = None) -> tuple[di
     return plan_raw, layout.validate_layout_plan(plan_raw).capacity
 
 
+@transaction.atomic
+def apply_default_plan_to_rooms(room_ids: list[int]) -> dict[str, list[str]]:
+    """Seçili salonlara varsayılan şablonu TOPLUCA uygular (02.09.2026).
+
+    Gerekçe: bu tarihten önce üretilmiş derslikler ESKİ şablondadır (kapı
+    sol-ön, öğretmen masası SAĞ-ön) ve numaraları sağdan başlar; salon başına
+    editörden düzeltmek onlarca tıklamadır.
+
+    Şablon her salonun KENDİ ızgara ölçüsünde kurulur — satır sayısı şube
+    mevcuduna göre büyümüş olabilir (`generate_section_rooms`) — böylece
+    kapasite korunur; değişen yalnız ön cephe (masa sola gelir, kapı düşer) ve
+    ona bağlı numaralandırma yönüdür. Planı okunamayan salon (boş/bozuk JSON)
+    varsayılan 5×4 ölçüsüne düşer: şablona en çok ihtiyacı olan kayıt tek
+    hatayla tüm toplu işi düşürmesin.
+
+    YERLEŞİMİ YAPILMIŞ salon ATLANIR: `SeatAssignment` koltuğu (desk_row,
+    desk_col, slot) + `seat_no` ile saklar ve koordinatı plandan yeniden
+    türetir; numaralandırma yönü değişince basılmış evrakla salonun güncel
+    planı çelişir. Aynı değişiklik editörden tek tek yapılabilir (bilinçli
+    karar) — toplu iş körlemesine yapamaz.
+
+    Dönüş {updated, unchanged, skipped_in_use}: TR sıralı salon adı listeleri
+    (kullanıcıya gösterilir — DB sırası SQLite'ta BINARY'dir).
+    """
+    result: dict[str, list[str]] = {"updated": [], "unchanged": [], "skipped_in_use": []}
+    if not room_ids:
+        return result
+
+    rooms = list(ExamRoom.objects.filter(pk__in=room_ids))
+    # Varsayılan manager soft-silinmişi süzer: iptal edilmiş yerleşim engel değil.
+    in_use = set(
+        SeatAssignment.objects.filter(room_id__in=[room.pk for room in rooms])
+        .values_list("room_id", flat=True)
+        .distinct()
+    )
+
+    for room in rooms:
+        if room.pk in in_use:
+            result["skipped_in_use"].append(room.name)
+            continue
+        try:
+            current = layout.validate_layout_plan(room.layout_plan)
+            desk_rows, cols = max(1, current.rows - 1), current.cols  # satır 0 = ön cephe bandı
+        except ValidationError:
+            desk_rows, cols = 5, 4
+        template = layout.default_section_plan(desk_rows=desk_rows, cols=cols)
+        if room.layout_plan == template:
+            result["unchanged"].append(room.name)
+            continue
+        update_exam_room(room, layout_plan=template)
+        result["updated"].append(room.name)
+
+    return {key: sorted(names, key=okul_normalize.tr_sort_key) for key, names in result.items()}
+
+
 def section_room_name(class_level: int, class_section: str, labels: dict[int, str]) -> str:
     """Şube derslik salon adı: 'Hazırlık/A Dersliği' veya '9/A Dersliği'.
 

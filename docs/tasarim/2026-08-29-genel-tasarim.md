@@ -378,6 +378,14 @@ koduna değil (`reference_cell`). Şablonu backend üretir
 şube derslikleri üretimi, "Yeni salon" ve editördeki "Varsayılan şablon"
 düğmesi (açık salonun ızgara ölçüsünde uygular).
 
+Değişiklikten önce kurulmuş okullar için **toplu düzeltme**: Salonlar →
+"Şablonu topluca uygula" (`POST /exam-rooms/apply-default-plan/`). Diyalog eski
+düzendeki salonları işaretli açar, her salon kendi satır/sütun ölçüsünde kalır
+(kapasite değişmez) ve **yerleşimi yapılmış salonlar atlanır** — `SeatAssignment`
+koltuğu `(desk_row, desk_col, slot)` + `seat_no` ile sakladığından numaralandırma
+yönü değişirse basılmış evrakla plan çelişirdi. Aynı salon editörden tek tek
+değiştirilebilir: bilinçli karar serbest, körlemesine toplu iş değil.
+
 ---
 
 ## 9. Evrak kataloğu

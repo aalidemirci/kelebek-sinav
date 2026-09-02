@@ -17,6 +17,7 @@ from rest_framework.test import APIClient
 from apps.okul.models import ClassSection, SchoolYear, Student
 from apps.sinav import layout, selectors, services
 from apps.sinav.models import DeskType, ExamRoom, NumberingScheme
+from apps.sinav.tests import oturum_yardim
 
 pytestmark = pytest.mark.django_db
 
@@ -311,6 +312,84 @@ def test_default_plan_endpoint_olcu_alir_ve_dogrular() -> None:
 
     assert APIClient().get(f"{URL}default-plan/?desk_rows=0").status_code == 400
     assert APIClient().get(f"{URL}default-plan/?cols=abc").status_code == 400
+
+
+ESKI_SABLON: dict[str, Any] = {
+    "grid": {"rows": 6, "cols": 4},
+    "desks": [
+        {"row": row, "col": col, "type": DeskType.DOUBLE} for row in range(1, 6) for col in range(4)
+    ],
+    "furniture": [
+        {"kind": "DOOR", "row": 0, "col": 0},
+        {"kind": "TEACHER_DESK", "row": 0, "col": 3},
+    ],
+}
+
+
+def test_toplu_sablon_eski_duzeni_kendi_olcusunde_duzeltir() -> None:
+    """Toplu uygulama: masa sola gelir, kapı düşer, ızgara ölçüsü KORUNUR."""
+    eski = services.create_exam_room(name="9/A Dersliği", layout_plan=ESKI_SABLON)
+    buyuk_plan = layout.default_section_plan(desk_rows=7, cols=4)
+    buyuk_plan["furniture"] = [{"kind": "DOOR", "row": 0, "col": 0}]  # masasız/eski cephe
+    buyuk = services.create_exam_room(name="9/B Dersliği", layout_plan=buyuk_plan)
+
+    sonuc = services.apply_default_plan_to_rooms([eski.pk, buyuk.pk])
+
+    assert sonuc["updated"] == ["9/A Dersliği", "9/B Dersliği"]
+    eski.refresh_from_db()
+    buyuk.refresh_from_db()
+    assert eski.layout_plan == layout.default_section_plan()
+    assert services.room_capacity(eski) == 40
+    # 7 sıralık salon 7 sıralık kaldı — kapasite küçülmedi (56 koltuk).
+    assert buyuk.layout_plan["grid"] == {"rows": 8, "cols": 4}
+    assert services.room_capacity(buyuk) == 56
+    assert buyuk.layout_plan["furniture"] == [{"kind": "TEACHER_DESK", "row": 0, "col": 0}]
+
+
+def test_toplu_sablon_zaten_uygun_olani_degistirmez() -> None:
+    room = services.create_exam_room(name="Uygun Salon", layout_plan=layout.default_section_plan())
+    sonuc = services.apply_default_plan_to_rooms([room.pk])
+    assert sonuc == {"updated": [], "unchanged": ["Uygun Salon"], "skipped_in_use": []}
+
+
+def test_toplu_sablon_bozuk_plani_varsayilan_olcuye_cekerek_kurtarir() -> None:
+    """Boş/bozuk JSON tüm toplu işi düşürmez; o salon 5×4 şablona döner."""
+    room = ExamRoom.objects.create(name="Bozuk Salon", layout_plan={})
+    sonuc = services.apply_default_plan_to_rooms([room.pk])
+    assert sonuc["updated"] == ["Bozuk Salon"]
+    room.refresh_from_db()
+    assert room.layout_plan == layout.default_section_plan()
+
+
+def test_toplu_sablon_yerlesimi_yapilmis_salonu_atlar() -> None:
+    """Yerleşim varsa plan DEĞİŞMEZ: basılmış evraktaki koltuk numarası kayar.
+
+    Editörden tek tek değiştirmek serbesttir (bilinçli karar); toplu iş
+    körlemesine yapamaz.
+    """
+    session = oturum_yardim.dagitilmis_oturum(rooms=1)
+    dolu = ExamRoom.objects.get(name="D-201")
+    onceki = dict(dolu.layout_plan)
+    bos = services.create_exam_room(name="D-202", layout_plan=ESKI_SABLON)
+
+    sonuc = services.apply_default_plan_to_rooms([dolu.pk, bos.pk])
+
+    assert sonuc["skipped_in_use"] == ["D-201"]
+    assert sonuc["updated"] == ["D-202"]
+    dolu.refresh_from_db()
+    assert dolu.layout_plan == onceki
+    assert session.seat_assignments.exists()
+
+
+def test_apply_default_plan_endpoint() -> None:
+    room = services.create_exam_room(name="10/C Dersliği", layout_plan=ESKI_SABLON)
+    resp = APIClient().post(f"{URL}apply-default-plan/", {"room_ids": [room.pk]}, format="json")
+    assert resp.status_code == 200, resp.data
+    assert resp.data["updated"] == ["10/C Dersliği"]
+
+    bos = APIClient().post(f"{URL}apply-default-plan/", {"room_ids": []}, format="json")
+    assert bos.status_code == 200 and bos.data["updated"] == []
+    assert APIClient().post(f"{URL}apply-default-plan/", {}, format="json").status_code == 400
 
 
 def test_salon_listesi_turk_alfabesine_gore_siralanir() -> None:

@@ -20,6 +20,7 @@ import type { ExamRoom } from "./api";
 import { examRoomApi } from "./api";
 import DerslikKumeleriDialog from "./DerslikKumeleriDialog";
 import RoomEditor from "./RoomEditor";
+import SablonUygulaDialog from "./SablonUygulaDialog";
 import { emptyPlan } from "./planEdit";
 
 export default function SalonlarPage() {
@@ -32,6 +33,8 @@ export default function SalonlarPage() {
   const [newBlock, setNewBlock] = useState("");
   const [groupsOpen, setGroupsOpen] = useState(false);
   const closeGroups = useCallback(() => setGroupsOpen(false), []);
+  const [sablonOpen, setSablonOpen] = useState(false);
+  const closeSablon = useCallback(() => setSablonOpen(false), []);
   // Dialog odak efekti onClose kimliğine bağlı — inline arrow her render'da
   // yenilenir ve yazarken odağı panele geri çalar; sabit referans şart.
   const closeCreate = useCallback(() => setCreateOpen(false), []);
@@ -135,6 +138,9 @@ export default function SalonlarPage() {
             <span className="ml-auto" />
             <Button variant="text" icon="category" onClick={() => setGroupsOpen(true)}>
               Derslik Kümeleri
+            </Button>
+            <Button variant="text" icon="grid_view" onClick={() => setSablonOpen(true)}>
+              Şablonu topluca uygula
             </Button>
             <Button
               variant="tonal"
@@ -256,6 +262,7 @@ export default function SalonlarPage() {
           </Dialog>
 
           {groupsOpen ? <DerslikKumeleriDialog rooms={list} onClose={closeGroups} /> : null}
+          {sablonOpen ? <SablonUygulaDialog rooms={list} onClose={closeSablon} /> : null}
         </>
       )}
     </div>
