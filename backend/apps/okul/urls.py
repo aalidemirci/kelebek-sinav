@@ -110,6 +110,9 @@ urlpatterns = [
         views.EncryptedBackupDownloadView.as_view(),
         name="encrypted-backup-download",
     ),
+    # Yedekten geri yükleme (Güvenlik sekmesi — çalışan program içinden)
+    path("backups/", views.BackupListView.as_view(), name="backup-list"),
+    path("backups/restore/", views.BackupRestoreView.as_view(), name="backup-restore"),
     # GitHub Release tabanlı uygulama güncellemesi (F8)
     path("updates/latest/", views.UpdateStatusView.as_view(), name="update-latest"),
     path(

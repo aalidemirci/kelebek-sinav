@@ -51,6 +51,7 @@ from apps.okul.services import app_password as app_password_service
 from apps.okul.services import departments as department_service
 from apps.okul.services import encrypted_backup as encrypted_backup_service
 from apps.okul.services import imports as import_service
+from apps.okul.services import live_restore as live_restore_service
 from apps.okul.services import persons as persons_service
 from apps.okul.services import school_year as school_year_service
 from apps.okul.services import sections as section_service
@@ -530,6 +531,63 @@ class EncryptedBackupDownloadView(APIView):
             filename=filename,
             content_type="application/octet-stream",
         )
+
+
+# ---------------------------------------------------------------------------
+# Yedekten geri yükleme (Güvenlik sekmesi — çalışan program içinden)
+# ---------------------------------------------------------------------------
+class BackupRestoreRequestSerializer(serializers.Serializer[dict[str, Any]]):
+    """Kaynak İKİSİNDEN BİRİ: `name` (yedek klasöründen) YA DA `file` (yükleme).
+
+    Parola/kurtarma anahtarı yalnız gövdede taşınır; yanıt ve günlüklerde
+    yankılanmaz (security uçlarıyla aynı kural).
+    """
+
+    name = serializers.CharField(required=False, allow_blank=True, default="")
+    file = serializers.FileField(required=False, allow_null=True, default=None)
+    password = serializers.CharField(
+        required=False, allow_blank=True, default="", trim_whitespace=False
+    )
+    recovery_key = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        ad = str(attrs.get("name") or "").strip()
+        dosya = attrs.get("file")
+        if bool(ad) == bool(dosya):
+            raise serializers.ValidationError(
+                "Yedek klasöründen bir dosya seçin YA DA bir .ksbak dosyası yükleyin."
+            )
+        attrs["name"] = ad
+        return attrs
+
+
+class BackupListView(APIView):
+    """`GET /api/v1/backups/` — yedek klasöründeki geri yüklenebilir dosyalar."""
+
+    def get(self, request: Request) -> Response:
+        return Response(live_restore_service.list_backups())
+
+
+class BackupRestoreView(APIView):
+    """`POST /api/v1/backups/restore/` — yedeği veritabanının yerine koyar.
+
+    Başarıda süreç "yeniden başlat" kapısına girer (`restart_gate`): sonraki
+    tüm API istekleri 503 `restart_required` döner, kullanıcı programı kapatıp
+    yeniden açar. Hata hâlinde hedefe dokunulmaz ve kapı kurulmaz.
+    """
+
+    def post(self, request: Request) -> Response:
+        req = BackupRestoreRequestSerializer(data=request.data)
+        req.is_valid(raise_exception=True)
+        yuklenen = req.validated_data["file"]
+        with _service_errors():
+            payload = live_restore_service.restore_and_require_restart(
+                name=req.validated_data["name"],
+                content=yuklenen.read() if yuklenen is not None else None,
+                password=req.validated_data["password"],
+                recovery_key=req.validated_data["recovery_key"],
+            )
+        return Response(payload)
 
 
 # ---------------------------------------------------------------------------

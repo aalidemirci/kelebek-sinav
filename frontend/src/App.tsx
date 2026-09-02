@@ -12,6 +12,7 @@ import AyarlarPage from "./modules/ayarlar/AyarlarPage";
 import ArsivBakimBanner from "./modules/bakim/ArsivBakimBanner";
 import DersHavuzuPage from "./modules/dersler/DersHavuzuPage";
 import GuvenlikKapisi from "./modules/guvenlik/GuvenlikKapisi";
+import YenidenBaslatEkrani from "./modules/guvenlik/YenidenBaslatEkrani";
 import HakkindaPage from "./modules/hakkinda/HakkindaPage";
 import KilavuzPage from "./modules/kilavuz/KilavuzPage";
 import KisilerPage from "./modules/kisiler/KisilerPage";
@@ -26,6 +27,9 @@ import TakvimlerPage from "./modules/takvimler/TakvimlerPage";
 export default function App() {
   return (
     <AppShell>
+      {/* Geri yükleme sonrası tam ekran "yeniden başlatın" örtüsü — kapıların
+          DIŞINDA: kilit/kurulum durumu ne olursa olsun her şeyi örtmelidir. */}
+      <YenidenBaslatEkrani />
       <GuvenlikKapisi>
         <KurulumKapisi>
           {/* F27/F8: kapıların İÇİNDE — kilit çözülünce mount olur, aday
