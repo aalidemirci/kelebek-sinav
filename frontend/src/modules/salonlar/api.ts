@@ -75,6 +75,12 @@ export interface ExamRoomPayload {
   is_active?: boolean;
 }
 
+/** Varsayılan salon şablonu — öğretmen masası ön-sol + ikili sıralar (backend üretir). */
+export interface DefaultPlanResult {
+  layout_plan: LayoutPlan;
+  capacity: number;
+}
+
 export interface GenerateSectionRoomsResult {
   created: string[];
   skipped: string[];
@@ -113,6 +119,20 @@ export const examRoomApi = {
       layout_plan,
       numbering_scheme,
     }),
+  /**
+   * Varsayılan salon şablonu (öğretmen masası ön-sol, kapısız, ikili sıralar).
+   * Şablon BACKEND'de tek yerde tanımlıdır — istemci kendi kopyasını üretmez.
+   * Ölçü verilmezse 5 sıra × 4 sütun = 40 koltuk.
+   */
+  defaultPlan: (deskRows?: number, cols?: number) => {
+    const query = new URLSearchParams();
+    if (deskRows !== undefined) query.set("desk_rows", String(deskRows));
+    if (cols !== undefined) query.set("cols", String(cols));
+    const suffix = query.toString();
+    return api.get<DefaultPlanResult>(
+      `/exam-rooms/default-plan/${suffix === "" ? "" : `?${suffix}`}`,
+    );
+  },
   // Her aktif şube için 40 koltuklu derslik salonu üret (idempotent).
   generateSectionRooms: () =>
     api.post<GenerateSectionRoomsResult>("/exam-rooms/generate-section-rooms/", {}),

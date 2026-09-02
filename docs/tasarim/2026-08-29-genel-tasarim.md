@@ -366,6 +366,18 @@ numaralandırma önizlemesi backend'den (`preview-seats` — iş kuralı tek yer
 Hızlı başlangıç: `generate-section-rooms` — her aktif şubeye 40 koltuklu
 (4 sütun × 5 sıra, ikili) derslik üretimi, idempotent.
 
+**Varsayılan salon şablonu (02.09.2026 kullanıcı kararı).** Okul içinde
+salonlar birbirine benzer, okullar arasında farklıdır: uygulama tek bir
+varsayılan biçim dayatır, farkı olan salonu idareci editörden düzeltir.
+Şablon = **öğretmen masası ön-sol (0, 0)** + 4 sütun × 5 sıra ikili sıra;
+**kapı yoktur** (yeri okula göre değişir, numaralandırmaya girmez ve yanlış
+basılırsa resmî krokide yanlış bilgi olur). Masa sol öndeyken numaralandırma
+kendiliğinden onun önünden başlar — kural şablona yazılıdır, numaralandırma
+koduna değil (`reference_cell`). Şablonu backend üretir
+(`GET /exam-rooms/default-plan/`, `desk_rows`/`cols` parametreli); tüketicileri:
+şube derslikleri üretimi, "Yeni salon" ve editördeki "Varsayılan şablon"
+düğmesi (açık salonun ızgara ölçüsünde uygular).
+
 ---
 
 ## 9. Evrak kataloğu

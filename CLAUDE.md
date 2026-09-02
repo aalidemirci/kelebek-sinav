@@ -76,6 +76,17 @@
   kapı içindir ve arayüzdeki "Sıra satırı" sayımına GİRMEZ (`planEdit
   .FRONT_BAND_ROWS`). `layout.DEFAULT_LAYOUT_PLAN` (6×4) ile `planEdit
   .emptyPlan()` BİREBİR aynı kalmalı — test ikisini karşılaştırır.
+- **Varsayılan salon şablonu bilinçlidir** (`layout.default_section_plan`,
+  02.09.2026): öğretmen masası **(0, 0) ön-sol**, **kapı YOK**, 4 sütun × 5 sıra
+  ikili = 40 koltuk. "Numaralandırma öğretmen masasının önünden başlar" kuralı
+  numaralandırma KODUNDA değil ŞABLONDA yaşar — `reference_cell` masayı bulur,
+  S rotası oradan başlar; masa taşınırsa numaralar da taşınır. Kapı
+  `_REFERENCE_PRIORITY`de yoktur (yalnız krokiye çizilir); varsayılana konursa
+  resmî salon evrakına YANLIŞ bilgi basılır. Şablonun tek doğruluk kaynağı
+  backend'dir: FE kendi kopyasını üretmez, `GET /exam-rooms/default-plan/`
+  (`services.default_room_plan`) çağırır — hem "Yeni salon" hem editördeki
+  "Varsayılan şablon" düğmesi. Şablon `desk_rows`/`cols` alır: 4×5 sabit
+  değildir, editör açık salonun ızgarasını gönderir (okullar arası fark).
 - **Kullanıcıya gösterilen her katalog listesi TR sıralanır:** DB `order_by`
   SQLite'ta BINARY'dir (Ç/Ğ/İ/Ö/Ş/Ü, Z'den sonra). ViewSet'lerde `get_queryset`
   QuerySet döndürür (detay yolları için), sıralı liste `list()` override'ında

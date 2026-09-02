@@ -183,6 +183,23 @@ class ExamRoomViewSet(viewsets.ModelViewSet[ExamRoom]):
             raise drf_serializers.ValidationError(exc.messages) from exc
         return Response({"capacity": capacity, "seats": SeatSerializer(seat_list, many=True).data})
 
+    @action(detail=False, methods=["get"], url_path="default-plan")
+    def default_plan(self, request: Request) -> Response:
+        """`GET /exam-rooms/default-plan/?desk_rows=&cols=` — varsayılan salon şablonu.
+
+        Kayıt YAZMAZ. Yeni salon oluşturma ve editördeki "Varsayılan şablon"
+        düğmesi bunu kullanır; şablon backend'de tek yerde tanımlıdır
+        (`layout.default_section_plan`). Geçersiz ölçü Türkçe 400.
+        """
+        try:
+            plan, capacity = services.default_room_plan(
+                request.query_params.get("desk_rows"),
+                request.query_params.get("cols"),
+            )
+        except DjangoValidationError as exc:
+            raise drf_serializers.ValidationError(exc.messages) from exc
+        return Response({"layout_plan": plan, "capacity": capacity})
+
     @action(detail=True, methods=["get"], url_path="layout-pdf")
     def layout_pdf(self, request: Request, pk: str | None = None) -> HttpResponse:
         """`GET /exam-rooms/<id>/layout-pdf/` — BOŞ yerleşim planı PDF'i.
@@ -203,7 +220,7 @@ class ExamRoomViewSet(viewsets.ModelViewSet[ExamRoom]):
     def generate_section_rooms(self, request: Request) -> Response:
         """Aktif yılın her şubesi için 40 koltuklu ikili-sıra derslik üretir (idempotent).
 
-        Kapı sol-ön, öğretmen masası sağ-ön; mevcut salonlar (linked_section VEYA
+        Öğretmen masası sol-ön, kapısız; mevcut salonlar (linked_section VEYA
         ad çakışması) atlanır. Yanıt: {created, skipped, orphan_rooms, sections_total}.
         """
         result = services.generate_section_rooms()

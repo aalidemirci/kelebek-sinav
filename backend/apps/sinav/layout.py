@@ -63,16 +63,27 @@ DEFAULT_LAYOUT_PLAN: dict[str, object] = {
 
 
 def default_section_plan(desk_rows: int = 5, cols: int = 4) -> dict[str, object]:
-    """Şube dersliği varsayılan planı (Tur 637): ikili sıralar cols×desk_rows.
+    """VARSAYILAN SALON ŞABLONU (Tur 637; 02.09.2026 revizyonu): ikili sıralar.
 
-    Kullanıcı isteği: 40 koltuklu derslik (4 sütun × 5 sıra ikili = 40); öğretmen
-    masası EN SAĞ sütunun ÖNÜNDE, kapı SOL ÖNde. Koordinat sözleşmesi (layout.py
+    Kullanıcı kararı: 40 koltuklu derslik (4 sütun × 5 sıra ikili = 40); öğretmen
+    masası SOL ÖN köşede, başka mobilya YOK. Koordinat sözleşmesi (layout.py
     başlığı): satır 0 = ÖN cephe, sütun 0 = SOL. Bu yüzden mobilya satır 0'a,
     sıralar satır 1..desk_rows'a yerleşir.
 
-    `desk_rows`/`cols` çağıran tarafça büyütülebilir (kalabalık şube). Üretilen
-    plan `validate_layout_plan`'ı geçer; öğretmen masası tek olduğundan
-    numaralandırma referansı sağ-ön köşedir (S rotası sağdan başlar).
+    Masanın SOL ÖNde olması numaralandırmayı da belirler: referans hücre odur
+    (`reference_cell`), en yakın sıra (1, 0) olur ve S rotası sol ön köşeden
+    başlar. "Numara öğretmen masasının önünden başlar" kuralı numaralandırma
+    KODUNA değil ŞABLONA yazılıdır — masa taşınırsa numaralar da taşınır
+    (koruma: `test_layout.test_varsayilan_sablon_numarasi_masanin_onunden`).
+
+    KAPI ŞABLONDA YOKTUR (02.09.2026): yeri okuldan okula değişir ve
+    numaralandırmaya girmez (`_REFERENCE_PRIORITY`) — yalnız krokiye çizilir.
+    Varsayılan bir kapı, resmî salon evrakına yanlış bilgi basmak demektir;
+    idareci gerçek yerini editörden ekler.
+
+    `desk_rows`/`cols` çağıran tarafça değiştirilebilir (kalabalık şube, farklı
+    derslik ölçüsü — okullar arası fark buradan karşılanır). Üretilen plan
+    `validate_layout_plan`'ı geçer.
     """
     grid_rows = desk_rows + 1  # satır 0 mobilya cephesi
     desks: list[dict[str, object]] = [
@@ -81,8 +92,7 @@ def default_section_plan(desk_rows: int = 5, cols: int = 4) -> dict[str, object]
         for col in range(cols)
     ]
     furniture: list[dict[str, object]] = [
-        {"kind": FurnitureKind.DOOR, "row": 0, "col": 0},
-        {"kind": FurnitureKind.TEACHER_DESK, "row": 0, "col": cols - 1},
+        {"kind": FurnitureKind.TEACHER_DESK, "row": 0, "col": 0},
     ]
     return {
         "grid": {"rows": grid_rows, "cols": cols},

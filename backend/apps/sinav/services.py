@@ -190,6 +190,33 @@ def preview_room_seats(
     return plan.capacity, layout.numbered_seats(plan, scheme)
 
 
+def _plan_dimension(value: object, label: str, default: int, hi: int) -> int:
+    """Sorgu dizesinden gelen ölçüyü tam sayıya çevirir (boş → varsayılan)."""
+    if value is None or value == "":
+        return default
+    try:
+        number = int(str(value))
+    except (TypeError, ValueError):
+        raise ValidationError(f"{label} tam sayı olmalı.") from None
+    if not 1 <= number <= hi:
+        raise ValidationError(f"{label} 1-{hi} aralığında olmalı.")
+    return number
+
+
+def default_room_plan(desk_rows: object = None, cols: object = None) -> tuple[dict[str, Any], int]:
+    """Varsayılan salon şablonu + kapasitesi (yeni salon ve editör düğmesi).
+
+    Şablonun TEK doğruluk kaynağı `layout.default_section_plan`'dır; frontend
+    kendi kopyasını üretmez (`preview_room_seats` emsali — iş kuralı backend'de).
+    Ölçü verilmezse 5 sıra × 4 sütun ikili = 40 koltuk; editör açık salonun
+    kendi ızgara ölçüsünü göndererek şablonu o ölçüde uygular.
+    """
+    rows = _plan_dimension(desk_rows, "Sıra satırı", 5, layout.MAX_GRID_ROWS - 1)
+    columns = _plan_dimension(cols, "Sıra sütunu", 4, layout.MAX_GRID_COLS)
+    plan_raw = layout.default_section_plan(desk_rows=rows, cols=columns)
+    return plan_raw, layout.validate_layout_plan(plan_raw).capacity
+
+
 def section_room_name(class_level: int, class_section: str, labels: dict[int, str]) -> str:
     """Şube derslik salon adı: 'Hazırlık/A Dersliği' veya '9/A Dersliği'.
 
@@ -254,8 +281,8 @@ def assign_room_group(*, room_ids: list[int], group_id: int | None) -> int:
 def generate_section_rooms() -> dict[str, Any]:
     """Aktif yılın her şubesi için `linked_section`'lı ExamRoom üretir (idempotent).
 
-    Varsayılan plan `layout.default_section_plan` (kapı sol-ön, öğretmen masası
-    sağ-ön, ikili sıralar 4 sütun). Öğrenci sayısı 40'ı aşarsa satır sayısı
+    Varsayılan plan `layout.default_section_plan` (öğretmen masası sol-ön,
+    kapısız, ikili sıralar 4 sütun). Öğrenci sayısı 40'ı aşarsa satır sayısı
     büyür (`max(5, ceil(n/8))`) — sabit 40 koltuk taşan şubede kapasite hatasını
     önler. Öğrencisiz şube DE salon alır (katalog tek doğruluk kaynağı).
 

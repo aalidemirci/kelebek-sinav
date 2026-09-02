@@ -160,6 +160,18 @@ export default function RoomEditor({ room, sectionOptions, onSaved, onBack }: Ro
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Salon kaydedilemedi."),
   });
 
+  // Varsayılan şablonu SALONUN MEVCUT ÖLÇÜSÜNDE uygular: okul içinde salonlar
+  // benzer, okullar arasında farklıdır — 4×5 sabitlemek yerine ızgara kullanıcıda
+  // kalır. Şablonu backend üretir (tek doğruluk kaynağı); kayıt "Kaydet" ile olur.
+  const applyTemplate = useMutation({
+    mutationFn: () => examRoomApi.defaultPlan(Math.max(1, deskRowCount(plan)), plan.grid.cols),
+    onSuccess: (result) => {
+      setPlan(result.layout_plan);
+      snackbar.success("Varsayılan şablon uygulandı — kaydetmezseniz kalıcı olmaz.");
+    },
+    onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Şablon alınamadı."),
+  });
+
   // Kullanıcının girdiği sayılar ÖĞRENCİ ALANINI tarif eder; ön cephe bandı
   // (öğretmen masası/tahta/kapı satırı) sayıma girmez (saha bulgusu).
   const handleResize = (deskRows: number, cols: number) => {
@@ -357,6 +369,14 @@ export default function RoomEditor({ room, sectionOptions, onSaved, onBack }: Ro
               className="w-28"
               helperText="Öğrenci sırası"
             />
+            <Button
+              variant="text"
+              icon="grid_view"
+              disabled={applyTemplate.isPending}
+              onClick={() => applyTemplate.mutate()}
+            >
+              Varsayılan şablon
+            </Button>
             <label className="ml-auto flex min-h-9 cursor-pointer items-center gap-3 text-body-medium text-on-surface">
               <input
                 type="checkbox"
@@ -378,7 +398,9 @@ export default function RoomEditor({ room, sectionOptions, onSaved, onBack }: Ro
           <p className="mb-2 text-body-small text-on-surface-variant">
             En üstteki şerit salonun <strong>ön cephesidir</strong> — öğretmen masası, tahta ve kapı
             oraya konur ve <strong>satır sayımına girmez</strong>. Numaralar öğretmen masasına en
-            yakın sıradan başlar; çizim kroki (R1) ile birebirdir.
+            yakın sıradan başlar; çizim kroki (R1) ile birebirdir.{" "}
+            <strong>Varsayılan şablon</strong> masayı ön-sola koyar ve ızgarayı ikili sıralarla
+            doldurur — mevcut planın yerine geçer.
           </p>
           <div className="overflow-x-auto pb-2">
             {/* Sütun sayısı kullanıcı verisi (1-30) — Tailwind sınıfı dinamik

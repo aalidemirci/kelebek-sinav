@@ -5,17 +5,18 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
-import type { ExamRoom } from "./api";
+import type { ExamRoom, LayoutPlan } from "./api";
 
 const exam = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
   previewSeats: vi.fn(),
+  defaultPlan: vi.fn(),
   generateSectionRooms: vi.fn(),
   layoutPdfBlob: vi.fn(),
 }));
@@ -65,6 +66,17 @@ function makeRoom(overrides: Partial<ExamRoom> = {}): ExamRoom {
   };
 }
 
+/** Backend varsayılan şablonunun aynası: öğretmen masası ön-sol + ikili sıralar. */
+function templatePlan(deskRows = 5, cols = 4): LayoutPlan {
+  return {
+    grid: { rows: deskRows + 1, cols },
+    desks: Array.from({ length: deskRows }, (_, r) =>
+      Array.from({ length: cols }, (_, c) => ({ row: r + 1, col: c, type: "DOUBLE" as const })),
+    ).flat(),
+    furniture: [{ kind: "TEACHER_DESK" as const, row: 0, col: 0 }],
+  };
+}
+
 function paginated(rooms: ExamRoom[]) {
   return { count: rooms.length, next: null, previous: null, results: rooms };
 }
@@ -82,6 +94,7 @@ function renderPage() {
   );
 }
 
+beforeEach(() => exam.defaultPlan.mockResolvedValue({ layout_plan: templatePlan(), capacity: 40 }));
 afterEach(() => vi.clearAllMocks());
 
 describe("SalonlarPage", () => {
@@ -97,7 +110,9 @@ describe("SalonlarPage", () => {
     expect(screen.getByText("12 koltuk")).toBeInTheDocument();
   });
 
-  it("yeni salon boş planla oluşturulur ve editör açılır", async () => {
+  it("yeni salon VARSAYILAN ŞABLONLA oluşturulur ve editör açılır", async () => {
+    // 02.09.2026 kararı: boş ızgaradan başlamak 20 tıklamaydı; şablon backend'den
+    // gelir (öğretmen masası ön-sol + 4×5 ikili sıra).
     const user = userEvent.setup();
     exam.list.mockResolvedValue(paginated([]));
     exam.create.mockResolvedValue(makeRoom({ id: 9, name: "Yeni-1" }));
@@ -112,7 +127,7 @@ describe("SalonlarPage", () => {
       expect(exam.create).toHaveBeenCalledWith({
         name: "Yeni-1",
         block: "",
-        layout_plan: { grid: { rows: 6, cols: 4 }, desks: [], furniture: [] },
+        layout_plan: templatePlan(),
       }),
     );
   });
@@ -156,6 +171,27 @@ describe("SalonlarPage", () => {
     // Backend'den gelen koltuk numaraları hücrede görünür.
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
+  });
+
+  it("'Varsayılan şablon' salonun MEVCUT ölçüsünde uygulanır (02.09.2026)", async () => {
+    // Okul içinde salonlar benzer, okullar arasında değil: şablon 4×5'e
+    // sabitlenmez, açık salonun ızgarasında uygulanır (burada 1 sıra × 2 sütun).
+    const user = userEvent.setup();
+    exam.list.mockResolvedValue(paginated([makeRoom()]));
+    exam.previewSeats.mockResolvedValue({ capacity: 0, seats: [] });
+    exam.defaultPlan.mockResolvedValue({ layout_plan: templatePlan(1, 2), capacity: 4 });
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: /D-204/ }));
+    await user.click(screen.getByRole("button", { name: "Varsayılan şablon" }));
+
+    await waitFor(() => expect(exam.defaultPlan).toHaveBeenCalledWith(1, 2));
+    expect(
+      await screen.findByRole("button", { name: "Ön cephe, sütun 1 — Öğretmen masası" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Sıra 1, sütun 1 — İkili sıra" }),
+    ).toBeInTheDocument();
   });
 
   it("araç paletinden mobilya seçilip yerleştirilir; silgi temizler", async () => {

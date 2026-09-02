@@ -55,12 +55,20 @@ export default function SalonlarPage() {
     [sections.data],
   );
 
+  // Varsayılan salon şablonu (öğretmen masası ön-sol + 4×5 ikili sıra) — yeni
+  // salon bununla açılır, boş ızgaradan başlatmak 20 tıklama demekti. Şablon
+  // BACKEND'de tanımlıdır; uç gelmezse boş plana düşülür (çevrimdışı emniyet).
+  const defaultPlan = useQuery({
+    queryKey: ["exam-room-default-plan"],
+    queryFn: () => examRoomApi.defaultPlan(),
+  });
+
   const create = useMutation({
     mutationFn: () =>
       examRoomApi.create({
         name: newName.trim(),
         block: newBlock.trim(),
-        layout_plan: emptyPlan(),
+        layout_plan: defaultPlan.data?.layout_plan ?? emptyPlan(),
       }),
     onSuccess: (room) => {
       snackbar.success("Salon oluşturuldu — planı düzenleyebilirsiniz.");
@@ -93,7 +101,7 @@ export default function SalonlarPage() {
     void confirm({
       title: "Şube dersliklerini oluştur",
       message:
-        "Her aktif şube için 40 koltuklu ikili-sıra derslik planı üretilecek (kapı sol-ön, öğretmen masası sağ-ön). Zaten tanımlı salonlar atlanır.",
+        "Her aktif şube için varsayılan derslik planı üretilecek: 4 sütun × 5 sıra ikili (40 koltuk), öğretmen masası ön-sol, numaralar masanın önünden başlar. Farklı olan salonları sonradan editörden değiştirebilirsiniz; zaten tanımlı salonlar atlanır.",
       confirmLabel: "Oluştur",
     }).then((ok) => {
       if (ok) generateSectionRooms.mutate();
@@ -241,7 +249,8 @@ export default function SalonlarPage() {
                 placeholder="Örn. A Blok 2. Kat"
               />
               <p className="text-body-small text-on-surface-variant">
-                Plan boş başlar; oluşturduktan sonra editörde sıraları yerleştirin.
+                Plan <strong>varsayılan şablonla</strong> başlar: 4 sütun × 5 sıra ikili (40
+                koltuk), öğretmen masası ön-sol. Farklıysa oluşturduktan sonra editörden değiştirin.
               </p>
             </div>
           </Dialog>

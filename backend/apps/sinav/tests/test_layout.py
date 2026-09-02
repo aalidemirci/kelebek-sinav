@@ -59,6 +59,23 @@ def test_validate_default_plan() -> None:
     assert plan.capacity == 0
 
 
+def test_varsayilan_sablon_numarasi_masanin_onunden() -> None:
+    """Varsayılan şablonda 1 numara öğretmen masasının ÖNÜNDEKİ sıradadır.
+
+    Kullanıcı kararı (02.09.2026): masa sol ön köşede, numaralandırma oradan
+    başlar. Kural numaralandırma kodunda DEĞİL şablonda yaşar — masa taşınırsa
+    numaralar da taşınır. S rotası: sütun 0 önden arkaya (1-10), sütun 1
+    arkadan öne (11-20), sütun 2 önden arkaya (21-30), sütun 3 arkadan öne.
+    """
+    route = _seat_route(layout.default_section_plan())
+    assert len(route) == 40
+    # İlk dört koltuk: (satır 1, sütun 0) ve (satır 2, sütun 0) ikili sıraları.
+    assert route[:4] == [(1, 0, 0), (1, 0, 1), (2, 0, 0), (2, 0, 1)]
+    assert route[9] == (5, 0, 1)  # 10. koltuk sütun 0'ın en arkası
+    assert route[10] == (5, 1, 0)  # S dönüşü: sütun 1 arkadan başlar
+    assert route[-1] == (1, 3, 1)  # 40. koltuk en sağ sütunun ön sırası
+
+
 @pytest.mark.parametrize(
     "bad",
     [

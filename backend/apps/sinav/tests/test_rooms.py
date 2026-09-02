@@ -281,12 +281,36 @@ def test_generate_section_rooms_endpoint() -> None:
 
 
 def test_default_section_plan_shape() -> None:
-    """layout.default_section_plan: kapı sol-ön, öğretmen masası sağ-ön, 40 koltuk."""
+    """Varsayılan şablon (02.09.2026): öğretmen masası SOL-ÖN, KAPI YOK, 40 koltuk.
+
+    Kapı bilinçli olarak yoktur: yeri okuldan okula değişir, numaralandırmaya
+    girmez ve yanlış yerde basılırsa resmî krokide yanlış bilgi olur.
+    """
     plan = layout.validate_layout_plan(layout.default_section_plan())
     assert plan.capacity == 40
+    assert (plan.rows, plan.cols) == (6, 4)  # 1 ön cephe bandı + 5 sıra
     furniture = {f.kind: (f.row, f.col) for f in plan.furniture}
-    assert furniture["DOOR"] == (0, 0)
-    assert furniture["TEACHER_DESK"] == (0, plan.cols - 1)
+    assert furniture == {"TEACHER_DESK": (0, 0)}
+
+
+def test_default_plan_endpoint_sablonu_verir() -> None:
+    """`default-plan` ucu: şablonun tek doğruluk kaynağı backend (editör tüketir)."""
+    resp = APIClient().get(f"{URL}default-plan/")
+    assert resp.status_code == 200, resp.data
+    assert resp.data["capacity"] == 40
+    assert resp.data["layout_plan"]["grid"] == {"rows": 6, "cols": 4}
+    assert resp.data["layout_plan"]["furniture"] == [{"kind": "TEACHER_DESK", "row": 0, "col": 0}]
+
+
+def test_default_plan_endpoint_olcu_alir_ve_dogrular() -> None:
+    """Ölçü parametreleri okullar arası farkı karşılar; geçersizi Türkçe 400."""
+    resp = APIClient().get(f"{URL}default-plan/?desk_rows=6&cols=5")
+    assert resp.status_code == 200, resp.data
+    assert resp.data["capacity"] == 60
+    assert resp.data["layout_plan"]["grid"] == {"rows": 7, "cols": 5}
+
+    assert APIClient().get(f"{URL}default-plan/?desk_rows=0").status_code == 400
+    assert APIClient().get(f"{URL}default-plan/?cols=abc").status_code == 400
 
 
 def test_salon_listesi_turk_alfabesine_gore_siralanir() -> None:
