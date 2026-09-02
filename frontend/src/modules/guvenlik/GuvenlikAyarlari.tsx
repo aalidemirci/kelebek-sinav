@@ -17,6 +17,7 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import TextField from "../../ui/TextField";
 import KurtarmaAnahtariDiyalogu from "./KurtarmaAnahtariDiyalogu";
 import SifreliYedekleme from "./SifreliYedekleme";
+import YedektenGeriYukleme from "./YedektenGeriYukleme";
 import { guvenlikApi } from "./api";
 import type { GuvenlikDurumu } from "./api";
 import { kilitOlayiYayinla } from "./GuvenlikKapisi";
@@ -163,6 +164,8 @@ export default function GuvenlikAyarlari({ okulAdi = "" }: GuvenlikAyarlariProps
       </Card>
 
       <SifreliYedekleme parolaKurulu={durum.password_set} />
+
+      <YedektenGeriYukleme />
 
       <Dialog open={kip !== "yok"} onClose={kapat} title={dialogBasligi}>
         <form onSubmit={gonder} className="flex flex-col gap-4">

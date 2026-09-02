@@ -24,6 +24,34 @@ export interface ParolaKurmaSonucu extends GuvenlikDurumu {
   recovery_key: string;
 }
 
+/** `GET /backups/` satırı — yedek klasöründeki bir `.ksbak` dosyası. */
+export interface YedekDosyasi {
+  name: string;
+  /** Bayt cinsinden boyut. */
+  size: number;
+  /** Son değişme anı (ISO tarih-saat, yerel dilim). */
+  modified_at: string;
+  /** Şifreli kapsayıcı mı (açmak için parola/kurtarma anahtarı gerekir)? */
+  encrypted: boolean;
+}
+
+export interface YedekListesi {
+  /** Yedeklerin durduğu klasör — kullanıcı elden getirdiği dosyayı buradan bilir. */
+  backup_dir: string;
+  /** En yeniden eskiye sıralı. */
+  backups: YedekDosyasi[];
+}
+
+/** `POST /backups/restore/` yanıtı. Başarıda backend "yeniden başlat" kapısını kurar. */
+export interface GeriYuklemeSonucu {
+  encrypted: boolean;
+  /** Kenara alınan önceki veritabanının adı (hedef yoksa boş). */
+  old_db_name: string;
+  /** guvenlik.json yedekteki kurtarma başlığından yeniden yazıldı mı? */
+  state_written: boolean;
+  restart_required: boolean;
+}
+
 export const guvenlikApi = {
   durum: () => api.get<GuvenlikDurumu>("/security/status/"),
   kur: (password: string) => api.post<ParolaKurmaSonucu>("/security/enable/", { password }),
@@ -34,4 +62,9 @@ export const guvenlikApi = {
   parolaDegistir: (current_password: string, new_password: string) =>
     api.post<GuvenlikDurumu>("/security/change-password/", { current_password, new_password }),
   kaldir: (password: string) => api.post<GuvenlikDurumu>("/security/disable/", { password }),
+  // Yedekten geri yükleme (Güvenlik sekmesi). Parola/kurtarma anahtarı yalnız
+  // form gövdesinde taşınır; `geriYukle` çok parçalı gönderir (dosya yüklemesi
+  // ile aynı uç — kaynak `name` YA DA `file`).
+  yedekler: () => api.get<YedekListesi>("/backups/"),
+  geriYukle: (form: FormData) => api.postForm<GeriYuklemeSonucu>("/backups/restore/", form),
 };

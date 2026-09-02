@@ -8,7 +8,12 @@
 
 // Boş/tanımsız → göreli "/api/v1": geliştirmede Vite proxy'si (vite.config.ts
 // server.proxy) backend'e yönlendirir. Mutlak URL yalnız özel senaryoda gerekir.
+import { yenidenBaslatGerekliYayinla } from "./restart";
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
+
+/** Backend "yeniden başlat" kapısındayken (geri yükleme sonrası) dönen kod. */
+const RESTART_CODE = "restart_required";
 
 export class ApiError extends Error {
   status: number;
@@ -53,9 +58,13 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (!resp.ok) {
     const d = (data ?? {}) as { code?: string; message?: string; fields?: Record<string, unknown> };
+    const code = d.code ?? String(resp.status);
+    // Geri yükleme sonrası kapı: HANGİ çağrı olursa olsun tam ekran
+    // "yeniden başlatın" yönlendirmesi tetiklenir (sayfa yenilense bile).
+    if (code === RESTART_CODE) yenidenBaslatGerekliYayinla();
     throw new ApiError(
       resp.status,
-      d.code ?? String(resp.status),
+      code,
       d.message ?? "Beklenmeyen bir hata oluştu.",
       d.fields ?? {},
     );
@@ -93,6 +102,7 @@ async function requestBlob(
     } catch {
       /* boş gövde */
     }
+    if (code === RESTART_CODE) yenidenBaslatGerekliYayinla();
     throw new ApiError(resp.status, code, message, fields);
   }
   return resp.blob();

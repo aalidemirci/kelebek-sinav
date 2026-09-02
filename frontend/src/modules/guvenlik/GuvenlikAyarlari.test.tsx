@@ -22,6 +22,7 @@ const download = vi.hoisted(() => ({ saveBlob: vi.fn() }));
 
 vi.mock("./api", () => ({ guvenlikApi: guvenlik }));
 vi.mock("./SifreliYedekleme", () => ({ default: () => null }));
+vi.mock("./YedektenGeriYukleme", () => ({ default: () => null }));
 vi.mock("../../lib/download", () => ({ saveBlob: download.saveBlob }));
 
 import GuvenlikAyarlari from "./GuvenlikAyarlari";

@@ -83,6 +83,11 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.common.CommonMiddleware",
+    # Yedekten geri yükleme uygulandıktan sonra "yeniden başlat" kapısı: süreç
+    # içi durum (bellekteki anahtar, bekleyen göçler) diskteki veriyi artık
+    # tarif etmez; tüm API 503 restart_required ile kesilir. Kilit kapısından
+    # ÖNCE durur — geri yükleme kilit durumunu da bayatlatır.
+    "apps.okul.restart_gate.RestartRequiredMiddleware",
     # Opsiyonel açılış parolası kapısı (tasarım §5): parola kuruluysa ve kilit
     # açılmadıysa veri uçlarını 423 Locked ile keser. Parola kurulu değilse
     # hiçbir şey yapmaz.
