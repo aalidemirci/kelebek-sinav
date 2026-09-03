@@ -48,7 +48,7 @@ test -f /usr/share/applications/kelebek-sinav.desktop
 test -f /usr/share/icons/hicolor/48x48/apps/kelebek-sinav.png
 # MEB çizelge verisi (K5): spec Tree yolu bozulursa tohum SESSİZCE boş kalırdı
 # (TB2 düşüşü) — dosyanın varlığı ve boş olmadığı burada sabitlenir.
-test -s /opt/kelebek-sinav/_internal/data/ders-cizelgeleri/anadolu-lisesi-2025-2026.md
+test -s /opt/kelebek-sinav/_internal/data/ders-cizelgeleri/anadolu-lisesi-2025.md
 test -s /opt/kelebek-sinav/_internal/data/ders-cizelgeleri/ders-adi-takma-adlari.md
 
 echo "== --bagimlilik-duman (K7: üçüncü taraf modüller pakette mi)"

@@ -132,7 +132,7 @@ if ($LASTEXITCODE -ne 0) { throw "Paket kişisel veri denetimi başarısız." }
 # MEB çizelge verisi (K5): spec Tree yolu bozulursa tohum SESSİZCE boş kalırdı
 # (TB2 düşüşü) — pakette dosyanın varlığı ve boş olmadığı burada sabitlenir.
 Write-Adim "paket içi katalog verisi denetimi"
-$Katalog = Join-Path $AppDir "_internal\data\ders-cizelgeleri\anadolu-lisesi-2025-2026.md"
+$Katalog = Join-Path $AppDir "_internal\data\ders-cizelgeleri\anadolu-lisesi-2025.md"
 if (-not (Test-Path $Katalog) -or (Get-Item $Katalog).Length -eq 0) {
     throw "MEB çizelge verisi pakette yok/boş: $Katalog (spec Tree yolu bozulmuş olabilir)."
 }

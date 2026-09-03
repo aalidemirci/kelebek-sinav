@@ -5,8 +5,10 @@ Beklenen sütunlar: `| Ders | Seviyeler | Tür | Sınav |`
 - Seviyeler: virgüllü liste ve/veya aralık — `9, 10` / `9-12` / `9, 11-12`
 - Tür: `ORTAK` veya `SECMELI` (Türkçe; dosya insan elinden çıkar)
 - Sınav: `YAZILI` / `UYGULAMA` / `YOK` — **isteğe bağlı 4. sütun**; yoksa ya da
-  boşsa `YAZILI` varsayılır. Üç sütunlu dosyalar (`cerceveler/*.md`) böylece
+  boşsa `YAZILI` varsayılır. Üç sütunlu (elle yazılmış eski) dosyalar böylece
   bozulmadan okunur.
+- Program meta bloğu (`- anahtar: değer`, tablo öncesi) `parse_program_meta`
+  ile ayrı okunur; okul türü/yürürlük kuralı `apps.dersler.catalog`'dadır.
 
 PDF/XLSX çizelgeler gerçek dosyalar temin edildiğinde eklenir (ADR-0016
 riskler). Hatalı satırlar sonucu durdurmaz; satır numarasıyla raporlanır.

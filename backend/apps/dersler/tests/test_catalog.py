@@ -22,7 +22,8 @@ GERCEK_CIZELGE_DIZINI = Path(settings.CATALOG_DIR)
 
 # ÜÇ SÜTUNLU çizelge — 'Sınav' sütunu isteğe bağlı olduğu için bu sabit BİLEREK
 # eski biçimde bırakıldı: onu tüketen yedi test, geriye dönük uyumun canlı
-# kanıtıdır (`cerceveler/*.md` dosyaları da üç sütunludur).
+# kanıtıdır (elle yazılmış eski çizelgeler üç sütunludur). Meta bloğu olmayan
+# dosya "genel" programdır: her okul türüne, yürürlük süzgeci olmadan uygulanır.
 KATALOG_MD = """
 # Örnek çizelge
 
@@ -79,7 +80,7 @@ class TestParser:
         }
 
     def test_sinav_sutunu_yoksa_yazili_varsayilir(self) -> None:
-        # Üç sütunlu dosyalar (cerceveler/*.md) bozulmadan okunmalı.
+        # Üç sütunlu (elle yazılmış eski) dosyalar bozulmadan okunmalı.
         parsed = parse_markdown_catalog(KATALOG_MD)
         assert not parsed.errors
         assert {row.exam_mode for row in parsed.rows} == {CourseExamMode.WRITTEN}

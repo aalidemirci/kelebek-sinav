@@ -244,7 +244,7 @@ DD'nin kanıtlı katmanı taşınır: `shared/crypto.py` (Fernet + Argon2id) +
   `repair_truncated_course_name` — çıplak `.upper()/.lower()` TR'de yasak).
 - Çizelge tablosunun **isteğe bağlı 4. sütunu "Sınav"**: `YAZILI` / `UYGULAMA` /
   `YOK`. Sütun yoksa veya hücre boşsa `YAZILI` sayılır — üç sütunlu dosyalar
-  (`cerceveler/*.md` ve elle yazılmış eski çizelgeler) değişmeden çözülür.
+  (elle yazılmış eski çizelgeler) değişmeden çözülür.
   Tanınmayan etiket satırı, mevcut hata kalıbındaki gibi, `errors`'a düşürür ve
   satır atlanır.
 - İlk açılışta idempotent tohum; UI: ders havuzu sayfası (liste + elle ekle +
