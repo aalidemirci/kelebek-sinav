@@ -69,6 +69,14 @@ SCHOOL_TYPE_LEVELS: dict[str, tuple[int, ...]] = {
 #: Hazırlık sınıfının seviye kodu (OYS `ders_yapisi.PREP_COURSE_LEVEL` paritesi).
 PREP_LEVEL = 0
 
+#: Günlük ders saati sayısının varsayılanı. Genel ortaöğretimde haftalık ders
+#: çizelgeleri 8 saat/gün üzerine kuruludur; mesleki ve teknik programlarda
+#: değiştiği için alan AYARDIR (`SchoolConfig.daily_period_count`).
+DEFAULT_DAILY_PERIOD_COUNT = 8
+
+#: Ayarlanabilir üst sınır — ikili öğretim/atölye günü dâhil makul tavan.
+MAX_DAILY_PERIOD_COUNT = 16
+
 
 def grade_levels_for(school_type: str, *, has_prep_class: bool) -> tuple[int, ...]:
     """Okul türü + hazırlık bayrağından geçerli sınıf seviyeleri (artan sırada)."""
@@ -126,12 +134,31 @@ class SchoolConfig(BaseModel):
     # B6 — program köprüsü SADELEŞTİR: OYS zil çizelgesinin yerini alan
     # düzenlenebilir varsayılan ders saati listesi. Öğe şekli OYS sözleşmesiyle
     # birebir: {"no": int, "name": str, "start": "SS:DD"}. Boş liste →
-    # apps.sinav.services_calendar.DEFAULT_BELL_SCHEDULE kullanılır.
+    # apps.sinav.services_calendar.default_bell_schedule() kullanılır.
     bell_schedule = models.JSONField(
         "ders saati listesi",
         default=list,
         blank=True,
         help_text='[{"no": 1, "name": "1. Ders", "start": "08:30"}, ...] — boşsa varsayılan.',
+    )
+    # Günlük ders saati sayısı AYARDIR, sabit değil: genel liselerde 8 saat
+    # yerleşiktir ama mesleki/teknik programlarda atölye ve işletmede beceri
+    # eğitimi günleriyle değişir (03.09.2026 kararı). `bell_schedule` boşken
+    # varsayılan zil çizelgesi BU SAYIDAN türetilir — iki alan çelişirse
+    # elle girilmiş `bell_schedule` kazanır (idari veri ham veriyi ezmez).
+    daily_period_count = models.PositiveSmallIntegerField(
+        "günlük ders saati sayısı",
+        default=DEFAULT_DAILY_PERIOD_COUNT,
+        help_text="Bir okul gününde kaç ders saati var (genel liselerde 8).",
+    )
+    # Sınav yapılabilecek ders saatleri (saat no listesi); BOŞ = tümü serbest.
+    # Otomatik takvim yerleştirici YALNIZ bu saatlere koyar; elle yerleştirmede
+    # dışına çıkmak uyarı üretir — idari takdir sert kısıta çevrilmez.
+    exam_period_nos = models.JSONField(
+        "sınav ders saatleri",
+        default=list,
+        blank=True,
+        help_text="[1, 2, 3] — sınav yapılabilecek ders saatleri; boşsa tümü.",
     )
 
     class Meta:

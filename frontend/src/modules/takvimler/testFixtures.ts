@@ -54,6 +54,7 @@ export function makeEntry(overrides: Partial<ExamCalendarEntryRow> = {}): ExamCa
     participant_label: "Seviye geneli",
     placed_date: null,
     period_no: null,
+    is_pinned: false,
     session: null,
     note: "",
     ...overrides,
@@ -100,6 +101,7 @@ export function makeCell(overrides: Partial<CalendarGridCell> = {}): CalendarGri
     participant_label: "Seviye geneli",
     session_id: null,
     note: "",
+    is_pinned: false,
     ...overrides,
   };
 }
@@ -119,8 +121,8 @@ export function makeGrid(overrides: Partial<CalendarGrid> = {}): CalendarGrid {
       { value: 10, label: "10", display_label: "10. Sınıf", student_count: 78 },
     ],
     periods: [
-      { no: 1, name: "1. Ders", start: "08:30" },
-      { no: 2, name: "2. Ders", start: "09:20" },
+      { no: 1, name: "1. Ders", start: "08:30", is_exam_period: true },
+      { no: 2, name: "2. Ders", start: "09:20", is_exam_period: true },
     ],
     days: [
       { date: "2026-10-27", is_weekend: false, weekday: 1 },

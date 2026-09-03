@@ -8,6 +8,7 @@ denetiminin sözleşmesidir — küme değişirse FE `SetupStatus` tipi ve
 from __future__ import annotations
 
 import pytest
+from django.core.exceptions import ValidationError
 from rest_framework.test import APIClient
 
 from apps.okul.models import SchoolConfig, SchoolType
@@ -152,3 +153,71 @@ def test_update_school_config_whitelist_disi_alan_yazmaz() -> None:
 @pytest.mark.django_db
 def test_letterhead_identity_bos_okul_adi_yer_tutucuya_duser() -> None:
     assert setup_service.get_letterhead_identity()["school_name"] == "Okul"
+
+
+# ---------------------------------------------------------------------------
+# Ders saati ayarları (F6 eki-2, 03.09.2026) — gün uzunluğu + sınav saatleri
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_gunluk_ders_saati_varsayilani_sekiz() -> None:
+    """Genel liselerde gün 8 ders saatidir; ayar dokunulmadan da geçerli olur."""
+    config = setup_service.update_school_config(fields={"school_name": "Örnek Lisesi"})
+    assert config.daily_period_count == 8
+    assert config.exam_period_nos == []  # boş = tüm saatler sınava açık
+
+
+@pytest.mark.django_db
+def test_sinav_saatleri_teklenir_ve_siralanir() -> None:
+    config = setup_service.update_school_config(
+        fields={"daily_period_count": 10, "exam_period_nos": [3, 1, 3, 2]}
+    )
+    assert config.daily_period_count == 10
+    assert config.exam_period_nos == [1, 2, 3]
+
+
+@pytest.mark.django_db
+def test_gunluk_ders_saati_sinirlari_reddedilir() -> None:
+    with pytest.raises(ValidationError):
+        setup_service.update_school_config(fields={"daily_period_count": 0})
+    with pytest.raises(ValidationError):
+        setup_service.update_school_config(fields={"daily_period_count": 99})
+
+
+@pytest.mark.django_db
+def test_acikca_gonderilen_aralik_disi_sinav_saati_sessizce_dusmez() -> None:
+    """İdareci ne seçtiğini görmeli: gönderilen listede olmayan saat HATA olur."""
+    with pytest.raises(ValidationError, match="9. ders saati yok"):
+        setup_service.update_school_config(
+            fields={"daily_period_count": 8, "exam_period_nos": [1, 9]}
+        )
+
+
+@pytest.mark.django_db
+def test_gun_kisalinca_eski_sinav_saatleri_kirpilir() -> None:
+    """Yalnız gün uzunluğu değiştiyse taşan kuyruk kırpılır (olmayan saate takvim kurulmaz)."""
+    setup_service.update_school_config(
+        fields={"daily_period_count": 10, "exam_period_nos": [1, 9, 10]}
+    )
+
+    config = setup_service.update_school_config(fields={"daily_period_count": 8})
+
+    assert config.exam_period_nos == [1]
+
+
+@pytest.mark.django_db
+def test_ders_saati_ayarlari_api_uzerinden_yazilir(client: APIClient) -> None:
+    yanit = client.put(
+        "/api/v1/setup/school-config/",
+        {
+            "school_name": "Örnek MTAL",
+            "school_type": SchoolType.MESLEKI_VE_TEKNIK_ANADOLU_LISESI,
+            "daily_period_count": 10,
+            "exam_period_nos": [1, 2, 3],
+        },
+        format="json",
+    )
+    assert yanit.status_code == 200
+    assert yanit.json()["daily_period_count"] == 10
+    assert yanit.json()["exam_period_nos"] == [1, 2, 3]

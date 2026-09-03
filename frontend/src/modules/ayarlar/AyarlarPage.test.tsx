@@ -221,6 +221,10 @@ describe("AyarlarPage — okul bilgileri", () => {
         school_type: "ANADOLU_LISESI",
         has_prep_class: true,
         level_programs: {},
+        // Ders saati ayarı (F6 eki-2): dokunulmadıysa varsayılan gün + "tüm
+        // saatler sınava açık" (boş liste) gönderilir.
+        daily_period_count: 8,
+        exam_period_nos: [],
       }),
     );
     // Hazırlık değişince plan yeni seçimle önizlenir.

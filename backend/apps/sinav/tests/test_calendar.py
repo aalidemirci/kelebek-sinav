@@ -337,11 +337,22 @@ def test_onay_akisi_damgalari() -> None:
 
 
 def _onayli_yerlesik_takvim() -> tuple[ExamCalendar, date]:
-    """2 dersi aynı slota yerleşik ONAYLI takvim (9. seviye, şube derslikli)."""
+    """2 dersi aynı slota yerleşik ONAYLI takvim (9. seviye, şube derslikli).
+
+    İki ders AYRIK şube kapsamlıdır (9/A ile 9/B): aynı gün + saate kapsamı
+    kesişen iki sınav artık konamaz (aynı öğrenci iki sınava aynı anda giremez).
+    Kelebek slotun birden çok ders taşıması bu kurguyla korunur — gerçek
+    karşılığı "9/A Almanca, 9/B Fransızca aynı saatte".
+    """
     calendar = _havuzlu_takvim(course_count=2)
     salon("9-A Dersliği")
+    a = ClassSection.objects.get(class_level=9, class_section="A")
+    b = sube(9, "B", students=2, start_no=201)
     gun = date(2026, 10, 27)
-    for entry in ExamCalendarEntry.objects.filter(calendar=calendar):
+    for entry, kapsam in zip(
+        ExamCalendarEntry.objects.filter(calendar=calendar).order_by("id"), (a, b), strict=True
+    ):
+        takvim.update_calendar_entry(entry, participant_type="SECTIONS", section_ids=[kapsam.pk])
         takvim.place_entry(entry, on_date=gun, period_no=1)
     takvim.submit_calendar(calendar)
     takvim.approve_calendar(calendar)
@@ -378,8 +389,14 @@ def test_kelebek_degil_girdi_oturuma_girmez() -> None:
     calendar, gun = _onayli_yerlesik_takvim()
     takvim.reopen_calendar(calendar)
     kd_ders = ders("Beden Eğitimi", levels=[9])
+    c = sube(9, "C", students=1, start_no=301)
     kd = takvim.add_calendar_entry(
-        calendar=calendar, course_id=kd_ders.pk, level=9, is_butterfly=False
+        calendar=calendar,
+        course_id=kd_ders.pk,
+        level=9,
+        is_butterfly=False,
+        participant_type="SECTIONS",
+        section_ids=[c.pk],
     )
     takvim.place_entry(kd, on_date=gun, period_no=1)
     takvim.submit_calendar(calendar)
@@ -414,7 +431,12 @@ def test_calendar_grid_hucre_anahtari_sozlesmesi() -> None:
     grid = takvim.calendar_grid(calendar)
     key = f"{gun.isoformat()}|2|9"  # "<iso_tarih>|<period_no>|<level>" — FE+PDF ortak
     assert key in grid["cells"] and grid["cells"][key][0]["entry_id"] == entry.pk
-    assert grid["periods"][0] == {"no": 1, "name": "1. Ders", "start": "08:30"}
+    assert grid["periods"][0] == {
+        "no": 1,
+        "name": "1. Ders",
+        "start": "08:30",
+        "is_exam_period": True,  # ayar boşken tüm saatler sınava açıktır
+    }
     assert any(d["is_weekend"] for d in grid["days"])  # aralıkta hafta sonu işaretli
 
 
@@ -427,8 +449,10 @@ def test_takvim_pdf_yatay_taslak_filigrani_ve_tr_duman() -> None:
     )
     calendar = _havuzlu_takvim(course_count=2)
     gun = date(2026, 10, 27)
-    for entry in ExamCalendarEntry.objects.filter(calendar=calendar):
-        takvim.place_entry(entry, on_date=gun, period_no=1)
+    for saat, entry in enumerate(
+        ExamCalendarEntry.objects.filter(calendar=calendar).order_by("id"), start=1
+    ):
+        takvim.place_entry(entry, on_date=gun, period_no=saat)
 
     taslak_pdf = takvim.render_calendar_pdf(calendar)
     assert taslak_pdf.startswith(b"%PDF")
@@ -753,6 +777,15 @@ def test_cok_sayfali_takvim_ve_satir_bolunme_korumasi() -> None:
     calendar = _havuzlu_takvim(course_count=0)
     for lvl in (10, 11, 12):
         sube(lvl, "A", students=1, start_no=lvl * 100)
+    # Her seviyede ikinci şube: aynı hücrenin iki sınavı AYRIK kapsamlı olmalı
+    # (kesişen kapsam aynı saate konamaz), hücre yine iki çip taşır.
+    kapsamlar = {
+        lvl: [
+            ClassSection.objects.get(class_level=lvl, class_section="A").pk,
+            sube(lvl, "B", students=1, start_no=lvl * 100 + 50).pk,
+        ]
+        for lvl in (9, 10, 11, 12)
+    }
     adlar: list[str] = []
     for i in range(12):
         gun = date(2026, 10, 26) + timedelta(days=i)
@@ -766,6 +799,8 @@ def test_cok_sayfali_takvim_ve_satir_bolunme_korumasi() -> None:
                     course_id=course.pk,
                     level=lvl,
                     authority=ExamAuthority.MINISTRY if k == 1 else ExamAuthority.SCHOOL,
+                    participant_type="SECTIONS",
+                    section_ids=[kapsamlar[lvl][k - 1]],
                 )
                 takvim.place_entry(entry, on_date=gun, period_no=1)
     # İmza bloğu seçilen zümreden gelsin — yedek dal her ders için imza satırı basar.
@@ -960,12 +995,22 @@ def test_create_session_from_slot_kapsami_tasir() -> None:
 
 
 def _kapsami_silinmis_onayli_takvim() -> tuple[ExamCalendar, date, ExamCalendarEntry, int]:
-    """Onaylı takvim: aynı slotta bir SEVİYE girdisi + şubesi SİLİNMİŞ bir ŞUBE girdisi."""
+    """Onaylı takvim: aynı slotta sağlam bir ŞUBE girdisi + şubesi SİLİNMİŞ olan.
+
+    İki girdinin kapsamı AYRIKTIR (9/B ile 9/A): kesişen kapsam aynı saate
+    konamaz. Ölçülen davranış değişmedi — kapsamı silinen girdi atlanır,
+    slottaki sağlam ders yine oturuma girer.
+    """
     calendar, ders_pk, a_pk = _secmeli_takvim()
     salon("9-A Dersliği")
+    b_pk = ClassSection.objects.get(class_level=9, class_section="B").pk
     seviye_dersi = ders("Matematik", levels=[9])
     seviye_girdisi = takvim.add_calendar_entry(
-        calendar=calendar, course_id=seviye_dersi.pk, level=9
+        calendar=calendar,
+        course_id=seviye_dersi.pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[b_pk],
     )
     sube_girdisi = takvim.add_calendar_entry(
         calendar=calendar,
@@ -1134,3 +1179,257 @@ def test_api_toplu_ekleme_ve_secmeli_secenekleri() -> None:
         format="json",
     )
     assert hata.status_code == 400
+
+
+# ===========================================================================
+# Otomatik yerleştirme + sabitleme + ders saati ayarı (03.09.2026, F6 eki-2)
+# ===========================================================================
+
+#: Tek koltuklu salon — kapasite aşımı senaryosu için (PLAN_8 taşmaz).
+PLAN_1: dict[str, object] = {
+    "grid": {"rows": 1, "cols": 1},
+    "desks": [{"row": 0, "col": 0, "type": "SINGLE"}],
+    "furniture": [],
+}
+
+
+def test_ayni_saate_kapsami_kesisen_iki_sinav_konamaz() -> None:
+    """Aynı gün + saat + seviyede kapsam kesişimi SERT reddedilir (uyarı değil).
+
+    Üç kanallı uyarı deseninin istisnasıdır: "zorunlu hâl takdiri" yorumu yok,
+    öğrenci aynı anda iki salonda olamaz.
+    """
+    calendar = _havuzlu_takvim(course_count=2)
+    birinci, ikinci = list(ExamCalendarEntry.objects.filter(calendar=calendar).order_by("id"))
+    gun = date(2026, 10, 27)
+    takvim.place_entry(birinci, on_date=gun, period_no=1)
+
+    with pytest.raises(ValidationError, match="aynı anda giremez"):
+        takvim.place_entry(ikinci, on_date=gun, period_no=1)
+
+    takvim.place_entry(ikinci, on_date=gun, period_no=2)  # farklı saat serbest
+
+
+def test_ayrik_sube_kapsamlari_ayni_saatte_yan_yana_durur() -> None:
+    """9/A Almanca ile 9/B Fransızca aynı saatte yapılabilir (kapsam kesişmez)."""
+    calendar, ders_pk, a_pk = _secmeli_takvim()
+    b_pk = ClassSection.objects.get(class_level=9, class_section="B").pk
+    ikinci_ders = ders("Fransızca", levels=[9], course_type=CourseType.ELECTIVE)
+    a_girdisi = takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=ders_pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[a_pk],
+    )
+    b_girdisi = takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=ikinci_ders.pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[b_pk],
+    )
+    gun = date(2026, 10, 27)
+    takvim.place_entry(a_girdisi, on_date=gun, period_no=1)
+    takvim.place_entry(b_girdisi, on_date=gun, period_no=1)
+
+    assert takvim.calendar_validation(calendar)["errors"] == []
+
+
+def test_kapsam_sonradan_genisleyince_dogrulama_cakismayi_yakalar() -> None:
+    """Yerleştirmeden SONRA kapsam kesişince çakışma doğrulamada görünür."""
+    calendar, ders_pk, a_pk = _secmeli_takvim()
+    b_pk = ClassSection.objects.get(class_level=9, class_section="B").pk
+    ikinci_ders = ders("Fransızca", levels=[9], course_type=CourseType.ELECTIVE)
+    a_girdisi = takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=ders_pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[a_pk],
+    )
+    b_girdisi = takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=ikinci_ders.pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[b_pk],
+    )
+    gun = date(2026, 10, 27)
+    takvim.place_entry(a_girdisi, on_date=gun, period_no=1)
+    takvim.place_entry(b_girdisi, on_date=gun, period_no=1)
+    takvim.update_calendar_entry(b_girdisi, section_ids=[a_pk, b_pk])
+
+    hatalar = takvim.calendar_validation(calendar)["errors"]
+    assert any("kapsamları kesişiyor" in h for h in hatalar)
+
+
+def test_gunluk_ders_saati_ayari_zil_cizelgesini_uzatir() -> None:
+    """Meslek lisesinde gün 10 saat olabilir: varsayılan çizelge ayardan türer."""
+    SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, daily_period_count=10)
+
+    saatler = takvim.default_bell_schedule()
+
+    assert len(saatler) == 10
+    # İlk sekiz saat eski SABİT listeyle birebir aynı kalır (regresyon kilidi).
+    assert saatler[0] == {"no": 1, "name": "1. Ders", "start": "08:30"}
+    assert saatler[7] == {"no": 8, "name": "8. Ders", "start": "14:20"}
+    assert saatler[9] == {"no": 10, "name": "10. Ders", "start": "16:00"}
+
+
+def test_sinav_saatleri_ayari_otomatigi_baglar_elle_yerlestirmeyi_uyarir() -> None:
+    """Ayar bağlayıcı DEĞİL: elle konabilir ama uyarır (Yönerge md. 5 saati okula bırakır)."""
+    SchoolConfig.objects.create(
+        pk=SchoolConfig.SINGLETON_PK, daily_period_count=8, exam_period_nos=[1, 2]
+    )
+    assert takvim.exam_period_numbers() == [1, 2]
+
+    calendar = _havuzlu_takvim(course_count=1)
+    entry = ExamCalendarEntry.objects.get(calendar=calendar)
+
+    sonuc = takvim.place_entry(entry, on_date=date(2026, 10, 27), period_no=5)
+
+    assert any("sınav saatleri arasında değil" in u for u in sonuc.warnings)
+
+
+def test_otomatik_yerlestirme_havuzu_dagitir_ve_gunluk_esasi_korur() -> None:
+    """FILL: havuz boşalır; hiçbir gün+seviyede ikiden fazla sınav olmaz (OKY md. 45)."""
+    SchoolConfig.objects.create(
+        pk=SchoolConfig.SINGLETON_PK, daily_period_count=8, exam_period_nos=[1, 2]
+    )
+    calendar = _havuzlu_takvim(course_count=6)
+
+    sonuc = takvim.auto_place_entries(calendar)
+
+    assert len(sonuc.placed) == 6 and sonuc.skipped == []
+    gunluk: dict[date, int] = {}
+    for e in ExamCalendarEntry.objects.filter(calendar=calendar):
+        assert e.placed_date is not None and e.placed_date.weekday() < 5  # hafta içi
+        assert e.period_no in (1, 2)  # yalnız sınav saatleri
+        assert e.is_pinned is False  # otomatik yerleşen SABİTLENMEZ
+        gunluk[e.placed_date] = gunluk.get(e.placed_date, 0) + 1
+    assert max(gunluk.values()) <= 2, f"günde ikiden fazla sınav: {gunluk}"
+
+
+def test_otomatik_yerlestirme_deterministiktir() -> None:
+    """Aynı havuz + aynı ayar → aynı dağıtım (motorun 'aynı seed' sözleşmesi)."""
+    SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, exam_period_nos=[1, 2])
+    calendar = _havuzlu_takvim(course_count=5)
+
+    birinci = takvim.auto_place_entries(calendar)
+    for entry in ExamCalendarEntry.objects.filter(calendar=calendar):
+        takvim.unplace_entry(entry)
+    ikinci = takvim.auto_place_entries(calendar)
+
+    def imza(sonuc: takvim.AutoPlaceResult) -> list[tuple[int, str, int]]:
+        return sorted((p["entry_id"], p["date"], p["period_no"]) for p in sonuc.placed)
+
+    assert imza(birinci) == imza(ikinci)
+
+
+def test_otomatik_yerlestirme_sabitlenmis_girdiyi_oynatmaz() -> None:
+    """REDISTRIBUTE: sabit yerinde kalır, sabitsiz havuza alınıp yeniden dağıtılır."""
+    SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, exam_period_nos=[1, 2])
+    calendar = _havuzlu_takvim(course_count=3)
+    sabit, gezici, _ucuncu = list(
+        ExamCalendarEntry.objects.filter(calendar=calendar).order_by("id")
+    )
+    sabit_gun = date(2026, 11, 6)
+    takvim.place_entry(sabit, on_date=sabit_gun, period_no=2)  # ELLE → sabitlenir
+    sabit.refresh_from_db()
+    assert sabit.is_pinned is True
+    takvim.place_entry(gezici, on_date=date(2026, 10, 27), period_no=1)
+    takvim.set_entry_pinned(gezici, is_pinned=False)
+
+    sonuc = takvim.auto_place_entries(calendar, mode=takvim.AUTO_MODE_REDISTRIBUTE)
+
+    assert sonuc.cleared == 1  # yalnız sabitsiz yerleşik girdi havuza alındı
+    sabit.refresh_from_db()
+    assert (sabit.placed_date, sabit.period_no) == (sabit_gun, 2)
+    assert not ExamCalendarEntry.objects.filter(
+        calendar=calendar, placed_date__isnull=True
+    ).exists()
+
+
+def test_otomatik_yerlestirme_ust_makam_sinavini_atlar() -> None:
+    """Üst makam sınavının tarihi kılavuzundadır — program kendiliğinden koymaz."""
+    calendar = _havuzlu_takvim(course_count=2)
+    ust, okul = list(ExamCalendarEntry.objects.filter(calendar=calendar).order_by("id"))
+    takvim.update_calendar_entry(ust, authority=ExamAuthority.MINISTRY)
+
+    sonuc = takvim.auto_place_entries(calendar)
+
+    assert [s["entry_id"] for s in sonuc.skipped] == [ust.pk]
+    assert "kılavuzunda" in sonuc.skipped[0]["reason"]
+    assert [p["entry_id"] for p in sonuc.placed] == [okul.pk]
+
+
+def test_otomatik_yerlestirme_ust_makam_gununden_kacinir() -> None:
+    """Üst makam sınavı olan gün+seviyeye okul sınavı yazılmaz (Yönerge md. 5)."""
+    SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, exam_period_nos=[1])
+    calendar = _havuzlu_takvim(course_count=2)
+    ust, okul = list(ExamCalendarEntry.objects.filter(calendar=calendar).order_by("id"))
+    takvim.update_calendar_entry(ust, authority=ExamAuthority.MINISTRY)
+    ust_gun = date(2026, 10, 26)
+    takvim.place_entry(ust, on_date=ust_gun, period_no=1)
+
+    takvim.auto_place_entries(calendar)
+
+    okul.refresh_from_db()
+    assert okul.placed_date is not None and okul.placed_date != ust_gun
+
+
+def test_havuza_donen_girdi_sabitlemesini_kaybeder() -> None:
+    """Yerleşmemiş girdinin sabitlenecek slotu yok — bayrak düşer, yeniden konamaz."""
+    calendar = _havuzlu_takvim(course_count=1)
+    entry = ExamCalendarEntry.objects.get(calendar=calendar)
+    takvim.place_entry(entry, on_date=date(2026, 10, 27), period_no=1)
+
+    takvim.unplace_entry(entry)
+
+    entry.refresh_from_db()
+    assert entry.is_pinned is False
+    with pytest.raises(ValidationError, match="Havuzdaki girdi sabitlenemez"):
+        takvim.set_entry_pinned(entry, is_pinned=True)
+
+
+def test_salon_kapasitesi_asimi_uyari_uretir() -> None:
+    """Aynı saatteki mevcut aktif salon kapasitesini aşarsa UYARI (sert kısıt değil).
+
+    Salon kataloğu eksik girilmiş okulda sert kısıt takvimi kurulamaz hâle
+    getirirdi; kapasite 0 iken denetim hiç çalışmaz.
+    """
+    calendar = _havuzlu_takvim(course_count=1)  # 9/A: 3 öğrenci
+    salon("Küçük Salon", plan=PLAN_1)  # 1 koltuk
+    entry = ExamCalendarEntry.objects.get(calendar=calendar)
+
+    sonuc = takvim.place_entry(entry, on_date=date(2026, 10, 27), period_no=1)
+
+    assert any("salon kapasitesi" in u for u in sonuc.warnings)
+    assert any("salon kapasitesi" in u for u in takvim.calendar_validation(calendar)["warnings"])
+
+
+def test_api_otomatik_yerlestirme_ve_sabitleme_uclari() -> None:
+    """Uç sözleşmesi: auto-place raporu + pin bayrağı ızgara hücresine yansır."""
+    SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, exam_period_nos=[1, 2])
+    calendar = _havuzlu_takvim(course_count=2)
+    client = APIClient()
+
+    cevap = client.post(
+        f"/api/v1/exam-calendars/{calendar.pk}/auto-place/", {"mode": "FILL"}, format="json"
+    )
+    assert cevap.status_code == 200
+    assert len(cevap.data["placed"]) == 2 and cevap.data["skipped"] == []
+    assert cevap.data["cleared"] == 0
+
+    entry_id = cevap.data["placed"][0]["entry_id"]
+    pin = client.post(
+        f"/api/v1/exam-calendar-entries/{entry_id}/pin/", {"is_pinned": True}, format="json"
+    )
+    assert pin.status_code == 200 and pin.data["is_pinned"] is True
+
+    grid = client.get(f"/api/v1/exam-calendars/{calendar.pk}/grid/")
+    hucreler = [c for cells in grid.data["cells"].values() for c in cells]
+    assert next(c["is_pinned"] for c in hucreler if c["entry_id"] == entry_id) is True
+    assert grid.data["periods"][0]["is_exam_period"] is True
+    assert grid.data["periods"][4]["is_exam_period"] is False  # 5. ders sınav saati değil

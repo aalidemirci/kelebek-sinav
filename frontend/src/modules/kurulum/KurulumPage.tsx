@@ -26,7 +26,13 @@ import Stepper from "../../ui/Stepper";
 import type { StepperItem } from "../../ui/Stepper";
 import TextField from "../../ui/TextField";
 import CizelgeAtamaMatrisi from "../okul/CizelgeAtamaMatrisi";
-import { okulApi, okulTuruSecenekleri } from "../okul/api";
+import {
+  MAKS_GUNLUK_DERS_SAATI,
+  MESLEKI_TURLER,
+  VARSAYILAN_GUNLUK_DERS_SAATI,
+  okulApi,
+  okulTuruSecenekleri,
+} from "../okul/api";
 import type {
   LevelPrograms,
   SchoolType,
@@ -99,6 +105,8 @@ export default function KurulumPage() {
   const [okulTuru, setOkulTuru] = useState<SchoolType>("ANADOLU_LISESI");
   const [hazirlikVar, setHazirlikVar] = useState(false);
   const [levelPrograms, setLevelPrograms] = useState<LevelPrograms>({});
+  const [gunlukDersSaati, setGunlukDersSaati] = useState(VARSAYILAN_GUNLUK_DERS_SAATI);
+  const [sinavSaatleri, setSinavSaatleri] = useState<number[]>([]);
   const [okulTurleri, setOkulTurleri] = useState<SchoolTypeOption[]>([]);
 
   const [busy, setBusy] = useState(false);
@@ -127,6 +135,8 @@ export default function KurulumPage() {
         setOkulTuru(c.school_type);
         setHazirlikVar(c.has_prep_class);
         setLevelPrograms(c.level_programs ?? {});
+        setGunlukDersSaati(c.daily_period_count || VARSAYILAN_GUNLUK_DERS_SAATI);
+        setSinavSaatleri(c.exam_period_nos ?? []);
         setAdim(ilkEksikAdim(s));
         setLoadError(null);
       })
@@ -186,6 +196,9 @@ export default function KurulumPage() {
         district: ilce.trim(),
         principal_name: mudur.trim(),
         school_type: okulTuru,
+        daily_period_count: gunlukDersSaati,
+        // Gün kısaldıysa taşan saat gönderilmez (backend açık listeyi kırpmaz, reddeder).
+        exam_period_nos: sinavSaatleri.filter((no) => no <= gunlukDersSaati),
         has_prep_class: hazirlikVar,
         level_programs: levelPrograms,
       });
@@ -282,6 +295,10 @@ export default function KurulumPage() {
                 onOkulTuru={setOkulTuru}
                 onHazirlikVar={setHazirlikVar}
                 onLevelPrograms={setLevelPrograms}
+                gunlukDersSaati={gunlukDersSaati}
+                sinavSaatleri={sinavSaatleri}
+                onGunlukDersSaati={setGunlukDersSaati}
+                onSinavSaatleri={setSinavSaatleri}
               />
             )}
             {adim === 1 && <DersYiliAdimi onChanged={durumTazele} />}
@@ -333,6 +350,8 @@ interface OkulBilgileriProps {
   okulTuru: SchoolType;
   hazirlikVar: boolean;
   levelPrograms: LevelPrograms;
+  gunlukDersSaati: number;
+  sinavSaatleri: number[];
   okulTurleri: SchoolTypeOption[];
   errors: Partial<Record<string, string>>;
   onOkulAdi: (v: string) => void;
@@ -342,6 +361,8 @@ interface OkulBilgileriProps {
   onOkulTuru: (v: SchoolType) => void;
   onHazirlikVar: (v: boolean) => void;
   onLevelPrograms: (v: LevelPrograms) => void;
+  onGunlukDersSaati: (v: number) => void;
+  onSinavSaatleri: (v: number[]) => void;
 }
 
 function OkulBilgileriAdimi({
@@ -361,6 +382,10 @@ function OkulBilgileriAdimi({
   onOkulTuru,
   onHazirlikVar,
   onLevelPrograms,
+  gunlukDersSaati,
+  sinavSaatleri,
+  onGunlukDersSaati,
+  onSinavSaatleri,
 }: OkulBilgileriProps) {
   return (
     <Card elevation={1} className="p-6">
@@ -417,6 +442,55 @@ function OkulBilgileriAdimi({
           ]}
           helperText="Varsa 'Hazırlık Sınıfı Bulunan …' çizelgesi uygulanır ve seviyelere Hazırlık eklenir."
         />
+        <Select
+          label="Günlük ders saati sayısı"
+          value={String(gunlukDersSaati)}
+          onChange={(e) => onGunlukDersSaati(Number(e.target.value))}
+          options={Array.from({ length: MAKS_GUNLUK_DERS_SAATI }, (_, i) => ({
+            value: String(i + 1),
+            label: `${i + 1} ders saati`,
+          }))}
+          helperText={
+            MESLEKI_TURLER.includes(okulTuru)
+              ? "Atölye ve işletmede beceri eğitimi günleriyle değişebilir — okulunuzun gününü girin."
+              : "Genel liselerde gün 8 ders saatidir."
+          }
+        />
+        <div className="sm:col-span-2">
+          <fieldset>
+            <legend className="text-label-large text-on-surface">
+              Sınav yapılabilecek ders saatleri
+            </legend>
+            <p className="mb-2 text-body-small text-on-surface-variant">
+              Sınav takvimini otomatik kurarken program yalnız işaretli saatleri kullanır. Boş
+              bırakılırsa tüm saatler sınava açıktır; sonradan Ayarlar → Okul Bilgileri'nden
+              değiştirilebilir.
+            </p>
+            <div className="grid grid-cols-3 gap-1 sm:grid-cols-4">
+              {Array.from({ length: gunlukDersSaati }, (_, i) => i + 1).map((no) => (
+                <label
+                  key={no}
+                  className="flex min-h-9 cursor-pointer items-center gap-2 rounded-shape-sm border border-outline px-3 text-body-medium text-on-surface"
+                >
+                  <input
+                    type="checkbox"
+                    className="h-5 w-5 accent-primary"
+                    checked={sinavSaatleri.includes(no)}
+                    aria-label={`${no}. ders saati sınava açık`}
+                    onChange={() =>
+                      onSinavSaatleri(
+                        sinavSaatleri.includes(no)
+                          ? sinavSaatleri.filter((x) => x !== no)
+                          : [...sinavSaatleri, no].sort((a, b) => a - b),
+                      )
+                    }
+                  />
+                  {no}. ders
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </div>
         <div className="sm:col-span-2">
           <CizelgeAtamaMatrisi
             schoolType={okulTuru}

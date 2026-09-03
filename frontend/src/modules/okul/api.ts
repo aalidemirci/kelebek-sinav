@@ -126,8 +126,24 @@ export interface SchoolConfig {
   school_type: SchoolType;
   has_prep_class: boolean;
   level_programs: LevelPrograms;
+  /** Bir okul gününde kaç ders saati var (genel liselerde 8, MTAL'de değişir). */
+  daily_period_count: number;
+  /** Sınav yapılabilecek ders saatleri; BOŞ liste = tüm saatler serbest. */
+  exam_period_nos: number[];
   setup_completed: boolean;
 }
+
+// Ders saati ayarı (F6 eki-2) — sınırlar backend'le AYNI olmalı
+// (`apps.okul.models.DEFAULT_DAILY_PERIOD_COUNT` / `MAX_DAILY_PERIOD_COUNT`).
+// Asıl doğrulama serviste; buradaki değerler yalnız seçenek listesi üretir.
+export const VARSAYILAN_GUNLUK_DERS_SAATI = 8;
+export const MAKS_GUNLUK_DERS_SAATI = 16;
+
+/** Gün uzunluğu programa göre değişen türler — yardım metni onlara ayrı konuşur. */
+export const MESLEKI_TURLER: SchoolType[] = [
+  "MESLEKI_VE_TEKNIK_ANADOLU_LISESI",
+  "COK_PROGRAMLI_ANADOLU_LISESI",
+];
 
 /** PUT gövdesi kısmi olabilir — backend MERGE semantiği uygular. */
 export type SchoolConfigBody = Partial<Omit<SchoolConfig, "setup_completed">>;

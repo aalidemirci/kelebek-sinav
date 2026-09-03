@@ -21,7 +21,21 @@ raporlarından (xlsx/pano) içe aktarılır; ders havuzu MEB ders çizelgesinden
 okul türü ve kademeye göre tohumlanır. Opsiyonel uygulama parolası ile alan
 şifrelemesi ve şifreli yedek.
 
-**Durum:** Ders havuzu okul türüne göre türetiliyor (03.09.2026): sekiz
+**Durum:** Sınav takvimi **otomatik kurulabiliyor** (03.09.2026): havuzdaki
+sınavlar tek düğmeyle hafta içi günlere ve okulun sınav saatlerine dağıtılıyor —
+aynı öğrenciye günde ikiden fazla sınav düşmüyor, kapsamı kesişen iki sınav aynı
+saate konmuyor, üst makam sınavı olan güne okul sınavı yazılmıyor ve
+Bakanlık/İl/İlçe sınavları hiç yerleştirilmiyor (tarihleri kılavuzlarında).
+Elle koyduğunuz sınavlar **kendiliğinden sabitleniyor**: "sabitler hariç yeniden
+dağıt" kipi kilitli sınavları yerinde bırakıyor, beğenilmeyen dağıtım tekrar
+çalıştırılabiliyor. İşlem sonunda yerleşemeyenleri gerekçesiyle listeleyen bir
+rapor açılıyor. Aynı saate kapsamı kesişen iki sınav koymak artık **reddediliyor**
+(9/A Almanca ile 9/B Fransızca yan yana durabilir); aynı saatteki mevcut salon
+kapasitesini aşarsa uyarı çıkıyor. Okulun **günlük ders saati sayısı** ve **sınav
+yapılabilecek ders saatleri** ayara girdi — genel liselerde gün 8 saat, mesleki
+ve teknik programlarda atölye günleriyle değiştiği için sorulur.
+
+Önceki durum: Ders havuzu okul türüne göre türetiliyor (03.09.2026): sekiz
 ortaöğretim türünün (Anadolu, Fen, Sosyal Bilimler, Anadolu İmam Hatip,
 Mesleki ve Teknik Anadolu, Çok Programlı Anadolu, Güzel Sanatlar, Spor
 liseleri) TTK haftalık ders çizelgeleri hazırlık varyantları ve bölümleriyle

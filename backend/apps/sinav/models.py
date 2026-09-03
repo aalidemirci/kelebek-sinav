@@ -968,6 +968,18 @@ class ExamCalendarEntry(BaseModel):
     period_no = models.PositiveSmallIntegerField(
         "ders saati", null=True, blank=True, help_text="Ders saati listesindeki saat no (B6)."
     )
+    # Sabitleme, otomatik yerleştiricinin (`auto_place_entries`) DOKUNMAYACAĞI
+    # girdileri işaretler: idareci bir sınavı bilerek belli bir güne koyduysa
+    # "yeniden dağıt" onu yerinden oynatmaz. Elle yerleştirme sabitler
+    # (`place_entry(pin=True)`), otomatik yerleştirme sabitlemez — böylece
+    # otomatik sonucu beğenmeyen idareci elle koyduklarını kaybetmeden yeniden
+    # çalıştırabilir. Havuza geri alınan girdide sabitleme DÜŞER (yerleşmemiş
+    # girdinin sabitlenecek slotu yoktur).
+    is_pinned = models.BooleanField(
+        "sabitlenmiş",
+        default=False,
+        help_text="True = otomatik yerleştirme bu girdiyi yerinden oynatmaz.",
+    )
     session = models.ForeignKey(
         ExamSession,
         on_delete=models.SET_NULL,

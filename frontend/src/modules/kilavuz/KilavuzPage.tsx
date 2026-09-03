@@ -129,11 +129,18 @@ export default function KilavuzPage() {
           bağlanır.
         </p>
         <p>
-          Ders saatleri (zil çizelgesi) sınav takviminin satırlarını oluşturur. Bu sürümde program
-          sekiz ders saatlik varsayılan bir çizelge kullanır (08.30'dan başlayarak ellişer dakika
-          arayla); çizelgeyi düzenleyen bir ekran henüz yoktur. Okulunuzun zil düzeni farklıysa
-          takvimdeki ders saati numaraları yine doğrudur; yanlarında görünen saat bilgisi varsayılan
-          çizelgeden gelir.
+          Ders saatleri sınav takviminin satırlarını oluşturur.{" "}
+          <Ekran to="/ayarlar?tab=okul">Ayarlar → Okul Bilgileri</Ekran> ekranında iki şeyi
+          belirtirsiniz: <strong>günlük ders saati sayısı</strong> (genel liselerde 8; mesleki ve
+          teknik programlarda atölye günleriyle değişir) ve{" "}
+          <strong>sınav yapılabilecek ders saatleri</strong>. İkincisini işaretlerseniz otomatik
+          yerleştirme sınavları yalnız o saatlere koyar; boş bırakırsanız bütün saatler sınava
+          açıktır. Elle yerleştirmede bu seçim engel değildir, yalnız hatırlatma çıkar — sınav
+          saatini okul müdürlüğü belirler.
+        </p>
+        <p>
+          Saat bilgisi (08.30'dan başlayarak ellişer dakika) varsayılan bir zil çizelgesinden gelir;
+          okulunuzun zil düzeni farklıysa takvimdeki ders saati <em>numaraları</em> yine doğrudur.
         </p>
       </Adim>
 
@@ -333,6 +340,68 @@ export default function KilavuzPage() {
           durumları — kendi sınıfında yapılacak sınavlar, uygulama sınavları, Bakanlık/MEM sınavları
           — havuz formundan elle eklemek kalır.
         </Ipucu>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Takvimi otomatik kurma ve sınavları sabitleme
+        </h3>
+        <p>
+          Havuzu doldurduktan sonra sınavları tek tek yerleştirmek zorunda değilsiniz. Yerleştirme
+          sekmesindeki <strong>“Otomatik yerleştir”</strong> düğmesi havuzda bekleyen sınavları
+          hafta içi günlere ve okulunuzun sınav saatlerine dağıtır. İki kipte çalışır:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Boşları doldur:</strong> yalnız havuzda bekleyenleri yerleştirir, ızgaradaki
+            sınavlara hiç dokunmaz.
+          </li>
+          <li>
+            <strong>Sabitler hariç yeniden dağıt:</strong> kilitlemediğiniz sınavları havuza alıp
+            baştan dağıtır. Sonucu beğenmezseniz tekrar çalıştırabilirsiniz.
+          </li>
+        </ul>
+        <p>
+          Elle yerleştirdiğiniz her sınav <strong>kendiliğinden sabitlenir</strong>: ızgaradaki
+          çipin üzerinde kilit simgesi görünür ve otomatik dağıtım onu yerinden oynatmaz. Kilide
+          tıklayarak sabitlemeyi kaldırabilir, otomatik yerleşmiş bir sınavı da kilitleyebilirsiniz.
+          Bir sınavı havuza geri alırsanız sabitlemesi düşer.
+        </p>
+        <p>Program dağıtırken şu kurallara uyar:</p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>Aynı öğrenciye günde ikiden fazla sınav düşürmez.</li>
+          <li>Kapsamı kesişen iki sınavı aynı saate koymaz.</li>
+          <li>Üst makam sınavı olan güne o seviyenin okul sınavını yazmaz.</li>
+          <li>Hafta sonlarını ve sınav saati işaretlemediğiniz ders saatlerini kullanmaz.</li>
+          <li>
+            Bakanlık/İl MEM/İlçe MEM sınavlarını <strong>hiç yerleştirmez</strong> — tarihleri
+            ilgili makamın kılavuzundadır, onları siz koyarsınız.
+          </li>
+        </ul>
+        <p>
+          İşlem bitince bir rapor açılır: kaç sınav yerleştirildi, hangileri yerleştirilemedi ve
+          neden. Yerleştirilemeyen sınav kalırsa takvim aralığını genişletin, sınav saati ekleyin ya
+          da o sınavı elle koyun.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Aynı saate iki sınav: kapsam kuralı
+        </h3>
+        <p>
+          Bir öğrenci aynı anda iki salonda olamaz. Bu yüzden program, aynı gün ve ders saatine{" "}
+          <strong>kapsamları kesişen</strong> iki sınav koymanızı kabul etmez. Kapsamlar
+          kesişmiyorsa — örneğin 9/A'nın Almanca, 9/B'nin Fransızca sınavı — aynı saatte yan yana
+          yapılabilir. Seviye geneli bir sınav o seviyedeki her şubeyle kesişir.
+        </p>
+        <p>
+          Bu, günlük sınav sayısı hesabını <em>gevşetmez</em>: bir şubenin seçmeli dersi aldığını
+          bilmek, o şubedeki her öğrencinin aldığını göstermez. Günlük yük sayımı ihtiyatlı kalır.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">Salon kapasitesi</h3>
+        <p>
+          Aynı saatte sınava girecek öğrenci sayısı aktif salonlarınızın toplam kapasitesini aşarsa
+          program uyarır (engellemez). Otomatik yerleştirme de böyle saatlerden kaçınmaya çalışır.
+          Salon tanımlamadıysanız bu denetim çalışmaz.
+        </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
           Günlük sınav sayısı sınırı

@@ -129,6 +129,9 @@ const BOS_CONFIG = {
   school_type: "ANADOLU_LISESI" as const,
   has_prep_class: false,
   level_programs: {},
+  // Ders saati ayarı (F6 eki-2): gün 8 saat, sınav saati seçimi boş = tümü.
+  daily_period_count: 8,
+  exam_period_nos: [],
   setup_completed: false,
 };
 
@@ -179,6 +182,8 @@ describe("KurulumPage", () => {
         school_type: "ANADOLU_LISESI",
         has_prep_class: false,
         level_programs: {},
+        daily_period_count: 8,
+        exam_period_nos: [],
       }),
     );
     expect(await screen.findByText("2. Ders yılı")).toBeInTheDocument();

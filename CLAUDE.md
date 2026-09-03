@@ -181,6 +181,40 @@
 - `ExamCalendarEntry.authority` teklik kısıtına GİRMEZ: bir (ders, seviye, tür)
   ya okul ya üst makam sınavıdır. Aynı gün+seviyede ikisi birden varsa UYARI
   üretilir (sert kısıt değil — "zorunlu hâl" takdiri okul müdürlüğünündür).
+- **Aynı slotta kapsam kesişimi SERT kısıttır** (03.09.2026): `place_entry`
+  aynı gün+saat+seviyede kapsamı kesişen ikinci sınavı REDDEDER — üç kanallı
+  uyarı deseninin tek istisnası, çünkü "zorunlu hâl" yorumu yok (öğrenci aynı
+  anda iki salonda olamaz). Kesişim `_scope_overlaps`: seviye farklıysa yok, en
+  az biri LEVEL ise var, ikisi de SECTIONS ise `section_ids` kesişimi. Bu kural
+  `_daily_exam_load`u GEVŞETMEZ (ADR-0044 karar 13, risk #4): oradaki soru
+  "öğrenci o GÜN kaç sınava girer" ve ders kaydı bilinmediğinden kapsam
+  ihtiyatlı okunur; burada soru "aynı ANDA olabilir mi" ve kesişim kesin cevap
+  verir. Denetim `calendar_validation`da da durur (kural öncesi kurulmuş
+  takvimler + yerleştirmeden sonra genişletilen kapsam).
+- **Otomatik yerleştirme KURAL MOTORU TUTMAZ** (`auto_place_entries`, F6 eki-2):
+  yalnız SIRA ve TERCİH üretir, her yerleştirmeyi `place_entry`ye yaptırır ve
+  reddedilen slotu atlar (`place_entry` kendi savepoint'inde koşar — `_seed_pool`
+  emsali). Skorlama yaklaşıktır, kararı veren yerleştirmedir; ikinci bir mevzuat
+  kopyası yazılırsa iki motor zamanla ayrışır. Üst makam sınavları OTOMATİK
+  YERLEŞTİRİLMEZ (tarihleri ilgili makamın kılavuzunda — Yönerge md. 5), rapora
+  gerekçesiyle düşer. Ceza demeti leksikografiktir (motor `_pair_penalty`
+  deseni): `(3. sınav, kapasite aşımı, seviye günlük yükü, gün toplamı, saat)`.
+- **Sabitleme (`is_pinned`) elle yerleştirmenin yan etkisidir:** `place_entry`
+  varsayılan `pin=True` (idareci bilerek koydu), otomatik yerleştirme
+  `pin=False`. `REDISTRIBUTE` kipi yalnız sabitsizleri havuza alır; `unplace`
+  bayrağı DÜŞÜRÜR (havuzdaki girdinin korunacak slotu yok) ve yerleşmemiş girdi
+  sabitlenemez — aksi hâlde otomatik yerleştirmeyi sessizce engellerdi.
+- **Ders saati ayarı ikilidir** (`SchoolConfig.daily_period_count` +
+  `exam_period_nos`): gün uzunluğu genel liselerde 8'dir ama mesleki/teknik
+  programlarda değişir, bu yüzden AYARDIR; `bell_schedule` boşken varsayılan
+  çizelge ondan türer (`default_bell_schedule` — 08:30'dan 50'şer dakika, ilk 8
+  saat eski sabit listeyle BİREBİR). `exam_period_nos` otomatik yerleştiriciyi
+  BAĞLAR, elle yerleştirmeyi yalnız UYARIR (mevzuat saat kısıtı koymaz; Yönerge
+  md. 5 saati okul müdürlüğüne bırakır). Ayar açıkça gönderilirse aralık dışı
+  saat HATA, yalnız gün kısaldıysa taşan kuyruk kırpılır.
+- **Salon kapasitesi UYARIDIR:** aynı slottaki toplam mevcut aktif salon
+  kapasitesini aşarsa uyarılır; kapasite 0 iken (salon tanımsız) denetim hiç
+  çalışmaz — sert kısıt, kataloğu eksik okulda takvimi kurulamaz hâle getirirdi.
 
 ## 4. Nasıl koşulur
 

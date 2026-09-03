@@ -563,6 +563,7 @@ class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]
             "participant_label",
             "placed_date",
             "period_no",
+            "is_pinned",
             "session",
             "note",
         )
@@ -573,6 +574,9 @@ class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]
             "participant_label",
             "placed_date",
             "period_no",
+            # Sabitleme yerleştirmeyle birlikte anlam kazanır: kendi ucundan
+            # (`entries/{id}/pin/`) değişir, düz alan güncellemesiyle değil.
+            "is_pinned",
             "session",
         )
         # Model teklik doğrulayıcısı KASITLA kapalı: 400 mesajları Türkçe ve

@@ -184,6 +184,27 @@ class ExamCalendarViewSet(viewsets.ModelViewSet[ExamCalendar]):
             _raise_drf(exc)
         return Response(ExamCalendarEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["post"], url_path="auto-place")
+    def auto_place(self, request: Request, pk: str | None = None) -> Response:
+        """Havuzda bekleyen sınavları kurallara uyarak ızgaraya dağıtır.
+
+        Gövde: `{"mode": "FILL" | "REDISTRIBUTE"}` — varsayılan FILL (yalnız
+        boşları doldurur, ızgaradakine dokunmaz).
+        """
+        mode = str(request.data.get("mode") or services_calendar.AUTO_MODE_FILL).upper()
+        try:
+            result = services_calendar.auto_place_entries(self.get_object(), mode=mode)
+        except DjangoValidationError as exc:
+            _raise_drf(exc)
+        return Response(
+            {
+                "placed": result.placed,
+                "skipped": result.skipped,
+                "warnings": result.warnings,
+                "cleared": result.cleared,
+            }
+        )
+
     @action(detail=True, methods=["get"])
     def grid(self, request: Request, pk: str | None = None) -> Response:
         return Response(services_calendar.calendar_grid(self.get_object()))
@@ -331,6 +352,17 @@ class ExamCalendarEntryViewSet(viewsets.GenericViewSet[ExamCalendarEntry]):
         return Response(
             {"entry": self.get_serializer(result.entry).data, "warnings": result.warnings}
         )
+
+    @action(detail=True, methods=["post"])
+    def pin(self, request: Request, pk: str | None = None) -> Response:
+        """Girdiyi sabitler/çözer — gövde `{"is_pinned": true|false}`."""
+        raw = request.data.get("is_pinned", True)
+        is_pinned = raw if isinstance(raw, bool) else str(raw).lower() in ("true", "1", "evet")
+        try:
+            entry = services_calendar.set_entry_pinned(self.get_object(), is_pinned=is_pinned)
+        except DjangoValidationError as exc:
+            _raise_drf(exc)
+        return Response(self.get_serializer(entry).data)
 
     @action(detail=True, methods=["post"])
     def unplace(self, request: Request, pk: str | None = None) -> Response:

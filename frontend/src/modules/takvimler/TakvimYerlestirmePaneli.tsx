@@ -18,7 +18,7 @@ import Icon from "../../ui/Icon";
 import { SkeletonList } from "../../ui/Skeleton";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import { formatDate } from "../oturumlar/oturumEtiket";
-import type { CalendarGrid, ExamCalendarStatusCode } from "./api";
+import type { AutoPlaceMode, AutoPlaceResult, CalendarGrid, ExamCalendarStatusCode } from "./api";
 import { EXAM_AUTHORITY_SHORT_TR, EXAM_AUTHORITY_TR, examCalendarApi } from "./api";
 
 interface SlotTarget {
@@ -26,6 +26,12 @@ interface SlotTarget {
   periodNo: number;
   level: number;
 }
+
+const AUTO_MODE_ACIKLAMA: Record<AutoPlaceMode, string> = {
+  FILL: "Havuzda bekleyen sınavlar boş slotlara yerleştirilir; ızgaradakilere dokunulmaz.",
+  REDISTRIBUTE:
+    "Sabitlenmemiş sınavlar havuza alınıp baştan dağıtılır; kilitli olanlar yerinde kalır.",
+};
 
 export default function TakvimYerlestirmePaneli({
   calendarId,
@@ -40,6 +46,8 @@ export default function TakvimYerlestirmePaneli({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [pickSlot, setPickSlot] = useState<SlotTarget | null>(null);
+  const [autoOpen, setAutoOpen] = useState(false);
+  const [autoResult, setAutoResult] = useState<AutoPlaceResult | null>(null);
   const editable = status === "DRAFT";
   const approved = status === "APPROVED";
 
@@ -72,6 +80,26 @@ export default function TakvimYerlestirmePaneli({
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Kaldırılamadı."),
   });
 
+  const pinMutation = useMutation({
+    mutationFn: (p: { entryId: number; isPinned: boolean }) =>
+      examCalendarApi.pinEntry(p.entryId, p.isPinned),
+    onSuccess: invalidate,
+    onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Sabitleme değişmedi."),
+  });
+
+  const autoPlaceMutation = useMutation({
+    mutationFn: (mode: AutoPlaceMode) => examCalendarApi.autoPlace(calendarId, mode),
+    onSuccess: (data) => {
+      // Rapor DİYALOGDA kalır: atlanan girdi gerekçesiyle görülmeden kapanmasın
+      // (snackbar tek satırlık ve kaybolur — sessiz düşme kanalı olurdu).
+      setAutoOpen(false);
+      setAutoResult(data);
+      invalidate();
+    },
+    onError: (e) =>
+      snackbar.error(e instanceof ApiError ? e.message : "Otomatik yerleştirilemedi."),
+  });
+
   const createSessionMutation = useMutation({
     mutationFn: (p: { date: string; periodNo: number }) =>
       examCalendarApi.createSession(calendarId, { date: p.date, period_no: p.periodNo }),
@@ -100,8 +128,27 @@ export default function TakvimYerlestirmePaneli({
 
   const unplacedByLevel = (level: number) => grid.unplaced.filter((c) => c.level === level);
 
+  const havuzdaBekleyen = grid.unplaced.length;
+
   return (
     <div>
+      {editable ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Button
+            variant="tonal"
+            icon="auto_fix_high"
+            disabled={autoPlaceMutation.isPending}
+            onClick={() => setAutoOpen(true)}
+          >
+            Otomatik yerleştir
+          </Button>
+          <span className="text-body-small text-on-surface-variant">
+            {havuzdaBekleyen > 0
+              ? `Havuzda ${havuzdaBekleyen} sınav bekliyor.`
+              : "Havuzda bekleyen sınav yok."}
+          </span>
+        </div>
+      ) : null}
       {grid.errors.length > 0 ? (
         <div className="mb-3 rounded-shape-sm bg-error-container p-3 text-body-small text-on-error-container">
           {grid.errors.map((e, i) => (
@@ -138,7 +185,12 @@ export default function TakvimYerlestirmePaneli({
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={`${row.date}|${row.periodNo}`} className="border-b border-outline-variant">
+              <tr
+                key={`${row.date}|${row.periodNo}`}
+                className={`border-b border-outline-variant${
+                  row.isExamPeriod ? "" : " bg-surface-container-lowest"
+                }`}
+              >
                 <th
                   scope="row"
                   className="sticky left-0 z-10 bg-surface-container-low px-3 py-2 text-left font-normal"
@@ -148,6 +200,7 @@ export default function TakvimYerlestirmePaneli({
                   ) : null}
                   <span className="block text-body-small text-on-surface-variant">
                     {row.periodName}
+                    {row.isExamPeriod ? "" : " · sınav saati değil"}
                   </span>
                 </th>
                 {grid.levels.map((l) => {
@@ -172,6 +225,31 @@ export default function TakvimYerlestirmePaneli({
                             >
                               {EXAM_AUTHORITY_SHORT_TR[c.authority]}
                             </span>
+                          ) : null}
+                          {editable ? (
+                            <button
+                              type="button"
+                              aria-label={
+                                c.is_pinned
+                                  ? `${c.course_name} sabitlemesini kaldır`
+                                  : `${c.course_name} sınavını sabitle`
+                              }
+                              aria-pressed={c.is_pinned}
+                              title={
+                                c.is_pinned
+                                  ? "Sabitlenmiş — otomatik yerleştirme bu sınavı oynatmaz"
+                                  : "Sabitle"
+                              }
+                              className="-my-2 flex min-h-8 min-w-8 shrink-0 items-center justify-center rounded-shape-sm hover:bg-on-secondary-container/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                              onClick={() =>
+                                pinMutation.mutate({
+                                  entryId: c.entry_id,
+                                  isPinned: !c.is_pinned,
+                                })
+                              }
+                            >
+                              <Icon name={c.is_pinned ? "lock" : "lock_open"} size="sm" />
+                            </button>
                           ) : null}
                           {editable ? (
                             <button
@@ -280,6 +358,88 @@ export default function TakvimYerlestirmePaneli({
           </div>
         </Dialog>
       ) : null}
+
+      {autoOpen ? (
+        <Dialog
+          open
+          onClose={() => setAutoOpen(false)}
+          title="Otomatik yerleştir"
+          actions={
+            <Button variant="text" onClick={() => setAutoOpen(false)}>
+              Vazgeç
+            </Button>
+          }
+        >
+          <div className="flex flex-col gap-3">
+            <p className="text-body-small text-on-surface-variant">
+              Program, havuzdaki sınavları hafta içi günlere ve okulun sınav saatlerine dağıtır:
+              aynı öğrenciye günde ikiden fazla sınav düşürmez (OKY md. 45), kapsamı kesişen iki
+              sınavı aynı saate koymaz, üst makam sınavı olan güne okul sınavı yazmaz (Yönerge md.
+              5). Bakanlık/İl/İlçe sınavları elle yerleştirilir.
+            </p>
+            {(["FILL", "REDISTRIBUTE"] as AutoPlaceMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                disabled={autoPlaceMutation.isPending}
+                className="rounded-shape-sm border border-outline-variant p-3 text-left hover:bg-on-surface/5 disabled:opacity-60"
+                onClick={() => autoPlaceMutation.mutate(mode)}
+              >
+                <span className="block text-body-medium text-on-surface">
+                  {mode === "FILL" ? "Boşları doldur" : "Sabitler hariç yeniden dağıt"}
+                </span>
+                <span className="block text-body-small text-on-surface-variant">
+                  {AUTO_MODE_ACIKLAMA[mode]}
+                </span>
+              </button>
+            ))}
+          </div>
+        </Dialog>
+      ) : null}
+
+      {autoResult ? (
+        <Dialog
+          open
+          onClose={() => setAutoResult(null)}
+          title="Otomatik yerleştirme sonucu"
+          actions={
+            <Button variant="text" onClick={() => setAutoResult(null)}>
+              Kapat
+            </Button>
+          }
+        >
+          <div className="flex flex-col gap-3 text-body-small">
+            <p className="text-on-surface">
+              {autoResult.placed.length} sınav yerleştirildi
+              {autoResult.cleared > 0 ? `, ${autoResult.cleared} sınav yeniden dağıtıldı` : ""}.
+            </p>
+            {autoResult.skipped.length > 0 ? (
+              <div className="rounded-shape-sm bg-error-container p-3 text-on-error-container">
+                <p className="mb-1 text-label-medium">
+                  Yerleştirilemeyen {autoResult.skipped.length} sınav:
+                </p>
+                <ul className="list-disc pl-4">
+                  {autoResult.skipped.map((s) => (
+                    <li key={s.entry_id}>
+                      {s.course_name} — {s.reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {autoResult.warnings.length > 0 ? (
+              <div className="rounded-shape-sm bg-secondary-container p-3 text-on-secondary-container">
+                <p className="mb-1 text-label-medium">Uyarılar:</p>
+                <ul className="list-disc pl-4">
+                  {autoResult.warnings.map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        </Dialog>
+      ) : null}
     </div>
   );
 }
@@ -290,6 +450,8 @@ interface GridRow {
   periodName: string;
   dayLabel: string;
   firstOfDay: boolean;
+  /** Ayarlarda sınava açık saat mi — kapalı satır soluk çizilir (yasak değil). */
+  isExamPeriod: boolean;
 }
 
 function buildRows(grid: CalendarGrid | undefined): GridRow[] {
@@ -307,6 +469,7 @@ function buildRows(grid: CalendarGrid | undefined): GridRow[] {
         periodName: p.name,
         dayLabel: day.is_weekend ? `${formatDate(day.date)} (Hafta sonu)` : formatDate(day.date),
         firstOfDay: idx === 0,
+        isExamPeriod: p.is_exam_period,
       });
     });
   }

@@ -76,6 +76,8 @@ export interface ExamCalendarEntryRow {
   participant_label: string;
   placed_date: string | null;
   period_no: number | null;
+  /** Sabitlenmiş girdiyi otomatik yerleştirme yerinden oynatmaz. */
+  is_pinned: boolean;
   session: number | null;
   note: string;
 }
@@ -92,6 +94,8 @@ export interface CalendarGridPeriod {
   no: number;
   name: string;
   start: string;
+  /** Ayarlarda sınava açık işaretlenmiş saat mi (otomatik yerleştirme buraya bakar). */
+  is_exam_period: boolean;
 }
 
 export interface CalendarGridCell {
@@ -109,6 +113,7 @@ export interface CalendarGridCell {
   participant_label: string;
   session_id: number | null;
   note: string;
+  is_pinned: boolean;
 }
 
 export interface CalendarGridDay {
@@ -132,6 +137,33 @@ export interface CalendarGrid {
   unplaced: CalendarGridCell[];
   errors: string[];
   warnings: string[];
+}
+
+/** Otomatik yerleştirme kipi: yalnız boşları doldur / sabitler hariç yeniden dağıt. */
+export type AutoPlaceMode = "FILL" | "REDISTRIBUTE";
+
+export interface AutoPlacedRow {
+  entry_id: number;
+  course_name: string;
+  level: number;
+  date: string;
+  period_no: number;
+}
+
+export interface AutoSkippedRow {
+  entry_id: number;
+  course_name: string;
+  level: number;
+  reason: string;
+}
+
+/** Otomatik yerleştirme raporu — yerleşenler, atlananlar (gerekçeli), uyarılar. */
+export interface AutoPlaceResult {
+  placed: AutoPlacedRow[];
+  skipped: AutoSkippedRow[];
+  warnings: string[];
+  /** REDISTRIBUTE kipinde havuza geri alınan sabitlenmemiş girdi sayısı. */
+  cleared: number;
 }
 
 /** Havuzu katalogdan doldurma sonucu (etiket listeleri + toplam çift). */
@@ -312,6 +344,13 @@ export const examCalendarApi = {
     ),
   unplaceEntry: (entryId: number) =>
     api.post<ExamCalendarEntryRow>(`/exam-calendar-entries/${entryId}/unplace/`, {}),
+  pinEntry: (entryId: number, isPinned: boolean) =>
+    api.post<ExamCalendarEntryRow>(`/exam-calendar-entries/${entryId}/pin/`, {
+      is_pinned: isPinned,
+    }),
+  /** Havuzda bekleyenleri kurallara uyarak ızgaraya dağıtır (F6 eki-2). */
+  autoPlace: (id: number, mode: AutoPlaceMode) =>
+    api.post<AutoPlaceResult>(`/exam-calendars/${id}/auto-place/`, { mode }),
 };
 
 export const examTrackItemApi = {

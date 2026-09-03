@@ -10,7 +10,8 @@ KS kesimleri:
 - Tatil/kapalı-gün uyarısı KESİLDİ (DD Holiday motoru ALMA) — hafta sonu
   uyarısı durur; `place_entry` imzası değişmedi.
 - Zil çizelgesi köprüsü (B6 SADELEŞTİR): `SchoolConfig.bell_schedule` +
-  `DEFAULT_BELL_SCHEDULE` — öğe şekli OYS ile birebir {no, name, start}.
+  `default_bell_schedule()` — öğe şekli OYS ile birebir {no, name, start};
+  varsayılanın uzunluğu `SchoolConfig.daily_period_count` ayarındadır.
 - `created_by`/`by_user` parametreleri düştü (B17); onay damgası ad-snapshot
   (`approved_by_name` + zaman — B12/risk #10, ExamSession emsali).
 """
@@ -19,7 +20,7 @@ from __future__ import annotations
 
 import calendar as _calmod
 from dataclasses import dataclass, field
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from django.core.exceptions import ValidationError
@@ -28,7 +29,7 @@ from django.db.models import QuerySet
 from django.utils import timezone
 
 from apps.okul import selectors as okul_selectors
-from apps.okul.models import SchoolConfig
+from apps.okul.models import MAX_DAILY_PERIOD_COUNT, SchoolConfig
 from apps.sinav.models import (
     ExamAuthority,
     ExamCalendar,
@@ -93,14 +94,39 @@ _WINDOW_MONTH: dict[tuple[int, int], int] = {
     (2, 2): 5,
 }
 
-#: B6 — zil çizelgesi köprüsünün KS karşılığı: SchoolConfig.bell_schedule boşsa
-#: bu varsayılan kullanılır. Öğe şekli OYS sözleşmesiyle birebir (no/name/start).
-DEFAULT_BELL_SCHEDULE: list[dict[str, Any]] = [
-    {"no": i, "name": f"{i}. Ders", "start": start}
-    for i, start in enumerate(
-        ("08:30", "09:20", "10:10", "11:00", "11:50", "12:40", "13:30", "14:20"), start=1
+#: Varsayılan zil çizelgesinin üretim parametreleri. Bu ikisi eski sabit listeyi
+#: (08:30, 09:20, 10:10, 11:00, 11:50, 12:40, 13:30, 14:20) BİREBİR üretir —
+#: liste sabit olmaktan çıktı çünkü gün uzunluğu artık ayardır (mesleki ve
+#: teknik programlarda 8 saat yetmez, 03.09.2026).
+BELL_FIRST_START = time(8, 30)
+BELL_PERIOD_STEP_MINUTES = 50
+
+
+def default_bell_schedule(period_count: int | None = None) -> list[dict[str, Any]]:
+    """B6 — `SchoolConfig.bell_schedule` boşken kullanılan ders saati listesi.
+
+    Öğe şekli OYS sözleşmesiyle birebir (no/name/start). `period_count`
+    verilmezse okulun günlük ders saati sayısından (`daily_period_count`)
+    türetilir; teneffüs uzunluğu modellenmez (başlangıçlar eşit aralıklıdır) —
+    zili farklı çalan okul `bell_schedule`'ı elle doldurur.
+    """
+    count = (
+        int(period_count)
+        if period_count is not None
+        else int(SchoolConfig.load().daily_period_count)
     )
-]
+    count = max(1, min(count, MAX_DAILY_PERIOD_COUNT))
+    base = datetime.combine(date(2000, 1, 1), BELL_FIRST_START)
+    return [
+        {
+            "no": i,
+            "name": f"{i}. Ders",
+            "start": (base + timedelta(minutes=BELL_PERIOD_STEP_MINUTES * (i - 1))).strftime(
+                "%H:%M"
+            ),
+        }
+        for i in range(1, count + 1)
+    ]
 
 
 # --------------------------------------------------------------------------- #
@@ -705,9 +731,40 @@ def remove_calendar_entry(entry: ExamCalendarEntry) -> None:
 
 def _bell_periods() -> list[dict[str, Any]]:
     """Ders saati listesi — SchoolConfig.bell_schedule; boşsa varsayılan (B6)."""
-    raw = SchoolConfig.load().bell_schedule
-    schedule = raw if isinstance(raw, list) and raw else DEFAULT_BELL_SCHEDULE
-    return [dict(p) for p in schedule]
+    config = SchoolConfig.load()
+    raw = config.bell_schedule
+    if isinstance(raw, list) and raw:
+        return [dict(p) for p in raw]
+    return default_bell_schedule(config.daily_period_count)
+
+
+def exam_period_numbers() -> list[int]:
+    """Sınav yapılabilecek ders saati no'ları (artan). Ayar boşsa TÜM saatler.
+
+    Ayar (`SchoolConfig.exam_period_nos`) idari bir tercihtir: okul sınavlarını
+    ilk derslere toplamak yaygındır ama mevzuat saat kısıtı koymaz — sınavlar
+    "okul müdürlüğünce belirlenip duyurulan tarih ve saatlerde" yapılır (Yazılı
+    ve Uygulamalı Sınavlar Yönergesi md. 5). Bu yüzden liste otomatik
+    yerleştiriciyi BAĞLAR, elle yerleştirmeyi yalnız UYARIR.
+
+    Zil çizelgesiyle kesiştirilir: ayarda kalmış ama artık var olmayan saat
+    (gün kısaldı, çizelge elle değişti) sınav saati sayılmaz.
+    """
+    all_nos = [int(p["no"]) for p in _bell_periods()]
+    raw = SchoolConfig.load().exam_period_nos
+    if not isinstance(raw, list) or not raw:
+        return all_nos
+    allowed: set[int] = set()
+    for value in raw:
+        try:
+            allowed.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    kesisim = [no for no in all_nos if no in allowed]
+    # Kesişim boşsa ayar fiilen kullanılamaz durumdadır; "hiç saat yok" demek
+    # takvimi kilitler — TÜM saatlere düşmek güvenli taraftır (uyarı kanalı
+    # `calendar_validation`da).
+    return kesisim or all_nos
 
 
 def _external_authority_clash(entry: ExamCalendarEntry, on_date: date) -> bool:
@@ -728,8 +785,92 @@ def _external_authority_clash(entry: ExamCalendarEntry, on_date: date) -> bool:
     return same_day.filter(authority=ExamAuthority.SCHOOL).exists()
 
 
+def _scope_overlaps(a: ExamCalendarEntry, b: ExamCalendarEntry) -> bool:
+    """İki girdinin ÖĞRENCİ kapsamı kesişiyor mu?
+
+    Seviye farklıysa kesişmez (şube seviyeye aittir). En az biri seviye geneli
+    (LEVEL) ise kesişir. İkisi de şube kapsamlıysa şube pk kümeleri kesişimine
+    bakılır — 9/A'nın Almancası ile 9/B'nin Fransızcası AYNI SAATE konabilir,
+    ikisi de 9/A'yı içeriyorsa konamaz.
+
+    Bu, `_daily_exam_load`un GEVŞETİLMESİ DEĞİLDİR (ADR-0044 karar 13, risk #4):
+    orada soru "öğrenci o gün kaç sınava girer" ve ders kaydı bilinmediği için
+    kapsam ihtiyatlı okunur; burada soru "aynı ANDA iki salonda olabilir mi" ve
+    cevabı kapsam kesişimi kesin verir — kesişmeyen iki şube aynı öğrenciyi
+    paylaşamaz.
+    """
+    if int(a.level) != int(b.level):
+        return False
+    if (
+        a.participant_type != ParticipantType.SECTIONS
+        or b.participant_type != ParticipantType.SECTIONS
+    ):
+        return True
+    return bool({int(x) for x in a.section_ids or []} & {int(x) for x in b.section_ids or []})
+
+
+def _slot_clash(
+    entry: ExamCalendarEntry, on_date: date, period_no: int
+) -> ExamCalendarEntry | None:
+    """Aynı gün + saatte kapsamı kesişen başka girdi (varsa ilki)."""
+    rakipler: QuerySet[ExamCalendarEntry] = (
+        ExamCalendarEntry.objects.filter(
+            calendar=entry.calendar, level=entry.level, placed_date=on_date, period_no=period_no
+        )
+        .exclude(pk=entry.pk)
+        .select_related("course")
+    )
+    for rakip in rakipler:
+        if _scope_overlaps(entry, rakip):
+            return rakip
+    return None
+
+
+def _entry_student_count(entry: ExamCalendarEntry, roster_counts: dict[int, int]) -> int:
+    """Girdinin sınava girecek öğrenci sayısı — kapsam bazlı, yalnız SAYIM.
+
+    Şube kapsamlı girdide şube sayımları toplanır; seviye genelinde seviyenin
+    aktif mevcudu. Ders kayıt verisi olmadığından seçmeli dersin kapsamı
+    "o şubelerin tamamı" sayılır (salon planlamasında ihtiyatlı taraf).
+    """
+    sections = _section_scope_groups(entry)
+    if sections is not None:
+        return sum(n for _, n in sections)
+    return int(roster_counts.get(int(entry.level), 0))
+
+
+def _total_room_capacity() -> int:
+    """Aktif salonların toplam koltuk kapasitesi (plan JSON'undan hesaplanır)."""
+    from apps.sinav import selectors as sinav_selectors
+    from apps.sinav import services as sinav_services
+
+    return sum(sinav_services.room_capacity(room) for room in sinav_selectors.exam_rooms())
+
+
+def _slot_student_total(
+    calendar: ExamCalendar,
+    on_date: date,
+    period_no: int,
+    *,
+    roster_counts: dict[int, int],
+    extra: ExamCalendarEntry | None = None,
+) -> int:
+    """Bir slotta aynı anda sınava girecek toplam öğrenci (tüm seviyeler)."""
+    yerlesik = ExamCalendarEntry.objects.filter(
+        calendar=calendar, placed_date=on_date, period_no=period_no
+    )
+    if extra is not None:
+        yerlesik = yerlesik.exclude(pk=extra.pk)
+    toplam = sum(_entry_student_count(other, roster_counts) for other in yerlesik)
+    if extra is not None:
+        toplam += _entry_student_count(extra, roster_counts)
+    return toplam
+
+
 @transaction.atomic
-def place_entry(entry: ExamCalendarEntry, *, on_date: date, period_no: int) -> PlacementResult:
+def place_entry(
+    entry: ExamCalendarEntry, *, on_date: date, period_no: int, pin: bool = True
+) -> PlacementResult:
     """Girdiyi ızgaraya yerleştirir (tarih + ders saati). Doğrulama + uyarılar.
 
     KS kesimi: resmî/idari tatil uyarısı yok (kapalı-gün kaynağı taşınmadı);
@@ -748,11 +889,34 @@ def place_entry(entry: ExamCalendarEntry, *, on_date: date, period_no: int) -> P
     if valid_period_nos and period_no not in valid_period_nos:
         raise ValidationError({"period_no": "Ders saati listede tanımlı değil."})
 
+    # Aynı anda iki salonda bulunulamaz: kapsamı kesişen iki sınav aynı gün +
+    # saate KONAMAZ. Bu, üç kanallı uyarı deseninin istisnasıdır — "zorunlu hâl
+    # takdiri" diye bir yorumu yok, fiziksel imkânsızlık.
+    clash = _slot_clash(entry, on_date, period_no)
+    if clash is not None:
+        raise ValidationError(
+            {
+                "period_no": f"Bu gün ve saatte {_level_display(entry.level)} için "
+                f"{clash.course.name} sınavı var; kapsamlar kesişiyor — aynı "
+                "öğrenci iki sınava aynı anda giremez."
+            }
+        )
+
     if not (entry.calendar.start_date <= on_date <= entry.calendar.end_date):
         warnings.append("Seçilen tarih takvim aralığı dışında.")
 
     if on_date.weekday() >= 5:
         warnings.append("Seçilen tarih hafta sonuna denk geliyor.")
+
+    # Sınav saati ayarı BAĞLAYICI DEĞİL (mevzuat saat kısıtı koymaz — Yönerge
+    # md. 5 saati okul müdürlüğüne bırakır); otomatik yerleştiriciyi bağlar,
+    # elle yerleştirmede yalnız hatırlatır.
+    izinli_saatler = exam_period_numbers()
+    if period_no not in izinli_saatler:
+        warnings.append(
+            f"{period_no}. ders saati okulun sınav saatleri arasında değil "
+            "(Ayarlar → Ders saatleri)."
+        )
 
     # Yönerge md. 5: ülke/il/ilçe geneli ortak yazılı sınavların yapılacağı
     # tarihlerde başka sınav yapılmaz. Sert kısıt DEĞİL (zorunlu hâl takdiri
@@ -791,9 +955,28 @@ def place_entry(entry: ExamCalendarEntry, *, on_date: date, period_no: int) -> P
             }
         )
 
+    # Salon kapasitesi UYARIDIR: salon kataloğu eksik girilmiş okulda sert
+    # kısıt takvimi hiç kurulamaz hâle getirirdi. Kapasite 0 ise (salon henüz
+    # tanımlanmamış) denetim atlanır — "0 koltuk" bir bilgi değil, veri yokluğu.
+    kapasite = _total_room_capacity()
+    if kapasite > 0:
+        mevcut = _slot_student_total(
+            entry.calendar,
+            on_date,
+            period_no,
+            roster_counts=okul_selectors.active_student_counts_by_level(),
+            extra=entry,
+        )
+        if mevcut > kapasite:
+            warnings.append(
+                f"Bu saatte sınava girecek öğrenci sayısı {mevcut}, aktif salon "
+                f"kapasitesi {kapasite} — sınav ikiye bölünmeli ya da salon eklenmeli."
+            )
+
     entry.placed_date = on_date
     entry.period_no = period_no
-    entry.save(update_fields=["placed_date", "period_no", "updated_at"])
+    entry.is_pinned = bool(pin)
+    entry.save(update_fields=["placed_date", "period_no", "is_pinned", "updated_at"])
     return PlacementResult(entry=entry, warnings=warnings)
 
 
@@ -804,8 +987,236 @@ def unplace_entry(entry: ExamCalendarEntry) -> ExamCalendarEntry:
         raise ValidationError("Oturumu üretilmiş girdi havuza geri alınamaz.")
     entry.placed_date = None
     entry.period_no = None
-    entry.save(update_fields=["placed_date", "period_no", "updated_at"])
+    # Havuza dönen girdinin sabitlenecek slotu yoktur; bayrak burada düşmezse
+    # sonraki otomatik yerleştirme girdiyi "sabit" sanıp hiç yerleştirmezdi.
+    entry.is_pinned = False
+    entry.save(update_fields=["placed_date", "period_no", "is_pinned", "updated_at"])
     return entry
+
+
+@transaction.atomic
+def set_entry_pinned(entry: ExamCalendarEntry, *, is_pinned: bool) -> ExamCalendarEntry:
+    """Girdinin sabitleme bayrağını değiştirir (ızgaradaki kilit düğmesi).
+
+    Yalnız YERLEŞTİRİLMİŞ girdi sabitlenebilir: havuzdaki girdinin korunacak
+    bir slotu yok, sabitlenmesi otomatik yerleştiriciyi sessizce engellerdi.
+    """
+    _ensure_draft(entry.calendar)
+    if is_pinned and entry.placed_date is None:
+        raise ValidationError("Havuzdaki girdi sabitlenemez — önce ızgaraya yerleştirin.")
+    entry.is_pinned = bool(is_pinned)
+    entry.save(update_fields=["is_pinned", "updated_at"])
+    return entry
+
+
+# --------------------------------------------------------------------------- #
+# Otomatik yerleştirme (03.09.2026 — F6 eki-2)
+# --------------------------------------------------------------------------- #
+
+#: Kipler: yalnız havuzda bekleyenleri dağıt / sabitler hariç yeniden dağıt.
+AUTO_MODE_FILL = "FILL"
+AUTO_MODE_REDISTRIBUTE = "REDISTRIBUTE"
+AUTO_MODES: tuple[str, ...] = (AUTO_MODE_FILL, AUTO_MODE_REDISTRIBUTE)
+
+
+@dataclass
+class AutoPlaceResult:
+    """Otomatik yerleştirme raporu — yerleşenler, atlananlar, uyarılar."""
+
+    placed: list[dict[str, Any]] = field(default_factory=list)
+    skipped: list[dict[str, Any]] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    cleared: int = 0
+
+
+def _auto_candidate_slots(calendar: ExamCalendar) -> list[tuple[date, int]]:
+    """Otomatik yerleştirmenin kullanabileceği (gün, ders saati) çiftleri.
+
+    Hafta sonu ELENİR (sınavlar ders yılı içinde, okul gününde yapılır); saatler
+    `exam_period_numbers()` ayarından gelir. Sıra deterministiktir: gün, sonra
+    ders saati.
+    """
+    saatler = exam_period_numbers()
+    gunler: list[date] = []
+    cur = calendar.start_date
+    while cur <= calendar.end_date:
+        if cur.weekday() < 5:
+            gunler.append(cur)
+        cur += timedelta(days=1)
+    return [(gun, saat) for gun in gunler for saat in saatler]
+
+
+@transaction.atomic
+def auto_place_entries(calendar: ExamCalendar, *, mode: str = AUTO_MODE_FILL) -> AutoPlaceResult:
+    """Havuzda bekleyen sınavları ızgaraya dağıtır (mevzuat kuralları korunarak).
+
+    KURAL MOTORU TEK: her yerleştirme `place_entry` üzerinden yapılır — bu
+    fonksiyon yalnız SIRA ve TERCİH üretir, kendi mevzuat kopyasını tutmaz.
+    Skorlama yaklaşıktır, kararı veren `place_entry`dir; reddedilen slot atlanır
+    ve sıradaki denenir (`place_entry` kendi savepoint'inde koştuğu için
+    yakalanan hata dış işlemi kirletmez — `_seed_pool` emsali).
+
+    Kipler: `FILL` yalnız havuzda bekleyenleri dağıtır, ızgaradakine dokunmaz.
+    `REDISTRIBUTE` sabitlenmemiş (ve oturumu üretilmemiş) yerleşik girdileri
+    havuza alıp baştan dağıtır — sabitlenenler yerinde kalır.
+
+    OTOMATİK YERLEŞTİRİLMEYENLER: üst makam (Bakanlık/İl/İlçe MEM) sınavlarının
+    tarih ve saati ilgili makamın kılavuzundadır (Yazılı ve Uygulamalı Sınavlar
+    Yönergesi md. 5) — program bunları kendiliğinden bir güne koymaz, raporda
+    gerekçesiyle listeler.
+    """
+    from apps.okul.normalize import tr_sort_key
+
+    _ensure_draft(calendar)
+    if mode not in AUTO_MODES:
+        raise ValidationError({"mode": f"Geçersiz kip: {mode!r}."})
+
+    result = AutoPlaceResult()
+
+    if mode == AUTO_MODE_REDISTRIBUTE:
+        for yerlesik in ExamCalendarEntry.objects.filter(
+            calendar=calendar, placed_date__isnull=False, is_pinned=False
+        ):
+            if (
+                yerlesik.session_id is not None
+                and ExamSession.objects.filter(pk=yerlesik.session_id).exists()
+            ):
+                continue  # oturumu üretilmiş girdi taşınamaz (OYS Tur 644)
+            yerlesik.placed_date = None
+            yerlesik.period_no = None
+            yerlesik.save(update_fields=["placed_date", "period_no", "updated_at"])
+            result.cleared += 1
+
+    slotlar = _auto_candidate_slots(calendar)
+    if not slotlar:
+        raise ValidationError(
+            "Takvim aralığında hafta içi gün ya da tanımlı sınav saati yok — "
+            "tarih aralığını veya Ayarlar → Ders saatleri seçimini gözden geçirin."
+        )
+
+    adaylar = list(
+        ExamCalendarEntry.objects.filter(
+            calendar=calendar, placed_date__isnull=True
+        ).select_related("course")
+    )
+    for aday in list(adaylar):
+        if aday.authority != ExamAuthority.SCHOOL:
+            adaylar.remove(aday)
+            result.skipped.append(
+                {
+                    "entry_id": aday.pk,
+                    "course_name": aday.course.name,
+                    "level": aday.level,
+                    "reason": "Üst makam sınavı — tarih ve saati ilgili makamın "
+                    "kılavuzunda ilan edilir (Yönerge md. 5); elle yerleştirin.",
+                }
+            )
+    if not adaylar:
+        return result
+
+    # --- Bellek içi durum (skorlama için; doğrulama yine place_entry'de) ---
+    roster_counts = okul_selectors.active_student_counts_by_level()
+    kapasite = _total_room_capacity()
+    mevcut_onbellek: dict[int, int] = {}
+
+    def mevcut_of(entry: ExamCalendarEntry) -> int:
+        if entry.pk not in mevcut_onbellek:
+            mevcut_onbellek[entry.pk] = _entry_student_count(entry, roster_counts)
+        return mevcut_onbellek[entry.pk]
+
+    slot_girdileri: dict[tuple[date, int], list[ExamCalendarEntry]] = {}
+    gun_seviye_yuk: dict[tuple[date, int], int] = {}
+    gun_toplam: dict[date, int] = {}
+    slot_mevcut: dict[tuple[date, int], int] = {}
+    ust_makam_gunleri: set[tuple[date, int]] = set()
+
+    def durumu_isle(entry: ExamCalendarEntry) -> None:
+        if entry.placed_date is None or entry.period_no is None:
+            return
+        anahtar = (entry.placed_date, int(entry.period_no))
+        slot_girdileri.setdefault(anahtar, []).append(entry)
+        gun_seviye_yuk[(entry.placed_date, int(entry.level))] = (
+            gun_seviye_yuk.get((entry.placed_date, int(entry.level)), 0) + 1
+        )
+        gun_toplam[entry.placed_date] = gun_toplam.get(entry.placed_date, 0) + 1
+        slot_mevcut[anahtar] = slot_mevcut.get(anahtar, 0) + mevcut_of(entry)
+        if entry.authority != ExamAuthority.SCHOOL:
+            ust_makam_gunleri.add((entry.placed_date, int(entry.level)))
+
+    for yerlesik in ExamCalendarEntry.objects.filter(
+        calendar=calendar, placed_date__isnull=False
+    ).select_related("course"):
+        durumu_isle(yerlesik)
+
+    # --- Sıra: en yüklü seviye ilk seçimi yapar (en-kısıtlı-önce) ---
+    seviye_yuku: dict[int, int] = {}
+    for aday in adaylar:
+        seviye_yuku[int(aday.level)] = seviye_yuku.get(int(aday.level), 0) + 1
+    adaylar.sort(
+        key=lambda e: (
+            -seviye_yuku[int(e.level)],
+            int(e.level),
+            0 if e.participant_type == ParticipantType.LEVEL else 1,
+            tr_sort_key(str(e.course.name)),
+            e.pk,
+        )
+    )
+
+    for aday in adaylar:
+        aday_mevcut = mevcut_of(aday)
+        puanli: list[tuple[tuple[int, ...], int, date, int]] = []
+        for slot_sira, (gun, saat) in enumerate(slotlar):
+            seviye_gun = (gun, int(aday.level))
+            # SERT ELEME — kapsamı kesişen sınav aynı saatte olamaz.
+            if any(_scope_overlaps(aday, other) for other in slot_girdileri.get((gun, saat), ())):
+                continue
+            # SERT ELEME — üst makam sınavı olan gün+seviye (Yönerge md. 5).
+            if seviye_gun in ust_makam_gunleri:
+                continue
+            gunluk = gun_seviye_yuk.get(seviye_gun, 0)
+            if gunluk >= 3:
+                continue  # 4. sınav sert sınırı (OKY md. 45) — place_entry de reddeder
+            asim = int(kapasite > 0 and slot_mevcut.get((gun, saat), 0) + aday_mevcut > kapasite)
+            # Leksikografik ceza demeti (motor `_pair_penalty` deseni): önce
+            # mevzuat esası (günde 2), sonra salon gerçekliği, sonra yayma,
+            # sonra erken ders saati; en sonda eşitlik bozucu slot sırası.
+            puan = (int(gunluk >= 2), asim, gunluk, gun_toplam.get(gun, 0), saat)
+            puanli.append((puan, slot_sira, gun, saat))
+        puanli.sort(key=lambda t: (t[0], t[1]))
+
+        yerlesti = False
+        for _puan, _slot_sira, gun, saat in puanli:
+            try:
+                yerlestirme = place_entry(aday, on_date=gun, period_no=saat, pin=False)
+            except ValidationError:
+                continue
+            durumu_isle(yerlestirme.entry)
+            result.placed.append(
+                {
+                    "entry_id": aday.pk,
+                    "course_name": aday.course.name,
+                    "level": aday.level,
+                    "date": gun.isoformat(),
+                    "period_no": saat,
+                }
+            )
+            result.warnings.extend(yerlestirme.warnings)
+            yerlesti = True
+            break
+        if not yerlesti:
+            result.skipped.append(
+                {
+                    "entry_id": aday.pk,
+                    "course_name": aday.course.name,
+                    "level": aday.level,
+                    "reason": "Kurallara uyan boş slot kalmadı — takvim aralığını "
+                    "genişletin, sınav saati ekleyin ya da elle yerleştirin.",
+                }
+            )
+
+    # Aynı uyarı onlarca girdiden gelebilir; sıra korunarak teklenir.
+    result.warnings = list(dict.fromkeys(result.warnings))
+    return result
 
 
 # --------------------------------------------------------------------------- #
@@ -971,11 +1382,15 @@ def calendar_validation(calendar: ExamCalendar) -> dict[str, list[str]]:
                 "kapsamı düzeltin, o şubeler sınava alınmaz."
             )
 
-    placed = ExamCalendarEntry.objects.filter(calendar=calendar, placed_date__isnull=False)
+    placed = ExamCalendarEntry.objects.filter(
+        calendar=calendar, placed_date__isnull=False
+    ).select_related("course")
     # Seviye + gün başına ders listesi (öğrenci-bazlı yük için).
     per_day: dict[tuple[int, date], list[int]] = {}
     # Seviye + gün başına makam kümesi (Yönerge md. 5 — üst makam günü çakışması).
     authorities_per_day: dict[tuple[int, date], set[str]] = {}
+    # Slot başına girdiler (aynı anda iki salonda olma + salon kapasitesi).
+    per_slot: dict[tuple[date, int], list[ExamCalendarEntry]] = {}
     for e in placed:
         if valid_period_nos and e.period_no not in valid_period_nos:
             errors.append(f"Girdi #{e.pk}: ders saati listede yok.")
@@ -986,6 +1401,32 @@ def calendar_validation(calendar: ExamCalendar) -> dict[str, list[str]]:
         if e.placed_date is not None:
             per_day.setdefault((e.level, e.placed_date), []).append(e.course_id)
             authorities_per_day.setdefault((e.level, e.placed_date), set()).add(e.authority)
+            if e.period_no is not None:
+                per_slot.setdefault((e.placed_date, int(e.period_no)), []).append(e)
+
+    # Aynı anda iki sınav: `place_entry` bunu artık reddeder, ama denetim BURADA
+    # da durur — kural konmadan önce kurulmuş takvimlerde (ve şube kapsamı
+    # sonradan genişletilen girdilerde) çakışma sessiz kalmasın.
+    for (gun, saat), slot_girdileri in sorted(per_slot.items()):
+        for i, birinci in enumerate(slot_girdileri):
+            for ikinci in slot_girdileri[i + 1 :]:
+                if _scope_overlaps(birinci, ikinci):
+                    errors.append(
+                        f"{_level_display(birinci.level)} {gun} {saat}. ders: "
+                        f"{birinci.course.name} ile {ikinci.course.name} aynı saatte "
+                        "ve kapsamları kesişiyor — aynı öğrenci iki sınava giremez."
+                    )
+
+    kapasite = _total_room_capacity()
+    if kapasite > 0:
+        roster_counts = okul_selectors.active_student_counts_by_level()
+        for (gun, saat), slot_girdileri in sorted(per_slot.items()):
+            mevcut = sum(_entry_student_count(e, roster_counts) for e in slot_girdileri)
+            if mevcut > kapasite:
+                warnings.append(
+                    f"{gun} {saat}. ders: aynı saatte {mevcut} öğrenci sınava giriyor, "
+                    f"aktif salon kapasitesi {kapasite}."
+                )
     for (level, day), makamlar in sorted(
         authorities_per_day.items(), key=lambda kv: (kv[0][1], kv[0][0])
     ):
@@ -1151,6 +1592,7 @@ def calendar_grid(calendar: ExamCalendar) -> dict[str, Any]:
     """FE + PDF ortak ızgara: seviyeler × günler × hücreler + havuz + doğrulama."""
     periods = _bell_periods()
     period_by_no = {int(p["no"]): p for p in periods}
+    sinav_saatleri = set(exam_period_numbers())
 
     # Seviye sütunları: seçilebilir seviyeler ∪ girdi seviyeleri.
     entries = list(ExamCalendarEntry.objects.filter(calendar=calendar).select_related("course"))
@@ -1205,6 +1647,9 @@ def calendar_grid(calendar: ExamCalendar) -> dict[str, Any]:
             "participant_label": participant_scope_label(e.participant_type, e.section_ids),
             "session_id": e.session_id,
             "note": e.note,
+            # Sabitleme ızgara çipinde kilit ikonudur; otomatik yerleştirme
+            # bu bayraklı girdileri yerinden oynatmaz.
+            "is_pinned": e.is_pinned,
         }
         if e.placed_date is not None and e.period_no is not None:
             key = f"{e.placed_date.isoformat()}|{e.period_no}|{e.level}"
@@ -1223,7 +1668,14 @@ def calendar_grid(calendar: ExamCalendar) -> dict[str, Any]:
         },
         "levels": levels,
         "periods": [
-            {"no": int(p["no"]), "name": str(p.get("name", p["no"])), "start": p.get("start", "")}
+            {
+                "no": int(p["no"]),
+                "name": str(p.get("name", p["no"])),
+                "start": p.get("start", ""),
+                # Sınav saati ayarı ızgarada da görünür: dışındaki satırlar
+                # soluk çizilir, otomatik yerleştirici oraya hiç bakmaz.
+                "is_exam_period": int(p["no"]) in sinav_saatleri,
+            }
             for p in periods
         ],
         "period_by_no": {str(k): v for k, v in period_by_no.items()},

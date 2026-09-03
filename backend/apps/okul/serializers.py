@@ -44,6 +44,10 @@ class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
     """
 
     level_programs = serializers.JSONField(required=False)
+    # Ders saati ayarları: asıl doğrulama servistedir (`update_school_config`)
+    # — aralık kuralı günlük saat sayısıyla birlikte değerlendirilir, tek alanı
+    # tek başına doğrulayan serializer dalı ikisini ayrıştırırdı.
+    exam_period_nos = serializers.JSONField(required=False)
 
     class Meta:
         model = SchoolConfig
@@ -55,6 +59,8 @@ class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
             "school_type",
             "has_prep_class",
             "level_programs",
+            "daily_period_count",
+            "exam_period_nos",
             "setup_completed",
         ]
         read_only_fields = ["setup_completed"]

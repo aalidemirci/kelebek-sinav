@@ -28,7 +28,13 @@ import SubeKumeleriPaneli from "./SubeKumeleriPaneli";
 import ZumrelerPaneli from "./ZumrelerPaneli";
 import GuvenlikAyarlari from "../guvenlik/GuvenlikAyarlari";
 import CizelgeAtamaMatrisi from "../okul/CizelgeAtamaMatrisi";
-import { okulApi, okulTuruSecenekleri } from "../okul/api";
+import {
+  MAKS_GUNLUK_DERS_SAATI,
+  MESLEKI_TURLER,
+  VARSAYILAN_GUNLUK_DERS_SAATI,
+  okulApi,
+  okulTuruSecenekleri,
+} from "../okul/api";
 import type {
   ClassSection,
   GradeLevelOption,
@@ -675,6 +681,8 @@ function OkulBilgileriPanel() {
   const [okulTuru, setOkulTuru] = useState<SchoolType>("ANADOLU_LISESI");
   const [hazirlikVar, setHazirlikVar] = useState(false);
   const [levelPrograms, setLevelPrograms] = useState<LevelPrograms>({});
+  const [gunlukDersSaati, setGunlukDersSaati] = useState(VARSAYILAN_GUNLUK_DERS_SAATI);
+  const [sinavSaatleri, setSinavSaatleri] = useState<number[]>([]);
   const [okulTurleri, setOkulTurleri] = useState<SchoolTypeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -695,6 +703,8 @@ function OkulBilgileriPanel() {
         setOkulTuru(c.school_type);
         setHazirlikVar(c.has_prep_class);
         setLevelPrograms(c.level_programs ?? {});
+        setGunlukDersSaati(c.daily_period_count || VARSAYILAN_GUNLUK_DERS_SAATI);
+        setSinavSaatleri(c.exam_period_nos ?? []);
         setError(null);
       })
       .catch((e: unknown) =>
@@ -730,6 +740,10 @@ function OkulBilgileriPanel() {
         school_type: okulTuru,
         has_prep_class: hazirlikVar,
         level_programs: levelPrograms,
+        daily_period_count: gunlukDersSaati,
+        // Gün kısaldıysa taşan saatler gönderilmez: backend'in "açıkça
+        // gönderilen liste sessizce kırpılmaz" kuralı hata döndürürdü.
+        exam_period_nos: sinavSaatleri.filter((no) => no <= gunlukDersSaati),
       });
       snackbar.success("Okul bilgileri kaydedildi. Ders havuzu çizelgeye göre güncellendi.");
     } catch (err) {
@@ -799,6 +813,55 @@ function OkulBilgileriPanel() {
             { value: "1", label: "Var" },
           ]}
         />
+        <Select
+          label="Günlük ders saati sayısı"
+          value={String(gunlukDersSaati)}
+          onChange={(e) => setGunlukDersSaati(Number(e.target.value))}
+          options={Array.from({ length: MAKS_GUNLUK_DERS_SAATI }, (_, i) => ({
+            value: String(i + 1),
+            label: `${i + 1} ders saati`,
+          }))}
+          helperText={
+            MESLEKI_TURLER.includes(okulTuru)
+              ? "Atölye ve işletmede beceri eğitimi günleriyle değişebilir — okulunuzun gününü girin."
+              : "Genel liselerde gün 8 ders saatidir."
+          }
+        />
+        <div className="sm:col-span-2">
+          <fieldset>
+            <legend className="text-label-large text-on-surface">
+              Sınav yapılabilecek ders saatleri
+            </legend>
+            <p className="mb-2 text-body-small text-on-surface-variant">
+              Otomatik yerleştirme sınavları YALNIZ işaretli saatlere koyar. Hiçbiri işaretli
+              değilse tüm saatler sınava açıktır. Elle yerleştirmede bu seçim bağlayıcı değildir —
+              sınav saatini okul müdürlüğü belirler (Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5).
+            </p>
+            <div className="grid grid-cols-3 gap-1 sm:grid-cols-4">
+              {Array.from({ length: gunlukDersSaati }, (_, i) => i + 1).map((no) => (
+                <label
+                  key={no}
+                  className="flex min-h-9 cursor-pointer items-center gap-2 rounded-shape-sm border border-outline px-3 text-body-medium text-on-surface"
+                >
+                  <input
+                    type="checkbox"
+                    className="h-5 w-5 accent-primary"
+                    checked={sinavSaatleri.includes(no)}
+                    aria-label={`${no}. ders saati sınava açık`}
+                    onChange={() =>
+                      setSinavSaatleri((prev) =>
+                        prev.includes(no)
+                          ? prev.filter((x) => x !== no)
+                          : [...prev, no].sort((a, b) => a - b),
+                      )
+                    }
+                  />
+                  {no}. ders
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </div>
         <div className="sm:col-span-2">
           <CizelgeAtamaMatrisi
             schoolType={okulTuru}
