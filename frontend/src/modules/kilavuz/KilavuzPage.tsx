@@ -97,8 +97,22 @@ export default function KilavuzPage() {
         </p>
         <p>
           Sonradan değiştirmek için <Ekran to="/ayarlar?tab=okul">Ayarlar → Okul Bilgileri</Ekran>.
-          Okul türü, programın hangi sınıf düzeylerini (9-12, hazırlık vb.) tanıyacağını belirler;
-          hazırlık sınıfı varsa burada işaretleyin.
+          Okul türü iki şeyi birden belirler: programın tanıyacağı sınıf düzeylerini (9-12,
+          hazırlık) ve <strong>hangi MEB haftalık ders çizelgesinin</strong> uygulanacağını. Sekiz
+          ortaöğretim türü tanınır — Anadolu, Fen, Sosyal Bilimler, Anadolu İmam Hatip, Mesleki ve
+          Teknik Anadolu, Çok Programlı Anadolu, Güzel Sanatlar ve Spor Lisesi; çizelge verisi henüz
+          gelmemiş türler listede işaretli görünür ve o okulda ders havuzu boş başlar. Hazırlık
+          sınıfı varsa burada işaretleyin — hazırlıksız okulda program hiç 0. seviye satırı üretmez.
+        </p>
+        <p>
+          Okul türünün altındaki <strong>çizelge ataması</strong> kartı, hangi seviyede hangi Talim
+          ve Terbiye Kurulu çizelgesinin yürürlükte olduğunu kararın tarih ve sayısıyla gösterir.
+          Bütün seviyeler aynı çizelgeyle okuyorsa dokunmanız gerekmez.{" "}
+          <strong>“Seviye bazında özelleştir”</strong> iki durum içindir: <em>kademeli dönüşüm</em>{" "}
+          — Anadolu Lisesi'nden Fen Lisesi'ne dönen okulda yeni tür 9. sınıftan başlar, üst sınıflar
+          eski çizelgede kalır — ve <em>çok programlı okul</em>: aynı seviyeye birden çok çizelge
+          işaretlenir. Kademeli bir çizelgede kapsanmayan seviye kalırsa program onu en yeni
+          programa düşürür ve kartta uyarı gösterir; sessizce geçmez.
         </p>
         <p>
           Verilerinizi korumak için <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran>{" "}
@@ -142,9 +156,24 @@ export default function KilavuzPage() {
 
       <Adim no={4} icon="menu_book" title="Ders havuzu: tür ve sınav biçimi">
         <p>
-          <Ekran to="/dersler">Ders Havuzu</Ekran>, MEB haftalık ders çizelgesinden okul türünüze
-          göre kendiliğinden tohumlanır. Sınav takvimi ve sınav oturumları dersleri bu havuzdan
-          seçer. Ders <strong>silinmez</strong>, pasifleştirilir — geçmiş evrak bozulmasın diye.
+          <Ekran to="/dersler">Ders Havuzu</Ekran>, okulun <strong>yürürlükteki</strong> haftalık
+          ders çizelgesinden kendiliğinden türetilir: okul türü, hazırlık sınıfı, aktif ders yılı ve
+          1. adımdaki seviye ataması birlikte hangi Talim ve Terbiye Kurulu çizelgesinin geçerli
+          olduğunu söyler. Sınav takvimi ve sınav oturumları dersleri bu havuzdan seçer. Ders{" "}
+          <strong>silinmez</strong>, pasifleştirilir — geçmiş evrak bozulmasın diye.
+        </p>
+        <p>
+          Listenin üstündeki <strong>“Yürürlükteki çizelge”</strong> kartı hangi programın hangi
+          seviyede uygulandığını, dayanağını (kararın tarihi ve sayısı) ve varsa uyarıları gösterir.
+          Okul türünü, hazırlık seçimini ya da ders yılını değiştirdiğinizde havuz kendiliğinden
+          yenilenir; <strong>“Çizelgeyi yeniden uygula”</strong> düğmesi bunu elle tetikler ve kaç
+          dersin eklendiğini, güncellendiğini ve çizelge dışı kaldığını söyler.
+        </p>
+        <p>
+          Çizelge değişince havuzda kalan eski dersler <strong>“Çizelge dışı”</strong> rozetiyle
+          pasifleşir; o ders çizelgeye geri girerse kendiliğinden yeniden açılır. Sizin{" "}
+          <strong>“Pasifleştir”</strong> dediğiniz ders ise asla kendiliğinden açılmaz — aktiflik
+          idari bir karardır, program ona dokunmaz.
         </p>
         <p>
           Listenin iki sütunu takvim havuzunun nasıl dolacağını belirler. <strong>Tür</strong>{" "}
@@ -156,6 +185,15 @@ export default function KilavuzPage() {
           <em>Sınav yok</em> gelir. Okulunuzun uygulaması farklıysa satırdaki{" "}
           <strong>Düzenle</strong> düğmesiyle dersin adını, seviyelerini, türünü ve sınav biçimini
           değiştirebilirsiniz.
+        </p>
+        <p>
+          <strong>Ancak çizelgeden gelen bir derste bu düzenleme kalıcı değildir.</strong> Ad,
+          seviye, tür ve sınav biçimi <em>çizelge verisidir</em>: çizelge yeniden uygulandığında
+          (okul türü, hazırlık ya da ders yılı değişikliği; program güncellemesiyle gelen yeni
+          çizelge) MEB değerine döner. Kalıcı olarak farklı kalması gereken bir ders için çizelge
+          dersini <strong>pasifleştirip</strong> yanına <em>farklı adla</em> elle bir ders ekleyin —
+          elle eklenen derse senkron dokunmaz. Buna karşılık{" "}
+          <strong>pasifleştirme her zaman kalıcıdır</strong>.
         </p>
         <Ipucu>
           <strong>Önce havuzu okulunuza göre sadeleştirin.</strong> Okulunuzda okutulmayan dersleri
@@ -203,6 +241,25 @@ export default function KilavuzPage() {
           Planın en üstündeki şerit salonun <strong>ön cephesidir</strong> — öğretmen masası, tahta
           ve kapı oraya konur. Bu şerit <strong>satır sayımına girmez</strong>: “Sıra satırı” ve
           “Sıra sütunu” alanları yalnız öğrenci sıralarını sayar.
+        </p>
+        <p>
+          Yeni salon boş ızgarayla değil <strong>varsayılan şablonla</strong> açılır: öğretmen
+          masası ön-solda, kapı çizilmemiş, bütün hücreler ikili sıra — dört sütun ve beş sırayla
+          kırk koltuk. Koltuk numaraları <strong>öğretmen masasının önünden</strong> başlar; masayı
+          başka bir köşeye taşırsanız numaralandırma da onunla döner. Kapı yalnız krokiye çizilir,
+          numaralandırmaya girmez — varsayılanda hiç yoktur, çünkü yeri okuldan okula değişir ve
+          uydurulmuş bir kapı resmî salon evrakına yanlış bilgi basmak olurdu. Editördeki{" "}
+          <strong>“Varsayılan şablon”</strong> düğmesi aynı düzeni açık salona uygular ve bunu{" "}
+          <strong>salonun kendi satır/sütun ölçüsünde</strong> yapar, 4×5'e zorlamaz; kaydetmezseniz
+          kalıcı olmaz.
+        </p>
+        <p>
+          Program daha önce kurulmuşsa ve onlarca derslik eski düzende kaldıysa Salonlar
+          sayfasındaki <strong>“Şablonu topluca uygula”</strong> düğmesini kullanın. Diyalog eski
+          düzendeki salonları işaretli açar, her salonu kendi ölçüsünde şablona çeker ve kapasiteyi
+          korur. <strong>Yerleşimi yapılmış salonlar atlanır</strong> ve adlarıyla bildirilir:
+          basılmış evraktaki koltuk numarası planla çelişmesin diye. Onları editörden tek tek
+          değiştirebilirsiniz.
         </p>
         <p>
           Salon planı bir kez çizilir, her sınavda yeniden kullanılır. Boş yerleşim planını PDF
@@ -393,20 +450,84 @@ export default function KilavuzPage() {
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
-          Özel durumlu öğrencilerin yerini sabitleme
+          Engelli ve özel durumlu öğrencilerin salonunu ve yerini sabitleme
         </h3>
         <p>
-          Oturum detayındaki <strong>Yerleştirme Kuralları</strong> sekmesinde engelli ya da özel
-          durumu olan öğrencilerin yerini sabitlersiniz. “Yerini ben seçeyim” demezseniz öğrenci{" "}
-          <strong>kendi dersliğinde, arka sırada ve tek başına</strong> oturur. İsterseniz salonu ve
-          koltuğu birebir seçebilirsiniz. “Tek başına” seçeneği sıradaki diğer koltukları kimseye
-          vermez; salon kapasitesi o kadar azalır (ikili sırada iki koltuk), kalabalık oturumda ek
-          salon gerekebilir. Kural sahibi öğrenciyi kelebek motoru taşıyamaz.
+          Engel durumu, BEP ya da sağlık nedeniyle belirli bir yerde oturması gereken öğrencilerin{" "}
+          <strong>salonu ve koltuğu</strong>, oturum detayındaki{" "}
+          <strong>Yerleştirme Kuralları</strong> sekmesinden <strong>“Kural ekle”</strong> ile
+          sabitlenir. Kural sahibi öğrenci kelebek motoru çalışmadan önce yerine oturtulur;{" "}
+          <strong>motor onu taşıyamaz</strong>. Kalan öğrenciler artakalan koltuklara kelebek
+          düzende dağıtılır.
+        </p>
+        <Mevzuat kaynak="MEB Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5">
+          Kaynaştırma/bütünleştirme yoluyla eğitim ve öğretimlerine devam eden öğrencilere yönelik
+          ölçme ve değerlendirmede BEP esas alınır. Bu öğrencilerin ortak yazılı sınavlara
+          katılımıyla ilgili süreçlerden okul müdürlükleri sorumludur.
+        </Mevzuat>
+        <p>
+          Formda önce öğrenciyi (ad ya da okul numarasıyla aranır) ve gerekçe kategorisini
+          seçersiniz. <strong>“Yerini ben seçeyim”</strong> kutusunu işaretlemezseniz öğrenci{" "}
+          <strong>kendi dersliğinde, arka sırada ve tek başına</strong> oturur — en sık istenen
+          bileşim budur, tek tıkla kurulur.
+        </p>
+        <p>Kutuyu işaretlerseniz yeri kendiniz belirlersiniz:</p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Salon</strong> zorunludur — öğrencinin sınava gireceği dersliği seçersiniz.
+          </li>
+          <li>
+            <strong>Koltuk</strong> isteğe bağlıdır: “salon içinde serbest” bırakabilir ya da
+            listeden birebir bir koltuk seçebilirsiniz. Liste her koltuğu sıra satır-sütunu, sıra
+            içi pozisyonu ve o plandaki koltuk numarasıyla birlikte gösterir.
+          </li>
+          <li>
+            <strong>Salon içinde tercih</strong> koltuğu serbest bıraktığınızda devreye girer: ön
+            sıra, arka sıra ya da fark etmez. Ön ve arka <em>öğretmen masasına</em> göre hesaplanır
+            — masası çizilmemiş planda plandaki ilk sıra “ön” sayılır.
+          </li>
+          <li>
+            <strong>“Tek başına otursun”</strong> sıradaki diğer koltukları kimseye vermez. Salon
+            kapasitesi o kadar azalır (ikili sırada iki koltuk) ve dağıtım raporunda kaç koltuğun
+            kapandığı uyarı olarak yazar; kalabalık oturumda ek salon gerekebilir.
+          </li>
+        </ul>
+        <Ipucu>
+          <strong>Kuralı dağıtımdan önce ekleyin.</strong> Kural yalnız dağıtım çalışırken
+          uygulanır: oturumu dağıttıktan sonra kural eklerseniz “Yeniden Dağıt” demeniz gerekir ve
+          bu, yeni bir çekirdek sayıyla bütün yerleşimi yeniler. Onaylanmış ya da arşivlenmiş
+          oturuma kural eklenemez — önce onayı geri alın.
+        </Ipucu>
+        <p>Kural yazarken üç noktaya dikkat edin:</p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>“Kendi dersliğinde” için bağlı şube şarttır.</strong> Program öğrencinin
+            şubesine <em>bağlı</em> bir derslik arar (Salonlar ekranındaki “bağlı şube” alanı);
+            bulamazsa dağıtımı reddeder ve hangi şubenin dersliğinin eksik olduğunu söyler.
+          </li>
+          <li>
+            <strong>Kuralda seçtiğiniz salonu oturumun salon listesine de ekleyin.</strong> Kural,
+            oturumda seçili olmayan bir salonu da hedef alabilir; öğrenci oraya yerleşir ama o salon
+            için salon sınav evrakı basılmaz — öğrenci hiçbir yoklama listesinde görünmez.
+          </li>
+          <li>
+            <strong>Koltuk, numarasıyla değil koordinatıyla saklanır.</strong> Numaralandırma yönünü
+            değiştirmek kuralı bozmaz; ama salon planını değiştirip o koltuğu kaldırırsanız kural
+            “koltuk planda yok” hatası verir. Aynı koltuk iki kurala verilemez ve hedef salonda boş
+            koltuk kalmazsa dağıtım durur.
+          </li>
+        </ul>
+        <p>
+          Kural <strong>eklendiği oturuma özgüdür</strong>: her sınav oturumunda yeniden tanımlanır
+          ve bir öğrencinin aynı oturumda tek kuralı olur. Değiştirmek için kuralı kaldırıp yeniden
+          ekleyin.
         </p>
         <p>
           Gerekçe olarak yalnız kategori seçilir (engel durumu, BEP, sağlık, diğer);{" "}
           <strong>tanı ya da rapor bilgisi hiç kaydedilmez</strong> — programda böyle bir alan
-          bilinçli olarak yoktur.
+          bilinçli olarak yoktur. Kural basılı evraka da geçmez: oturma planında ve yoklama
+          listesinde öğrenci diğerleri gibi görünür, dağıtım doğrulama raporunda ise yalnız{" "}
+          <em>kaç</em> öğrencinin sabit kuralla yerleştiği sayı olarak yazar.
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
@@ -437,10 +558,31 @@ export default function KilavuzPage() {
           (“muaf” gibi) — böylece “neden seçemiyorum” sorusu ekranda yanıtlanır. Görevlendirme
           yazısı tebellüğ imzası için yer bırakır.
         </p>
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Yedek alma ve yedekten dönme
+        </h3>
+        <p>
+          Program her açılışta kendiliğinden bir <strong>günlük yedek</strong> alır. Bunun dışında{" "}
+          <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran> bölümünden istediğiniz an
+          elle yedek (<span className="font-mono">.ksbak</span>) alabilirsiniz.
+        </p>
+        <p>
+          Yanlış ya da eksik veri girişinden sonra eski bir güne dönmek için aynı ekrandaki{" "}
+          <strong>“Yedekten geri yükle”</strong> kartını kullanın: günlük yedeklerden birini seçin
+          ya da elinizdeki .ksbak dosyasını yükleyin. Yedek şifreliyse uygulama parolası ya da
+          kurtarma anahtarı istenir. Mevcut veritabanı <strong>silinmez</strong>; veri klasöründe{" "}
+          <span className="font-mono">db-onceki-…</span> adıyla kenara alınır. Geri yükleme
+          uygulandıktan sonra program <strong>kapatılıp yeniden açılmalıdır</strong> — atlanmasın
+          diye ekran kapanmayan bir yönlendirmeye döner.
+        </p>
+        <p>
+          Program hiç açılmıyorsa (bozuk veritabanı) bu ekrana ulaşamazsınız; o durumda Başlat
+          menüsündeki <strong>“Yedekten Geri Yükle”</strong> kısayolunu kullanın.
+        </p>
         <Ipucu>
-          Sınav dönemi başlamadan <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran>{" "}
-          bölümünden bir yedek (.ksbak) alın ve okul dışında saklayın. Program çevrimdışıdır;
-          veriler yalnız bu bilgisayarda durur, bir bulut kopyası yoktur.
+          Sınav dönemi başlamadan bir yedek alıp <strong>okul dışında</strong> saklayın. Program
+          çevrimdışıdır; veriler yalnız bu bilgisayarda durur, bir bulut kopyası yoktur. Günlük
+          yedekler de aynı bilgisayarda tutulur — disk giderse onlar da gider.
         </Ipucu>
       </Adim>
 
