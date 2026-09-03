@@ -17,10 +17,11 @@ import TextField from "../../ui/TextField";
 import { okulApi } from "../okul/api";
 import type { GradeLevelOption } from "../okul/api";
 import { COURSE_EXAM_MODE_TR, COURSE_SOURCE_TR, COURSE_TYPE_TR, derslerApi } from "./api";
-import type { Course, CourseExamMode, CourseType, DuplicateCluster } from "./api";
+import type { CatalogStatus, Course, CourseExamMode, CourseType, DuplicateCluster } from "./api";
 
 export default function DersHavuzuPage() {
   const [rows, setRows] = useState<Course[]>([]);
+  const [status, setStatus] = useState<CatalogStatus | null>(null);
   const [levels, setLevels] = useState<GradeLevelOption[]>([]);
   const [level, setLevel] = useState<number | null>(null);
   const [courseType, setCourseType] = useState<CourseType | null>(null);
@@ -56,6 +57,13 @@ export default function DersHavuzuPage() {
         setRows(courses);
         setDuplicates(clusters);
         setError(null);
+        // Çizelge paneli liste senkronundan SONRA çekilir (liste ucu tembel tohumu
+        // koşturur; önce çekilse "henüz senkronlanmadı" yanlış görünürdü).
+        // Gelmezse panel gizli kalır, liste çalışmaya devam eder.
+        return derslerApi
+          .getCatalogStatus()
+          .then(setStatus)
+          .catch(() => setStatus(null));
       })
       .catch((err: unknown) =>
         setError(err instanceof ApiError ? err.message : "Ders havuzu yüklenemedi."),
@@ -84,6 +92,8 @@ export default function DersHavuzuPage() {
       </div>
 
       {error && <ErrorBanner message={error} />}
+
+      {status && <CizelgePaneli status={status} onResynced={load} />}
 
       {duplicates.length > 0 && <DuplicatesPanel clusters={duplicates} onMerged={load} />}
 
@@ -254,6 +264,15 @@ function CourseRow({
           <span className="rounded-shape-sm bg-success-container px-2 py-0.5 text-label-medium text-on-success-container">
             Aktif
           </span>
+        ) : course.catalog_excluded ? (
+          // Senkron pasifleştirdi: okulun yürürlükteki çizelgesinde yok. İdari
+          // pasiften ayrı gösterilir; çizelgeye geri girerse kendiliğinden açılır.
+          <span
+            className="rounded-shape-sm bg-surface-container-high px-2 py-0.5 text-label-medium text-on-surface-variant"
+            title="Okulun yürürlükteki MEB çizelgesinde yok; çizelgeye geri girerse kendiliğinden açılır."
+          >
+            Çizelge dışı
+          </span>
         ) : (
           <span className="rounded-shape-sm bg-surface-container-high px-2 py-0.5 text-label-medium text-on-surface-variant">
             Pasif
@@ -281,6 +300,99 @@ function CourseRow({
         </Button>
       </td>
     </tr>
+  );
+}
+
+/**
+ * Yürürlükteki çizelge paneli — hangi TTK çizelgesinin hangi seviyede uygulandığı,
+ * dayanağı ve varsa uyarılar (kademeli çizelgede aktarılmamış önceki nesil gibi).
+ * "Çizelgeyi yeniden uygula" kataloğu damgadan bağımsız senkronlar.
+ */
+function CizelgePaneli({ status, onResynced }: { status: CatalogStatus; onResynced: () => void }) {
+  const snackbar = useSnackbar();
+  const [busy, setBusy] = useState(false);
+  const ayniKume = new Set(
+    status.levels.map((lv) =>
+      lv.programs
+        .map((p) => p.key)
+        .sort()
+        .join("|"),
+    ),
+  );
+  const tek = ayniKume.size === 1 && status.levels.length > 0 ? status.levels[0].programs : null;
+
+  const resync = async () => {
+    setBusy(true);
+    try {
+      const sonuc = await derslerApi.resyncCatalog();
+      const r = sonuc.result;
+      snackbar.success(
+        r
+          ? `Çizelge uygulandı: ${r.created} yeni, ${r.updated} güncellenen, ${r.restored} geri açılan, ${r.excluded} çizelge dışı.`
+          : "Çizelge verisi yok; havuz değişmedi.",
+      );
+      onResynced();
+    } catch (err) {
+      snackbar.error(err instanceof ApiError ? err.message : "Çizelge uygulanamadı.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card elevation={1} className="p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-title-medium text-on-surface">
+            <Icon name="fact_check" />
+            Yürürlükteki çizelge — {status.school_type_label}
+            {status.has_prep_class ? " (hazırlık sınıflı)" : ""}, {status.year_label}
+          </p>
+          {tek ? (
+            <p className="mt-1 text-body-medium text-on-surface-variant">
+              Tüm seviyeler:{" "}
+              {tek.map((p) => (
+                <span key={p.key} className="text-on-surface">
+                  {p.name}
+                  {p.source ? ` — ${p.source.split(" — ")[0]}` : ""}
+                  {"; "}
+                </span>
+              ))}
+            </p>
+          ) : (
+            <ul className="mt-1 space-y-0.5 text-body-medium text-on-surface-variant">
+              {status.levels.map((lv) => (
+                <li key={lv.level}>
+                  <span className="text-on-surface">{lv.label}:</span>{" "}
+                  {lv.programs.map((p) => p.name).join(" + ") || "çizelge atanmamış"}
+                </li>
+              ))}
+            </ul>
+          )}
+          {!status.synced && (
+            <p className="mt-1 text-body-small text-on-surface-variant">
+              Havuz bu planla henüz senkronlanmadı; liste açıldığında kendiliğinden uygulanır.
+            </p>
+          )}
+        </div>
+        <Button variant="tonal" icon="sync" onClick={resync} disabled={busy}>
+          {busy ? "Uygulanıyor…" : "Çizelgeyi yeniden uygula"}
+        </Button>
+      </div>
+      {status.warnings.length > 0 && (
+        <ul className="mt-3 space-y-1">
+          {status.warnings.map((w) => (
+            <li
+              key={w}
+              className="flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-3 py-2 text-body-small text-on-tertiary-container"
+            >
+              <Icon name="warning" size="sm" />
+              <span>{w}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 

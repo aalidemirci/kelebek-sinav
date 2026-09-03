@@ -35,6 +35,16 @@ def _validate_level(value: int) -> int:
 
 
 class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
+    """Kurum künyesi. `level_programs` seviye → çizelge program anahtarları (kademeli dönüşüm).
+
+    Doğrulama: anahtar geçerli bir sınıf düzeyi (0, 9-12), değer bilinen
+    program anahtarlarının listesi. Boş sözlük = varsayılan atama. Okulun
+    seviye kümesi dışındaki seviye (ör. hazırlıksız okulda 0) reddedilmez —
+    plan onu yok sayar; hazırlık sonradan açılırsa atama hazır durur.
+    """
+
+    level_programs = serializers.JSONField(required=False)
+
     class Meta:
         model = SchoolConfig
         fields = [
@@ -44,9 +54,46 @@ class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
             "principal_name",
             "school_type",
             "has_prep_class",
+            "level_programs",
             "setup_completed",
         ]
         read_only_fields = ["setup_completed"]
+
+    def validate_level_programs(self, value: Any) -> dict[str, list[str]]:
+        from apps.dersler import catalog as catalog_mod
+        from apps.dersler.models import VALID_COURSE_LEVELS
+
+        if value in (None, ""):
+            return {}
+        if not isinstance(value, dict):
+            raise serializers.ValidationError(
+                "Seviye atamaları sözlük olmalıdır: {'9': ['fen-lisesi-2025']}."
+            )
+        known = catalog_mod.load_programs()
+        cleaned: dict[str, list[str]] = {}
+        for raw_level, raw_keys in value.items():
+            try:
+                level = int(raw_level)
+            except (TypeError, ValueError) as exc:
+                raise serializers.ValidationError(
+                    f"Seviye anahtarı sayısal olmalıdır: {raw_level!r}."
+                ) from exc
+            if level not in VALID_COURSE_LEVELS:
+                raise serializers.ValidationError(
+                    f"Geçersiz seviye: {level}. Geçerli düzeyler: Hazırlık (0), 9, 10, 11, 12."
+                )
+            if not isinstance(raw_keys, list):
+                raise serializers.ValidationError(
+                    f"{level}. seviye için program listesi bekleniyor."
+                )
+            keys: list[str] = []
+            for key in raw_keys:
+                if not isinstance(key, str) or key not in known:
+                    raise serializers.ValidationError(f"Bilinmeyen çizelge programı: {key!r}.")
+                if key not in keys:
+                    keys.append(key)
+            cleaned[str(level)] = keys
+        return cleaned
 
 
 class SchoolYearSerializer(serializers.ModelSerializer[SchoolYear]):

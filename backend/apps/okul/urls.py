@@ -16,6 +16,7 @@ urlpatterns = [
     # Kurulum sihirbazı
     path("setup/status/", views.SetupStatusView.as_view(), name="setup-status"),
     path("setup/school-config/", views.SchoolConfigView.as_view(), name="setup-school-config"),
+    path("setup/school-types/", views.SchoolTypesView.as_view(), name="setup-school-types"),
     path("setup/complete/", views.SetupCompleteView.as_view(), name="setup-complete"),
     # Öğrenim seviyeleri (okul türünden türetilir — U4)
     path("grade-levels/", views.GradeLevelsView.as_view(), name="grade-levels"),

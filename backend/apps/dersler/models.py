@@ -93,6 +93,16 @@ class Course(BaseModel):
         default=True,
         help_text="Pasif ders yeni planlamada seçilemez; kayıt silinmez.",
     )
+    # Katalog senkronu (`services.sync_catalog`) okulun yürürlükteki çizelgesinde
+    # ARTIK bulunmayan MEB dersini pasifleştirirken bu bayrağı kaldırır; ders
+    # çizelgeye geri girerse yalnız bu bayraklı kayıt yeniden AÇILIR. İdarecinin
+    # elle pasifleştirdiği ders (bayraksız) senkronla asla geri açılmaz —
+    # `is_active` idari karardır (K5), bu alan onun ayrımını taşır.
+    catalog_excluded = models.BooleanField(
+        "çizelge dışı",
+        default=False,
+        help_text="Okulun yürürlükteki MEB çizelgesinde yok; senkron pasifleştirdi.",
+    )
 
     class Meta:
         verbose_name = "ders"

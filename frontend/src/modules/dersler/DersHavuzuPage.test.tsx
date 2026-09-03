@@ -17,6 +17,40 @@ const dersler = vi.hoisted(() => ({
   listDuplicates: vi.fn(() => Promise.resolve([])),
   createCourse: vi.fn(),
   updateCourse: vi.fn(),
+  getCatalogStatus: vi.fn(() =>
+    Promise.resolve({
+      year: 2026,
+      year_label: "2026-2027",
+      school_type: "ANADOLU_LISESI",
+      school_type_label: "Anadolu Lisesi",
+      has_prep_class: false,
+      transitional: false,
+      custom: false,
+      synced: true,
+      data_available: true,
+      warnings: ["12. sınıf ortak dersleri için önceki çizelge bu sürümde yok."],
+      levels: [
+        {
+          level: 9,
+          label: "9. sınıf",
+          explicit: false,
+          programs: [
+            {
+              key: "anadolu-lisesi-2025",
+              name: "Anadolu Lisesi Haftalık Ders Çizelgesi (TTK 09.05.2025/5)",
+              source: "TTK 09.05.2025 tarihli ve 5 sayılı karar — https://ttkb.meb.gov.tr/x.pdf",
+              role: "ortak+seçmeli",
+            },
+          ],
+          default_program_keys: ["anadolu-lisesi-2025"],
+          warnings: [],
+        },
+      ],
+      programs: [],
+      school_types: [],
+    }),
+  ),
+  resyncCatalog: vi.fn(),
 }));
 
 const okul = vi.hoisted(() => ({
@@ -53,6 +87,7 @@ function ders(overrides: Partial<Course> = {}): Course {
     exam_mode: "WRITTEN",
     exam_mode_label: "Yazılı",
     is_active: true,
+    catalog_excluded: false,
     ...overrides,
   };
 }
@@ -79,6 +114,53 @@ function renderPage() {
 afterEach(() => vi.clearAllMocks());
 
 describe("DersHavuzuPage", () => {
+  it("yürürlükteki çizelge panelini dayanağıyla basar; 'yeniden uygula' senkronu tetikler", async () => {
+    const user = userEvent.setup();
+    dersler.listCourses.mockResolvedValue([ders()]);
+    dersler.resyncCatalog.mockResolvedValue({
+      result: {
+        created: 0,
+        updated: 2,
+        unchanged: 59,
+        restored: 1,
+        excluded: 0,
+        errors: [],
+        warnings: [],
+      },
+      status: {},
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByText(/Yürürlükteki çizelge — Anadolu Lisesi, 2026-2027/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/TTK 09\.05\.2025 tarihli ve 5 sayılı karar/)).toBeInTheDocument();
+    expect(screen.getByText(/önceki çizelge bu sürümde yok/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Çizelgeyi yeniden uygula/ }));
+    await waitFor(() => expect(dersler.resyncCatalog).toHaveBeenCalled());
+    expect(await screen.findByText(/2 güncellenen, 1 geri açılan/)).toBeInTheDocument();
+  });
+
+  it("çizelge dışı kalan ders idari pasiften ayrı rozetlenir", async () => {
+    dersler.listCourses.mockResolvedValue([
+      ders({
+        id: 5,
+        name: "Hazırlık Sınıfı Türk Dili ve Edebiyatı",
+        is_active: false,
+        catalog_excluded: true,
+      }),
+      ders({ id: 6, name: "Girişimcilik", is_active: false }),
+    ]);
+
+    renderPage();
+
+    const tablo = within(await screen.findByRole("table"));
+    expect(tablo.getByText("Çizelge dışı")).toBeInTheDocument();
+    expect(tablo.getByText("Pasif")).toBeInTheDocument();
+  });
+
   it("listede Sınav sütunu dersin sınav biçimini basar", async () => {
     dersler.listCourses.mockResolvedValue([ders(), BEDEN]);
 

@@ -36,4 +36,10 @@ def activate_school_year(year: SchoolYear) -> SchoolYear:
     if not year.is_active:
         year.is_active = True
         year.save(update_fields=["is_active", "updated_at"])
+    # Ders yılı, çizelge yürürlük kuralının girdisidir (kademeli çizelgelerde
+    # hangi seviyenin hangi nesli okuduğu yıla bağlı): yıl devrinde katalog
+    # aynı işlemde yeniden türetilir (damga farklıysa).
+    from apps.okul.services import setup as setup_service
+
+    setup_service.sync_course_catalog()
     return year

@@ -21,7 +21,19 @@ raporlarından (xlsx/pano) içe aktarılır; ders havuzu MEB ders çizelgesinden
 okul türü ve kademeye göre tohumlanır. Opsiyonel uygulama parolası ile alan
 şifrelemesi ve şifreli yedek.
 
-**Durum:** Yerleşim ve seçim akışı genişletildi (31.08.2026): şubeler
+**Durum:** Ders havuzu okul türüne göre türetiliyor (03.09.2026): sekiz
+ortaöğretim türünün (Anadolu, Fen, Sosyal Bilimler, Anadolu İmam Hatip,
+Mesleki ve Teknik Anadolu, Çok Programlı Anadolu, Güzel Sanatlar, Spor
+liseleri) TTK haftalık ders çizelgeleri hazırlık varyantları ve bölümleriyle
+program dosyası olarak gömüldü; havuz, okul türü + hazırlık sınıfı + ders
+yılından **yürürlükteki çizelge**ye göre senkronlanır (hazırlıksız okulda
+artık "Hazırlık" seviyesi görünmez). **Kademeli dönüşüm** için seviye bazlı
+çizelge ataması eklendi (ör. 9. sınıf Fen Lisesi, 10-12 Anadolu Lisesi;
+MTAL'de üç nesil aynı anda); çok programlı okul aynı seviyeye birden çok
+çizelge işaretler. Ders havuzu ekranı yürürlükteki çizelgeyi TTK karar
+dayanağıyla gösterir, çizelge dışı kalan dersleri rozetler.
+
+Önceki durum: Yerleşim ve seçim akışı genişletildi (31.08.2026): şubeler
 (Sayısal/Eşit Ağırlık/Dil) ve derslikler (Sabah/Öğle — ikili eğitimde salon
 listesi kalabalıklaşıyor) **kümelenebiliyor** ve sihirbazda tek tıkla
 seçiliyor; engelli ya da özel durumu olan öğrencilerin **salonu ve koltuğu

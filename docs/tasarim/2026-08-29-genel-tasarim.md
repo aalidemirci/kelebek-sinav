@@ -42,7 +42,7 @@ Geliştirme yalnız Docker'da (host'a Python/Node kurulmaz); kapı zinciri
 | U1 | Kapsam | **Tam kapsam, fazlı:** önce kelebek dağıtım + evrak (F1-F5), sonra sınav takvimi (F6), gözetmen (F7) |
 | U2 | Gözetmen | **Elle listeden seçim, ayara bağlı (varsayılan kapalı).** Oto-atama alınmaz: OYS'de Tur 242'de program verisi eksikken askıya alınmış, Tur 459'da program+devamsızlık köprüleriyle yeniden açılmıştı — masaüstünde bu köprüler hiç olmayacağından aynı yanlış-seçim sorunu geri gelirdi. Salon başına 1 gözetmen + 5 salona 1 yedek + R6 tebliğ korunur |
 | U3 | Şifreleme | **Parola + alan şifrelemesi ALINIR** (öneri düz SQLite idi; kullanıcı şifreleme istedi — bkz. §5) |
-| U4 | Okul türü | **v1 yalnız Anadolu Lisesi çizelgesi gömülü**; seviye kümesi ve veri formatı okul türüne göre parametrik — diğer türler sonraki sürümlerde veri dosyasıyla gelir |
+| U4 | Okul türü | Seviye kümesi ve veri formatı okul türüne göre parametrik. **03.09.2026 revizyonu:** sekiz ortaöğretim türünün TTK çizelgeleri program dosyası olarak gömülü; havuz okulun yürürlükteki çizelgesinden türetilir, kademeli dönüşüm seviye bazlı atamayla (§7.2) |
 
 ### 2.2 Teknik kararlar
 
@@ -232,10 +232,13 @@ DD'nin kanıtlı katmanı taşınır: `shared/crypto.py` (Fernet + Argon2id) +
 
 ## 7. MEB ders havuzu planı
 
-- Gömülü veri: [data/ders-cizelgeleri/](../../data/ders-cizelgeleri/)
-  `anadolu-lisesi-2025-2026.md` (64 ders katalo­ğu, TTK 09.05.2025/05) +
-  `cerceveler/` (AL + AL-Hazırlık saat matrisleri) + `ders-adi-takma-adlari.md`
-  (~55 takma ad) — okulapp'tan kopyalandı, format aynı.
+- Gömülü veri: [data/ders-cizelgeleri/](../../data/ders-cizelgeleri/) —
+  okul türü başına **program dosyaları** (`<program_key>.md`; 03.09.2026'da
+  15 dosya: AL, Fen, SBL ve hazırlık varyantları, AİHL (+program/proje),
+  GSL dört bölüm, Spor (+tematik), MTAL ortak dersler) +
+  `ders-adi-takma-adlari.md` (~55 takma ad). Eski birleşik
+  `anadolu-lisesi-2025-2026.md` ve OYS'den kopyalanan `cerceveler/` (KS'de
+  hiç tüketilmeyen saat matrisleri) kaldırıldı — bkz. §7.2.
 - Parser'lar saf ve aynen taşınır: `catalog_parser`, `curriculum_parser`,
   normalize yardımcıları (`_match_key`, `titlecase_tr`,
   `repair_truncated_course_name` — çıplak `.upper()/.lower()` TR'de yasak).
@@ -248,8 +251,75 @@ DD'nin kanıtlı katmanı taşınır: `shared/crypto.py` (Fernet + Argon2id) +
   **düzenle** + pasifleştir + mükerrer tespiti/birleştirme
   `consolidate_duplicate_course`). Liste "Sınav" sütununu gösterir; sınav
   biçimi ders bazında değiştirilebilir (§7.1).
-- Yeni okul türü = yeni md dosyası + `program_key`; kod değişikliği gerekmez
-  (U4 altyapı şartı). Seçmeli bütçesi türetilir: 40 − ortak toplam.
+- Yeni okul türü = yeni md dosyası + `program_key` (+ `okul.SchoolType`'a bir
+  satır); kod değişikliği gerekmez (U4 altyapı şartı).
+
+### 7.2 Okul türü çizelgeleri ve kademeli dönüşüm (03.09.2026)
+
+**Sorun (kullanıcı bulgusu).** Hazırlıksız bir Anadolu Lisesi'nde ders havuzu
+"Hazırlık, 9. Sınıf, …" etiketleri gösteriyordu: gömülü tek dosya AL ile
+"Hazırlık Sınıfı Bulunan AL" çizelgelerinin birleşimiydi ve tohum okulun
+yapılandırmasına bakmıyordu. Aynı kökten iki eksik daha: diğer ortaöğretim
+türlerinin çizelgesi yoktu (TB2) ve okul türü dönüşümündeki "kademeli"
+uygulama (yeni çizelge 9'dan başlar, üst sınıflar eskide kalır) hiç
+modellenmemişti — oysa MTAL'de 2026-2027'de üç nesil (2023/40, 2024/41,
+2026/85) aynı anda yürürlüktedir, GSL/Spor 2025 çizelgeleri de ortak dersleri
+hazırlık-9-10'dan başlatır.
+
+**Karar.**
+
+1. **Program dosyası = TTK çizelgesi.** Her çizelge ayrı `.md` (meta bloğu:
+   `program_key`, `okul_turu` (virgülle çoklu — ÇPAL, AL/MTAL/AİHL dosyalarını
+   paylaşır), `hazirlik`, `bolum`, `varsayilan`, `kaynak`, `yururluk`,
+   `kademeli`, `kademeli_ilk_seviyeler`, `secmeli_kademeli`). Yürürlük kuralı
+   dosyada yaşar; `CatalogProgram.covers(seviye, yıl, tür)` üç kalıbı tek
+   kuralla verir (kademesiz · ortak kademeli/seçmeli hemen · tümü kademeli).
+2. **Seviye ataması** (`catalog.default_assignment`): okul türü + hazırlık +
+   aktif ders yılı → her seviyede hangi program(lar). Aynı bölüm grubunda
+   birden çok nesil varsa (seviye, tür) için EN YENİ kapsayan nesil; hiçbiri
+   kapsamıyorsa en yeni program yedek + UYARI (aktarılmamış önceki nesil).
+   `SchoolConfig.level_programs` (`{"9": ["fen-lisesi-2025"]}`) seviye bazında
+   ezer: kademeli tür dönüşümü, çok programlı okul, bölümlü GSL'de bulunmayan
+   bölümü bırakma. Boş sözlük = varsayılan. OYS'nin
+   `CurriculumFramework/Entry/Assignment` üçlüsü (ADR-0037) ALINMADI: KS'de
+   haftalık saat ve ders programı yok; dosya + JSON alanı yeter.
+3. **Birleştirme** (`catalog.effective_rows`): ad → seviye birleşimi; tür
+   çatışmasında SEÇMELİ (havuz otomatik doldurması eksik doldurur, idareci
+   ekler), sınav biçiminde YOK > UYGULAMA > YAZILI. Aynı çizelgede hem ortak hem
+   seçmeli olan ders tek kayıttır: ortak bölümü lise seviyesindeyse ORTAK +
+   birleşim (Fen BTY 9-10), yalnız hazırlıkta ortaksa SEÇMELİ (AL BTY) — dosya
+   notlarında gerekçelenir.
+4. **Senkron** (`services.sync_catalog` + `ensure_catalog_synced`): etkin
+   satırlar upsert; çizelge dışı kalan MEB dersi `is_active=False +
+   catalog_excluded=True`; geri girerse yalnız bayraklı kayıt açılır (idari
+   pasif korunur, K5). Tetik DAMGA'dır (`catalog_stamp` = yapılandırma + yıl +
+   dosya özetleri): ilk kurulum, ayar kaydı, kurulum tamamlama, ders yılı
+   aktivasyonu, ders listesi açılışı ve **sürümle gelen yeni dosya** aynı
+   yoldan iner — 0003 tarzı veri göçü artık gerekmez. Türün hiç dosyası yoksa
+   dokunulmaz (uyarı).
+5. **Arayüz:** okul türü seçici `GET /setup/school-types/` (veri olmayan tür
+   "çizelge verisi yok" ekiyle); kurulum 1. adımı ve Ayarlar → Okul bilgileri
+   ortak `CizelgeAtamaMatrisi` bileşenini kullanır — plan `GET
+   /courses/catalog-status/` önizlemesiyle (kaydedilmemiş seçim), "Seviye
+   bazında özelleştir" program × seviye matrisi açar. Ders havuzu ekranı
+   yürürlükteki çizelgeyi dayanağıyla (TTK karar tarih/sayı) ve uyarıları
+   basar; "Çizelgeyi yeniden uygula" zorla senkron; çizelge dışı ders "Çizelge
+   dışı" rozetiyle idari pasiften ayrılır.
+
+**Kaynak usulü (evrakmotoru ile aynı).** Resmî PDF (ttkb.meb.gov.tr /
+meslek.meb.gov.tr) `data/raw/` altında (git dışı); `pypdf` düzen kipi (MTAL
+ÇÖP'lerinde döndürülmüş tablo için `orientations`) → `scripts/
+cizelge_metninden_tablo.py` taslağı → satır satır teyit → dosya + kürasyon
+notu + dayanak. AL çizelgesi evrakmotoru korpusundaki kanonik aktarımla
+karşılaştırıldı: 9-12 satırları birebir doğru çıktı; kullanıcının şüphesi
+(yanlış çizelge) doğrulanmadı, sorun tohumun yapılandırmaya bakmamasıydı.
+Kürasyon düzeltmesi: "Hedef Temelli Destek Eğitimi" `YOK` (kararın
+AÇIKLAMALAR bölümü: "Ders notla değerlendirilmez").
+
+**Bilinçli boşluklar** (TB2): GSL/Spor önceki nesil çizelgeleri (2026-2027'de
+yalnız 12. sınıf ortak dersleri; uyarıyla yedek), MTAL seçmeli tablosu ve
+hazırlıklı MTAL (resmî PDF taranmış görüntü), MTAL alan/dal meslek dersleri
+(56 alan — okul elle ekler), ÖP Fen/SBL (2025/24-25; SBL nüshası "TASLAK").
 
 ### 7.1 Sınav biçimi (`exam_mode`) ve havuz doldurmanın daralması (31.08.2026, K19)
 
@@ -580,8 +650,9 @@ app'i, guardian_* alanları.
    kalırsa iki uygulama aynı makinede veri karıştırır.
 7. **UTC tarih tuzağı:** 00:00-03:00 arası bir gün geri kayma —
    format.test.ts koruma testi taşınmazsa sınav tarihli evrakta nüksedebilir.
-8. **Tek okul türü verisi (U4):** farklı türde çalışan kullanıcı için havuz
-   boş başlar → elle ekleme F1'de eksiksiz olmalı.
+8. **Okul türü verisi (U4):** 03.09.2026'dan itibaren sekiz türün çizelgesi
+   gömülü (§7.2); kalan boşluklar (MTAL seçmeli/meslek dersleri, GSL/Spor
+   önceki nesil) uyarıyla görünür, elle ekleme yolu açık.
 9. **F27 geri dönüşsüz:** onay diyaloğu + aday listesi olmadan tetiklenirse
    veri kaybı şikâyeti kaçınılmaz.
 10. **Takvim damgaları:** tek-kullanıcı sadeleştirmesi onaylayan/tarih
@@ -590,11 +661,12 @@ app'i, guardian_* alanları.
 ## 14. Açık işler / teknik borç başlangıcı
 
 - e-Okul PDF parser'ları (şube listesi, personel) → v2 adayı.
-- Diğer okul türü çizelgeleri (Fen/SB/Meslek/İH) → veri dosyası küratörlüğü.
-  Yeni çizelgede **"Sınav" sütunu** da doldurulmalı: uygulama sınavı yapılan ve
-  sınavı olmayan dersler işaretlenmezse hepsi YAZILI sayılır ve havuz o okulda
-  yeniden şişer (§7.1). Meslek dersleri özel: ortak sınavın en az biri
-  uygulamalı yapılır (Yönetmelik md. 5/1-h) — sınıflama zümre kararına bağlı.
+- Okul türü çizelgeleri: sekiz tür gömülü (§7.2, 03.09.2026). Kalan
+  küratörlük: GSL/Spor önceki nesil çizelgeleri (2023/41-42, 2024/46-47), MTAL
+  seçmeli dersler tablosu (2026/62 — taranmış PDF, OCR/elle aktarım gerekir),
+  hazırlıklı MTAL (2024/42, 2026/63), ÖP Fen/SBL (2025/24-25). Meslek dersleri
+  özel: ortak sınavın en az biri uygulamalı yapılır (Yönetmelik md. 5/1-h) —
+  sınıflama zümre kararına bağlı, katalogla taşınmaz.
 - Ortaokul/ilkokul kademesi → seviye kümesi parametrik olduğunda değerlendirilir.
 - okulapp.org yayın alanı: sürüm kartı + tanıtım sayfaları (DD deseni;
   `okulapp.org/CLAUDE.md` "Ortak çalışma düzeni"ne tabi).

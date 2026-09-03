@@ -27,12 +27,15 @@ import UpdatePanel from "../guncelleme/UpdatePanel";
 import SubeKumeleriPaneli from "./SubeKumeleriPaneli";
 import ZumrelerPaneli from "./ZumrelerPaneli";
 import GuvenlikAyarlari from "../guvenlik/GuvenlikAyarlari";
-import { SCHOOL_TYPE_TR, okulApi } from "../okul/api";
+import CizelgeAtamaMatrisi from "../okul/CizelgeAtamaMatrisi";
+import { okulApi, okulTuruSecenekleri } from "../okul/api";
 import type {
   ClassSection,
   GradeLevelOption,
+  LevelPrograms,
   SchoolTerm,
   SchoolType,
+  SchoolTypeOption,
   SchoolYear,
 } from "../okul/api";
 
@@ -671,6 +674,8 @@ function OkulBilgileriPanel() {
   const [mudur, setMudur] = useState("");
   const [okulTuru, setOkulTuru] = useState<SchoolType>("ANADOLU_LISESI");
   const [hazirlikVar, setHazirlikVar] = useState(false);
+  const [levelPrograms, setLevelPrograms] = useState<LevelPrograms>({});
+  const [okulTurleri, setOkulTurleri] = useState<SchoolTypeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -689,6 +694,7 @@ function OkulBilgileriPanel() {
         setMudur(c.principal_name);
         setOkulTuru(c.school_type);
         setHazirlikVar(c.has_prep_class);
+        setLevelPrograms(c.level_programs ?? {});
         setError(null);
       })
       .catch((e: unknown) =>
@@ -696,6 +702,14 @@ function OkulBilgileriPanel() {
       )
       .finally(() => {
         if (!iptal) setLoading(false);
+      });
+    okulApi
+      .listSchoolTypes()
+      .then((r) => {
+        if (!iptal) setOkulTurleri(r);
+      })
+      .catch(() => {
+        if (!iptal) setOkulTurleri([]);
       });
     return () => {
       iptal = true;
@@ -715,8 +729,9 @@ function OkulBilgileriPanel() {
         principal_name: mudur.trim(),
         school_type: okulTuru,
         has_prep_class: hazirlikVar,
+        level_programs: levelPrograms,
       });
-      snackbar.success("Okul bilgileri kaydedildi.");
+      snackbar.success("Okul bilgileri kaydedildi. Ders havuzu çizelgeye göre güncellendi.");
     } catch (err) {
       const split = splitApiError(err, "Okul bilgileri kaydedilemedi.");
       setFieldErrors(split.fields);
@@ -732,8 +747,9 @@ function OkulBilgileriPanel() {
     <Card elevation={1} className="p-6">
       <p className="text-title-medium text-on-surface">Okul bilgileri</p>
       <p className="mt-1 text-body-medium text-on-surface-variant">
-        Salon evrakının antedi bu bilgilerden üretilir. Okul türü, ders havuzunun MEB çizelgesini ve
-        geçerli sınıf seviyelerini belirler.
+        Salon evrakının antedi bu bilgilerden üretilir. Okul türü, hazırlık sınıfı ve seviye bazlı
+        çizelge ataması, ders havuzunun hangi MEB çizelgesinden türetileceğini ve geçerli sınıf
+        seviyelerini belirler; kaydedince ders havuzu çizelgeye göre yeniden senkronlanır.
       </p>
       {error && (
         <div className="mt-4">
@@ -772,7 +788,7 @@ function OkulBilgileriPanel() {
           label="Okul türü"
           value={okulTuru}
           onChange={(e) => setOkulTuru(e.target.value as SchoolType)}
-          options={Object.entries(SCHOOL_TYPE_TR).map(([value, label]) => ({ value, label }))}
+          options={okulTuruSecenekleri(okulTurleri)}
         />
         <Select
           label="Hazırlık sınıfı"
@@ -783,6 +799,14 @@ function OkulBilgileriPanel() {
             { value: "1", label: "Var" },
           ]}
         />
+        <div className="sm:col-span-2">
+          <CizelgeAtamaMatrisi
+            schoolType={okulTuru}
+            hasPrepClass={hazirlikVar}
+            value={levelPrograms}
+            onChange={setLevelPrograms}
+          />
+        </div>
         <div className="flex justify-end sm:col-span-2">
           <Button type="submit" icon="check" disabled={busy}>
             {busy ? "Kaydediliyor…" : "Kaydet"}

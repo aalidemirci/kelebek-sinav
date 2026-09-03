@@ -34,19 +34,36 @@ from shared.models import BaseModel
 
 
 class SchoolType(models.TextChoices):
-    """Okul türü — ders havuzu fixture'ı ve seviye kümesi bundan türetilir (U4).
+    """Okul türü — ders havuzunun çizelge kaynağı ve seviye kümesi bundan türetilir (U4).
 
-    v1'de yalnız Anadolu Lisesi verisi gömülüdür; yeni tür eklemek = yeni
-    çizelge veri dosyası + bu listeye bir satır (kod değişikliği gerekmez,
-    `grade_levels_for` tek yerden türetir).
+    Her türün haftalık ders çizelgesi `data/ders-cizelgeleri/<program>.md`
+    dosyalarından gelir (`apps.dersler.catalog`): dosyanın `okul_turu` meta
+    satırı bu koda bağlanır. Veri dosyası olmayan tür de seçilebilir — havuz
+    boş başlar, arayüz bunu söyler (`GET /setup/school-types/` `available`).
+    Ortaöğretimde hepsi 9-12'dir; Hazırlık (0) `has_prep_class` ile eklenir.
     """
 
     ANADOLU_LISESI = "ANADOLU_LISESI", "Anadolu Lisesi"
+    FEN_LISESI = "FEN_LISESI", "Fen Lisesi"
+    SOSYAL_BILIMLER_LISESI = "SOSYAL_BILIMLER_LISESI", "Sosyal Bilimler Lisesi"
+    ANADOLU_IMAM_HATIP_LISESI = "ANADOLU_IMAM_HATIP_LISESI", "Anadolu İmam Hatip Lisesi"
+    MESLEKI_VE_TEKNIK_ANADOLU_LISESI = (
+        "MESLEKI_VE_TEKNIK_ANADOLU_LISESI",
+        "Mesleki ve Teknik Anadolu Lisesi",
+    )
+    COK_PROGRAMLI_ANADOLU_LISESI = (
+        "COK_PROGRAMLI_ANADOLU_LISESI",
+        "Çok Programlı Anadolu Lisesi",
+    )
+    GUZEL_SANATLAR_LISESI = "GUZEL_SANATLAR_LISESI", "Güzel Sanatlar Lisesi"
+    SPOR_LISESI = "SPOR_LISESI", "Spor Lisesi"
 
 
 #: Okul türü → hazırlıksız seviye listesi. Hazırlık (0) `has_prep_class` ile eklenir.
+#: Ortaöğretim kurumlarının tamamı 9-12'dir (OKY md. 4); tür farkı seviye
+#: kümesinde değil çizelge dosyasında yaşar.
 SCHOOL_TYPE_LEVELS: dict[str, tuple[int, ...]] = {
-    SchoolType.ANADOLU_LISESI: (9, 10, 11, 12),
+    str(school_type): (9, 10, 11, 12) for school_type in SchoolType
 }
 
 #: Hazırlık sınıfının seviye kodu (OYS `ders_yapisi.PREP_COURSE_LEVEL` paritesi).
@@ -85,6 +102,23 @@ class SchoolConfig(BaseModel):
         default=SchoolType.ANADOLU_LISESI,
     )
     has_prep_class = models.BooleanField("hazırlık sınıfı var", default=False)
+    # Kademeli dönüşüm / çok programlı okul: seviye → uygulanan çizelge program
+    # anahtarları. BOŞ sözlük = varsayılan (okul türü + hazırlık bayrağı + ders
+    # yılından `apps.dersler.catalog.default_assignment` türetir). Dolu ise her
+    # seviye için YALNIZ yazılan programlar uygulanır; yazılmayan seviye
+    # varsayılanda kalır. Örn. AL→Fen dönüşümünün ilk yılı:
+    # {"9": ["fen-lisesi-2025"]}. Küme/şube kimliği gibi hiçbir oturum kaydına
+    # yazılmaz; yalnız katalog senkronunun girdisidir.
+    level_programs = models.JSONField(
+        "seviye bazlı çizelge programları",
+        default=dict,
+        blank=True,
+        help_text='{"9": ["fen-lisesi-2025"], "10": ["anadolu-lisesi-2025"]} — boşsa varsayılan.',
+    )
+    # Ders kataloğunun en son hangi girdiyle (program ataması + dosya özetleri +
+    # ders yılı) senkronlandığının damgası; `apps.dersler.services
+    # .ensure_catalog_synced` farkı görünce kataloğu yeniden türetir.
+    catalog_stamp = models.CharField("katalog damgası", max_length=64, blank=True, default="")
     setup_completed = models.BooleanField("kurulum tamamlandı", default=False)
     app_password_hash = models.CharField(
         "uygulama parolası özeti", max_length=255, blank=True, default=""

@@ -103,16 +103,30 @@
   gelir. Silme her yerde soft olduğundan `on_delete=PROTECT` de hiç
   tetiklenmez. Evrağa ad basan her yol `deleted_at`'i ELLE denetler
   (emsal `services_calendar._chair_name`).
-- **`Course.exam_mode` mevcut kurulumlara VERİ GÖÇÜYLE gelir:**
-  `ensure_meb_catalog` bir tek `MEB_CATALOG` kaydı varsa **hiçbir dosyayı
-  okumadan** döner (`source=MEB_CATALOG` erken dönüşü) — yani çizelgeye "Sınav"
-  sütunu eklemek yalnız sıfırdan kurulan makineleri etkiler. Dolu kurulumları
-  ada göre normalize eşleştiren data migration sınıflar; geri alma `noop`
-  (idarecinin elle verdiği değer silinmesin). Göçteki historical model
-  soft-delete SÜZMEZ (`use_in_migrations` kurulu değil) — silinmiş kayıt da
-  sınıflanır, bu bilinçlidir. İki alanı karıştırma: `exam_mode` çizelge
-  verisidir, import'ta EZİLİR (`levels`/`course_type` sınıfı); `is_active`
-  idari karardır ve import'ta bilinçle KORUNUR.
+- **Ders havuzu okulun YÜRÜRLÜKTEKİ çizelgesinden türetilir (03.09.2026,
+  tasarım §7.2):** `data/ders-cizelgeleri/<program_key>.md` dosyaları TTK
+  çizelgeleridir (meta bloğu: `okul_turu`, `hazirlik`, `bolum`, `yururluk`,
+  `kademeli`…); `apps.dersler.catalog` okul türü + hazırlık + aktif ders yılı +
+  `SchoolConfig.level_programs`'tan seviye→program planını çözer, satırları
+  ada göre birleştirir (tür çatışmasında SEÇMELİ, sınavda YOK>UYGULAMA>YAZILI
+  kazanır), `services.sync_catalog` kataloğa uygular. Tuzaklar: (1) senkron
+  DAMGA ile tetiklenir (`catalog_stamp` = yapılandırma + yıl + dosya özetleri);
+  eski "MEB kaydı varsa dosyayı okuma" erken dönüşü YOK, dosya değişikliği
+  veri göçü GEREKTİRMEZ (0003 göçü tarihsel emsaldir, tekrarlanmaz). (2)
+  Çizelge dışı kalan MEB dersi `is_active=False + catalog_excluded=True` olur ve
+  yalnız BU bayraklı kayıt senkronla geri açılır; idarecinin pasifleştirdiği
+  ders (bayraksız) asla geri açılmaz — `is_active` idari karardır. (3) Okul
+  türünün HİÇ program dosyası yoksa senkron hiçbir kayda dokunmaz (veri yokluğu
+  sessiz silmeye dönüşmez). (4) Ayar kaydı (`update_school_config`), kurulum
+  tamamlama ve ders yılı aktivasyonu senkronu KENDİLERİ koşturur — testlerde
+  `settings.CATALOG_DIR` tmp dizine çevrilmezse gerçek çizelgeler yüklenir.
+  (5) Kademeli çizelgede (GSL/Spor 2025, MTAL nesilleri) kapsanmayan seviye en
+  yeni programa DÜŞER ve plan uyarı taşır — sessiz düşme yok; uyarı ders havuzu
+  panelinde görünür. (6) Aynı ders programlar arasında AYNI adla yazılır
+  (kademeli/çok programlı birleşim ada göredir); "Seçmeli X" öneki resmî
+  çizelge adıysa korunur. İki alanı karıştırma: `exam_mode` çizelge verisidir,
+  senkronda EZİLİR (`levels`/`course_type` sınıfı); `is_active` idari karardır
+  ve KORUNUR.
 - **SQLite:** `levels__contains` yok (Python süzme); yedek daima
   `Connection.backup()` (dosya kopyalama WAL'de yasak).
 - **Kimlik sabitleri:** `KS_*` env, `ks_oturum`, `X-KS-Token`, `.ksbak`,

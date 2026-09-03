@@ -81,6 +81,66 @@ class CourseDetailView(APIView):
         return Response(CourseSerializer(guncel).data)
 
 
+class CatalogStatusView(APIView):
+    """`GET /api/v1/courses/catalog-status/` — yürürlükteki çizelge planı.
+
+    Ders havuzu ekranının "hangi çizelge, hangi seviyede, dayanağı ne" paneli ve
+    kurulum/ayar matrisinin program listesi tek uçtan gelir (tasarım §7.2).
+    Salt okunur; senkron tetiklemez (liste ucu zaten tembel tohumu koşar).
+    """
+
+    def get(self, request: Request) -> Response:
+        import json
+
+        params = request.query_params
+        school_type = params.get("school_type") or None
+        raw_prep = params.get("has_prep_class", "").strip().lower()
+        has_prep = raw_prep in TRUE_VALUES if raw_prep else None
+        overrides: dict[str, Any] | None = None
+        raw_overrides = params.get("level_programs", "").strip()
+        if raw_overrides:
+            try:
+                parsed = json.loads(raw_overrides)
+            except ValueError as exc:
+                raise serializers.ValidationError(
+                    {"level_programs": "Seviye atamaları JSON sözlük olmalıdır."}
+                ) from exc
+            if not isinstance(parsed, dict):
+                raise serializers.ValidationError(
+                    {"level_programs": "Seviye atamaları JSON sözlük olmalıdır."}
+                )
+            overrides = parsed
+        return Response(
+            services.catalog_status(school_type=school_type, has_prep=has_prep, overrides=overrides)
+        )
+
+
+class CatalogResyncView(APIView):
+    """`POST /api/v1/courses/resync/` — kataloğu çizelgeye zorla yeniden çeker.
+
+    Damga eşit olsa da koşar (idareci "çizelgeyi yeniden uygula" dedi). Sonuç
+    sayaçları + güncel plan döner; MEB dersi olmayan okulda yalnız uyarı gelir.
+    """
+
+    def post(self, request: Request) -> Response:
+        sonuc = services.ensure_catalog_synced(force=True)
+        services.ensure_course_aliases()
+        ozet = (
+            {
+                "created": sonuc.created,
+                "updated": sonuc.updated,
+                "unchanged": sonuc.unchanged,
+                "restored": sonuc.restored,
+                "excluded": sonuc.excluded,
+                "errors": sonuc.errors,
+                "warnings": sonuc.warnings,
+            }
+            if sonuc is not None
+            else None
+        )
+        return Response({"result": ozet, "status": services.catalog_status()})
+
+
 class CourseDuplicatesView(APIView):
     """`GET /api/v1/courses/duplicates/` — mükerrer aday kümeleri."""
 

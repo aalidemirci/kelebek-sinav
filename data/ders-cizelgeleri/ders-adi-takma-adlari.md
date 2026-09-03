@@ -1,7 +1,7 @@
 # Ders Adı Takma Adları (Seed)
 
 e-Okul ihracı ve dış AI çıktılarında sık görülen ders adı KISALTMALARINI
-MEB kataloğundaki (`anadolu-lisesi-2025-2026.md`) kanonik ada bağlar
+MEB kataloğundaki (`data/ders-cizelgeleri/*.md` program dosyaları) kanonik ada bağlar
 (Tur 565, AI-import sağlamlaştırma T6 / FAZ D).
 
 - Bu dosya **katalog değildir** — `ensure_meb_catalog` bu dosyayı ada göre

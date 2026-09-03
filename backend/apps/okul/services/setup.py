@@ -23,7 +23,11 @@ UPDATABLE_FIELDS: tuple[str, ...] = (
     "principal_name",
     "school_type",
     "has_prep_class",
+    "level_programs",
 )
+
+#: Değişince ders kataloğunun çizelgeye yeniden çekilmesini gerektiren alanlar.
+CATALOG_FIELDS: frozenset[str] = frozenset({"school_type", "has_prep_class", "level_programs"})
 
 
 def get_school_config() -> SchoolConfig:
@@ -31,9 +35,26 @@ def get_school_config() -> SchoolConfig:
     return SchoolConfig.load()
 
 
+def sync_course_catalog() -> None:
+    """Ders kataloğunu okulun yürürlükteki çizelgesine çeker (damga farklıysa).
+
+    `dersler` servisine köprü: okul türü/hazırlık/seviye ataması/ders yılı
+    değişince havuz aynı işlemde güncellensin, idareci Ders Havuzu ekranını
+    açmadan takvim havuzunu doldurursa eski çizelge çekilmesin. Çizelge dosyası
+    yoksa sessizce atlar (TB2).
+    """
+    from apps.dersler import services as ders_services
+
+    ders_services.ensure_catalog_synced()
+    ders_services.ensure_course_aliases()
+
+
 @transaction.atomic
 def update_school_config(*, fields: dict[str, Any]) -> SchoolConfig:
-    """Kurum yapılandırmasını günceller (whitelist alanları). Satır yoksa oluşturur."""
+    """Kurum yapılandırmasını günceller (whitelist alanları). Satır yoksa oluşturur.
+
+    Çizelgeyi etkileyen alan değiştiyse katalog aynı işlemde senkronlanır.
+    """
     config: SchoolConfig
     config, _created = SchoolConfig.objects.get_or_create(pk=SchoolConfig.SINGLETON_PK)
     update_fields: list[str] = ["updated_at"]
@@ -42,16 +63,23 @@ def update_school_config(*, fields: dict[str, Any]) -> SchoolConfig:
             setattr(config, name, fields[name])
             update_fields.append(name)
     config.save(update_fields=update_fields)
+    if CATALOG_FIELDS & set(update_fields):
+        sync_course_catalog()
     return config
 
 
 @transaction.atomic
 def mark_setup_completed() -> SchoolConfig:
-    """Kurulum sihirbazını tamamlanmış işaretler (satır yoksa oluşturur)."""
+    """Kurulum sihirbazını tamamlanmış işaretler (satır yoksa oluşturur).
+
+    Katalog burada da senkronlanır: sihirbaz okul türünü 1. adımda yazar, ders
+    yılını 2. adımda aktifleştirir — tamamlama anında ikisi de bellidir.
+    """
     config: SchoolConfig
     config, _created = SchoolConfig.objects.get_or_create(pk=SchoolConfig.SINGLETON_PK)
     config.setup_completed = True
     config.save(update_fields=["setup_completed", "updated_at"])
+    sync_course_catalog()
     return config
 
 

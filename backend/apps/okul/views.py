@@ -103,6 +103,19 @@ class GradeLevelsView(APIView):
         )
 
 
+class SchoolTypesView(APIView):
+    """`GET /api/v1/setup/school-types/` — okul türleri + bu sürümde çizelge verisi var mı.
+
+    Seçici her türü listeler; `available=False` olan tür de seçilebilir ama
+    arayüz havuzun boş başlayacağını söyler (TB2 — veri sonraki sürümde).
+    """
+
+    def get(self, request: Request) -> Response:
+        from apps.dersler import services as ders_services
+
+        return Response(ders_services.school_type_options())
+
+
 class SchoolConfigView(APIView):
     def get(self, request: Request) -> Response:
         return Response(SchoolConfigSerializer(setup_service.get_school_config()).data)

@@ -16,6 +16,10 @@ from apps.dersler.catalog_parser import parse_alias_table, parse_markdown_catalo
 from apps.dersler.models import Course, CourseAlias, CourseExamMode, CourseSource, CourseType
 from apps.okul.models import Student
 
+# Kök conftest her testte CATALOG_DIR'ı boş dizine çevirir; gerçek dosya yolu
+# import anında (fixture çalışmadan) sabitlenir.
+GERCEK_CIZELGE_DIZINI = Path(settings.CATALOG_DIR)
+
 # ÜÇ SÜTUNLU çizelge — 'Sınav' sütunu isteğe bağlı olduğu için bu sabit BİLEREK
 # eski biçimde bırakıldı: onu tüketen yedi test, geriye dönük uyumun canlı
 # kanıtıdır (`cerceveler/*.md` dosyaları da üç sütunludur).
@@ -88,8 +92,8 @@ class TestParser:
         assert parsed.errors and not parsed.rows
 
     def test_gercek_cizelge_dosyasi_cozulur(self) -> None:
-        """Depodaki gerçek çizelge hatasız okunmalı ve altı satırı işaretlemeli."""
-        dosya = Path(settings.CATALOG_DIR) / "anadolu-lisesi-2025-2026.md"
+        """Depodaki AL çizelgesi hatasız okunmalı ve sınav biçimlerini işaretlemeli."""
+        dosya = GERCEK_CIZELGE_DIZINI / "anadolu-lisesi-2025.md"
         if not dosya.is_file():  # paketlenmiş/ayrık ortamda veri dizini yok
             pytest.skip("çizelge dosyası bu ortamda yok")
         parsed = parse_markdown_catalog(dosya.read_text(encoding="utf-8"), source_name=dosya.name)
@@ -101,13 +105,14 @@ class TestParser:
             "Spor Eğitimi",
             "Sanat Eğitimi",
         }
-        # "Yabancı Dil" de YOK: katalogda yalnız e-Okul program doğrulaması için
-        # durur, "Birinci Yabancı Dil"in takma adıdır — YAZILI kalsaydı havuz
-        # her seviyede kopya satır alırdı (31.08.2026 denetimi).
+        # Rehberlik notla değerlendirilmez; HTDE için dayanak kararın AÇIKLAMALAR
+        # bölümü ("Ders notla değerlendirilmez"). Eski "Yabancı Dil" satırı KS'de
+        # program doğrulaması olmadığından kaldırıldı (takma ad tablosunda kalır).
         assert {r.name for r in parsed.rows if r.exam_mode == CourseExamMode.NONE} == {
             "Rehberlik ve Yönlendirme",
-            "Yabancı Dil",
+            "Hedef Temelli Destek Eğitimi",
         }
+        assert all(0 not in r.levels for r in parsed.rows)  # hazırlıksız çizelge
 
     def test_alias_tablosu_cozulur(self) -> None:
         parsed = parse_alias_table(ALIAS_MD)

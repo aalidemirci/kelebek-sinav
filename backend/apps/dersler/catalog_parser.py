@@ -14,6 +14,7 @@ riskler). Hatalı satırlar sonucu durdurmaz; satır numarasıyla raporlanır.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from apps.dersler.models import CourseExamMode, CourseType
@@ -132,6 +133,28 @@ def parse_markdown_catalog(text: str, *, source_name: str = "") -> ParsedCatalog
             )
         )
     return result
+
+
+_META_LINE_RE = re.compile(r"^\s*-\s+([a-z_]+)\s*:\s*(.*?)\s*$")
+
+
+def parse_program_meta(text: str) -> dict[str, str]:
+    """Program dosyasının üst meta bloğunu (`- anahtar: değer`) sözlüğe çevir.
+
+    Yalnız İLK tablo satırından ÖNCEKİ `- anahtar: değer` satırları okunur;
+    anahtar küçük harf/alt çizgi (`program_key`, `okul_turu`, `yururluk` …).
+    Tablo başladıktan sonra gelen madde işaretleri (kürasyon notları) meta
+    sayılmaz. Meta bloğu olmayan dosya boş sözlük döner — böyle bir dosya
+    "genel" programdır (her okul türüne, yürürlük süzgeci olmadan uygulanır).
+    """
+    meta: dict[str, str] = {}
+    for line in text.splitlines():
+        if line.lstrip().startswith("|"):
+            break
+        m = _META_LINE_RE.match(line)
+        if m:
+            meta[m.group(1)] = m.group(2)
+    return meta
 
 
 @dataclass

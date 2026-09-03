@@ -16,6 +16,7 @@ const oapi = vi.hoisted(() => ({
   getSetupStatus: vi.fn(),
   getSchoolConfig: vi.fn(),
   updateSchoolConfig: vi.fn(),
+  listSchoolTypes: vi.fn(),
   getGradeLevels: vi.fn(),
   listSchoolYears: vi.fn(),
   createSchoolYear: vi.fn(),
@@ -27,9 +28,19 @@ const oapi = vi.hoisted(() => ({
   deleteClassSection: vi.fn(),
 }));
 
+// Okul bilgileri paneli çizelge planını ders havuzu API'sinden önizler.
+const dapi = vi.hoisted(() => ({
+  getCatalogStatus: vi.fn(),
+}));
+
 vi.mock("../okul/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../okul/api")>();
   return { ...actual, okulApi: oapi };
+});
+
+vi.mock("../dersler/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../dersler/api")>();
+  return { ...actual, derslerApi: { ...actual.derslerApi, ...dapi } };
 });
 
 // Güvenlik paneli kendi API'sine gider; bu testte içeriği önemsizdir.
@@ -87,7 +98,27 @@ beforeEach(() => {
     principal_name: "",
     school_type: "ANADOLU_LISESI",
     has_prep_class: false,
+    level_programs: {},
     setup_completed: true,
+  });
+  oapi.listSchoolTypes.mockResolvedValue([
+    { value: "ANADOLU_LISESI", label: "Anadolu Lisesi", available: true, program_keys: [] },
+    { value: "SPOR_LISESI", label: "Spor Lisesi", available: false, program_keys: [] },
+  ]);
+  dapi.getCatalogStatus.mockResolvedValue({
+    year: 2026,
+    year_label: "2026-2027",
+    school_type: "ANADOLU_LISESI",
+    school_type_label: "Anadolu Lisesi",
+    has_prep_class: false,
+    transitional: false,
+    custom: false,
+    synced: true,
+    data_available: true,
+    warnings: [],
+    levels: [],
+    programs: [],
+    school_types: [],
   });
   oapi.getGradeLevels.mockResolvedValue({
     levels: [
@@ -173,6 +204,11 @@ describe("AyarlarPage — okul bilgileri", () => {
     await user.click(await screen.findByRole("tab", { name: /Okul Bilgileri/ }));
     expect(await screen.findByLabelText(/Okul adı/)).toHaveValue("Örnek Anadolu Lisesi");
 
+    // Çizelge verisi olmayan tür seçenekte işaretlidir.
+    expect(
+      screen.getByRole("option", { name: "Spor Lisesi (çizelge verisi yok)" }),
+    ).toBeInTheDocument();
+
     await user.selectOptions(screen.getByLabelText("Hazırlık sınıfı"), "1");
     await user.click(screen.getByRole("button", { name: "Kaydet" }));
 
@@ -184,7 +220,12 @@ describe("AyarlarPage — okul bilgileri", () => {
         principal_name: "",
         school_type: "ANADOLU_LISESI",
         has_prep_class: true,
+        level_programs: {},
       }),
+    );
+    // Hazırlık değişince plan yeni seçimle önizlenir.
+    expect(dapi.getCatalogStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ schoolType: "ANADOLU_LISESI", hasPrepClass: true }),
     );
   });
 

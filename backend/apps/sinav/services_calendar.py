@@ -475,6 +475,7 @@ def fill_calendar_pool(calendar: ExamCalendar) -> dict[str, Any]:
     elle ekleme formunda durur. Dönüş sözlüğünün ŞEKLİ DEĞİŞMEDİ.
     """
     from apps.dersler import selectors as ders_selectors
+    from apps.dersler import services as ders_services
     from apps.dersler.models import CourseExamMode, CourseType
 
     _ensure_draft(calendar)
@@ -483,6 +484,9 @@ def fill_calendar_pool(calendar: ExamCalendar) -> dict[str, Any]:
             "3. sınav takviminin havuzu elle doldurulur — otomatik doldurma yalnız "
             "1. ve 2. ortak sınav takvimlerinde geçerlidir."
         )
+    # Katalog damgası eşitse ucuz; sürümle gelen yeni çizelge dosyası ya da ayar
+    # değişikliği ders listesi hiç açılmadan havuza yansısın (tasarım §7.2).
+    ders_services.ensure_seeded()
     pairs = ders_selectors.taught_course_levels(
         calendar.semester.school_year_id,
         course_types=[CourseType.COMMON],
@@ -603,9 +607,13 @@ def elective_pool_options(calendar: ExamCalendar) -> list[dict[str, Any]]:
     yardımcıdan (`_level_display`) gelir.
     """
     from apps.dersler import selectors as ders_selectors
+    from apps.dersler import services as ders_services
     from apps.dersler.models import CourseExamMode, CourseType
     from apps.okul.normalize import tr_sort_key
 
+    # Katalog damgası eşitse ucuz; sürümle gelen yeni çizelge dosyası ya da ayar
+    # değişikliği ders listesi hiç açılmadan havuza yansısın (tasarım §7.2).
+    ders_services.ensure_seeded()
     pairs = ders_selectors.taught_course_levels(
         calendar.semester.school_year_id,
         course_types=[CourseType.ELECTIVE],

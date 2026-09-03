@@ -12,11 +12,17 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
   Öğrenci Listesi) ve OOK01001R1 (Personel Listesi) Excel ihraçları artık
   **değiştirilmeden** yükleniyor (bkz. `apps/okul/eokul.py`), yani PDF yolu
   yalnız Excel düğmesi olmayan raporlar için gerekir. v2 adayı.
-- **TB2 — Ders çizelgesi verisi yalnız Anadolu Lisesi (U4):** diğer okul
-  türlerinde havuz boş başlar; elle ekleme + md veri dosyası ekleme yolu açık.
-  31.08.2026 eki: yeni çizelgede **"Sınav" sütunu** (YAZILI/UYGULAMA/YOK) da
-  küratörlük ister — doldurulmazsa her ders YAZILI sayılır ve takvim havuzu o
-  okulda yeniden şişer (K19, tasarım §7.1).
+- **TB2 — Çizelge verisi boşlukları (U4, 03.09.2026'da daraldı):** sekiz
+  ortaöğretim türünün TTK çizelgeleri gömülü (tasarım §7.2). Kalanlar:
+  (a) GSL/Spor 2025 çizelgeleri ortak dersleri kademeli uygular; 2026-2027'de
+  12. sınıfın tabi olduğu önceki nesil (TTK 2023/41-42, 2024/46-47) aktarılmadı
+  — program en yeni çizelgeyi yedek kullanır ve ders havuzu ekranında uyarır;
+  2027-2028'de kendiliğinden kapanır. (b) MTAL seçmeli dersler tablosu (TTK
+  2026/62, 2024/41 eki) ve hazırlıklı MTAL çizelgesi (2024/42, 2026/63) resmî
+  PDF'te taranmış görüntü — OCR ya da elle aktarım bekliyor; MTAL alan/dal
+  meslek dersleri (56 alan) katalogla taşınmaz, okul elle ekler. (c) Özel
+  Program Uygulayan Fen/SBL (2025/24-25; SBL nüshası "TASLAK"). Yeni dosya
+  eklerken **"Sınav" sütunu** kürasyonu şart (K19, tasarım §7.1).
 - **TB3 — Şifreli kipte ad-temelli DB sorgusu yok (U3 bedeli):** arama/
   sıralama/teklik selector katmanında Python ile; yeni ad sorgusu ORM
   filtresiyle yazılamaz (DD F5-D5 dersi).

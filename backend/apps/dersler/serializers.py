@@ -31,8 +31,9 @@ class CourseSerializer(serializers.ModelSerializer[Course]):
             "exam_mode_label",
             "source",
             "is_active",
+            "catalog_excluded",
         ]
-        read_only_fields = ["source"]
+        read_only_fields = ["source", "catalog_excluded"]
 
     def get_level_labels(self, obj: Course) -> list[str]:
         return [level_label(int(lvl)) for lvl in (obj.levels or [])]

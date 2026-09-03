@@ -16,6 +16,7 @@ OYS `ders_yapisi.services`'ten KELEBEK KESİTİ (tasarım §7 + §11):
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -51,12 +52,20 @@ class CourseRow:
 
 @dataclass
 class CatalogImportResult:
-    """`import_course_rows` özeti."""
+    """`import_course_rows` / `sync_catalog` özeti.
+
+    `restored`: çizelge dışı (pasif + `catalog_excluded`) iken çizelgeye geri
+    girip yeniden açılan; `excluded`: yürürlükteki çizelgede artık bulunmayıp
+    pasifleşen MEB dersi. İkisi de yalnız senkronda dolar.
+    """
 
     created: int = 0
     updated: int = 0
     unchanged: int = 0
+    restored: int = 0
+    excluded: int = 0
     errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 def normalize_levels(levels: object) -> list[int]:
@@ -177,8 +186,17 @@ def import_course_rows(rows: list[CourseRow]) -> CatalogImportResult:
                 )
                 result.created += 1
                 continue
+            # Çizelge dışı kaldığı için senkronun pasifleştirdiği ders çizelgeye
+            # geri girdi: yalnız BU bayraklı kayıt yeniden açılır (idarecinin
+            # elle pasifleştirdiği ders bayraksızdır, dokunulmaz — K5).
+            restored = existing.catalog_excluded
+            if restored:
+                existing.is_active = True
+                existing.catalog_excluded = False
+                result.restored += 1
             if (
-                existing.levels == levels
+                not restored
+                and existing.levels == levels
                 and existing.course_type == row.course_type
                 and existing.exam_mode == row.exam_mode
                 and existing.source == CourseSource.MEB_CATALOG
@@ -190,38 +208,234 @@ def import_course_rows(rows: list[CourseRow]) -> CatalogImportResult:
             existing.exam_mode = row.exam_mode
             existing.source = CourseSource.MEB_CATALOG
             existing.save()
-            result.updated += 1
+            if not restored:
+                result.updated += 1
+    return result
+
+
+def catalog_year() -> int:
+    """Katalog senkronunun ders yılı (ilk yıl): aktif ders yılı, yoksa bugünün yılı.
+
+    Eylül ve sonrası yeni ders yılını başlatır (kurulumun 2. adımından önce
+    ders yılı henüz yoktur; ilk senkron takvimden türetir, yıl aktifleşince
+    damga değişir ve senkron yenilenir). Yerel tarih (`localdate`) — UTC'den
+    yerel tarih türetme yasağı (CLAUDE.md §2).
+    """
+    from apps.okul import selectors as okul_selectors
+
+    active = okul_selectors.active_school_year()
+    if active is not None:
+        return int(active.start_date.year)
+    today = timezone.localdate()
+    return today.year if today.month >= 9 else today.year - 1
+
+
+def _current_plan(
+    *,
+    root: str | None = None,
+    school_type: str | None = None,
+    has_prep: bool | None = None,
+    overrides: dict[str, Any] | None = None,
+) -> Any:
+    """Okulun yapılandırmasından çözülmüş çizelge planı (`catalog.CatalogPlan`).
+
+    `school_type`/`has_prep`/`overrides` verilirse KAYITLI yapılandırma yerine
+    onlar kullanılır (önizleme: kurulum/ayar ekranı henüz kaydedilmemiş seçimin
+    planını gösterir). Seviye kümesi de önizlenen türden türetilir.
+    """
+    from apps.dersler import catalog
+    from apps.okul.models import SchoolConfig, grade_levels_for
+
+    config = SchoolConfig.load()
+    tur = config.school_type if school_type is None else school_type
+    prep = config.has_prep_class if has_prep is None else has_prep
+    atamalar = config.level_programs if overrides is None else overrides
+    return catalog.resolve_plan(
+        school_type=tur,
+        has_prep=prep,
+        levels=grade_levels_for(tur, has_prep_class=prep),
+        year=catalog_year(),
+        overrides=atamalar,
+        root=root,
+    )
+
+
+def sync_catalog(*, plan: Any) -> CatalogImportResult:
+    """Kataloğu okulun etkin çizelge satırlarına çeker (idempotent).
+
+    1. Etkin satırlar ada göre upsert edilir (`import_course_rows` — MEB kazanır,
+       `is_active` korunur, çizelge dışı bayraklı kayıt geri açılır).
+    2. Aktif MEB dersi etkin satırlarda YOKSA pasifleşir ve `catalog_excluded`
+       işaretlenir — okul türü/hazırlık/ders yılı değişince eski çizelgenin
+       dersleri havuzda kalmasın. Elle (MANUAL) dersler ve idarecinin
+       pasifleştirdikleri dokunulmaz.
+    3. Okulun türü için HİÇ program dosyası yoksa (TB2: veri sonraki sürümde)
+       hiçbir kayda dokunulmaz — "veri yok" sessiz silmeye dönüşmez.
+    """
+    from apps.dersler import catalog as catalog_mod
+
+    rows = plan.rows()
+    result = CatalogImportResult()
+    result.warnings = list(plan.warnings)
+    candidates = catalog_mod.candidates_for(
+        plan.programs, school_type=plan.school_type, has_prep=plan.has_prep
+    )
+    explicit = any(p.explicit for p in plan.plans.values())
+    if not candidates and not explicit:
+        result.warnings.append(
+            "Bu okul türü için çizelge verisi bu sürümde yok; havuz elle doldurulur."
+        )
+        return result
+    imported = import_course_rows(rows)
+    result.created, result.updated, result.unchanged, result.restored = (
+        imported.created,
+        imported.updated,
+        imported.unchanged,
+        imported.restored,
+    )
+    result.errors = imported.errors
+    names = {text.normalize_course_name(r.name) for r in rows}
+    with transaction.atomic():
+        stale = Course.objects.filter(source=CourseSource.MEB_CATALOG, is_active=True).exclude(
+            name__in=names
+        )
+        result.excluded = stale.update(
+            is_active=False, catalog_excluded=True, updated_at=timezone.now()
+        )
+    return result
+
+
+def ensure_catalog_synced(
+    *, root: str | None = None, force: bool = False
+) -> CatalogImportResult | None:
+    """Katalog damgası değiştiyse senkronu koşar; aynıysa None döner (ucuz yol).
+
+    Damga = okul türü + hazırlık + seviyeler + seviye atamaları + ders yılı +
+    program dosyalarının içerik özetleri. Böylece (a) ilk kurulum, (b) ayar
+    değişikliği, (c) ders yılı devri ve (d) uygulama sürümüyle gelen yeni/
+    değişmiş çizelge dosyası (K5) aynı yoldan kataloğa iner — eski "MEB kaydı
+    varsa dosyayı okuma" erken dönüşü ve veri göçü ihtiyacı kalktı.
+    Program dosyası hiç yoksa SESSİZCE atlar (TB2 — elle ekleme yolu açık).
+    """
+    from apps.okul.models import SchoolConfig
+
+    plan = _current_plan(root=root)
+    if not plan.programs:
+        return None
+    config = SchoolConfig.load()
+    if not force and config.pk is not None and config.catalog_stamp == plan.stamp:
+        return None
+    result = sync_catalog(plan=plan)
+    with transaction.atomic():
+        row, _created = SchoolConfig.objects.get_or_create(pk=SchoolConfig.SINGLETON_PK)
+        row.catalog_stamp = plan.stamp
+        row.save(update_fields=["catalog_stamp", "updated_at"])
     return result
 
 
 def ensure_meb_catalog(*, path: str | None = None) -> CatalogImportResult:
-    """MEB ders kataloğu YOKSA veri dosyalarından yükler (idempotent tembel tohum).
+    """Geriye dönük giriş: verilen kök/dosyadan kataloğu senkronlar (damga ile idempotent)."""
+    return ensure_catalog_synced(root=path) or CatalogImportResult()
 
-    Katalog zaten varsa hızlıca döner; yoksa `settings.CATALOG_DIR/*.md`
-    dosyalarını yükler (README ve takma ad dosyası hariç). Dosya yoksa SESSİZCE
-    atlar — elle ekleme yolu her durumda açık kalır (TB2).
+
+def catalog_status(
+    *,
+    root: str | None = None,
+    school_type: str | None = None,
+    has_prep: bool | None = None,
+    overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Ders havuzu ekranının "yürürlükteki çizelge" paneli + ayar matrisinin verisi.
+
+    Önizleme parametreleri verilirse (`school_type`/`has_prep`/`overrides`) plan
+    kaydedilmemiş seçime göre çözülür; `synced` o durumda anlamsızdır (False).
     """
-    from pathlib import Path
+    from apps.dersler import catalog as catalog_mod
+    from apps.okul.models import SchoolConfig, SchoolType
 
-    from apps.dersler.catalog_parser import parse_markdown_catalog
+    config = SchoolConfig.load()
+    preview = school_type is not None or has_prep is not None or overrides is not None
+    plan = _current_plan(root=root, school_type=school_type, has_prep=has_prep, overrides=overrides)
+    defaults = catalog_mod.default_assignment(
+        plan.programs,
+        school_type=plan.school_type,
+        has_prep=plan.has_prep,
+        levels=plan.levels,
+        year=plan.year,
+    )
+    programs_out = [
+        {
+            "key": p.key,
+            "name": p.name,
+            "school_type": p.school_type,
+            "school_type_label": p.school_type_label,
+            "has_prep": p.has_prep,
+            "department": p.department,
+            "source": p.source,
+            "start_year": p.start_year,
+            "phased": p.phased,
+            "default_included": p.default_included,
+            "course_count": len(p.rows),
+        }
+        for p in sorted(plan.programs.values(), key=lambda p: (p.school_type, p.key))
+    ]
+    levels_out: list[dict[str, Any]] = []
+    for level in plan.levels:
+        lp = plan.plans[level]
+        roles: dict[str, list[str]] = {}
+        for key in lp.common_from:
+            roles.setdefault(key, []).append("ortak")
+        for key in lp.elective_from:
+            roles.setdefault(key, []).append("seçmeli")
+        levels_out.append(
+            {
+                "level": level,
+                "label": catalog_mod.level_label(level),
+                "explicit": lp.explicit,
+                "programs": [
+                    {
+                        "key": key,
+                        "name": plan.programs[key].name if key in plan.programs else key,
+                        "source": plan.programs[key].source if key in plan.programs else "",
+                        "role": "+".join(role_list),
+                    }
+                    for key, role_list in roles.items()
+                ],
+                "default_program_keys": list(defaults[level].program_keys),
+                "warnings": list(lp.warnings),
+            }
+        )
+    try:
+        type_label = str(SchoolType(plan.school_type).label)
+    except ValueError:
+        type_label = plan.school_type
+    explicit_levels = [lp.level for lp in plan.plans.values() if lp.explicit]
+    return {
+        "year": plan.year,
+        "year_label": f"{plan.year}-{plan.year + 1}",
+        "school_type": plan.school_type,
+        "school_type_label": type_label,
+        "has_prep_class": plan.has_prep,
+        "transitional": plan.transitional,
+        "custom": bool(explicit_levels),
+        "synced": (not preview and config.pk is not None and config.catalog_stamp == plan.stamp),
+        "data_available": bool(
+            catalog_mod.candidates_for(
+                plan.programs, school_type=plan.school_type, has_prep=plan.has_prep
+            )
+        ),
+        "warnings": list(plan.warnings),
+        "levels": levels_out,
+        "programs": programs_out,
+        "school_types": catalog_mod.school_type_options(plan.programs),
+    }
 
-    if Course.objects.filter(source=CourseSource.MEB_CATALOG).exists():
-        return CatalogImportResult()  # zaten yüklü
-    root = Path(path if path is not None else settings.CATALOG_DIR)
-    if root.is_dir():
-        skip = {"readme.md", "ders-adi-takma-adlari.md"}
-        files = sorted(f for f in root.glob("*.md") if f.name.lower() not in skip)
-    elif root.is_file():
-        files = [root]
-    else:
-        return CatalogImportResult()  # dosya yok → atla
-    rows: list[CourseRow] = []
-    for file in files:
-        parsed = parse_markdown_catalog(file.read_text(encoding="utf-8"), source_name=file.name)
-        rows.extend(parsed.rows)
-    if not rows:
-        return CatalogImportResult()
-    return import_course_rows(rows)
+
+def school_type_options(*, root: str | None = None) -> list[dict[str, Any]]:
+    """Kurulum/ayar seçicisi: okul türleri + bu sürümde çizelge verisi var mı."""
+    from apps.dersler import catalog as catalog_mod
+
+    return catalog_mod.school_type_options(catalog_mod.load_programs(root))
 
 
 def learn_course_alias(
@@ -296,8 +510,12 @@ def ensure_course_aliases(*, path: str | None = None) -> int:
 
 
 def ensure_seeded() -> None:
-    """Tembel tohum girişi — katalog listesi açılırken çağrılır (K5)."""
-    ensure_meb_catalog()
+    """Tembel tohum girişi — katalog listesi/havuz doldurma öncesi çağrılır (K5).
+
+    Damga eşitse maliyet birkaç dosya özetidir; farklıysa katalog okulun
+    yürürlükteki çizelgesine çekilir ve takma adlar tamamlanır.
+    """
+    ensure_catalog_synced()
     ensure_course_aliases()
 
 

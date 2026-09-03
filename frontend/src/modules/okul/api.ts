@@ -59,12 +59,63 @@ export interface SetupStatus {
   class_section_count: number;
 }
 
-/** Okul türü — seviye kümesi bundan türetilir (U4); v1'de tek tür. */
-export type SchoolType = "ANADOLU_LISESI";
+/**
+ * Okul türü — ders havuzunun çizelge kaynağı bundan türetilir (U4). Backend
+ * `okul.SchoolType` ile birebir; hangi türün çizelge verisi olduğunu
+ * `GET /setup/school-types/` söyler (`available`).
+ */
+export type SchoolType =
+  | "ANADOLU_LISESI"
+  | "FEN_LISESI"
+  | "SOSYAL_BILIMLER_LISESI"
+  | "ANADOLU_IMAM_HATIP_LISESI"
+  | "MESLEKI_VE_TEKNIK_ANADOLU_LISESI"
+  | "COK_PROGRAMLI_ANADOLU_LISESI"
+  | "GUZEL_SANATLAR_LISESI"
+  | "SPOR_LISESI";
 
 export const SCHOOL_TYPE_TR: Record<SchoolType, string> = {
   ANADOLU_LISESI: "Anadolu Lisesi",
+  FEN_LISESI: "Fen Lisesi",
+  SOSYAL_BILIMLER_LISESI: "Sosyal Bilimler Lisesi",
+  ANADOLU_IMAM_HATIP_LISESI: "Anadolu İmam Hatip Lisesi",
+  MESLEKI_VE_TEKNIK_ANADOLU_LISESI: "Mesleki ve Teknik Anadolu Lisesi",
+  COK_PROGRAMLI_ANADOLU_LISESI: "Çok Programlı Anadolu Lisesi",
+  GUZEL_SANATLAR_LISESI: "Güzel Sanatlar Lisesi",
+  SPOR_LISESI: "Spor Lisesi",
 };
+
+/** `GET /setup/school-types/` satırı — `available`: bu sürümde çizelge verisi var. */
+export interface SchoolTypeOption {
+  value: SchoolType;
+  label: string;
+  available: boolean;
+  program_keys: string[];
+}
+
+/**
+ * Okul türü seçici seçenekleri: API listesi (çizelge verisi olmayan tür
+ * "(çizelge verisi yok)" ekiyle), liste gelmediyse sabit sözlük. Kurulum
+ * sihirbazı ve Ayarlar → Okul bilgileri aynı yardımcıyı kullanır.
+ */
+export function okulTuruSecenekleri(
+  okulTurleri: SchoolTypeOption[],
+): { value: string; label: string }[] {
+  if (okulTurleri.length === 0) {
+    return Object.entries(SCHOOL_TYPE_TR).map(([value, label]) => ({ value, label }));
+  }
+  return okulTurleri.map((t) => ({
+    value: t.value,
+    label: t.available ? t.label : `${t.label} (çizelge verisi yok)`,
+  }));
+}
+
+/**
+ * Seviye → çizelge program anahtarları (kademeli dönüşüm / çok programlı okul).
+ * BOŞ nesne = varsayılan atama (okul türü + hazırlık + ders yılından türetilir);
+ * yazılan seviye için yalnız listedeki programlar uygulanır.
+ */
+export type LevelPrograms = Record<string, string[]>;
 
 /** Kurum künyesi — evrak antedi buradan çözülür (`setup_completed` salt-okunur). */
 export interface SchoolConfig {
@@ -74,6 +125,7 @@ export interface SchoolConfig {
   principal_name: string;
   school_type: SchoolType;
   has_prep_class: boolean;
+  level_programs: LevelPrograms;
   setup_completed: boolean;
 }
 
@@ -306,6 +358,10 @@ export const okulApi = {
 
   completeSetup: (): Promise<{ setup_completed: boolean }> =>
     api.post<{ setup_completed: boolean }>("/setup/complete/"),
+
+  /** Okul türleri + çizelge verisi var mı (seçici bu listeden dolar). */
+  listSchoolTypes: (): Promise<SchoolTypeOption[]> =>
+    api.get<SchoolTypeOption[]>("/setup/school-types/"),
 
   /** Öğrenim seviyeleri — okul türünden türetilir (U4). */
   getGradeLevels: (): Promise<GradeLevelsResponse> => fetchGradeLevels(),

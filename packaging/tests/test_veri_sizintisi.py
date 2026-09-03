@@ -71,7 +71,7 @@ def test_kullanici_durum_dosyalari_reddedilir(tmp_path: Path) -> None:
 
 def test_katalog_verisi_serbesttir(tmp_path: Path) -> None:
     """Meşru `data/ders-cizelgeleri` içeriği yasak kurallara TAKILMAMALI (K5)."""
-    dosya = tmp_path / "_internal" / "data" / "ders-cizelgeleri" / "anadolu-lisesi-2025-2026.md"
+    dosya = tmp_path / "_internal" / "data" / "ders-cizelgeleri" / "anadolu-lisesi-2025.md"
     dosya.parent.mkdir(parents=True)
     dosya.touch()
 

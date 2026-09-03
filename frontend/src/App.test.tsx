@@ -25,6 +25,7 @@ const okulApiMock = vi.hoisted(() => ({
   getSchoolConfig: vi.fn(),
   updateSchoolConfig: vi.fn(),
   completeSetup: vi.fn(),
+  listSchoolTypes: vi.fn(() => Promise.resolve([])),
   getGradeLevels: vi.fn(),
   listSchoolYears: vi.fn(),
   listSchoolTerms: vi.fn(),
@@ -81,6 +82,7 @@ beforeEach(() => {
     principal_name: "",
     school_type: "ANADOLU_LISESI",
     has_prep_class: false,
+    level_programs: {},
     setup_completed: true,
   });
   okulApiMock.getGradeLevels.mockResolvedValue({

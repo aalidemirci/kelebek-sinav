@@ -25,8 +25,15 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import Stepper from "../../ui/Stepper";
 import type { StepperItem } from "../../ui/Stepper";
 import TextField from "../../ui/TextField";
-import { SCHOOL_TYPE_TR, okulApi } from "../okul/api";
-import type { SchoolType, SchoolYear, SetupStatus } from "../okul/api";
+import CizelgeAtamaMatrisi from "../okul/CizelgeAtamaMatrisi";
+import { okulApi, okulTuruSecenekleri } from "../okul/api";
+import type {
+  LevelPrograms,
+  SchoolType,
+  SchoolTypeOption,
+  SchoolYear,
+  SetupStatus,
+} from "../okul/api";
 
 const ADIMLAR = [
   { key: "okul", label: "Okul bilgileri", icon: "school" },
@@ -91,6 +98,8 @@ export default function KurulumPage() {
   const [mudur, setMudur] = useState("");
   const [okulTuru, setOkulTuru] = useState<SchoolType>("ANADOLU_LISESI");
   const [hazirlikVar, setHazirlikVar] = useState(false);
+  const [levelPrograms, setLevelPrograms] = useState<LevelPrograms>({});
+  const [okulTurleri, setOkulTurleri] = useState<SchoolTypeOption[]>([]);
 
   const [busy, setBusy] = useState(false);
   const [adimHatasi, setAdimHatasi] = useState<string | null>(null);
@@ -117,6 +126,7 @@ export default function KurulumPage() {
         setMudur(c.principal_name);
         setOkulTuru(c.school_type);
         setHazirlikVar(c.has_prep_class);
+        setLevelPrograms(c.level_programs ?? {});
         setAdim(ilkEksikAdim(s));
         setLoadError(null);
       })
@@ -125,6 +135,15 @@ export default function KurulumPage() {
       })
       .finally(() => {
         if (!iptal) setLoading(false);
+      });
+    // Okul türü listesi ayrı yüklenir: gelmezse sabit sözlükten düşülür.
+    okulApi
+      .listSchoolTypes()
+      .then((r) => {
+        if (!iptal) setOkulTurleri(r);
+      })
+      .catch(() => {
+        if (!iptal) setOkulTurleri([]);
       });
     return () => {
       iptal = true;
@@ -168,6 +187,7 @@ export default function KurulumPage() {
         principal_name: mudur.trim(),
         school_type: okulTuru,
         has_prep_class: hazirlikVar,
+        level_programs: levelPrograms,
       });
       snackbar.success("Okul bilgileri kaydedildi.");
       await durumTazele();
@@ -252,6 +272,8 @@ export default function KurulumPage() {
                 mudur={mudur}
                 okulTuru={okulTuru}
                 hazirlikVar={hazirlikVar}
+                levelPrograms={levelPrograms}
+                okulTurleri={okulTurleri}
                 errors={errors}
                 onOkulAdi={setOkulAdi}
                 onIl={setIl}
@@ -259,6 +281,7 @@ export default function KurulumPage() {
                 onMudur={setMudur}
                 onOkulTuru={setOkulTuru}
                 onHazirlikVar={setHazirlikVar}
+                onLevelPrograms={setLevelPrograms}
               />
             )}
             {adim === 1 && <DersYiliAdimi onChanged={durumTazele} />}
@@ -309,6 +332,8 @@ interface OkulBilgileriProps {
   mudur: string;
   okulTuru: SchoolType;
   hazirlikVar: boolean;
+  levelPrograms: LevelPrograms;
+  okulTurleri: SchoolTypeOption[];
   errors: Partial<Record<string, string>>;
   onOkulAdi: (v: string) => void;
   onIl: (v: string) => void;
@@ -316,6 +341,7 @@ interface OkulBilgileriProps {
   onMudur: (v: string) => void;
   onOkulTuru: (v: SchoolType) => void;
   onHazirlikVar: (v: boolean) => void;
+  onLevelPrograms: (v: LevelPrograms) => void;
 }
 
 function OkulBilgileriAdimi({
@@ -325,6 +351,8 @@ function OkulBilgileriAdimi({
   mudur,
   okulTuru,
   hazirlikVar,
+  levelPrograms,
+  okulTurleri,
   errors,
   onOkulAdi,
   onIl,
@@ -332,13 +360,14 @@ function OkulBilgileriAdimi({
   onMudur,
   onOkulTuru,
   onHazirlikVar,
+  onLevelPrograms,
 }: OkulBilgileriProps) {
   return (
     <Card elevation={1} className="p-6">
       <p className="text-title-medium text-on-surface">1. Okul bilgileri</p>
       <p className="mt-1 text-body-medium text-on-surface-variant">
-        Bu bilgiler salon evrakının antetinde kullanılır. Okul türü, ders havuzunun hangi MEB
-        çizelgesinden tohumlanacağını ve geçerli sınıf seviyelerini belirler.
+        Bu bilgiler salon evrakının antetinde kullanılır. Okul türü ve hazırlık sınıfı, ders
+        havuzunun hangi MEB çizelgesinden türetileceğini ve geçerli sınıf seviyelerini belirler.
       </p>
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <TextField
@@ -375,8 +404,8 @@ function OkulBilgileriAdimi({
           label="Okul türü"
           value={okulTuru}
           onChange={(e) => onOkulTuru(e.target.value as SchoolType)}
-          options={Object.entries(SCHOOL_TYPE_TR).map(([value, label]) => ({ value, label }))}
-          helperText="v1'de yalnız Anadolu Lisesi çizelgesi gömülüdür; diğer türler sonraki sürümlerde."
+          options={okulTuruSecenekleri(okulTurleri)}
+          helperText="Ders havuzu bu türün TTK haftalık ders çizelgesinden türetilir."
         />
         <Select
           label="Hazırlık sınıfı"
@@ -386,8 +415,16 @@ function OkulBilgileriAdimi({
             { value: "0", label: "Yok" },
             { value: "1", label: "Var" },
           ]}
-          helperText="Varsa seviyelere 'Hazırlık' eklenir; listelerdeki HAZIRLIK/A biçimi tanınır."
+          helperText="Varsa 'Hazırlık Sınıfı Bulunan …' çizelgesi uygulanır ve seviyelere Hazırlık eklenir."
         />
+        <div className="sm:col-span-2">
+          <CizelgeAtamaMatrisi
+            schoolType={okulTuru}
+            hasPrepClass={hazirlikVar}
+            value={levelPrograms}
+            onChange={onLevelPrograms}
+          />
+        </div>
       </div>
     </Card>
   );
