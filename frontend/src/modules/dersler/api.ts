@@ -160,6 +160,17 @@ export interface MergeResult {
   dropped_exams: number;
 }
 
+/** Bir dersin bir seviyedeki şube kapsamı (seçmeli dersler için). */
+export interface CourseSectionOffering {
+  level: number;
+  section_ids: number[];
+}
+
+/** Tüm katalogun kapsam haritası — ders havuzu tablosunun "Şubeler" sütunu. */
+export interface CourseSectionOfferingRow extends CourseSectionOffering {
+  course: number;
+}
+
 export const derslerApi = {
   listCourses: (params: CourseListParams = {}): Promise<Course[]> => {
     const parts: string[] = [];
@@ -204,4 +215,19 @@ export const derslerApi = {
 
   mergeCourses: (duplicate: number, canonical: number): Promise<MergeResult> =>
     api.post<MergeResult>("/courses/merge/", { duplicate, canonical }),
+  /** Seçmeli derslerin şube kapsamı — sınav takvimi de bu kaynaktan beslenir. */
+  sectionOfferings: (schoolYearId?: number) =>
+    api.get<{ school_year: number; results: CourseSectionOfferingRow[] }>(
+      `/courses/section-offerings/${schoolYearId ? `?school_year=${schoolYearId}` : ""}`,
+    ),
+  courseSections: (courseId: number, schoolYearId?: number) =>
+    api.get<{ school_year: number; offerings: CourseSectionOffering[] }>(
+      `/courses/${courseId}/sections/${schoolYearId ? `?school_year=${schoolYearId}` : ""}`,
+    ),
+  /** TAM DEĞİŞTİRME: gönderilmeyen seviyenin kapsamı silinir. */
+  setCourseSections: (courseId: number, offerings: CourseSectionOffering[]) =>
+    api.put<{ school_year: number; offerings: CourseSectionOffering[] }>(
+      `/courses/${courseId}/sections/`,
+      { offerings },
+    ),
 };

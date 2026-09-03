@@ -494,11 +494,19 @@ def fill_calendar_pool(calendar: ExamCalendar) -> dict[str, Any]:
     (`CourseExamMode.WRITTEN`) derslerdir. Anadolu Lisesi kataloğunda 19 ortak
     + 45 seçmeli satır seviyelere açılınca ~175 havuz girdisi oluşuyor, idareci
     gerçekte sınav yapılacak ~30 tanesi kalana dek satırları tek tek siliyordu.
-    Seçmeli dersler artık `elective_pool_options` + `add_calendar_entries_bulk`
-    ile SEÇİLEREK eklenir; uygulama sınavı yapılan (Beden/Görsel/Müzik/Spor)
-    ve sınavı olmayan (Rehberlik) dersler ise `exam_mode` sayesinde havuza hiç
-    girmez. Kenar durumlar (uygulama sınavı, kelebek-değil, üst makam sınavı)
-    elle ekleme formunda durur. Dönüş sözlüğünün ŞEKLİ DEĞİŞMEDİ.
+    Uygulama sınavı yapılan (Beden/Görsel/Müzik/Spor) ve sınavı olmayan
+    (Rehberlik) dersler `exam_mode` sayesinde havuza hiç girmez. Kenar durumlar
+    (uygulama sınavı, kelebek-değil, üst makam sınavı) elle ekleme formunda
+    durur. Dönüş sözlüğünün ŞEKLİ DEĞİŞMEDİ.
+
+    GENİŞLEME (03.09.2026): YAZILI seçmeli dersler artık ŞUBE KAPSAMI GİRİLMİŞSE
+    kendiliğinden havuza girer (`dersler.selectors.course_section_map`) ve
+    kapsam girdiye ön-dolar. 31.08.2026'da seçmeliler bilerek dışarıda
+    bırakılmıştı: kimin aldığı bilinmediğinden ~175 satır oluşuyor ve idareci
+    tek tek siliyordu. Bilgi artık ders havuzunda yaşıyor — "hangi şubeler
+    alıyor" bir kez girilir, dört takvimde de kullanılır. Kapsamı GİRİLMEMİŞ
+    seçmeli sessizce düşmez: `skipped`'a nedeniyle yazılır ve seçim diyaloğundan
+    elle eklenebilir (`elective_pool_options` durmaya devam eder).
     """
     from apps.dersler import selectors as ders_selectors
     from apps.dersler import services as ders_services
@@ -513,9 +521,17 @@ def fill_calendar_pool(calendar: ExamCalendar) -> dict[str, Any]:
     # Katalog damgası eşitse ucuz; sürümle gelen yeni çizelge dosyası ya da ayar
     # değişikliği ders listesi hiç açılmadan havuza yansısın (tasarım §7.2).
     ders_services.ensure_seeded()
+    year_id = calendar.semester.school_year_id
     pairs = ders_selectors.taught_course_levels(
-        calendar.semester.school_year_id,
+        year_id,
         course_types=[CourseType.COMMON],
+        exam_modes=[CourseExamMode.WRITTEN],
+    )
+    # Şube kapsamı girilmiş YAZILI seçmeliler: kapsamıyla birlikte havuza girer.
+    section_map = ders_selectors.course_section_map(year_id)
+    elective_pairs = ders_selectors.taught_course_levels(
+        year_id,
+        course_types=[CourseType.ELECTIVE],
         exam_modes=[CourseExamMode.WRITTEN],
     )
     live_pairs = set(
@@ -526,15 +542,29 @@ def fill_calendar_pool(calendar: ExamCalendar) -> dict[str, Any]:
     created: list[str] = []
     existed: list[str] = []
     skipped: list[str] = []
-    for pair in pairs:
+    adaylar = [(pair, False) for pair in pairs] + [(pair, True) for pair in elective_pairs]
+    for pair, secmeli in adaylar:
         label = f"{pair.course_name} — {_level_display(pair.level)}"
+        kapsam = section_map.get((pair.course_id, pair.level))
+        if secmeli and not kapsam:
+            skipped.append(
+                f"{label} (şubeleri girilmemiş — Ders Havuzu ekranında tanımlayın "
+                "ya da seçmeli seçim penceresinden ekleyin)"
+            )
+            continue
         if (pair.course_id, pair.level) in live_pairs:
             existed.append(label)
             continue
         try:
             # add_calendar_entry iç içe atomic (savepoint) — tek çiftin reddi
             # koşunun kalanını geri almaz; varsayılanlar YAZILI + kelebek.
-            add_calendar_entry(calendar=calendar, course_id=pair.course_id, level=pair.level)
+            add_calendar_entry(
+                calendar=calendar,
+                course_id=pair.course_id,
+                level=pair.level,
+                participant_type=(ParticipantType.SECTIONS if kapsam else ParticipantType.LEVEL),
+                section_ids=(list(kapsam) if kapsam else None),
+            )
         except ValidationError as exc:
             skipped.append(f"{label} ({_validation_text(exc)})")
             continue
@@ -543,7 +573,7 @@ def fill_calendar_pool(calendar: ExamCalendar) -> dict[str, Any]:
         "created": created,
         "existed": existed,
         "skipped": skipped,
-        "total_pairs": len(pairs),
+        "total_pairs": len(pairs) + len(elective_pairs),
     }
 
 
@@ -575,6 +605,11 @@ def add_calendar_entries_bulk(
     from apps.dersler import selectors as ders_selectors
 
     _ensure_draft(calendar)
+    # Kapsam gönderilmemiş kalem ders havuzundaki tanımdan ön-dolar (03.09.2026):
+    # idareci "hangi şubeler alıyor"u bir kez Ders Havuzu ekranında girer, her
+    # takvimde yeniden işaretlemez. Gönderilen kapsam KAZANIR — diyalogda tek
+    # sınav için istisna yapılabilir.
+    section_map = ders_selectors.course_section_map(calendar.semester.school_year_id)
     created: list[str] = []
     existed: list[str] = []
     skipped: list[str] = []
@@ -598,6 +633,12 @@ def add_calendar_entries_bulk(
         ).exists():
             existed.append(label)
             continue
+        kapsam = item.get("section_ids")
+        ptype = item.get("participant_type")
+        if not kapsam and not ptype:
+            katalog = section_map.get((course_id, level))
+            if katalog:
+                kapsam, ptype = list(katalog), ParticipantType.SECTIONS
         try:
             add_calendar_entry(
                 calendar=calendar,
@@ -606,8 +647,8 @@ def add_calendar_entries_bulk(
                 exam_kind=exam_kind,
                 is_butterfly=bool(item.get("is_butterfly", True)),
                 authority=str(item.get("authority") or ExamAuthority.SCHOOL),
-                participant_type=str(item.get("participant_type") or ParticipantType.LEVEL),
-                section_ids=item.get("section_ids"),
+                participant_type=str(ptype or ParticipantType.LEVEL),
+                section_ids=kapsam,
                 note=str(item.get("note") or ""),
             )
         except ValidationError as exc:
@@ -615,6 +656,39 @@ def add_calendar_entries_bulk(
             continue
         created.append(label)
     return {"created": created, "existed": existed, "skipped": skipped}
+
+
+def entry_scope_differs_from_catalog(entry: ExamCalendarEntry) -> bool:
+    """Girdinin şube kapsamı, ders havuzundaki tanımdan farklı mı?
+
+    Katalogda tanım YOKSA False döner: karşılaştırılacak bir şey yoktur
+    (zorunlu ders, ya da şubesi henüz girilmemiş seçmeli). Rozet yalnız
+    "tanım var ama bu takvimde bilerek değiştirilmiş" durumunu işaretler —
+    idareci farkın farkında olsun, kapsam sessizce ayrışmasın.
+    """
+    from apps.dersler import selectors as ders_selectors
+
+    katalog = ders_selectors.course_section_map(entry.calendar.semester.school_year_id).get(
+        (entry.course_id, int(entry.level))
+    )
+    if not katalog:
+        return False
+    return set(katalog) != {int(sid) for sid in entry.section_ids or []}
+
+
+def entries_differing_from_catalog(calendar: ExamCalendar) -> set[int]:
+    """Kapsamı ders havuzu tanımından farklı girdilerin id kümesi (tek sorgu)."""
+    from apps.dersler import selectors as ders_selectors
+
+    section_map = ders_selectors.course_section_map(calendar.semester.school_year_id)
+    if not section_map:
+        return set()
+    farkli: set[int] = set()
+    for entry in ExamCalendarEntry.objects.filter(calendar=calendar):
+        katalog = section_map.get((entry.course_id, int(entry.level)))
+        if katalog and set(katalog) != {int(sid) for sid in entry.section_ids or []}:
+            farkli.add(entry.pk)
+    return farkli
 
 
 def elective_pool_options(calendar: ExamCalendar) -> list[dict[str, Any]]:
@@ -650,6 +724,9 @@ def elective_pool_options(calendar: ExamCalendar) -> list[dict[str, Any]]:
             "course_id", "level"
         )
     )
+    # Ders havuzunda girilmiş kapsam diyaloğa ÖN SEÇİM olarak iner; idareci
+    # yalnız istisna varsa dokunur (kaynak Ders Havuzu ekranıdır — 03.09.2026).
+    section_map = ders_selectors.course_section_map(calendar.semester.school_year_id)
     by_level: dict[int, list[dict[str, Any]]] = {}
     for pair in pairs:
         by_level.setdefault(pair.level, []).append(
@@ -657,6 +734,7 @@ def elective_pool_options(calendar: ExamCalendar) -> list[dict[str, Any]]:
                 "id": pair.course_id,
                 "name": pair.course_name,
                 "in_pool": (pair.course_id, pair.level) in live_pairs,
+                "default_section_ids": list(section_map.get((pair.course_id, pair.level), [])),
             }
         )
     return [

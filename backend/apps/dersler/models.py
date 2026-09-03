@@ -175,3 +175,60 @@ class CourseAlias(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.display_name} → {self.course}"
+
+
+class CourseSectionOffering(BaseModel):
+    """Seçmeli dersin hangi şubelerde okutulduğu — (ders, ders yılı, seviye).
+
+    Sınav takvimi kapsamının KAYNAĞIDIR (03.09.2026 kararı): idareci bu bilgiyi
+    ders havuzunda BİR KEZ girer, takvim havuzu ondan beslenir. Takvim girdisi
+    kendi `section_ids` KOPYASINI yazmaya devam eder (snapshot) — katalog
+    sonradan değişince onaylanmış takvimin kapsamı geriye dönük kaymasın; aynı
+    gerekçe şube kümelerinde de geçerlidir (CLAUDE.md §3 "kümeler seçim
+    aracıdır").
+
+    Neden `Course` üzerinde bir alan DEĞİL: ders kataloğu ders yılından
+    bağımsızdır ve `sync_catalog` alanlarını çizelgeden EZER; şube (`okul
+    .ClassSection`) ise ders yılına bağlıdır. Course'a yazılan şube pk'leri yıl
+    geçince ölü referansa dönüşür ve kapsam sessizce boşalırdı. Seviye de
+    anahtarın parçasıdır: aynı ders 9'da A-B, 10'da C şubesinde okutulabilir.
+
+    `section_ids` JSON'dur (takvim girdisiyle AYNI kalıp): şube soft-silinince
+    FK koruması devreye girmez, canlılık okuma anında denetlenir
+    (`selectors.course_section_map`). Kişisel veri içermez.
+    """
+
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name="section_offerings",
+        verbose_name="ders",
+    )
+    school_year = models.ForeignKey(
+        "okul.SchoolYear",
+        on_delete=models.CASCADE,
+        related_name="course_section_offerings",
+        verbose_name="ders yılı",
+    )
+    level = models.PositiveSmallIntegerField("seviye", help_text="Sınıf düzeyi (0=Hazırlık, 9-12).")
+    section_ids = models.JSONField(
+        "şube id'leri",
+        default=list,
+        blank=True,
+        help_text="okul.ClassSection id listesi (küme kimliği YAZILMAZ).",
+    )
+
+    class Meta:
+        verbose_name = "ders şube kapsamı"
+        verbose_name_plural = "ders şube kapsamları"
+        ordering = ["course", "level"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["course", "school_year", "level"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_course_offering_alive",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.course} / {self.level} → {len(self.section_ids or [])} şube"

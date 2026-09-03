@@ -1,22 +1,38 @@
 // Ders havuzu testleri: "Sınav" sütunu (yazılı / uygulama / sınav yok) ve
 // satırdan düzenleme yolu. Sınav biçimi takvim havuzunun neyi kendiliğinden
 // çekeceğini belirler — sütun kayarsa idareci yanlış dersi siler.
-// Sayfa react-query kullanmaz (useState + Promise.all); sağlayıcı olarak
-// Snackbar + Confirm yeter. KVKK: ders adları kataloğa aittir, kişi verisi yok.
+// Liste useState + Promise.all ile, "Şubeler" sütununun kapsam haritası
+// react-query ile gelir (03.09.2026) — sağlayıcı üçlüsü: QueryClient +
+// Snackbar + Confirm. KVKK: ders adları kataloğa aittir, kişi verisi yok.
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
-import type { Course } from "./api";
+import type { Course, CourseSectionOffering, CourseSectionOfferingRow } from "./api";
 
 const dersler = vi.hoisted(() => ({
   listCourses: vi.fn(),
   listDuplicates: vi.fn(() => Promise.resolve([])),
   createCourse: vi.fn(),
   updateCourse: vi.fn(),
+  // Tipli varsayılan: `results: []` tek başına `never[]` çıkarır ve
+  // mockResolvedValue kapsam satırlarını kabul etmez (tsc kapısı — emsal
+  // TakvimHavuzPaneli.test.tsx şube mock'u).
+  sectionOfferings: vi.fn(
+    (): Promise<{ school_year: number; results: CourseSectionOfferingRow[] }> =>
+      Promise.resolve({ school_year: 1, results: [] }),
+  ),
+  courseSections: vi.fn((): Promise<{ school_year: number; offerings: CourseSectionOffering[] }> =>
+    Promise.resolve({ school_year: 1, offerings: [] }),
+  ),
+  setCourseSections: vi.fn(
+    (): Promise<{ school_year: number; offerings: CourseSectionOffering[] }> =>
+      Promise.resolve({ school_year: 1, offerings: [] }),
+  ),
   getCatalogStatus: vi.fn(() =>
     Promise.resolve({
       year: 2026,
@@ -63,6 +79,13 @@ const okul = vi.hoisted(() => ({
       prep_enabled: false,
     }),
   ),
+  listClassSections: vi.fn(() =>
+    Promise.resolve([
+      { id: 1, class_level: 9, class_section: "A", class_label: "9/A", group: null },
+      { id: 2, class_level: 9, class_section: "B", class_label: "9/B", group: null },
+    ]),
+  ),
+  listClassSectionGroups: vi.fn(() => Promise.resolve([])),
 }));
 
 vi.mock("./api", async (importActual) => {
@@ -102,12 +125,15 @@ const BEDEN = ders({
 });
 
 function renderPage() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <SnackbarProvider>
-      <ConfirmProvider>
-        <DersHavuzuPage />
-      </ConfirmProvider>
-    </SnackbarProvider>,
+    <QueryClientProvider client={qc}>
+      <SnackbarProvider>
+        <ConfirmProvider>
+          <DersHavuzuPage />
+        </ConfirmProvider>
+      </SnackbarProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -221,5 +247,88 @@ describe("DersHavuzuPage", () => {
         exam_mode: "PRACTICE",
       }),
     );
+  });
+  it("Şubeler sütunu: zorunlu derste 'Seviye geneli', seçmelide kapsam özeti", async () => {
+    dersler.listCourses.mockResolvedValue([
+      ders({ id: 1, name: "Matematik", course_type: "COMMON" }),
+      ders({ id: 2, name: "Almanca", course_type: "ELECTIVE" }),
+    ]);
+    dersler.sectionOfferings.mockResolvedValue({
+      school_year: 1,
+      results: [{ course: 2, level: 9, section_ids: [1, 2] }],
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole("columnheader", { name: "Şubeler" })).toBeInTheDocument();
+    // Zorunlu ders seviyenin tamamında okutulur; kapsam düğmesi çizilmez.
+    expect(screen.getByText("Seviye geneli")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Almanca dersinin şubelerini düzenle" }),
+    ).toHaveTextContent("9: A, B");
+  });
+
+  it("şubesi girilmemiş YAZILI seçmeli uyarı işaretiyle görünür", async () => {
+    // Havuz doldurma onu atlayacak — sessiz düşmesin diye sütunda işaretlenir.
+    dersler.listCourses.mockResolvedValue([
+      ders({ id: 2, name: "Almanca", course_type: "ELECTIVE", exam_mode: "WRITTEN" }),
+    ]);
+    dersler.sectionOfferings.mockResolvedValue({ school_year: 1, results: [] });
+
+    renderPage();
+
+    expect(
+      await screen.findByRole("button", { name: "Almanca dersinin şubelerini düzenle" }),
+    ).toHaveTextContent("Girilmedi ⚠");
+  });
+
+  it("şube kapsamı diyaloğu seçimi seviye seviye kaydeder", async () => {
+    const user = userEvent.setup();
+    dersler.listCourses.mockResolvedValue([
+      ders({ id: 2, name: "Almanca", course_type: "ELECTIVE", levels: [9] }),
+    ]);
+    dersler.sectionOfferings.mockResolvedValue({ school_year: 1, results: [] });
+    dersler.courseSections.mockResolvedValue({ school_year: 1, offerings: [] });
+    dersler.setCourseSections.mockResolvedValue({
+      school_year: 1,
+      offerings: [{ level: 9, section_ids: [1] }],
+    });
+
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: "Almanca dersinin şubelerini düzenle" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "Almanca — şubeler" });
+    await user.click(await within(dialog).findByLabelText("Almanca 9. sınıf: 9/A"));
+    await user.click(within(dialog).getByRole("button", { name: "Kaydet" }));
+
+    await waitFor(() =>
+      expect(dersler.setCourseSections).toHaveBeenCalledWith(2, [{ level: 9, section_ids: [1] }]),
+    );
+  });
+
+  it("kayıtlı kapsam diyaloğa yüklenir", async () => {
+    const user = userEvent.setup();
+    dersler.listCourses.mockResolvedValue([
+      ders({ id: 2, name: "Almanca", course_type: "ELECTIVE", levels: [9] }),
+    ]);
+    dersler.sectionOfferings.mockResolvedValue({
+      school_year: 1,
+      results: [{ course: 2, level: 9, section_ids: [2] }],
+    });
+    dersler.courseSections.mockResolvedValue({
+      school_year: 1,
+      offerings: [{ level: 9, section_ids: [2] }],
+    });
+
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: "Almanca dersinin şubelerini düzenle" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "Almanca — şubeler" });
+    expect(await within(dialog).findByLabelText("Almanca 9. sınıf: 9/B")).toBeChecked();
+    expect(within(dialog).getByLabelText("Almanca 9. sınıf: 9/A")).not.toBeChecked();
   });
 });

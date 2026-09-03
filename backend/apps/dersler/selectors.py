@@ -339,3 +339,37 @@ def course_level_coverage(
             whole_sections=True,
         )
     ]
+
+
+def course_section_map(school_year_id: int) -> dict[tuple[int, int], list[int]]:
+    """(ders, seviye) → CANLI şube pk listesi — ders havuzunda girilen kapsam.
+
+    Sınav takvimi kapsamının kaynağıdır; takvim girdisi bundan ÖN-DOLAR ama
+    kendi kopyasını yazar (`CourseSectionOffering` docstring'i).
+
+    Silinmiş şube okuma anında düşürülür: `section_ids` bir JSON listedir, FK
+    koruması yoktur (takvim girdisiyle aynı kalıp — `services_calendar
+    ._live_section_ids`). Şube pk'leri TEK sorguda süzülür; kapsamı tümüyle
+    ölmüş kayıt sözlüğe boş liste ile girer, çağıran "tanımsız" ile "boş"u
+    ayırt edebilsin (havuz doldurma ikisini de atlar, arayüz uyarır).
+    """
+    from apps.dersler.models import CourseSectionOffering
+    from apps.okul.models import ClassSection
+
+    kayitlar = list(CourseSectionOffering.objects.filter(school_year_id=school_year_id))
+    if not kayitlar:
+        return {}
+    tum_ids: set[int] = set()
+    for kayit in kayitlar:
+        tum_ids.update(int(sid) for sid in kayit.section_ids or [])
+    canli = set(
+        ClassSection.objects.filter(pk__in=tum_ids, school_year_id=school_year_id).values_list(
+            "pk", flat=True
+        )
+    )
+    return {
+        (kayit.course_id, int(kayit.level)): [
+            int(sid) for sid in kayit.section_ids or [] if int(sid) in canli
+        ]
+        for kayit in kayitlar
+    }

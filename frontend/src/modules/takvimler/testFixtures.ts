@@ -55,6 +55,7 @@ export function makeEntry(overrides: Partial<ExamCalendarEntryRow> = {}): ExamCa
     placed_date: null,
     period_no: null,
     is_pinned: false,
+    scope_differs_from_catalog: false,
     session: null,
     note: "",
     ...overrides,
@@ -71,14 +72,16 @@ export function makeElectiveOptions(): ElectivePoolLevel[] {
       value: 9,
       display_label: "9. Sınıf",
       courses: [
-        { id: 21, name: "Çağdaş Türk ve Dünya Tarihi", in_pool: false },
-        { id: 22, name: "Almanca", in_pool: true },
+        { id: 21, name: "Çağdaş Türk ve Dünya Tarihi", in_pool: false, default_section_ids: [] },
+        { id: 22, name: "Almanca", in_pool: true, default_section_ids: [] },
       ],
     },
     {
       value: 10,
       display_label: "10. Sınıf",
-      courses: [{ id: 23, name: "Astronomi ve Uzay Bilimleri", in_pool: false }],
+      courses: [
+        { id: 23, name: "Astronomi ve Uzay Bilimleri", in_pool: false, default_section_ids: [] },
+      ],
     },
   ];
 }

@@ -22,7 +22,7 @@ import { okulApi } from "../okul/api";
 import type { ParticipantTypeCode } from "../oturumlar/api";
 import type { ExamCalendarEntryRow } from "./api";
 import { examCalendarApi } from "./api";
-import SubeSecici, { KAPSAM_SECENEKLERI } from "./SubeKapsamSecici";
+import SubeSecici, { KAPSAM_SECENEKLERI } from "../okul/SubeKapsamSecici";
 
 export default function KapsamDuzenleDialog({
   entry,

@@ -1,4 +1,4 @@
-// Takvim havuz paneli testleri (F6 sadeleştirmesi): "Zorunlu dersleri ekle"
+// Takvim havuz paneli testleri (F6 sadeleştirmesi): "Dersleri ekle"
 // onay + fill-pool çağrısı, "Seçmeli ders seç" dialog'unun açılması, havuz
 // tablosundaki katılımcı kapsamı sütunu ve o sütundan kapsamın DÜZELTİLMESİ. Panel useConfirm kullanır →
 // ConfirmProvider ZORUNLU; onay dialog'una basılmadan mutasyon koşmaz.
@@ -72,7 +72,7 @@ function renderPanel(round = 1, editable = true) {
 afterEach(() => vi.clearAllMocks());
 
 describe("TakvimHavuzPaneli", () => {
-  it("“Zorunlu dersleri ekle” onaydan sonra fill-pool ucunu çağırır ve sonucu özetler", async () => {
+  it("“Dersleri ekle” onaydan sonra fill-pool ucunu çağırır ve sonucu özetler", async () => {
     const user = userEvent.setup();
     calApi.entries.mockResolvedValue({ results: [makeEntry()] });
     calApi.participantPreview.mockResolvedValue({});
@@ -85,11 +85,13 @@ describe("TakvimHavuzPaneli", () => {
     });
 
     renderPanel();
-    await user.click(await screen.findByRole("button", { name: "Zorunlu dersleri ekle" }));
+    await user.click(await screen.findByRole("button", { name: "Dersleri ekle" }));
 
-    // Onay metni yeni sözleşmeyi anlatır: yalnız ortak + yazılı dersler.
-    const onay = await screen.findByRole("dialog", { name: "Zorunlu dersleri havuza ekle" });
+    // Onay metni sözleşmeyi anlatır: ortak + yazılı dersler ve ŞUBESİ TANIMLI
+    // seçmeliler; şubesi girilmemiş seçmeli atlanır (03.09.2026 genişlemesi).
+    const onay = await screen.findByRole("dialog", { name: "Dersleri havuza ekle" });
     expect(within(onay).getByText(/ZORUNLU \(ortak\) ve sınavı YAZILI/)).toBeInTheDocument();
+    expect(within(onay).getByText(/şubesi girilmemiş seçmeli atlanır/)).toBeInTheDocument();
     await user.click(within(onay).getByRole("button", { name: "Ekle" }));
 
     await waitFor(() => expect(calApi.fillPool).toHaveBeenCalledWith(7));
@@ -191,5 +193,24 @@ describe("TakvimHavuzPaneli", () => {
         section_ids: [3],
       }),
     );
+  });
+  it("kapsamı ders havuzundan farklı girdi 'özel' rozeti taşır", async () => {
+    // Kapsamın kaynağı ders havuzudur; takvimdeki istisna görünür kalmalı.
+    calApi.entries.mockResolvedValue({
+      results: [
+        makeEntry({
+          participant_type: "SECTIONS",
+          section_ids: [3],
+          participant_label: "1 şube",
+          scope_differs_from_catalog: true,
+        }),
+      ],
+    });
+    calApi.participantPreview.mockResolvedValue({});
+    calApi.grid.mockResolvedValue(makeGrid());
+
+    renderPanel();
+
+    expect(await screen.findByText("özel")).toBeInTheDocument();
   });
 });

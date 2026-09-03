@@ -1433,3 +1433,130 @@ def test_api_otomatik_yerlestirme_ve_sabitleme_uclari() -> None:
     assert next(c["is_pinned"] for c in hucreler if c["entry_id"] == entry_id) is True
     assert grid.data["periods"][0]["is_exam_period"] is True
     assert grid.data["periods"][4]["is_exam_period"] is False  # 5. ders sınav saati değil
+
+
+# ===========================================================================
+# Kapsamın kaynağı ders havuzu (03.09.2026) — havuz doldurma + ön dolum + rozet
+# ===========================================================================
+
+
+def _kapsam_yaz(course_id: int, level: int, section_ids: list[int]) -> None:
+    """Ders havuzunda şube kapsamı tanımlar (kapsamın TEK kaynağı)."""
+    from apps.dersler import services as ders_services
+
+    ders_services.set_course_sections(
+        course_id=course_id,
+        school_year_id=aktif_yil().pk,
+        offerings=[{"level": level, "section_ids": section_ids}],
+    )
+
+
+def test_havuz_doldurma_subesi_tanimli_secmeliyi_kapsamiyla_ceker() -> None:
+    """Şubesi girilmiş YAZILI seçmeli kendiliğinden havuza girer, kapsamı taşınır."""
+    calendar, ders_pk, a_pk = _secmeli_takvim()
+    _kapsam_yaz(ders_pk, 9, [a_pk])
+
+    sonuc = takvim.fill_calendar_pool(calendar)
+
+    girdi = ExamCalendarEntry.objects.get(calendar=calendar, course_id=ders_pk)
+    assert girdi.participant_type == "SECTIONS"
+    assert girdi.section_ids == [a_pk]
+    assert any("Astronomi" in ad for ad in sonuc["created"])
+
+
+def test_havuz_doldurma_subesiz_secmeliyi_gerekcesiyle_atlar() -> None:
+    """Kapsamı girilmemiş seçmeli SESSİZCE düşmez — skipped'a nedeniyle yazılır."""
+    calendar, ders_pk, _a_pk = _secmeli_takvim()
+
+    sonuc = takvim.fill_calendar_pool(calendar)
+
+    assert not ExamCalendarEntry.objects.filter(calendar=calendar, course_id=ders_pk).exists()
+    assert any("şubeleri girilmemiş" in s for s in sonuc["skipped"])
+
+
+def test_secmeli_secim_secenekleri_katalog_kapsamini_tasir() -> None:
+    """Diyalog şube kutularını ders havuzundaki tanımdan DOLU getirir."""
+    calendar, ders_pk, a_pk = _secmeli_takvim()
+    _kapsam_yaz(ders_pk, 9, [a_pk])
+
+    secenekler = takvim.elective_pool_options(calendar)
+
+    dokuz = next(lv for lv in secenekler if lv["value"] == 9)
+    ders_satiri = next(c for c in dokuz["courses"] if c["id"] == ders_pk)
+    assert ders_satiri["default_section_ids"] == [a_pk]
+
+
+def test_toplu_eklemede_kapsam_gonderilmezse_katalogdan_dolar() -> None:
+    calendar, ders_pk, a_pk = _secmeli_takvim()
+    _kapsam_yaz(ders_pk, 9, [a_pk])
+
+    takvim.add_calendar_entries_bulk(calendar, [{"course_id": ders_pk, "level": 9}])
+
+    girdi = ExamCalendarEntry.objects.get(calendar=calendar, course_id=ders_pk)
+    assert (girdi.participant_type, girdi.section_ids) == ("SECTIONS", [a_pk])
+
+
+def test_toplu_eklemede_gonderilen_kapsam_katalogu_ezer() -> None:
+    """İstisna serbesttir: diyalogda seçilen kapsam katalog tanımından ÖNCE gelir."""
+    calendar, ders_pk, a_pk = _secmeli_takvim()
+    b_pk = ClassSection.objects.get(class_level=9, class_section="B").pk
+    _kapsam_yaz(ders_pk, 9, [a_pk])
+
+    takvim.add_calendar_entries_bulk(
+        calendar,
+        [
+            {
+                "course_id": ders_pk,
+                "level": 9,
+                "participant_type": "SECTIONS",
+                "section_ids": [b_pk],
+            }
+        ],
+    )
+
+    girdi = ExamCalendarEntry.objects.get(calendar=calendar, course_id=ders_pk)
+    assert girdi.section_ids == [b_pk]
+    # Fark rozetle görünür kalır — kapsam sessizce ayrışmasın.
+    assert takvim.entry_scope_differs_from_catalog(girdi) is True
+    assert takvim.entries_differing_from_catalog(calendar) == {girdi.pk}
+
+
+def test_katalogla_ayni_kapsam_rozet_uretmez() -> None:
+    calendar, ders_pk, a_pk = _secmeli_takvim()
+    _kapsam_yaz(ders_pk, 9, [a_pk])
+    takvim.add_calendar_entries_bulk(calendar, [{"course_id": ders_pk, "level": 9}])
+
+    girdi = ExamCalendarEntry.objects.get(calendar=calendar, course_id=ders_pk)
+    assert takvim.entry_scope_differs_from_catalog(girdi) is False
+    assert takvim.entries_differing_from_catalog(calendar) == set()
+
+
+def test_katalogda_tanim_yoksa_rozet_cikmaz() -> None:
+    """Karşılaştırılacak tanım yoksa fark da yoktur (zorunlu ders dâhil)."""
+    calendar = _havuzlu_takvim(course_count=1)
+    girdi = ExamCalendarEntry.objects.get(calendar=calendar)
+
+    assert takvim.entry_scope_differs_from_catalog(girdi) is False
+
+
+def test_api_havuz_listesi_katalog_farkini_bildirir() -> None:
+    calendar, ders_pk, a_pk = _secmeli_takvim()
+    b_pk = ClassSection.objects.get(class_level=9, class_section="B").pk
+    _kapsam_yaz(ders_pk, 9, [a_pk])
+    takvim.add_calendar_entries_bulk(
+        calendar,
+        [
+            {
+                "course_id": ders_pk,
+                "level": 9,
+                "participant_type": "SECTIONS",
+                "section_ids": [b_pk],
+            }
+        ],
+    )
+
+    yanit = APIClient().get(f"/api/v1/exam-calendars/{calendar.pk}/entries/")
+
+    assert yanit.status_code == 200
+    satir = next(r for r in yanit.data["results"] if r["course"] == ders_pk)
+    assert satir["scope_differs_from_catalog"] is True

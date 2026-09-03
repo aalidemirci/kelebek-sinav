@@ -1,8 +1,14 @@
 // Ders havuzu — MEB çizelgesinden tohumlanan katalog + elle ekleme + pasifleştirme
 // + mükerrer birleştirme (tasarım §7). Liste ilk açılışta backend tembel tohumunu
 // tetikler (K5); veri dosyası yoksa havuz boş başlar ve elle ekleme yolu açıktır (TB2).
+//
+// 03.09.2026: seçmeli derslerde "Şubeler" sütunu — dersi hangi şubelerin aldığı
+// BURADA girilir, sınav takvimi havuzu o bilgiden beslenir (takvim başına
+// yeniden şube işaretlemek yok). Liste manuel `load()` ile, kapsam haritası
+// React Query ile gelir: diyalog kaydedince invalidate ile ikisi de tazelenir.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { ApiError } from "../../lib/api";
 import Button from "../../ui/Button";
@@ -18,6 +24,7 @@ import { okulApi } from "../okul/api";
 import type { GradeLevelOption } from "../okul/api";
 import { COURSE_EXAM_MODE_TR, COURSE_SOURCE_TR, COURSE_TYPE_TR, derslerApi } from "./api";
 import type { CatalogStatus, Course, CourseExamMode, CourseType, DuplicateCluster } from "./api";
+import DersSubeKapsamiDialog from "./DersSubeKapsamiDialog";
 
 export default function DersHavuzuPage() {
   const [rows, setRows] = useState<Course[]>([]);
@@ -33,7 +40,38 @@ export default function DersHavuzuPage() {
   // Düzenlenen ders — ekleme ile aynı dialog'u besler (iki bileşen olsaydı
   // seviye çipleri + tür + sınav biçimi iki yerde sürüklenirdi).
   const [editing, setEditing] = useState<Course | null>(null);
+  // Şube kapsamı düzenlenen ders (seçmeli) — kapsamın KAYNAĞI bu ekrandır.
+  const [sectionsFor, setSectionsFor] = useState<Course | null>(null);
   const [duplicates, setDuplicates] = useState<DuplicateCluster[]>([]);
+
+  const offeringsQuery = useQuery({
+    queryKey: ["course-section-offerings"],
+    queryFn: () => derslerApi.sectionOfferings(),
+    // Aktif ders yılı yoksa uç 400 döner; sütun "—" kalır, sayfa çalışmaya devam eder.
+    retry: false,
+  });
+  const sectionCatalog = useQuery({
+    queryKey: ["class-sections"],
+    queryFn: () => okulApi.listClassSections(),
+    retry: false,
+  });
+
+  /** course_id → seviye bazlı şube etiketleri ("9: A, B"). */
+  const kapsamOzetleri = useMemo(() => {
+    const etiket = new Map((sectionCatalog.data ?? []).map((s) => [s.id, s.class_label] as const));
+    const ozet = new Map<number, string[]>();
+    for (const row of offeringsQuery.data?.results ?? []) {
+      const adlar = row.section_ids
+        .map((id) => etiket.get(id))
+        .filter((x): x is string => Boolean(x));
+      if (adlar.length === 0) continue;
+      const parca = `${row.level === 0 ? "Hz" : row.level}: ${adlar
+        .map((a) => a.split("/")[1] ?? a)
+        .join(", ")}`;
+      ozet.set(row.course, [...(ozet.get(row.course) ?? []), parca]);
+    }
+    return ozet;
+  }, [offeringsQuery.data, sectionCatalog.data]);
 
   useEffect(() => {
     okulApi
@@ -160,6 +198,7 @@ export default function DersHavuzuPage() {
                 <th className="px-4 py-3">Seviyeler</th>
                 <th className="px-4 py-3">Tür</th>
                 <th className="px-4 py-3">Sınav</th>
+                <th className="px-4 py-3">Şubeler</th>
                 <th className="px-4 py-3">Kaynak</th>
                 <th className="px-4 py-3">Durum</th>
                 <th className="px-4 py-3 text-right">İşlem</th>
@@ -170,13 +209,23 @@ export default function DersHavuzuPage() {
                 <CourseRow
                   key={course.id}
                   course={course}
+                  kapsamOzeti={kapsamOzetleri.get(course.id) ?? []}
                   onEdit={() => setEditing(course)}
+                  onEditSections={() => setSectionsFor(course)}
                   onChanged={load}
                 />
               ))}
             </tbody>
           </table>
         </Card>
+      )}
+
+      {sectionsFor && (
+        <DersSubeKapsamiDialog
+          course={sectionsFor}
+          onClose={() => setSectionsFor(null)}
+          onSaved={() => setSectionsFor(null)}
+        />
       )}
 
       {(adding || editing) && (
@@ -213,13 +262,60 @@ function ExamModeBadge({ course }: { course: Course }) {
   );
 }
 
+/**
+ * "Şubeler" hücresi — kapsam YALNIZ seçmeli derste anlamlıdır: zorunlu ders
+ * seviyenin tamamında okutulur ve takvim havuzuna seviye geneli girer.
+ * Kapsamı girilmemiş YAZILI seçmeli, havuz doldurmada atlanacağı için ayrıca
+ * uyarılır (sessiz düşme olmasın).
+ */
+function SubeKapsamiHucresi({
+  course,
+  ozet,
+  onEdit,
+}: {
+  course: Course;
+  ozet: string[];
+  onEdit: () => void;
+}) {
+  if (course.course_type !== "ELECTIVE") {
+    return <span className="text-on-surface-variant">Seviye geneli</span>;
+  }
+  return (
+    <button
+      type="button"
+      aria-label={`${course.name} dersinin şubelerini düzenle`}
+      onClick={onEdit}
+      className="rounded-shape-sm px-2 py-1 text-left underline-offset-4 hover:bg-on-surface/5 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+    >
+      {ozet.length > 0 ? (
+        <span className="text-on-surface">{ozet.join(" · ")}</span>
+      ) : (
+        <span
+          className="text-on-surface-variant"
+          title={
+            course.exam_mode === "WRITTEN"
+              ? "Şubeleri girilmediği için sınav takvimi havuzuna kendiliğinden girmez."
+              : "Bu dersin yazılı sınavı yok; kapsam yalnız bilgi amaçlıdır."
+          }
+        >
+          {course.exam_mode === "WRITTEN" ? "Girilmedi ⚠" : "Girilmedi"}
+        </span>
+      )}
+    </button>
+  );
+}
+
 function CourseRow({
   course,
+  kapsamOzeti,
   onEdit,
+  onEditSections,
   onChanged,
 }: {
   course: Course;
+  kapsamOzeti: string[];
   onEdit: () => void;
+  onEditSections: () => void;
   onChanged: () => void;
 }) {
   const confirm = useConfirm();
@@ -257,6 +353,9 @@ function CourseRow({
       <td className="px-4 py-3 text-on-surface-variant">{COURSE_TYPE_TR[course.course_type]}</td>
       <td className="px-4 py-3">
         <ExamModeBadge course={course} />
+      </td>
+      <td className="px-4 py-3 text-body-small">
+        <SubeKapsamiHucresi course={course} ozet={kapsamOzeti} onEdit={onEditSections} />
       </td>
       <td className="px-4 py-3 text-on-surface-variant">{COURSE_SOURCE_TR[course.source]}</td>
       <td className="px-4 py-3">

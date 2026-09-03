@@ -115,11 +115,13 @@ class ExamCalendarViewSet(viewsets.ModelViewSet[ExamCalendar]):
 
     @action(detail=True, methods=["post"], url_path="fill-pool")
     def fill_pool(self, request: Request, pk: str | None = None) -> Response:
-        """Havuzu ZORUNLU + YAZILI derslerle doldurur (idempotent; round 3 reddedilir).
+        """Havuzu ZORUNLU + YAZILI ve ŞUBESİ TANIMLI seçmeli derslerle doldurur.
 
-        Uç adı ve gövde sözleşmesi değişmedi; DAVRANIŞ daraldı (seçmeliler
-        artık `bulk-entries` ile seçilerek eklenir) — arayüzdeki etiket de
-        "Zorunlu dersleri ekle"dir.
+        İdempotent; round 3 reddedilir. Uç adı ve gövde sözleşmesi hiç
+        değişmedi. Davranış 31.08.2026'da daralmış (seçmeliler dışarıda
+        kalmıştı), 03.09.2026'da şube kapsamı ders havuzuna taşınınca kapsamı
+        girilmiş seçmelileri de alacak şekilde genişledi; kapsamsız seçmeli
+        `skipped`'a nedeniyle düşer.
         """
         try:
             result = services_calendar.fill_calendar_pool(self.get_object())
@@ -163,7 +165,16 @@ class ExamCalendarViewSet(viewsets.ModelViewSet[ExamCalendar]):
             # `order_by` SQLite'ta BINARY'dir ve Ç/Ğ/İ/Ö/Ş/Ü'yü Z'den sonraya
             # atıyordu.
             rows = selectors.calendar_entries_sorted(int(pk) if pk else 0)
-            return Response({"results": ExamCalendarEntrySerializer(rows, many=True).data})
+            # Katalog farkı kümesi TEK sorguda çıkarılır ve serializer'a
+            # context'le verilir (satır başına sorgu olmasın).
+            diff_ids = services_calendar.entries_differing_from_catalog(self.get_object())
+            return Response(
+                {
+                    "results": ExamCalendarEntrySerializer(
+                        rows, many=True, context={"catalog_diff_ids": diff_ids}
+                    ).data
+                }
+            )
         calendar = self.get_object()
         serializer = ExamCalendarEntrySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

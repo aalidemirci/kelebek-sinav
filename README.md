@@ -21,7 +21,16 @@ raporlarından (xlsx/pano) içe aktarılır; ders havuzu MEB ders çizelgesinden
 okul türü ve kademeye göre tohumlanır. Opsiyonel uygulama parolası ile alan
 şifrelemesi ve şifreli yedek.
 
-**Durum:** Sınav takvimi **otomatik kurulabiliyor** (03.09.2026): havuzdaki
+**Durum:** Seçmeli dersin **hangi şubelerin aldığı artık ders havuzunda**
+tanımlanıyor (03.09.2026): idareci bunu bir kez girer, dört sınav takvimi de
+kullanır — takvim havuzu şubesi tanımlı seçmelileri kapsamıyla birlikte
+kendiliğinden alır, seçmeli seçim penceresi kutuları dolu getirir. Takvim
+girdisi kendi kopyasını tutmaya devam ediyor (onaylı takvimin kapsamı
+katalog değişince geriye dönük kaymaz); bir sınava mahsus istisna yaparsanız
+havuz tablosunda "özel" rozetiyle görünür. Şubesi girilmemiş seçmeli havuza
+girmez, gerekçesiyle raporlanır.
+
+Önceki durum: Sınav takvimi **otomatik kurulabiliyor** (03.09.2026): havuzdaki
 sınavlar tek düğmeyle hafta içi günlere ve okulun sınav saatlerine dağıtılıyor —
 aynı öğrenciye günde ikiden fazla sınav düşmüyor, kapsamı kesişen iki sınav aynı
 saate konmuyor, üst makam sınavı olan güne okul sınavı yazılmıyor ve

@@ -202,6 +202,13 @@ export default function KilavuzPage() {
           elle eklenen derse senkron dokunmaz. Buna karşılık{" "}
           <strong>pasifleştirme her zaman kalıcıdır</strong>.
         </p>
+        <p>
+          Seçmeli derslerde <strong>“Şubeler”</strong> sütununa basıp o dersi hangi şubelerin
+          aldığını işaretleyin — sınav takvimi havuzu bu bilgiyle kendiliğinden dolar ve her
+          takvimde yeniden şube seçmezsiniz. Şubeleri girilmemiş yazılı seçmeli, sütunda uyarı
+          işaretiyle görünür. Bu tanım ders yılına özeldir: yeni ders yılında yeniden girilir
+          (şubeler her yıl yeniden kurulduğu için eski seçim taşınmaz).
+        </p>
         <Ipucu>
           <strong>Önce havuzu okulunuza göre sadeleştirin.</strong> Okulunuzda okutulmayan dersleri
           havuzda <strong>pasif</strong> yapın (satırın sağındaki “Pasifleştir”); pasif ders takvim
@@ -313,26 +320,34 @@ export default function KilavuzPage() {
           Havuzu doldurmak: zorunlu dersler ve seçmeliler
         </h3>
         <p>
-          Havuz sekmesinde iki düğme vardır. <strong>“Zorunlu dersleri ekle”</strong>, ders
-          havuzundaki <em>ortak</em> ve sınavı <em>Yazılı</em> olan dersleri, öğrencisi olan her
-          seviye için tek tıkla havuza koyar; uygulama sınavı yapılan ve sınavı olmayan dersler
-          eklenmez. <strong>“Seçmeli ders seç”</strong> ise seviye sekmeleri açar: her seviyede o
-          seviyede okutulan seçmeli dersleri işaretlersiniz. Havuzda zaten bulunan ders işaretli ve
-          kilitli görünür, ikinci kez eklenmez.
+          Havuz sekmesinde iki düğme vardır. <strong>“Dersleri ekle”</strong>, ders havuzundaki{" "}
+          <em>ortak</em> ve sınavı <em>Yazılı</em> dersleri — ve{" "}
+          <strong>şubelerini girdiğiniz</strong> seçmelileri — öğrencisi olan her seviye için tek
+          tıkla havuza koyar; uygulama sınavı yapılan ve sınavı olmayan dersler eklenmez. Şubesi
+          henüz girilmemiş seçmeli atlanır ve size bildirilir. <strong>“Seçmeli ders seç”</strong>{" "}
+          ise seviye sekmeleri açar: kalan seçmelileri elle işaretlersiniz. Havuzda zaten bulunan
+          ders işaretli ve kilitli görünür, ikinci kez eklenmez.
         </p>
+        <Ipucu>
+          Bir seçmeliyi <strong>hangi şubelerin aldığını</strong> her takvimde yeniden seçmeyin:
+          bunu bir kez <Ekran to="/dersler">Ders havuzu</Ekran> ekranında, dersin{" "}
+          <strong>“Şubeler”</strong> sütunundan girin. Dört sınav takvimi de o bilgiyi kullanır,
+          havuz kendiliğinden dolar.
+        </Ipucu>
         <p>
-          İşaretlediğiniz her seçmeli dersin <strong>katılımcı kapsamını</strong> da
-          belirleyebilirsiniz: <em>Seviye geneli</em> (varsayılan) ya da <em>Şube seç</em>. Şube
-          seçerken Ayarlar’daki <strong>şube kümelerini</strong> (SAY, EA, DİL gibi — 8. adımda
-          anlatılır) çipe basarak topluca ekleyebilir, sonra tek tek düzeltebilirsiniz. Küme yalnız
-          seçim kolaylığıdır — takvime kümenin adı değil, seçilen şubeler yazılır. Aynı kapsamı
-          birden çok derse verecekseniz “Seçili derslere topluca kapsam uygula” kısayolunu kullanın.
+          Seçmeli seçim penceresinde şube kutuları ders havuzundaki tanımdan <strong>dolu</strong>{" "}
+          gelir; dilerseniz o takvime mahsus değiştirebilirsiniz. Kapsam iki türlüdür:{" "}
+          <em>Seviye geneli</em> ya da <em>Şube seç</em>. Şube seçerken Ayarlar’daki{" "}
+          <strong>şube kümelerini</strong> (SAY, EA, DİL gibi — 8. adımda anlatılır) çipe basarak
+          topluca ekleyebilirsiniz. Küme yalnız seçim kolaylığıdır — takvime kümenin adı değil,
+          seçilen şubeler yazılır.
         </p>
         <p>
           Kapsamı yanlış verdiyseniz girdiyi silmeniz gerekmez: havuz tablosunda{" "}
           <strong>“Kapsam”</strong> sütunundaki değere basınca kapsam düzenleme penceresi açılır.
           Takvim taslak olduğu sürece ızgaraya yerleştirilmiş girdinin kapsamı da buradan
-          düzeltilir.
+          düzeltilir. Bir girdinin kapsamı ders havuzundaki tanımdan farklıysa yanında{" "}
+          <strong>“özel”</strong> rozeti görünür — o sınava mahsus istisna yaptığınızı hatırlatır.
         </p>
         <Ipucu>
           Yeni bir takvim açtığınızda zorunlu dersler <strong>kendiliğinden</strong> havuza gelir

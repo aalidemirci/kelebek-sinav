@@ -160,3 +160,92 @@ class CourseMergeView(APIView):
             services.consolidate_duplicate_course, duplicate=duplicate, canonical=canonical
         )
         return Response(sonuc)
+
+
+def _cozulen_yil_id(request: Request) -> int:
+    """İstekten ders yılı: `school_year` parametresi ya da aktif yıl."""
+    from apps.okul import selectors as okul_selectors
+
+    raw = request.query_params.get("school_year") or request.data.get("school_year_id")
+    if raw is not None and raw != "":
+        try:
+            return int(str(raw))
+        except (TypeError, ValueError) as exc:
+            raise serializers.ValidationError({"school_year": "Ders yılı sayısal olmalı."}) from exc
+    year = okul_selectors.active_school_year()
+    if year is None:
+        raise serializers.ValidationError(
+            {"school_year": "Aktif ders yılı yok — Ayarlar → Ders Yılları'ndan bir yıl açın."}
+        )
+    return int(year.pk)
+
+
+class CourseSectionOfferingsView(APIView):
+    """`GET /api/v1/courses/section-offerings/` — seçmeli derslerin şube kapsamı.
+
+    Çıktı `{"school_year": <id>, "results": [{"course": <id>, "level": <int>,
+    "section_ids": [...]}]}`. Ders havuzu tablosu "Şubeler" sütununu bundan
+    doldurur; sınav takvimi de aynı kaynaktan beslenir (kapsamın TEK doğruluk
+    kaynağı ders havuzudur — takvim girdisi kopya tutar).
+
+    Silinmiş şube okuma anında düşer (`selectors.course_section_map`).
+    """
+
+    def get(self, request: Request) -> Response:
+        year_id = _cozulen_yil_id(request)
+        harita = selectors.course_section_map(year_id)
+        return Response(
+            {
+                "school_year": year_id,
+                "results": [
+                    {"course": course_id, "level": level, "section_ids": section_ids}
+                    for (course_id, level), section_ids in sorted(harita.items())
+                ],
+            }
+        )
+
+
+class CourseSectionsView(APIView):
+    """`GET/PUT /api/v1/courses/<pk>/sections/` — tek dersin şube kapsamı.
+
+    PUT gövdesi `{"school_year_id"?: <id>, "offerings": [{"level", "section_ids"}]}`
+    ve TAM DEĞİŞTİRME yapar: gönderilmeyen seviyenin kaydı silinir (diyalog
+    dersin bütün seviyelerini birlikte gösterir).
+    """
+
+    def get(self, request: Request, pk: int) -> Response:
+        year_id = _cozulen_yil_id(request)
+        get_object_or_404(Course.objects.all(), pk=pk)
+        return Response(
+            {
+                "school_year": year_id,
+                "offerings": [
+                    {"level": level, "section_ids": ids}
+                    for level, ids in sorted(
+                        services.course_section_offerings(
+                            course_id=pk, school_year_id=year_id
+                        ).items()
+                    )
+                ],
+            }
+        )
+
+    def put(self, request: Request, pk: int) -> Response:
+        year_id = _cozulen_yil_id(request)
+        offerings = request.data.get("offerings")
+        if not isinstance(offerings, list):
+            raise serializers.ValidationError({"offerings": "Kapsam listesi gerekli."})
+        guncel = _servis(
+            services.set_course_sections,
+            course_id=pk,
+            school_year_id=year_id,
+            offerings=offerings,
+        )
+        return Response(
+            {
+                "school_year": year_id,
+                "offerings": [
+                    {"level": level, "section_ids": ids} for level, ids in guncel.items()
+                ],
+            }
+        )

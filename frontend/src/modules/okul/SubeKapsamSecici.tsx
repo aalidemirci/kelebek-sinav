@@ -1,8 +1,8 @@
-// Takvim girdisi katılımcı kapsamı — ORTAK seçim parçaları.
-// Buraya taşındı (31.08.2026 denetimi): kapsam artık iki yerde seçiliyor —
-// "Seçmeli ders seç" dialog'unda (henüz eklenmemiş ders) ve havuz tablosundaki
-// "Kapsamı düzenle" dialog'unda (eklenmiş girdi). İki kopya, çip görünümü ile
-// aria etiketlerini sürüklenmeye açardı.
+// Şube kapsamı seçimi — ORTAK parça (okul modülünde, üç ekran kullanır).
+// 31.08.2026'da takvim modülünde doğdu (seçmeli ders dialog'u + havuzdaki
+// "Kapsamı düzenle"); 03.09.2026'da kapsamın KAYNAĞI ders havuzuna taşınınca
+// (Ders Havuzu → "Şubeler") buraya alındı. Üç kopya, çip görünümü ile aria
+// etiketlerini sürüklenmeye açardı.
 //
 // Küme çipi şubeleri seçime EKLER, AYRI DURUM TUTMAZ ("gruptan gelen" ile "elle
 // seçilen" için ikinci kaynak-gerçek doğardı; emsal SinavSihirbazi.applyGroup).

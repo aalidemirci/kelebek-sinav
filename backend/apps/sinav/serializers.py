@@ -546,6 +546,9 @@ class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]
 
     course_name = serializers.CharField(source="course.name", read_only=True)
     participant_label = serializers.SerializerMethodField()
+    # Kapsam ders havuzundaki tanımdan farklıysa arayüz rozet basar (03.09.2026):
+    # kaynak katalog, girdi ise kopyadır — fark bilinçli olmalı, sessiz kalmamalı.
+    scope_differs_from_catalog = serializers.SerializerMethodField()
 
     class Meta:
         model = ExamCalendarEntry
@@ -561,6 +564,7 @@ class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]
             "participant_type",
             "section_ids",
             "participant_label",
+            "scope_differs_from_catalog",
             "placed_date",
             "period_no",
             "is_pinned",
@@ -572,6 +576,7 @@ class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]
             "course_name",
             "calendar",
             "participant_label",
+            "scope_differs_from_catalog",
             "placed_date",
             "period_no",
             # Sabitleme yerleştirmeyle birlikte anlam kazanır: kendi ucundan
@@ -586,6 +591,14 @@ class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]
 
     def get_participant_label(self, obj: ExamCalendarEntry) -> str:
         return services_calendar.participant_scope_label(obj.participant_type, obj.section_ids)
+
+    def get_scope_differs_from_catalog(self, obj: ExamCalendarEntry) -> bool:
+        # Liste yolunda küme context'ten gelir (tek sorgu); tekil yanıtlarda
+        # (PATCH/place) girdi başına hesaplanır — bir satır için ucuz.
+        ids = self.context.get("catalog_diff_ids")
+        if ids is not None:
+            return obj.pk in ids
+        return services_calendar.entry_scope_differs_from_catalog(obj)
 
 
 class ExamTrackItemSerializer(serializers.ModelSerializer[ExamTrackItem]):

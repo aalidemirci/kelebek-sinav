@@ -168,13 +168,28 @@
   ATLAR, kapsamı tümüyle silinmiş girdiyi oturuma almaz/BAĞLAMAZ ve slotun
   kalanını üretir — kilitlemek OYS Tur 644'ün kapattığı hata sınıfını geri
   getirirdi. Sessiz düşmenin panzehiri `calendar_validation` uyarısıdır.
-- **Havuz otomatik doldurması dar kapsamlıdır:** `fill_calendar_pool` YALNIZ
-  ORTAK + YAZILI dersleri çeker (`course_types=[COMMON]`,
-  `exam_modes=[WRITTEN]`); dönüş sözlüğünün şekli
-  (`created/existed/skipped/total_pairs`) değişmez. Seçmeliler seçim
-  diyaloğundan, uygulama sınavı (`PRACTICE`) ve sınavsız (`NONE`) dersler ELLE
-  eklenir. Tohum tur 1-2'de takvim yaratılırken kendiliğinden koşar, tur 3'te
-  koşmaz; tohum hatası takvim yaratılmasını düşürmez.
+- **Havuz otomatik doldurması:** `fill_calendar_pool` ORTAK + YAZILI dersleri
+  ve **şube kapsamı GİRİLMİŞ** yazılı seçmelileri çeker (03.09.2026); dönüş
+  sözlüğünün şekli (`created/existed/skipped/total_pairs`) değişmez. Kapsamsız
+  seçmeli `skipped`'a nedeniyle yazılır (sessiz düşme yok) ve seçim
+  diyaloğundan elle eklenir; uygulama sınavı (`PRACTICE`) ve sınavsız (`NONE`)
+  dersler hiç girmez. Tohum tur 1-2'de takvim yaratılırken kendiliğinden koşar,
+  tur 3'te koşmaz; tohum hatası takvim yaratılmasını düşürmez.
+- **Seçmeli ders kapsamının KAYNAĞI ders havuzudur** (`dersler
+  .CourseSectionOffering`, 03.09.2026): "bu seçmeliyi hangi şubeler alıyor"
+  bir kez Ders Havuzu ekranında girilir, dört takvim de onu kullanır. Anahtar
+  `(ders, ders yılı, seviye)` — `Course` üzerinde ALAN OLAMAZ: katalog yıldan
+  bağımsızdır ve `sync_catalog` alanlarını ezer, şube ise yıla bağlıdır (yıl
+  geçince pk'ler ölü referansa dönerdi). Kapsam YALNIZ `ELECTIVE` derste
+  yazılabilir. `set_course_sections` TAM DEĞİŞTİRMEDİR (gönderilmeyen seviye
+  silinir); okuma (`course_section_map`) silinmiş şubeyi süzer. Yıl geçişinde
+  kopyalama YOKTUR — her yıl yeniden girilir (bilinçli karar).
+- **Takvim girdisi kapsamın KOPYASINI tutar** (snapshot): katalog sonradan
+  değişince onaylanmış takvimin kapsamı geriye dönük kaymaz — küme kuralının
+  aynı gerekçesi. `add_calendar_entries_bulk` kapsam GÖNDERİLMEMİŞSE katalogdan
+  ön-dolar, gönderilmişse gönderilen kazanır (tek sınava mahsus istisna).
+  Fark `scope_differs_from_catalog` ile rozetlenir (`entries` ucunda küme
+  context'ten gelir — satır başına sorgu yok).
 - **Koltuk sabitleme koordinattır:** `(desk_row, desk_col, slot)` — `seat_no`
   numaralandırma düzeni değişince kayar. "Tek başına" kardeş koltukları motor
   girdisinden düşürür; sahte `SeatAssignment` yazılmaz.

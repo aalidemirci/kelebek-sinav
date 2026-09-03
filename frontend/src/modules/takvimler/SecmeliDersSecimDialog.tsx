@@ -24,7 +24,7 @@ import { okulApi } from "../okul/api";
 import type { ParticipantTypeCode } from "../oturumlar/api";
 import type { BulkEntryItem } from "./api";
 import { examCalendarApi } from "./api";
-import SubeSecici, { KAPSAM_SECENEKLERI } from "./SubeKapsamSecici";
+import SubeSecici, { KAPSAM_SECENEKLERI } from "../okul/SubeKapsamSecici";
 
 /** Bir dersin seçimdeki kapsamı — anahtar `"<seviye>:<ders id>"`. */
 interface Kapsam {
@@ -82,10 +82,26 @@ export default function SecmeliDersSecimDialog({
     [sections.data, aktifSeviye],
   );
 
+  /**
+   * Ders işaretlenince kapsam DERS HAVUZUNDAKİ tanımdan ön-dolar (03.09.2026):
+   * "hangi şubeler alıyor" bilgisi orada bir kez girilir. Tanım yoksa eski
+   * davranış sürer (seviye geneli) — idareci burada elle işaretler.
+   */
   const toggleCourse = (level: number, courseId: number) => {
     const key = secimAnahtari(level, courseId);
+    const varsayilan =
+      levels.find((l) => l.value === level)?.courses.find((c) => c.id === courseId)
+        ?.default_section_ids ?? [];
     setSecim((prev) => {
-      if (!(key in prev)) return { ...prev, [key]: { ptype: "LEVEL", sectionIds: [] } };
+      if (!(key in prev)) {
+        return {
+          ...prev,
+          [key]:
+            varsayilan.length > 0
+              ? { ptype: "SECTIONS", sectionIds: [...varsayilan] }
+              : { ptype: "LEVEL", sectionIds: [] },
+        };
+      }
       const next = { ...prev };
       delete next[key];
       return next;

@@ -1,7 +1,8 @@
 // Sınav Takvimi — Havuz paneli (F6) — OYS TakvimHavuzPaneli'nden UYARLA.
-// Havuz iki yoldan dolar: "Zorunlu dersleri ekle" (fill-pool ucu — artık YALNIZ
-// ortak + YAZILI dersler; uygulama sınavı ve sınavsız dersler dışarıda) ve
-// "Seçmeli ders seç" dialog'u (seviye seviye, katılımcı kapsamıyla). Kaynak
+// Havuz iki yoldan dolar: "Dersleri ekle" (fill-pool ucu — ortak + YAZILI
+// dersler ve ŞUBESİ TANIMLI yazılı seçmeliler; uygulama sınavı ve sınavsız
+// dersler dışarıda) ve "Seçmeli ders seç" dialog'u (seviye seviye, katılımcı
+// kapsamıyla — kutular ders havuzundaki tanımdan ön dolar). Kaynak
 // hâlâ aktif ders kataloğu × öğrencisi olan seviyeler (KS sapması B6/B8:
 // program verisi yok). Elle ekleme formu kenar durumlar için kalır: kelebek
 // olmayan sınav, uygulama sınavı, üst makam sınavı. Katılımcı sayısı/kapsam
@@ -140,13 +141,15 @@ export default function TakvimHavuzPaneli({
   const canFill = editable && round !== 3;
   const handleFill = () => {
     void confirm({
-      title: "Zorunlu dersleri havuza ekle",
+      title: "Dersleri havuza ekle",
       message:
         "Ders havuzundaki ZORUNLU (ortak) ve sınavı YAZILI dersler, öğrencisi olan " +
         "seviyeler bazında takvim havuzuna eklenecek; var olan girdiler atlanır. " +
-        "Uygulama sınavı yapılan ve sınavı olmayan dersler eklenmez — seçmeli dersleri " +
-        "“Seçmeli ders seç” ile seviye seviye işaretleyin. Hazırlayan makam varsayılanı " +
-        "Okul — Bakanlık/MEM sınavlarını taslakta işaretleyin.",
+        "Şubeleri Ders Havuzu ekranında girilmiş SEÇMELİ dersler de kapsamlarıyla " +
+        "birlikte eklenir — şubesi girilmemiş seçmeli atlanır ve raporlanır, " +
+        "“Seçmeli ders seç” ile elle işaretleyebilirsiniz. Uygulama sınavı yapılan " +
+        "ve sınavı olmayan dersler eklenmez. Hazırlayan makam varsayılanı Okul — " +
+        "Bakanlık/MEM sınavlarını taslakta işaretleyin.",
       confirmLabel: "Ekle",
     }).then((ok) => ok && fillMutation.mutate());
   };
@@ -167,7 +170,7 @@ export default function TakvimHavuzPaneli({
               disabled={fillMutation.isPending}
               onClick={handleFill}
             >
-              Zorunlu dersleri ekle
+              Dersleri ekle
             </Button>
           ) : null}
           {/* Seçmeli seçimi 3. turda da açık: tekil ekleme yolunu kullanır,
@@ -268,7 +271,7 @@ export default function TakvimHavuzPaneli({
           title="Havuz boş"
           description={
             canFill
-              ? "Zorunlu dersleri tek tıkla ekleyin, seçmelileri seviye seviye seçin; kenar durumlar için yukarıdaki form kalır."
+              ? "Zorunlu dersleri ve şubesi tanımlı seçmelileri tek tıkla ekleyin; kalan seçmelileri seviye seviye seçin, kenar durumlar için yukarıdaki form kalır."
               : editable
                 ? "Seçmeli dersleri seçin ya da yukarıdan elle ekleyin."
                 : "Bu takvime ders eklenmemiş."
@@ -276,7 +279,7 @@ export default function TakvimHavuzPaneli({
           action={
             canFill ? (
               <Button icon="auto_awesome" disabled={fillMutation.isPending} onClick={handleFill}>
-                Zorunlu dersleri ekle
+                Dersleri ekle
               </Button>
             ) : editable ? (
               <Button icon="checklist" onClick={() => setElectiveOpen(true)}>
@@ -317,17 +320,34 @@ export default function TakvimHavuzPaneli({
                   (e.participant_type === "SECTIONS"
                     ? `${e.section_ids.length} şube`
                     : PARTICIPANT_TYPE_TR.LEVEL);
-                return editable ? (
-                  <Button
-                    variant="text"
-                    icon="edit"
-                    aria-label={`${e.course_name} katılımcı kapsamını düzenle`}
-                    onClick={() => setKapsamEntry(e)}
+                // Kapsamın KAYNAĞI ders havuzudur; buradaki değişiklik o
+                // takvime mahsus bir istisnadır ve rozetle görünür kalır
+                // (03.09.2026) — sessizce ayrışmasın.
+                const rozet = e.scope_differs_from_catalog ? (
+                  <span
+                    className="ml-1 rounded-shape-sm bg-tertiary-container px-1.5 py-0.5 text-label-small text-on-tertiary-container"
+                    title="Bu takvimde ders havuzundaki şube tanımından farklı bir kapsam seçilmiş."
                   >
-                    {etiket}
-                  </Button>
+                    özel
+                  </span>
+                ) : null;
+                return editable ? (
+                  <span className="inline-flex items-center">
+                    <Button
+                      variant="text"
+                      icon="edit"
+                      aria-label={`${e.course_name} katılımcı kapsamını düzenle`}
+                      onClick={() => setKapsamEntry(e)}
+                    >
+                      {etiket}
+                    </Button>
+                    {rozet}
+                  </span>
                 ) : (
-                  etiket
+                  <span className="inline-flex items-center">
+                    {etiket}
+                    {rozet}
+                  </span>
                 );
               },
             },

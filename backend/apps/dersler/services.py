@@ -579,3 +579,91 @@ def consolidate_duplicate_course(*, duplicate: Course, canonical: Course) -> dic
         "exams": moved_exams,
         "dropped_exams": dropped_exams,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Seçmeli ders şube kapsamı (03.09.2026) — takvim kapsamının KAYNAĞI
+# --------------------------------------------------------------------------- #
+
+
+def course_section_offerings(*, course_id: int, school_year_id: int) -> dict[int, list[int]]:
+    """Tek dersin seviye → CANLI şube listesi eşlemesi (yoksa boş sözlük)."""
+    from apps.dersler import selectors as ders_selectors
+
+    return {
+        level: sections
+        for (cid, level), sections in ders_selectors.course_section_map(school_year_id).items()
+        if cid == course_id
+    }
+
+
+@transaction.atomic
+def set_course_sections(
+    *, course_id: int, school_year_id: int, offerings: list[dict[str, Any]]
+) -> dict[int, list[int]]:
+    """Dersin şube kapsamını TAMAMEN değiştirir (PUT semantiği) → yeni eşleme.
+
+    `offerings` öğesi `{"level": 9, "section_ids": [1, 2]}`. Gönderilmeyen
+    seviyenin kaydı SİLİNİR: diyalog dersin bütün seviyelerini birlikte
+    gösterir, kısmi güncelleme "kaldırdım ama gitmedi" şaşkınlığı üretirdi.
+    Boş `section_ids` de kaydı siler ("tanımsız" ile "boş" aynı sonuca çıkar;
+    ikisi de havuz doldurmada atlanır).
+
+    Kapsam YALNIZ seçmeli derste anlamlıdır: zorunlu ders seviyenin tamamında
+    okutulur ve takvim havuzuna seviye geneli (LEVEL) girer.
+
+    Şube denetimi takvim tarafıyla AYNI kalıptadır
+    (`services_calendar._validate_entry_participants`): şube canlı olmalı, o
+    ders yılına ve verilen seviyeye ait olmalı. Küme kimliği yazılmaz —
+    arayüz kümeyi somut şube listesine açar (CLAUDE.md §3).
+    """
+    from apps.dersler.models import CourseSectionOffering
+    from apps.okul.models import ClassSection, SchoolYear
+
+    course = Course.objects.filter(pk=course_id).first()
+    if course is None:
+        raise ValidationError({"course": "Ders bulunamadı."})
+    if course.course_type != CourseType.ELECTIVE:
+        raise ValidationError(
+            {
+                "course": "Şube kapsamı yalnız seçmeli derslerde tanımlanır — zorunlu ders "
+                "seviyenin tamamında okutulur."
+            }
+        )
+    if not SchoolYear.objects.filter(pk=school_year_id).exists():
+        raise ValidationError({"school_year": "Ders yılı bulunamadı."})
+
+    temiz: dict[int, list[int]] = {}
+    for item in offerings:
+        try:
+            level = int(item["level"])
+        except (KeyError, TypeError, ValueError):
+            raise ValidationError({"level": f"Geçersiz seviye: {item.get('level')!r}."}) from None
+        ids: list[int] = []
+        for raw in item.get("section_ids") or []:
+            try:
+                ids.append(int(raw))
+            except (TypeError, ValueError):
+                raise ValidationError({"section_ids": f"Geçersiz şube kimliği: {raw!r}."}) from None
+        # Sıra korunarak teklenir (oturum/takvim tarafındaki `dict.fromkeys` deseni).
+        ids = list(dict.fromkeys(ids))
+        for sid in ids:
+            section = ClassSection.objects.filter(pk=sid, school_year_id=school_year_id).first()
+            if section is None:
+                raise ValidationError({"section_ids": f"Şube bulunamadı (id={sid})."})
+            if int(section.class_level) != level:
+                raise ValidationError(
+                    {
+                        "section_ids": f"{section.class_label} şubesi {level}. seviyeye ait "
+                        "değil — kapsam seviye seviye tanımlanır."
+                    }
+                )
+        if ids:
+            temiz[level] = ids
+
+    CourseSectionOffering.objects.filter(course=course, school_year_id=school_year_id).delete()
+    for level, ids in temiz.items():
+        CourseSectionOffering.objects.create(
+            course=course, school_year_id=school_year_id, level=level, section_ids=ids
+        )
+    return dict(sorted(temiz.items()))

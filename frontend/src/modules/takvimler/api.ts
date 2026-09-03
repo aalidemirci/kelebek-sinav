@@ -74,6 +74,8 @@ export interface ExamCalendarEntryRow {
   section_ids: number[];
   /** Backend'in hazır kapsam etiketi ("Seviye geneli" / "3 şube"). */
   participant_label: string;
+  /** Kapsam ders havuzundaki tanımdan farklı mı (bilinçli istisna rozeti). */
+  scope_differs_from_catalog: boolean;
   placed_date: string | null;
   period_no: number | null;
   /** Sabitlenmiş girdiyi otomatik yerleştirme yerinden oynatmaz. */
@@ -201,6 +203,11 @@ export interface ElectivePoolCourse {
   name: string;
   /** O takvimde canlı YAZILI girdisi var mı (işaretli + kilitli gösterilir). */
   in_pool: boolean;
+  /**
+   * Ders havuzunda girilmiş şube kapsamı — diyalog kutuları bununla ÖN DOLAR
+   * (kaynak Ders Havuzu ekranıdır, 03.09.2026). Boşsa kapsam tanımsızdır.
+   */
+  default_section_ids: number[];
 }
 
 /** Seviye başına seçilebilir seçmeli dersler (ders adları backend'de TR sıralı). */
