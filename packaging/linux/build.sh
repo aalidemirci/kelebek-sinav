@@ -67,12 +67,17 @@ APT_QT="libgl1 libegl1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 libnss3 libn
 
 bilgi() { echo "== $*"; }
 
+# apt komutları ayna tutarsızlığına karşı sarmalanır (gerekçe apt_dene.sh
+# başlığında: 04.09.2026'da bir sürüm koşusu tam burada 404 ile düştü).
+. "$(dirname "${BASH_SOURCE[0]}")/apt_dene.sh"
+
 # --- 1. Sistem bağımlılıkları (derleme kabında) ------------------------------
 bilgi "sistem bağımlılıkları"
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
 # shellcheck disable=SC2086
-apt-get install -y -qq --no-install-recommends $APT_TEMEL
+apt_dene apt-get install -y -qq --no-install-recommends $APT_TEMEL
+# İSTEĞE BAĞLI paket YENİDEN DENENMEZ: yokluğu beklenen durumdur (Debian
+# 11'de libharfbuzz-subset0 hiç yok), sarmal onu üç kez boşuna arardı.
 # shellcheck disable=SC2086
 apt-get install -y -qq --no-install-recommends $APT_ISTEGE_BAGLI 2>/dev/null || \
     echo "   (libharfbuzz-subset0 bu dağıtımda yok — atlandı)"
@@ -80,7 +85,7 @@ if [ "$QT_ILE" != "0" ]; then
     # PyInstaller PyQt5'i ÇÖZÜMLEMEK için import eder; libGL olmadan import
     # patlar ("libGL.so.1: cannot open shared object file").
     # shellcheck disable=SC2086
-    apt-get install -y -qq --no-install-recommends $APT_QT
+    apt_dene apt-get install -y -qq --no-install-recommends $APT_QT
 fi
 
 # --- 2. Python bağımlılıkları ------------------------------------------------

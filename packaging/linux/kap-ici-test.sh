@@ -25,9 +25,6 @@ PAKET_DIZINI="${PAKET_DIZINI:-/paketler}"
 echo "== dağıtım"
 head -2 /etc/os-release
 
-echo "== apt-get update"
-apt-get update -qq
-
 DEB="$(find "$PAKET_DIZINI" -maxdepth 1 -name '*.deb' | sort | head -1)"
 [ -n "$DEB" ] || { echo "HATA: $PAKET_DIZINI içinde .deb yok" >&2; exit 1; }
 echo "== paket: $DEB"
@@ -36,7 +33,10 @@ echo "== dpkg -i (bağımlılıklar eksik olabilir)"
 dpkg -i "$DEB" || true
 
 echo "== apt-get -f install (bağımlılık çözümü)"
-apt-get -f install -y -qq
+# `apt_dene` her denemede önce `apt-get update` koşar; ayrı update adımı
+# yoktur — ayna tutarsızlığında listeler tazelenip yeniden denenir.
+. "$(dirname "${BASH_SOURCE[0]}")/apt_dene.sh"
+apt_dene apt-get -f install -y -qq
 
 echo "== paket durumu"
 dpkg -s kelebek-sinav | grep -E '^(Package|Version|Status|Depends)'

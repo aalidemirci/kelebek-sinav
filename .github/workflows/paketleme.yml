@@ -107,10 +107,30 @@ jobs:
     steps:
       # Temiz debian imajında git yok; actions/checkout git olmadan da çalışır
       # ama tarball yoluna düşer. Açıkça kurmak koşuyu öngörülebilir kılar.
+      #
+      # Sarmal BURADA İNLİNE olmak ZORUNDA: bu adım checkout'tan ÖNCE koşar,
+      # `packaging/linux/apt_dene.sh` henüz diskte yoktur. Gerekçe ve davranış
+      # o dosyanın başlığında — 04.09.2026'da v2026.9.0-beta.5 etiket koşusu tam
+      # bu adımda `libperl5.32` için 404 alıp düştü (aynı commit yeniden
+      # denemede geçti); listeler her denemede silinir, çünkü asıl sorun kap
+      # imajındaki BAYAT apt indeksidir.
       - name: git
         run: |
-          apt-get update -qq
-          apt-get install -y -qq --no-install-recommends git ca-certificates
+          deneme=1
+          while :; do
+            if apt-get update -qq && apt-get install -y -qq \
+                --no-install-recommends -o Acquire::Retries=3 git ca-certificates; then
+              break
+            fi
+            if [ "$deneme" -ge 3 ]; then
+              echo "HATA: git/ca-certificates 3 denemede de kurulamadı." >&2
+              exit 1
+            fi
+            echo "::warning::apt $deneme. denemede başarısız (ayna tutarsızlığı olabilir); listeler tazelenip yeniden denenecek."
+            rm -rf /var/lib/apt/lists/*
+            deneme=$((deneme + 1))
+            sleep $((deneme * 10))
+          done
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:

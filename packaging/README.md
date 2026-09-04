@@ -90,6 +90,24 @@ Tek doğruluk kaynağı depo kökündeki **`VERSION`** dosyasıdır (CalVer:
 * artefakt dosya adları,
 * `v*` etiketi ile GitHub Release.
 
+### apt komutları ayna tutarsızlığına karşı sarmalı
+
+Linux tarafındaki her `apt-get install`, `packaging/linux/apt_dene.sh` içindeki
+`apt_dene` sarmalından geçer: başarısızlıkta `/var/lib/apt/lists/*` silinir ve
+artan beklemeyle üç kez denenir. Gerekçe 04.09.2026 vakasıdır — `v2026.9.0-beta.5`
+etiket koşusu, kurulum provasının `git` adımında `libperl5.32` için **404 Not
+Found** alıp düştü; kap imajının apt indeksi aynadan kaldırılmış bir güvenlik
+güncellemesine işaret ediyordu. Aynı commit yeniden denemede sorunsuz geçti.
+
+Listelerin silinmesi kasıtlıdır: tek başına `apt-get update` önbellekteki aynı
+bayat indeksi geri getirebilir. `Acquire::Retries` ağ kesintisini kapsar, 404'ü
+kapsamaz — ikisi ayrı sorun sınıfıdır. İSTEĞE BAĞLI paketler (Debian 11'de
+bulunmayan `libharfbuzz-subset0`) sarmala GİRMEZ: yokluğu beklenen durumdur.
+
+İş akışındaki `git` adımı sarmalı İNLİNE taşır, çünkü o adım checkout'tan önce
+koşar ve betik henüz diskte yoktur. Davranış `packaging/tests/test_apt_dene.py`
+ile sabitlenir (sahte `apt-get` ile: kurtarma, pes etme, deneme sayısı).
+
 ### Yayın hattı (etiket push'undan sonra)
 
 `v*` etiketi `paketleme.yml`'nin `yayin` işini tetikler; iş sırasıyla
