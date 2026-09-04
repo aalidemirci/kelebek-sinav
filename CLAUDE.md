@@ -247,6 +247,11 @@ bash scripts/gates.sh
 
 - Conventional Commits, Türkçe, kapsam etiketli: `feat(sinav): …`,
   `fix(okul): …`, `chore(paket): …`.
-- Sürüm: CalVer, `VERSION` dosyası; sürüm çıkışı ileride okulapp.org kartına
-  dokunur (DD §5 deseni; `../okulapp.org/CLAUDE.md` kuralları).
+- Sürüm: CalVer, `VERSION` dosyası. `v*` etiketi paketleri üretir, GitHub
+  Release'i açar ve paketleri R2'ye (`indir.okulapp.org/kelebek-sinav/`)
+  yükler — hat ve gereken secret'lar `packaging/README.md` "Yayın hattı".
+  Elle kalan tek iş okulapp.org deposundaki `src/data/ks-release.json`'dur;
+  o siteye yazarken `../okulapp.org/CLAUDE.md` "Ortak çalışma düzeni" kuralları
+  BAĞLAYICIDIR (taze taban · yalnız kendi alanı: `ks-release.json` +
+  `src/pages/kelebek-sinav/**` · commit başlığı "Kelebek Sınav: …").
 - Faz kapıları (F0-F9) tasarım belgesi §12'de — kapısı geçilmeden faz kapanmaz.

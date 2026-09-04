@@ -90,6 +90,25 @@ Tek doğruluk kaynağı depo kökündeki **`VERSION`** dosyasıdır (CalVer:
 * artefakt dosya adları,
 * `v*` etiketi ile GitHub Release.
 
+### Yayın hattı (etiket push'undan sonra)
+
+`v*` etiketi `paketleme.yml`'nin `yayin` işini tetikler; iş sırasıyla
+`SHA256SUMS.txt` üretir, GitHub Release'i açar ve paketleri **Cloudflare R2**
+kovasına (`okulapp-indirme/kelebek-sinav/`) yükler — okullar siteden indirir,
+MEB ağında GitHub sık sık engellidir. Kovadaki `SHA256SUMS` dosyası SÜRÜMLÜ
+adla yazılır (`SHA256SUMS-<sürüm>.txt`): sabit ad her yayında eski sürümlerin
+özetini silerdi.
+
+R2 adımı iki secret ister — `CLOUDFLARE_API_TOKEN` (R2 *Object Read & Write*
+izni) ve `CLOUDFLARE_ACCOUNT_ID`. Tanımlı değilse adım uyarı basıp ATLANIR:
+secret'ı olmayan bir çatalda da sürüm çıkarılabilmelidir; paketler o durumda
+yalnız GitHub Release'te kalır.
+
+Yükleme sonrası **elle kalan tek iş**, `okulapp.org` deposundaki
+`src/data/ks-release.json` dosyasını (sürüm, tarih, boyutlar) güncellemektir;
+site indirme kartı oradan üretilir ve o deponun `npm run check-releases`
+kapısı bayat kalırsa uyarır.
+
 ## İki dil kuralı
 
 * **Python tanımlayıcıları İngilizce** (depo geneliyle aynı), yorumlar ve
