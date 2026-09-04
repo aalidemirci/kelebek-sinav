@@ -30,7 +30,12 @@
    `bash scripts/gates.sh` yeşil olmadan iş bitmiş sayılmaz.
 6. **KVKK:** TCKN, veli verisi, sağlık serbest metni **hiç toplanmaz**;
    uyarı/hata metinlerinde öğrenci adı asla (okul no kullanılır); gerçek
-   öğrenci verisi/e-Okul ihracı depoya girmez (`.gitignore` engeller).
+   öğrenci verisi/e-Okul ihracı depoya girmez. İki katman: `.gitignore`
+   ÖNLER, `packaging/depo_sizintisi.py` DENETLER (gates.sh'in ilk kapısı —
+   izlenen dosyalarda veri biçimi + TCKN sağlaması arar). Dağıtım paketinin
+   karşılığı `packaging/veri_sizintisi.py`, iki platform derlemesinde koşar.
+   Her iki betik de bulguyu KONUMLA raporlar, eşleşen değeri BASMAZ —
+   hata çıktısı da bir sızıntı kanalıdır.
 
 ## 2. Bilinen tuzaklar (gerçek kusurların yaşadığı yerler)
 
@@ -127,6 +132,12 @@
   çizelge adıysa korunur. İki alanı karıştırma: `exam_mode` çizelge verisidir,
   senkronda EZİLİR (`levels`/`course_type` sınıfı); `is_active` idari karardır
   ve KORUNUR.
+- **Sentetik veri fixture'ı eklerken muafiyet ADIYLA yazılır:** hem
+  `.gitignore` hem `depo_sizintisi.MUAF_YOLLAR` tek tek dosya adı tutar; joker
+  (`veri/*.xls`) o klasöre bırakılan GERÇEK bir e-Okul ihracını da muaf tutar
+  ve KVKK koruması tam orada delinir. Sağlamalı örnek bir kimlik numarası test
+  KAYNAĞINA yazılmaz, çalışma anında üretilir (aksi hâlde kapı kendi testini
+  yakalar — `test_depo_sizintisi.py` deseni).
 - **SQLite:** `levels__contains` yok (Python süzme); yedek daima
   `Connection.backup()` (dosya kopyalama WAL'de yasak).
 - **Kimlik sabitleri:** `KS_*` env, `ks_oturum`, `X-KS-Token`, `.ksbak`,

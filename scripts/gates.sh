@@ -21,7 +21,10 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
 KAPI_LOG="$(mktemp)"
-trap 'rm -f "$KAPI_LOG"' EXIT
+# Depo sızıntı kapısının girdisi: `git ls-files` çıktısı. Liste DEPO KÖKÜNE
+# yazılır çünkü konteyner yalnız orayı (/repo) görür; koşu bitince silinir.
+DEPO_LISTESI=".ks-depo-listesi.tmp"
+trap 'rm -f "$KAPI_LOG" "$DEPO_LISTESI"' EXIT
 
 # kapi <etiket> <nöbetçi> <servis> <komut> [compose run ek bayrakları...]
 # Komutu konteynerde koşar; çıkış kodu (pipefail üzerinden) VE nöbetçi kanıtı
@@ -37,6 +40,12 @@ kapi() {
     exit 1
   fi
 }
+
+# KVKK kapısı EN BAŞTA: en ucuz denetim (saniyeler) ve en pahalı hata sınıfı —
+# depoya giren kişisel veri `.gitignore` ile geçmişten çıkmaz. Dosya listesini
+# HOST üretir: backend imajında git YOKTUR (denendi), betik listeyi okur.
+git ls-files -z > "$DEPO_LISTESI"
+kapi "depo sızıntısı (KVKK)" depo_sizinti backend "python packaging/depo_sizintisi.py --kok /repo --liste /repo/$DEPO_LISTESI" -w /repo
 
 kapi "pytest" pytest backend "pytest"
 kapi "ruff check" ruff backend "ruff check ."

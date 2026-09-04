@@ -31,6 +31,9 @@ node_modules/
 frontend/dist/
 # Kapı koşusunun geçici vitest raporu (scripts/gates.sh)
 frontend/vitest-sonuc.json
+# Depo sızıntı kapısının geçici dosya listesi (scripts/gates.sh); depo
+# köküne yazılır çünkü konteyner yalnız orayı görür.
+.ks-depo-listesi.tmp
 
 # Paketleme çıktıları
 build/
