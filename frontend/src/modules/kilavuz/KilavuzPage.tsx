@@ -100,24 +100,34 @@ export default function KilavuzPage() {
           Okul türü iki şeyi birden belirler: programın tanıyacağı sınıf düzeylerini (9-12,
           hazırlık) ve <strong>hangi MEB haftalık ders çizelgesinin</strong> uygulanacağını. Sekiz
           ortaöğretim türü tanınır — Anadolu, Fen, Sosyal Bilimler, Anadolu İmam Hatip, Mesleki ve
-          Teknik Anadolu, Çok Programlı Anadolu, Güzel Sanatlar ve Spor Lisesi; çizelge verisi henüz
-          gelmemiş türler listede işaretli görünür ve o okulda ders havuzu boş başlar. Hazırlık
-          sınıfı varsa burada işaretleyin — hazırlıksız okulda program hiç 0. seviye satırı üretmez.
+          Teknik Anadolu, Çok Programlı Anadolu, Güzel Sanatlar ve Spor Lisesi — ve sekizinin de
+          çizelgesi programla birlikte gelir. Hazırlık sınıfı varsa burada işaretleyin — hazırlıksız
+          okulda program hiç hazırlık satırı üretmez.
         </p>
         <p>
-          Okul türünün altındaki <strong>çizelge ataması</strong> kartı, hangi seviyede hangi Talim
-          ve Terbiye Kurulu çizelgesinin yürürlükte olduğunu kararın tarih ve sayısıyla gösterir.
-          Bütün seviyeler aynı çizelgeyle okuyorsa dokunmanız gerekmez.{" "}
-          <strong>“Seviye bazında özelleştir”</strong> iki durum içindir: <em>kademeli dönüşüm</em>{" "}
-          — Anadolu Lisesi'nden Fen Lisesi'ne dönen okulda yeni tür 9. sınıftan başlar, üst sınıflar
-          eski çizelgede kalır — ve <em>çok programlı okul</em>: aynı seviyeye birden çok çizelge
-          işaretlenir. Kademeli bir çizelgede kapsanmayan seviye kalırsa program onu en yeni
-          programa düşürür ve kartta uyarı gösterir; sessizce geçmez.
+          <strong>Çizelgede eksik kalanlar sınırlıdır</strong> ve program bunları gizlemez. Mesleki
+          ve Teknik Anadolu Lisesinde yalnız zorunlu dersler gelir: alan/dal meslek derslerini ve
+          seçmeli dersleri Ders Havuzu ekranından elle eklersiniz (4. adım); hazırlık sınıfı bulunan
+          mesleki ve teknik çizelge de henüz yoktur. Güzel Sanatlar ve Spor Liselerinde 2026-2027
+          ders yılında 12. sınıfın tabi olduğu önceki çizelge bulunmaz; program o sınıf düzeyinde en
+          yeni çizelgeyi kullanır ve bunu ders havuzunda uyarıyla bildirir.
+        </p>
+        <p>
+          Okul türünün altındaki <strong>çizelge ataması</strong> kartı, hangi sınıf düzeyinde hangi
+          Talim ve Terbiye Kurulu çizelgesinin yürürlükte olduğunu kararın tarih ve sayısıyla
+          gösterir. Bütün sınıf düzeyleri aynı çizelgeyle okuyorsa dokunmanız gerekmez.{" "}
+          <strong>“Sınıf düzeyine göre özelleştir”</strong> iki durum içindir:{" "}
+          <em>kademeli dönüşüm</em> — Anadolu Lisesi'nden Fen Lisesi'ne dönen okulda yeni tür 9.
+          sınıftan başlar, üst sınıflar eski çizelgede kalır — ve <em>çok programlı okul</em>: aynı
+          sınıf düzeyine birden çok çizelge işaretlenir. Kademeli bir çizelgede kapsanmayan sınıf
+          düzeyi kalırsa program onu en yeni programa düşürür ve kartta uyarı gösterir; sessizce
+          geçmez.
         </p>
         <p>
           Verilerinizi korumak için <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran>{" "}
-          bölümünden uygulama parolası kurabilirsiniz. Parola kurulunca öğrenci ve personel adları
-          diskte şifreli tutulur; kurtarma anahtarını mutlaka güvenli bir yere not edin.
+          bölümünden uygulama parolası kurabilirsiniz. Parola kurulunca öğrenci ve öğretmen adları
+          diskte şifreli tutulur; kurtarma anahtarını mutlaka güvenli bir yere not edin (ayrıntısı
+          9. adımda).
         </p>
       </Adim>
 
@@ -144,10 +154,11 @@ export default function KilavuzPage() {
         </p>
       </Adim>
 
-      <Adim no={3} icon="group" title="Kişiler: öğrenci ve personel listeleri">
+      <Adim no={3} icon="group" title="Kişiler: öğrenci ve öğretmen listeleri">
         <p>
-          <Ekran to="/kisiler">Kişiler</Ekran> ekranından öğrenci ve personel listelerini içe
-          aktarın. En hızlı yol e-Okul'dan indirdiğiniz raporu doğrudan yüklemektir; program hazır
+          <Ekran to="/kisiler">Kişiler</Ekran> ekranından öğrenci ve öğretmen listelerini içe
+          aktarın. En hızlı yol e-Okul'dan indirdiğiniz raporu doğrudan yüklemektir (öğrenciler için
+          Sınıf/Şube Öğrenci Listesi, öğretmenler için Personel Listesi raporu); program hazır
           şablon indirmenize ya da listeyi panodan yapıştırmanıza da izin verir.
         </p>
         <p>
@@ -155,26 +166,39 @@ export default function KilavuzPage() {
           gösterir; onaylayınca kayıt işlenir. Aktarım sonrası şubeler kataloğa kendiliğinden düşer.
         </p>
         <Ipucu>
-          Personel listesi iki yerde işinize yarar: gözetmen görevlendirmesinde aday havuzu ve zümre
-          başkanı seçiminde seçenek listesi buradan gelir. Bu yüzden personeli zümrelerden önce
+          Öğretmen listesi iki yerde işinize yarar: gözetmen görevlendirmesinde aday havuzu ve zümre
+          başkanı seçiminde seçenek listesi buradan gelir. Bu yüzden öğretmenleri zümrelerden önce
           girin.
         </Ipucu>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Şube kataloğu: Ayarlar → Şubeler
+        </h3>
+        <p>
+          Öğrenci aktarımında görülen her şube{" "}
+          <Ekran to="/ayarlar?tab=subeler">Ayarlar → Şubeler</Ekran> sekmesindeki şube kataloğuna
+          kendiliğinden eklenir; çoğu okulda bu sekmeye hiç dokunmanız gerekmez. İki durumda işinize
+          yarar: öğrencisi henüz aktarılmamış bir şubeyi elle eklemek ve artık bulunmayan bir şubeyi
+          kaldırmak. Kaldırmak öğrenci kayıtlarını etkilemez; aktarım o şubeyi yeniden görürse şube
+          geri gelir. Katalog aktif ders yılına bağlıdır ve üç yeri besler: “Kendi dersliğinde”
+          düzenindeki salon-şube eşlemesi, şube sınav duyurusu ve sihirbazdaki şube seçim listeleri.
+        </p>
       </Adim>
 
-      <Adim no={4} icon="menu_book" title="Ders havuzu: tür ve sınav biçimi">
+      <Adim no={4} icon="menu_book" title="Ders Havuzu: tür ve sınav biçimi">
         <p>
           <Ekran to="/dersler">Ders Havuzu</Ekran>, okulun <strong>yürürlükteki</strong> haftalık
           ders çizelgesinden kendiliğinden türetilir: okul türü, hazırlık sınıfı, aktif ders yılı ve
-          1. adımdaki seviye ataması birlikte hangi Talim ve Terbiye Kurulu çizelgesinin geçerli
+          1. adımdaki çizelge ataması birlikte hangi Talim ve Terbiye Kurulu çizelgesinin geçerli
           olduğunu söyler. Sınav takvimi ve sınav oturumları dersleri bu havuzdan seçer. Ders{" "}
           <strong>silinmez</strong>, pasifleştirilir — geçmiş evrak bozulmasın diye.
         </p>
         <p>
           Listenin üstündeki <strong>“Yürürlükteki çizelge”</strong> kartı hangi programın hangi
-          seviyede uygulandığını, dayanağını (kararın tarihi ve sayısı) ve varsa uyarıları gösterir.
-          Okul türünü, hazırlık seçimini ya da ders yılını değiştirdiğinizde havuz kendiliğinden
-          yenilenir; <strong>“Çizelgeyi yeniden uygula”</strong> düğmesi bunu elle tetikler ve kaç
-          dersin eklendiğini, güncellendiğini ve çizelge dışı kaldığını söyler.
+          sınıf düzeyinde uygulandığını, dayanağını (kararın tarihi ve sayısı) ve varsa uyarıları
+          gösterir. Okul türünü, hazırlık seçimini ya da ders yılını değiştirdiğinizde havuz
+          kendiliğinden yenilenir; <strong>“Çizelgeyi yeniden uygula”</strong> düğmesi bunu elle
+          tetikler ve kaç dersin eklendiğini, güncellendiğini ve çizelge dışı kaldığını söyler.
         </p>
         <p>
           Çizelge değişince havuzda kalan eski dersler <strong>“Çizelge dışı”</strong> rozetiyle
@@ -184,22 +208,21 @@ export default function KilavuzPage() {
         </p>
         <p>
           Listenin iki sütunu takvim havuzunun nasıl dolacağını belirler. <strong>Tür</strong>{" "}
-          dersin <em>ortak (zorunlu)</em> mu yoksa <em>seçmeli</em> mi olduğunu,{" "}
-          <strong>Sınav</strong> ise dersin sınavının <em>Yazılı</em> mı, <em>Uygulama</em> mı
-          olduğunu ya da o dersin hiç sınavı olmadığını (<em>Sınav yok</em>) söyler. MEB
-          çizelgesinden gelen dersler için bu alanlar hazır doldurulmuştur: Beden Eğitimi ve Spor,
-          Görsel Sanatlar/Müzik, Spor ve Sanat Eğitimi <em>Uygulama</em>, Rehberlik ve Yönlendirme{" "}
-          <em>Sınav yok</em> gelir. Okulunuzun uygulaması farklıysa satırdaki{" "}
-          <strong>Düzenle</strong> düğmesiyle dersin adını, seviyelerini, türünü ve sınav biçimini
-          değiştirebilirsiniz.
+          dersin <em>zorunlu</em> mu yoksa <em>seçmeli</em> mi olduğunu, <strong>Sınav</strong> ise
+          dersin sınavının <em>Yazılı</em> mı, <em>Uygulama</em> mı olduğunu ya da o dersin hiç
+          sınavı olmadığını (<em>Sınav yok</em>) söyler. MEB çizelgesinden gelen dersler için bu
+          alanlar hazır doldurulmuştur: Beden Eğitimi ve Spor, Görsel Sanatlar/Müzik, Spor ve Sanat
+          Eğitimi <em>Uygulama</em>, Rehberlik ve Yönlendirme <em>Sınav yok</em> gelir. Okulunuzun
+          uygulaması farklıysa satırdaki <strong>Düzenle</strong> düğmesiyle dersin adını, sınıf
+          düzeylerini, türünü ve sınav biçimini değiştirebilirsiniz.
         </p>
         <p>
-          <strong>Ancak çizelgeden gelen bir derste bu düzenleme kalıcı değildir.</strong> Ad,
-          seviye, tür ve sınav biçimi <em>çizelge verisidir</em>: çizelge yeniden uygulandığında
+          <strong>Ancak çizelgeden gelen bir derste bu düzenleme kalıcı değildir.</strong> Ad, sınıf
+          düzeyi, tür ve sınav biçimi <em>çizelge verisidir</em>: çizelge yeniden uygulandığında
           (okul türü, hazırlık ya da ders yılı değişikliği; program güncellemesiyle gelen yeni
           çizelge) MEB değerine döner. Kalıcı olarak farklı kalması gereken bir ders için çizelge
           dersini <strong>pasifleştirip</strong> yanına <em>farklı adla</em> elle bir ders ekleyin —
-          elle eklenen derse senkron dokunmaz. Buna karşılık{" "}
+          elle eklenen derse çizelge güncellemesi dokunmaz. Buna karşılık{" "}
           <strong>pasifleştirme her zaman kalıcıdır</strong>.
         </p>
         <p>
@@ -229,7 +252,7 @@ export default function KilavuzPage() {
         <p>
           <Ekran to="/ayarlar?tab=zumreler">Ayarlar → Zümreler</Ekran> ekranında okul zümre
           başkanları kurulunu oluşturan zümreleri girin (örneğin “Sosyal Bilimler”, “Matematik”,
-          “Yabancı Dil”) ve her zümrenin başkanını personel listesinden seçin.
+          “Yabancı Dil”) ve her zümrenin başkanını öğretmen listesinden seçin.
         </p>
         <p>
           Bu liste sınav takvimi PDF'inin <strong>imza bölümünü</strong> besler: takvimi hazırlarken
@@ -246,10 +269,10 @@ export default function KilavuzPage() {
 
       <Adim no={6} icon="meeting_room" title="Salonlar ve oturma düzeni">
         <p>
-          <Ekran to="/salonlar">Salonlar</Ekran> ekranında sınav yapılacak derslikleri tanımlayın:
-          sıra düzenini 2B editörde çizin, tek/çift kişilik sıraları ve numaralandırma yönünü seçin.
-          Bir dersliği bir şubeye bağlarsanız “kendi sınıfında” yapılacak sınavlarda program o
-          salonu kullanır.
+          <Ekran to="/salonlar">Salonlar</Ekran> ekranında sınav yapılacak salonları tanımlayın:
+          sıra düzenini oturma düzeni editöründe çizin, tek/çift kişilik sıraları ve numaralandırma
+          yönünü seçin. Bir salonu bir şubeye bağlarsanız (şube dersliği) “Kendi dersliğinde”
+          yapılacak sınavlarda program o salonu kullanır.
         </p>
         <p>
           Planın en üstündeki şerit salonun <strong>ön cephesidir</strong> — öğretmen masası, tahta
@@ -257,10 +280,10 @@ export default function KilavuzPage() {
           “Sıra sütunu” alanları yalnız öğrenci sıralarını sayar.
         </p>
         <p>
-          Yeni salon boş ızgarayla değil <strong>varsayılan şablonla</strong> açılır: öğretmen
-          masası ön-solda, kapı çizilmemiş, bütün hücreler ikili sıra — dört sütun ve beş sırayla
-          kırk koltuk. Koltuk numaraları <strong>öğretmen masasının önünden</strong> başlar; masayı
-          başka bir köşeye taşırsanız numaralandırma da onunla döner. Kapı yalnız krokiye çizilir,
+          Yeni salon boş planla değil <strong>varsayılan şablonla</strong> açılır: öğretmen masası
+          ön-solda, kapı çizilmemiş, bütün hücreler ikili sıra — dört sütun ve beş sırayla kırk
+          koltuk. Koltuk numaraları <strong>öğretmen masasının önünden</strong> başlar; masayı başka
+          bir köşeye taşırsanız numaralandırma da onunla döner. Kapı yalnız krokiye çizilir,
           numaralandırmaya girmez — varsayılanda hiç yoktur, çünkü yeri okuldan okula değişir ve
           uydurulmuş bir kapı resmî salon evrakına yanlış bilgi basmak olurdu. Editördeki{" "}
           <strong>“Varsayılan şablon”</strong> düğmesi aynı düzeni açık salona uygular ve bunu{" "}
@@ -268,11 +291,11 @@ export default function KilavuzPage() {
           kalıcı olmaz.
         </p>
         <p>
-          Program daha önce kurulmuşsa ve onlarca derslik eski düzende kaldıysa Salonlar
-          sayfasındaki <strong>“Şablonu topluca uygula”</strong> düğmesini kullanın. Diyalog eski
-          düzendeki salonları işaretli açar, her salonu kendi ölçüsünde şablona çeker ve kapasiteyi
-          korur. <strong>Yerleşimi yapılmış salonlar atlanır</strong> ve adlarıyla bildirilir:
-          basılmış evraktaki koltuk numarası planla çelişmesin diye. Onları editörden tek tek
+          Program daha önce kurulmuşsa ve onlarca salon eski düzende kaldıysa Salonlar sayfasındaki{" "}
+          <strong>“Şablonu topluca uygula”</strong> düğmesini kullanın. Diyalog eski düzendeki
+          salonları işaretli açar, her salonu kendi ölçüsünde şablona çeker ve kapasiteyi korur.{" "}
+          <strong>Yerleşimi yapılmış salonlar atlanır</strong> ve adlarıyla bildirilir: basılmış
+          evraktaki koltuk numarası planla çelişmesin diye. Onları editörden tek tek
           değiştirebilirsiniz.
         </p>
         <p>
@@ -280,12 +303,12 @@ export default function KilavuzPage() {
           olarak alıp kapıya asabilirsiniz.
         </p>
         <Ipucu>
-          <strong>İkili eğitim yapıyorsanız derslikleri kümeleyin.</strong> “Şube dersliklerini
-          oluştur” her şube için bir derslik üretir; ikili eğitimde liste kalabalıklaşır ve
-          sihirbazda tek tek işaretlemek zorlaşır. Salonlar ekranındaki <strong>Kümeler</strong>{" "}
-          düğmesiyle “Sabah”, “Öğle” gibi kümeler tanımlayıp salonları topluca atayın — sınav
-          sihirbazında kümenin tamamı tek tıkla seçilir. Küme yalnız seçim kolaylığıdır; evrağa
-          basılan konum bilgisi salonun “blok/kat” alanıdır.
+          <strong>İkili eğitim yapıyorsanız salonları kümeleyin.</strong> “Şube dersliklerini
+          oluştur” her şube için bir salon (şube dersliği) üretir; ikili eğitimde liste
+          kalabalıklaşır ve sihirbazda tek tek işaretlemek zorlaşır. Salonlar ekranındaki{" "}
+          <strong>“Salon kümeleri”</strong> düğmesiyle “Sabah”, “Öğle” gibi kümeler tanımlayıp
+          salonları topluca atayın — sınav sihirbazında kümenin tamamı tek tıkla seçilir. Küme
+          yalnız seçim kolaylığıdır; evrağa basılan konum bilgisi salonun “blok/kat” alanıdır.
         </Ipucu>
       </Adim>
 
@@ -304,16 +327,19 @@ export default function KilavuzPage() {
           ayı ilk haftası aralığında yapılır.
         </Mevzuat>
         <p>
-          Takvimin dört sekmesi vardır: <strong>Havuz</strong> (hangi ders hangi seviyede sınav
-          olacak), <strong>Yerleştirme</strong> (hangi gün, hangi ders saati),{" "}
+          Takvimin dört sekmesi vardır: <strong>Havuz</strong> (hangi ders hangi sınıf düzeyinde
+          sınav olacak), <strong>Yerleştirme</strong> (hangi gün, hangi ders saati),{" "}
           <strong>Süreç Takip</strong> (soru teslimi, basım, puan girişi gibi kalemler) ve{" "}
           <strong>Önizleme</strong> (açıklamalar, dipnot, imza zümreleri ve PDF).
         </p>
         <p>
-          Takvim <strong>Taslak → Onaya Sunuldu → Onaylandı</strong> sırasıyla ilerler. Havuz,
-          yerleştirme, açıklama, dipnot ve imza zümreleri yalnız taslak durumda değişir; onaylı
-          takvimi düzenlemek için önce “Taslağa Al” deyin. Taslak ve onaya sunulmuş takvimlerin
-          PDF'inde “TASLAK” filigranı bulunur.
+          Takvimin iki durumu vardır: <strong>Taslak</strong> ve <strong>Onaylandı</strong>. Havuz,
+          yerleştirme, açıklama, dipnot ve imza zümreleri yalnız taslak durumda değişir. Takvim
+          hazır olduğunda başlıktaki <strong>“Onayla”</strong> düğmesine basarsınız; onay tarihi ve
+          onaylayan kaydedilir, PDF'teki “TASLAK” filigranı kalkar. Onaylı takvimi düzenlemek için
+          önce <strong>“Taslağa al”</strong> deyin: program onayın kalkacağını söyleyip sizden onay
+          ister; bu takvimden üretilmiş oturumlar etkilenmez, ama duyurmadan önce takvimi yeniden
+          onaylamanız gerekir.
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
@@ -321,39 +347,39 @@ export default function KilavuzPage() {
         </h3>
         <p>
           Havuz sekmesinde iki düğme vardır. <strong>“Dersleri ekle”</strong>, ders havuzundaki{" "}
-          <em>ortak</em> ve sınavı <em>Yazılı</em> dersleri — ve{" "}
-          <strong>şubelerini girdiğiniz</strong> seçmelileri — öğrencisi olan her seviye için tek
-          tıkla havuza koyar; uygulama sınavı yapılan ve sınavı olmayan dersler eklenmez. Şubesi
+          <em>zorunlu</em> ve sınavı <em>Yazılı</em> dersleri — ve{" "}
+          <strong>şubelerini girdiğiniz</strong> seçmelileri — öğrencisi olan her sınıf düzeyi için
+          tek tıkla havuza koyar; uygulama sınavı yapılan ve sınavı olmayan dersler eklenmez. Şubesi
           henüz girilmemiş seçmeli atlanır ve size bildirilir. <strong>“Seçmeli ders seç”</strong>{" "}
-          ise seviye sekmeleri açar: kalan seçmelileri elle işaretlersiniz. Havuzda zaten bulunan
-          ders işaretli ve kilitli görünür, ikinci kez eklenmez.
+          ise sınıf düzeyi sekmeleri açar: kalan seçmelileri elle işaretlersiniz. Havuzda zaten
+          bulunan ders işaretli ve kilitli görünür, ikinci kez eklenmez.
         </p>
         <Ipucu>
           Bir seçmeliyi <strong>hangi şubelerin aldığını</strong> her takvimde yeniden seçmeyin:
-          bunu bir kez <Ekran to="/dersler">Ders havuzu</Ekran> ekranında, dersin{" "}
+          bunu bir kez <Ekran to="/dersler">Ders Havuzu</Ekran> ekranında, dersin{" "}
           <strong>“Şubeler”</strong> sütunundan girin. Dört sınav takvimi de o bilgiyi kullanır,
           havuz kendiliğinden dolar.
         </Ipucu>
         <p>
           Seçmeli seçim penceresinde şube kutuları ders havuzundaki tanımdan <strong>dolu</strong>{" "}
-          gelir; dilerseniz o takvime mahsus değiştirebilirsiniz. Kapsam iki türlüdür:{" "}
-          <em>Seviye geneli</em> ya da <em>Şube seç</em>. Şube seçerken Ayarlar’daki{" "}
-          <strong>şube kümelerini</strong> (SAY, EA, DİL gibi — 8. adımda anlatılır) çipe basarak
-          topluca ekleyebilirsiniz. Küme yalnız seçim kolaylığıdır — takvime kümenin adı değil,
-          seçilen şubeler yazılır.
+          gelir; dilerseniz o takvime mahsus değiştirebilirsiniz. <strong>Katılımcılar</strong>{" "}
+          alanının iki seçeneği vardır: <em>Sınıf düzeyinin tamamı</em> ya da{" "}
+          <em>Seçili şubeler</em>. Şube seçerken Ayarlar’daki <strong>şube kümelerini</strong> (SAY,
+          EA, DİL gibi — 8. adımda anlatılır) çipe basarak topluca ekleyebilirsiniz. Küme yalnız
+          seçim kolaylığıdır — takvime kümenin adı değil, seçilen şubeler yazılır.
         </p>
         <p>
-          Kapsamı yanlış verdiyseniz girdiyi silmeniz gerekmez: havuz tablosunda{" "}
-          <strong>“Kapsam”</strong> sütunundaki değere basınca kapsam düzenleme penceresi açılır.
-          Takvim taslak olduğu sürece ızgaraya yerleştirilmiş girdinin kapsamı da buradan
-          düzeltilir. Bir girdinin kapsamı ders havuzundaki tanımdan farklıysa yanında{" "}
+          Katılımcıları yanlış verdiyseniz girdiyi silmeniz gerekmez: havuz tablosunda{" "}
+          <strong>“Katılımcılar”</strong> sütunundaki değere basınca düzenleme penceresi açılır.
+          Takvim taslak olduğu sürece çizelgeye yerleştirilmiş girdinin katılımcıları da buradan
+          düzeltilir. Bir girdinin katılımcıları ders havuzundaki tanımdan farklıysa yanında{" "}
           <strong>“özel”</strong> rozeti görünür — o sınava mahsus istisna yaptığınızı hatırlatır.
         </p>
         <Ipucu>
           Yeni bir takvim açtığınızda zorunlu dersler <strong>kendiliğinden</strong> havuza gelir
-          (1. ve 2. sınav takvimlerinde). Geriye yalnız seçmelileri işaretlemek ve gerekiyorsa kenar
-          durumları — kendi sınıfında yapılacak sınavlar, uygulama sınavları, Bakanlık/MEM sınavları
-          — havuz formundan elle eklemek kalır.
+          (1. ve 2. sınav takvimlerinde). Geriye yalnız seçmelileri işaretlemek ve gerekiyorsa özel
+          durumları — “Kendi dersliğinde” yapılacak sınavlar (formdaki <strong>Düzen</strong>{" "}
+          alanı), uygulama sınavları, Bakanlık/MEM sınavları — havuz formundan elle eklemek kalır.
         </Ipucu>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
@@ -366,7 +392,7 @@ export default function KilavuzPage() {
         </p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            <strong>Boşları doldur:</strong> yalnız havuzda bekleyenleri yerleştirir, ızgaradaki
+            <strong>Boşları doldur:</strong> yalnız havuzda bekleyenleri yerleştirir, çizelgedeki
             sınavlara hiç dokunmaz.
           </li>
           <li>
@@ -375,16 +401,25 @@ export default function KilavuzPage() {
           </li>
         </ul>
         <p>
-          Elle yerleştirdiğiniz her sınav <strong>kendiliğinden sabitlenir</strong>: ızgaradaki
-          çipin üzerinde kilit simgesi görünür ve otomatik dağıtım onu yerinden oynatmaz. Kilide
-          tıklayarak sabitlemeyi kaldırabilir, otomatik yerleşmiş bir sınavı da kilitleyebilirsiniz.
-          Bir sınavı havuza geri alırsanız sabitlemesi düşer.
+          Elle yerleştirdiğiniz her sınav <strong>kendiliğinden sabitlenir</strong>: yerleştirme
+          çizelgesindeki çipin üzerinde kilit simgesi görünür ve otomatik dağıtım onu yerinden
+          oynatmaz. Kilide tıklayarak sabitlemeyi kaldırabilir, otomatik yerleşmiş bir sınavı da
+          kilitleyebilirsiniz. Bir sınavı havuza geri alırsanız sabitlemesi düşer. Çipteki{" "}
+          <strong>“Uygulama”</strong> rozeti uygulamalı sınavı, <strong>“Kendi dersliğinde”</strong>{" "}
+          rozeti kelebek dağıtıma girmeyen sınavı gösterir.
+        </p>
+        <p>
+          Elle yerleştirirken program bir kuralı <em>hatırlatıyor</em> ama yerleştirmeyi
+          engellemiyorsa (örneğin aynı gün üçüncü sınav) uyarı, çizelgenin üstündeki{" "}
+          <strong>“Yerleştirme uyarıları”</strong> bandında birikir ve siz <strong>“Kapat”</strong>{" "}
+          diyene dek ekranda kalır. Kabul edilmeyen yerleştirmenin gerekçesi ise ekranın altında
+          kısa bir bildirimle gösterilir.
         </p>
         <p>Program dağıtırken şu kurallara uyar:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>Aynı öğrenciye günde ikiden fazla sınav düşürmez.</li>
-          <li>Kapsamı kesişen iki sınavı aynı saate koymaz.</li>
-          <li>Üst makam sınavı olan güne o seviyenin okul sınavını yazmaz.</li>
+          <li>Katılımcıları kesişen iki sınavı aynı saate koymaz.</li>
+          <li>Üst makam sınavı olan güne o sınıf düzeyinin okul sınavını yazmaz.</li>
           <li>Hafta sonlarını ve sınav saati işaretlemediğiniz ders saatlerini kullanmaz.</li>
           <li>
             Bakanlık/İl MEM/İlçe MEM sınavlarını <strong>hiç yerleştirmez</strong> — tarihleri
@@ -398,13 +433,13 @@ export default function KilavuzPage() {
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
-          Aynı saate iki sınav: kapsam kuralı
+          Aynı saate iki sınav: katılımcı kuralı
         </h3>
         <p>
           Bir öğrenci aynı anda iki salonda olamaz. Bu yüzden program, aynı gün ve ders saatine{" "}
-          <strong>kapsamları kesişen</strong> iki sınav koymanızı kabul etmez. Kapsamlar
+          <strong>katılımcıları kesişen</strong> iki sınav koymanızı kabul etmez. Katılımcılar
           kesişmiyorsa — örneğin 9/A'nın Almanca, 9/B'nin Fransızca sınavı — aynı saatte yan yana
-          yapılabilir. Seviye geneli bir sınav o seviyedeki her şubeyle kesişir.
+          yapılabilir. Sınıf düzeyinin tamamına yapılan bir sınav o düzeydeki her şubeyle kesişir.
         </p>
         <p>
           Bu, günlük sınav sayısı hesabını <em>gevşetmez</em>: bir şubenin seçmeli dersi aldığını
@@ -437,7 +472,7 @@ export default function KilavuzPage() {
         </Mevzuat>
         <p>Program bu esası şöyle uygular:</p>
         <ul className="list-disc space-y-1 pl-5">
-          <li>Aynı gün ve seviyede iki sınava kadar sessizce izin verir.</li>
+          <li>Aynı gün ve sınıf düzeyinde iki sınava kadar sessizce izin verir.</li>
           <li>
             <strong>Üçüncü sınavda uyarır</strong> ama engellemez — “zorunlu hâl” takdiri okul
             müdürlüğünündür.
@@ -446,8 +481,8 @@ export default function KilavuzPage() {
             <strong>Dördüncü sınavı hiç kabul etmez</strong>; yerleştirme reddedilir.
           </li>
           <li>
-            Sayım <strong>öğrenci bazlıdır</strong>: aynı gün aynı seviyeye konan derslerin kaç
-            öğrenciyi birlikte etkilediğine bakılır.
+            Sayım <strong>öğrenci bazlıdır</strong>: aynı gün aynı sınıf düzeyine konan derslerin
+            kaç öğrenciyi birlikte etkilediğine bakılır.
           </li>
         </ul>
         <p>
@@ -466,7 +501,7 @@ export default function KilavuzPage() {
           olduğunu işaretleyebilirsiniz.
         </p>
         <p>
-          Okul dışı makam sınavları takvimde ayrı görünür: yerleştirme ızgarasında BAK / İL / İLÇE
+          Okul dışı makam sınavları takvimde ayrı görünür: yerleştirme çizelgesinde BAK / İL / İLÇE
           rozeti taşırlar, PDF'te ise gölgeli ve sol kenarı çizgili hücrede “BAKANLIK SINAVI”, “İL
           MEM SINAVI” veya “İLÇE MEM SINAVI” etiketiyle basılırlar. Aynı güne hem okul hem üst makam
           sınavı koyarsanız program uyarır.
@@ -475,6 +510,27 @@ export default function KilavuzPage() {
           Ülke geneli yapılacak ortak yazılı sınavlar Bakanlıkça, il geneli yapılacak ortak yazılı
           sınavlar ise il millî eğitim müdürlüğünce belirlenen tarih ve saatlerde yapılır.
         </Mevzuat>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Süreç Takip: işleri izleme ve kalemleri düzenleme
+        </h3>
+        <p>
+          <strong>Süreç Takip</strong> sekmesi, takvimdeki her sınav için yapılacak işleri
+          izlediğiniz bir çizelgedir: satırlar sınavlar (ders ve sınıf düzeyi), sütunlar süreç
+          kalemleridir (soru teslimi, basım, puan girişi gibi). Bir hücreye tıkladıkça durum sırayla
+          değişir: işaretsiz → <em>Yapıldı</em> → <em>Kapsam dışı</em> → işaretsiz.{" "}
+          <strong>“Not modu”</strong> açıkken tıklama durumu değiştirmez, o hücre için not
+          yazabileceğiniz bir pencere açar; işaretin tarihi ve notu, fareyle hücrenin üzerine
+          gelince görünür.
+        </p>
+        <p>
+          Kalemleri okulunuza göre düzenlemek için <strong>“Kalem yönetimi”</strong> düğmesini
+          kullanın: yeni kalem ekleyebilir, adını ve açıklamasını değiştirebilir, kullanmadığınız
+          kalemi <strong>“Pasifleştir”</strong> ile gizleyebilirsiniz. Kalem listesi bütün takvimler
+          için tektir: pasifleştirdiğiniz kalem bütün takvimlerin çizelgesinden kalkar.
+          Pasifleştirme işaretleri silmez; kalemi <strong>“Etkinleştir”</strong> ile geri
+          getirdiğinizde eski işaretler de geri gelir.
+        </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
           Açıklamalar, dipnot ve imzalar
@@ -504,33 +560,34 @@ export default function KilavuzPage() {
 
       <Adim no={8} icon="event_seat" title="Sınav oturumları ve kelebek dağıtım">
         <p>
-          Takvim onaylandıktan sonra her sınav slotu için <Ekran to="/oturumlar">Oturum</Ekran>{" "}
+          Takvim onaylandıktan sonra yerleştirme çizelgesindeki her sınav saati için{" "}
+          <strong>“Oturum üret”</strong> düğmesiyle <Ekran to="/oturumlar">Oturum</Ekran>{" "}
           üretebilirsiniz; sihirbazla elle de oturum açabilirsiniz. Oturumda dersleri, katılacak
           şubeleri ve kullanılacak salonları seçersiniz.
         </p>
         <p>
           Dağıtımı başlattığınızda program öğrencileri salonlara “kelebek” düzende yerleştirir: aynı
-          dersi aynı seviyede alan öğrenciler yan yana ve ön arkaya düşmez. Sonuç bağımsız bir
-          doğrulayıcıdan geçer; <strong>ihlal sıfır değilse onay verilmez</strong>. Aynı çekirdek
-          sayı (seed) aynı dağıtımı üretir ve bu sayı doğrulama raporuna basılır.
+          dersi aynı sınıf düzeyinde alan öğrenciler yan yana ve ön arkaya düşmez. Sonuç bağımsız
+          bir denetimden geçer; <strong>kural ihlali varsa onay verilmez</strong>. Aynı dağıtım
+          numarası (seed) aynı dağıtımı üretir ve bu numara dağıtım doğrulama raporuna basılır.
         </p>
         <p>
           Öğrenci sayıları karışmaya elverişli değilse — örneğin salonda tek ders varsa — aynı
           sınava giren öğrencilerin yan yana düşmesi matematiksel olarak kaçınılmaz olabilir. Bu
           durumda program o çiftleri <strong>öğretmen masasına en yakın sıralara</strong> çeker;
           gözetim en zor olan yerler öğretmenin önünde kalır. Bu yalnız bir tercihtir: kaçınılmaz
-          olmayan hiçbir komşuluğu yaratmaz ve ihlal sayısını artırmaz.
+          olmayan hiçbir komşuluğu yaratmaz ve kural ihlali sayısını artırmaz.
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
-          Şube ve derslik kümeleriyle hızlı seçim
+          Şube ve salon kümeleriyle hızlı seçim
         </h3>
         <p>
           Sihirbazın katılımcı adımında{" "}
           <Ekran to="/ayarlar?tab=sube-kumeleri">Ayarlar → Şube Kümeleri</Ekran> ekranında
           tanımladığınız kümeler (Sayısal, Eşit Ağırlık, Dil…) çip olarak görünür; çipe basınca o
           kümenin şubeleri seçime eklenir. Küme seçili sınıf düzeyiyle kesiştirilir — bir oturum
-          dersi tek seviyeye bağlıdır. Salon adımında da derslik kümeleri düğme olarak çıkar.
+          dersi tek sınıf düzeyine bağlıdır. Salon adımında da salon kümeleri düğme olarak çıkar.
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
@@ -540,9 +597,9 @@ export default function KilavuzPage() {
           Engel durumu, BEP ya da sağlık nedeniyle belirli bir yerde oturması gereken öğrencilerin{" "}
           <strong>salonu ve koltuğu</strong>, oturum detayındaki{" "}
           <strong>Yerleştirme Kuralları</strong> sekmesinden <strong>“Kural ekle”</strong> ile
-          sabitlenir. Kural sahibi öğrenci kelebek motoru çalışmadan önce yerine oturtulur;{" "}
-          <strong>motor onu taşıyamaz</strong>. Kalan öğrenciler artakalan koltuklara kelebek
-          düzende dağıtılır.
+          sabitlenir. Kural sahibi öğrenci kelebek dağıtım çalışmadan önce yerine oturtulur;{" "}
+          <strong>dağıtım onu yerinden oynatamaz</strong>. Kalan öğrenciler artakalan koltuklara
+          kelebek düzende dağıtılır.
         </p>
         <Mevzuat kaynak="MEB Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5">
           Kaynaştırma/bütünleştirme yoluyla eğitim ve öğretimlerine devam eden öğrencilere yönelik
@@ -558,12 +615,12 @@ export default function KilavuzPage() {
         <p>Kutuyu işaretlerseniz yeri kendiniz belirlersiniz:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            <strong>Salon</strong> zorunludur — öğrencinin sınava gireceği dersliği seçersiniz.
+            <strong>Salon</strong> zorunludur — öğrencinin sınava gireceği salonu seçersiniz.
           </li>
           <li>
             <strong>Koltuk</strong> isteğe bağlıdır: “salon içinde serbest” bırakabilir ya da
-            listeden birebir bir koltuk seçebilirsiniz. Liste her koltuğu sıra satır-sütunu, sıra
-            içi pozisyonu ve o plandaki koltuk numarasıyla birlikte gösterir.
+            listeden birebir bir koltuk seçebilirsiniz. Liste her koltuğu sözle tarif eder: sırası,
+            sütunu, sıra içindeki yeri (sol / orta / sağ) ve o plandaki koltuk numarası.
           </li>
           <li>
             <strong>Salon içinde tercih</strong> koltuğu serbest bıraktığınızda devreye girer: ön
@@ -578,21 +635,26 @@ export default function KilavuzPage() {
         </ul>
         <Ipucu>
           <strong>Kuralı dağıtımdan önce ekleyin.</strong> Kural yalnız dağıtım çalışırken
-          uygulanır: oturumu dağıttıktan sonra kural eklerseniz “Yeniden Dağıt” demeniz gerekir ve
-          bu, yeni bir çekirdek sayıyla bütün yerleşimi yeniler. Onaylanmış ya da arşivlenmiş
-          oturuma kural eklenemez — önce onayı geri alın.
+          uygulanır: oturumu dağıttıktan sonra kural eklerseniz oturum başlığındaki{" "}
+          <strong>“Yeniden dağıt”</strong> düğmesine basmanız gerekir; bu, yeni bir dağıtım
+          numarasıyla bütün yerleşimi yeniler. Ders, şube ya da salon seçimini de değiştirecekseniz{" "}
+          <strong>“Taslağa al”</strong> ile sihirbaza dönün (aşağıda anlatılır). Onaylanmış oturuma
+          kural eklenemez — önce “Yeniden aç” ile onayı geri alın; arşivlenmiş oturum
+          değiştirilemez.
         </Ipucu>
         <p>Kural yazarken üç noktaya dikkat edin:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
             <strong>“Kendi dersliğinde” için bağlı şube şarttır.</strong> Program öğrencinin
-            şubesine <em>bağlı</em> bir derslik arar (Salonlar ekranındaki “bağlı şube” alanı);
-            bulamazsa dağıtımı reddeder ve hangi şubenin dersliğinin eksik olduğunu söyler.
+            şubesine <em>bağlı</em> bir salon (şube dersliği) arar (Salonlar ekranındaki “bağlı
+            şube” alanı); bulamazsa dağıtımı reddeder ve hangi şubenin dersliğinin eksik olduğunu
+            söyler.
           </li>
           <li>
-            <strong>Kuralda seçtiğiniz salonu oturumun salon listesine de ekleyin.</strong> Kural,
-            oturumda seçili olmayan bir salonu da hedef alabilir; öğrenci oraya yerleşir ama o salon
-            için salon sınav evrakı basılmaz — öğrenci hiçbir yoklama listesinde görünmez.
+            <strong>Kural, oturumun salon listesinde olmayan bir salonu da hedef alabilir.</strong>{" "}
+            Öğrenci oraya yerleşir; o salon yerleşimde, gözetmen listesinde ve salon sınav evrakında
+            ayrı bir salon olarak görünür. Tek öğrenci için açılan salona da gözetmen gerektiğini
+            unutmayın.
           </li>
           <li>
             <strong>Koltuk, numarasıyla değil koordinatıyla saklanır.</strong> Numaralandırma yönünü
@@ -620,23 +682,23 @@ export default function KilavuzPage() {
         <p>
           Benzer bir oturum daha önce tanımlandıysa sihirbazın ders adımındaki{" "}
           <strong>“Başka oturumdan kopyala”</strong> düğmesiyle o oturumun derslerini, katılacak
-          şubelerini ve kullanılacak dersliklerini bu taslağa aktarabilir, sonra üzerinde değişiklik
+          şubelerini ve kullanılacak salonlarını bu taslağa aktarabilir, sonra üzerinde değişiklik
           yapabilirsiniz. Zaten ekli olanlar atlanır ve size listelenir. Sınav tarihi ve saati,
-          dağıtım (seed), yerleşim, yoklama, gözetmen görevlendirmesi ve onay damgaları kopyalanmaz
-          — bunlar her oturuma özgüdür.
+          dağıtım numarası, yerleşim, yoklama, gözetmen görevlendirmesi ve onay damgaları
+          kopyalanmaz — bunlar her oturuma özgüdür.
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
-          Aynı ders birden çok seviyede: ayrı sorular mı, aynı kitapçık mı?
+          Aynı ders birden çok sınıf düzeyinde: ayrı sorular mı, aynı kitapçık mı?
         </h3>
         <p>
-          Bir dersi iki seviyede (örneğin Türk Dili ve Edebiyatı 9 ve 10) aynı oturuma eklerseniz
-          her seviye <strong>ayrı bir sınavdır</strong>: kendi soru dosyasını alır ve kelebek
-          dağıtımda 9 ile 10. sınıf öğrencileri yan yana oturabilir, çünkü farklı soruları çözerler.
-          Program bunu varsayılan sayar; ek bir şey işaretlemeniz gerekmez.
+          Bir dersi iki sınıf düzeyinde (örneğin Türk Dili ve Edebiyatı 9 ve 10) aynı oturuma
+          eklerseniz her sınıf düzeyi <strong>ayrı bir sınavdır</strong>: kendi soru dosyasını alır
+          ve kelebek dağıtımda 9 ile 10. sınıf öğrencileri yan yana oturabilir, çünkü farklı
+          soruları çözerler. Program bunu varsayılan sayar; ek bir şey işaretlemeniz gerekmez.
         </p>
         <p>
-          Yalnız dersin tüm seviyeleri <strong>aynı soru kitapçığını</strong> çözecekse ders
+          Yalnız dersin tüm sınıf düzeyleri <strong>aynı soru kitapçığını</strong> çözecekse ders
           listesinin altındaki “… aynı soru kitapçığını çözecek” kutusunu işaretleyin. O zaman
           Sorular sekmesinde o ders tek satır olur, tek dosya yüklenir ve bu öğrenciler birbirinin
           yanına oturtulmaz. Bu kutunun MEB mevzuatındaki “ortak sınav” kavramıyla ilgisi yoktur:
@@ -647,47 +709,101 @@ export default function KilavuzPage() {
           Soru dosyaları ve kişiselleştirilmiş kitapçıklar
         </h3>
         <p>
-          Dağıtımdan sonra <strong>Sorular ve Kitapçıklar</strong> sekmesinde her ders-seviye
-          satırına A4 dikey soru PDF dosyasını yüklersiniz. Panelden indirilen Word şablonu sayfanın
-          üst 4 santimetresini boş bırakır; oraya öğrencinin adı, numarası, salonu ve puan bölümü
-          basılır. “Kitapçıkları üret” düğmesi salon salon ZIP paketi çıkarır: her öğrenciye oturma
-          sırasında, adına basılı bir kitapçık. İsimsiz yedek kopya sayısı salon başına eklenir.
+          Dağıtımdan sonra <strong>Sorular ve Kitapçıklar</strong> sekmesinde her ders ve sınıf
+          düzeyi satırına A4 dikey soru PDF dosyasını yüklersiniz. Panelden indirilen Word şablonu
+          sayfanın üst 4 santimetresini boş bırakır; oraya öğrencinin adı, numarası, salonu ve puan
+          bölümü basılır. “Kitapçıkları üret” düğmesi salon salon ZIP paketi çıkarır: her öğrenciye
+          oturma sırasında, adına basılı bir kitapçık. İsimsiz yedek kopya sayısı salon başına
+          eklenir.
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
-          Dağıtımdan sonra fark edilen hata: “Taslağa al”
+          Dağıtımdan sonra fark edilen hata: “Yeniden dağıt” ve “Taslağa al”
         </h3>
         <p>
-          Yanlış seviye, eksik şube ya da yanlış işaretlenmiş kitapçık kutusunu dağıtımdan sonra
-          fark ederseniz oturum başlığındaki <strong>“Taslağa al”</strong> düğmesi sihirbaza geri
-          döndürür: yerleşim ve gözetmen görevlendirmeleri silinir; ders, şube ve salon seçimi,
-          yerleştirme kuralları ve yüklenmiş soru dosyaları korunur. Düzeltip yeniden dağıtırsınız.
-          Onaylanmış oturumda önce “Yeniden aç”, sonra “Taslağa al” denir; arşiv geri dönüşsüzdür.
+          Dağıtımı beğenmediyseniz ya da sonradan yerleştirme kuralı eklediyseniz oturum
+          başlığındaki <strong>“Yeniden dağıt”</strong> düğmesi ders, şube ve salon seçimine
+          dokunmadan yerleşimi baştan kurar (dağıtım numarasını boş bırakırsanız yeni bir
+          numarayla). Elle yaptığınız koltuk takasları ve gözetmen görevlendirmeleri sıfırlanır;
+          daha önce bastığınız evrakı ve ürettiğiniz kitapçıkları yeniden üretmeniz gerekir.
+        </p>
+        <p>
+          Yanlış sınıf düzeyi, eksik şube ya da yanlış işaretlenmiş kitapçık kutusu gibi{" "}
+          <em>seçimin kendisindeki</em> bir hatayı dağıtımdan sonra fark ederseniz oturum
+          başlığındaki <strong>“Taslağa al”</strong> düğmesi sihirbaza geri döndürür: yerleşim ve
+          gözetmen görevlendirmeleri silinir; ders, şube ve salon seçimi, yerleştirme kuralları ve
+          yüklenmiş soru dosyaları korunur. Düzeltip yeniden dağıtırsınız. Onaylanmış oturumda önce
+          “Yeniden aç”, sonra “Taslağa al” denir; arşiv geri dönüşsüzdür.
         </p>
       </Adim>
 
-      <Adim no={9} icon="description" title="Evrak, gözetmen ve yedekleme">
+      <Adim no={9} icon="description" title="Evrak, gözetmenler ve yoklama">
         <p>
-          Oturum onaylanınca evrak paneli açılır. Salon sınav evrakı tek belgede birleşiktir: salon
-          ve oturum bilgileri, oturma planı, gözetmen işlemleri, sınav evrakı sayımı ve teslim
-          zinciri (1. yaprak) ile yoklama ve imza listesi (2. yaprak) — çift yüz basıldığında salon
-          başına bir kâğıt. Ayrıca şube sınav duyurusu (kapıya asılan liste), gözetmen görevlendirme
-          yazısı, dağıtım doğrulama raporu ve ihlal/kopya tutanağı üretilir. Hepsi PDF olarak
-          indirilir ve doğrudan basılabilir.
+          Evrak, oturum <strong>dağıtıldığı andan itibaren</strong> basılır; onayı beklemeniz
+          gerekmez. Onay yerleşimi kilitler; arşivlenmiş oturumdan da yeniden basım yapılabilir.
+          Oturum detayındaki <strong>Evrak</strong> sekmesinde salon sınav evrakı tek belgede
+          birleşiktir: salon ve oturum bilgileri, oturma planı, gözetmen işlemleri, sınav evrakı
+          sayımı ve teslim zinciri (1. yaprak) ile yoklama ve imza listesi (2. yaprak) — çift yüz
+          basıldığında salon başına bir kâğıt. Ayrıca şube sınav duyurusu (kapıya asılan liste),
+          gözetmen görevlendirme yazısı, dağıtım doğrulama raporu ve ihlal/kopya tutanağı üretilir.
+          Hepsi PDF olarak indirilir ve doğrudan basılabilir.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Gözetmen görevlendirme ve muaf öğretmenler
+        </h3>
+        <p>
+          Gözetmen görevlendirmesi oturum bazında açılır: sihirbazın{" "}
+          <strong>Oturum Bilgileri</strong> adımındaki gözetmen görevlendirmesi kutusunu
+          işaretlerseniz oturum detayındaki <strong>Gözetmenler</strong> sekmesinde her salona
+          öğretmen listesinden elle gözetmen atarsınız. Kutu boşsa görevlendirme yazısı basılmaz,
+          salon evrakındaki görevli adı elle yazılır. Görevlendirme yazısı tebellüğ imzası için yer
+          bırakır.
         </p>
         <p>
-          Gözetmenleri personel listesinden salonlara elle atarsınız. Muafiyet tanımladığınız
-          öğretmenler aday listesinde görünmeye devam eder ama seçilemez; yanlarında nedeni yazar
-          (“muaf” gibi) — böylece “neden seçemiyorum” sorusu ekranda yanıtlanır. Görevlendirme
-          yazısı tebellüğ imzası için yer bırakır.
+          Bir öğretmeni gözetmenlikten muaf tutmak için <strong>Gözetmenler</strong> sekmesinin
+          altındaki <strong>“Muaf öğretmenler”</strong> bölümünü kullanın: öğretmeni, gerekçe
+          kategorisini (sağlık, idari görev, diğer) ve muafiyetin kalıcı mı yoksa yalnız o oturum
+          için mi olduğunu seçersiniz. Muaf öğretmenler aday listesinde görünmeye devam eder ama
+          seçilemez; yanlarında nedeni yazar (“muaf” gibi) — böylece “neden seçemiyorum” sorusu
+          ekranda yanıtlanır. Gerekçe yalnız kategori olarak tutulur; açıklama yazılmaz.
         </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Yoklama: sınava girmeyen öğrenciler ve mazeret
+        </h3>
+        <p>
+          Oturum <strong>onaylandıktan sonra</strong> oturum detayında <strong>Yoklama</strong>{" "}
+          sekmesi açılır (yerleşim kesinleşmeden yoklama alınmaz). Sınava girmeyen öğrenciyi salon
+          listesindeki <strong>“Girmedi işaretle”</strong> düğmesiyle işaretlersiniz; öğrenci
+          “Sınava girmeyenler” listesine <em>Beklemede</em> durumuyla düşer. Veli mazeretini
+          bildirince durumu <em>Mazeretli</em> ya da <em>Mazeretsiz</em> yapar, belgenin numarasını
+          ve tarihini not alanına yazarsınız (belgenin kendisi programa yüklenmez). Yanlış işareti
+          “İşareti kaldır” ile geri alırsınız.
+        </p>
+        <Mevzuat kaynak="MEB Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5">
+          Ortak sınavlara katılmayan öğrencilerin bilgileri okul müdürlüğü tarafından sınav
+          bitiminde e-Okula işlenir. Geçerli mazereti bulunan öğrencilerin sınava katılmama
+          gerekçesi ortak yazılı sınav uygulama tarihinden itibaren en geç 5 (beş) iş günü
+          içerisinde velisi tarafından okul müdürlüğüne yazılı olarak bildirilir.
+        </Mevzuat>
+        <p>
+          Mazeret belgesi sınavdan günler sonra gelebildiği için yoklama{" "}
+          <strong>arşivlenmiş oturumda da güncellenebilir</strong>: oturumu arşive kaldırmış olmanız
+          mazeret durumunu işlemenize engel değildir.
+        </p>
+      </Adim>
+
+      <Adim no={10} icon="shield_lock" title="Bakım: yedek, parola ve güncelleme">
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
           Yedek alma ve yedekten dönme
         </h3>
         <p>
-          Program her açılışta kendiliğinden bir <strong>günlük yedek</strong> alır. Bunun dışında{" "}
-          <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran> bölümünden istediğiniz an
-          elle yedek (<span className="font-mono">.ksbak</span>) alabilirsiniz.
+          Program <strong>her gün ilk açılışta</strong> kendiliğinden bir günlük yedek alır (aynı
+          gün ikinci açılışta sabahki yedeğin üzerine yazmaz) ve son 14 günün yedeğini saklar. Bunun
+          dışında <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran> bölümünden
+          istediğiniz an elle şifreli yedek (<span className="font-mono">.ksbak</span>)
+          alabilirsiniz; elle yedek için uygulama parolasının kurulu olması gerekir.
         </p>
         <p>
           Yanlış ya da eksik veri girişinden sonra eski bir güne dönmek için aynı ekrandaki{" "}
@@ -699,14 +815,58 @@ export default function KilavuzPage() {
           diye ekran kapanmayan bir yönlendirmeye döner.
         </p>
         <p>
-          Program hiç açılmıyorsa (bozuk veritabanı) bu ekrana ulaşamazsınız; o durumda Başlat
-          menüsündeki <strong>“Yedekten Geri Yükle”</strong> kısayolunu kullanın.
+          Program hiç açılmıyorsa (bozuk veritabanı) bu ekrana ulaşamazsınız. O durumda Windows’ta
+          Başlat menüsündeki <strong>“Yedekten Geri Yükle”</strong> kısayolunu, Pardus/Linux’ta
+          uçbirimden <span className="font-mono">kelebek-sinav --geri-yukle</span> komutunu
+          kullanın. Araç yedekleri en yeniden eskiye listeler; şifreli yedek için uygulama
+          parolanızı ya da kurtarma anahtarınızı sorar.
         </p>
         <Ipucu>
           Sınav dönemi başlamadan bir yedek alıp <strong>okul dışında</strong> saklayın. Program
           çevrimdışıdır; veriler yalnız bu bilgisayarda durur, bir bulut kopyası yoktur. Günlük
           yedekler de aynı bilgisayarda tutulur — disk giderse onlar da gider.
         </Ipucu>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Uygulama parolası, kilit ekranı ve kurtarma anahtarı
+        </h3>
+        <p>
+          Uygulama parolası isteğe bağlıdır.{" "}
+          <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran> bölümündeki{" "}
+          <strong>“Parola koy”</strong> ile kurduğunuzda öğrenci ve öğretmen ad-soyadları şifrelenir
+          ve program her açılışta <strong>kilit ekranıyla</strong> başlar: parola girilmeden hiçbir
+          kayıt görünmez. Bilgisayarın başından kalkarken <strong>“Şimdi kilitle”</strong> ile
+          programı kapatmadan kilitleyebilir, aynı bölümden parolayı değiştirebilir ya da
+          kaldırabilirsiniz. Bu koruma tam disk şifrelemesi değildir: okul numarası, sınıf/şube ve
+          oturma düzeni şifrelenmez.
+        </p>
+        <p>
+          Parolayı kurduğunuz anda program size bir <strong>kurtarma anahtarı</strong> gösterir. Bu
+          anahtar <strong>yalnız bir kez</strong> gösterilir ve hiçbir yerde saklanmaz; pencere,
+          yazdırdığınızı ya da kaydettiğinizi onaylamadan kapanmaz. Çıktıyı okul kasası gibi kilitli
+          bir yerde tutun, bilgisayarın kendisinde saklamayın. Parolayı unutursanız kilit
+          ekranındaki <strong>“Parolamı unuttum”</strong> bağlantısıyla kurtarma anahtarını girip
+          yeni bir parola belirlersiniz. Hem parola hem kurtarma anahtarı kaybolursa şifreli
+          ad-soyadlara ve şifreli yedeklere ulaşmanın yolu yoktur.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">Programı güncelleme</h3>
+        <p>
+          Program açılışta — internet varsa — yayımlanan son sürümü sorar; yeni sürüm çıktıysa
+          ekranın üstünde <strong>“Kelebek Sınav … hazır”</strong> afişi belirir. İstediğiniz an{" "}
+          <Ekran to="/ayarlar?tab=guncelleme">Ayarlar → Güncelleme</Ekran> sekmesindeki{" "}
+          <strong>“Şimdi denetle”</strong> ile de bakabilirsiniz. Programın internete çıkan{" "}
+          <strong>tek isteği budur</strong>; kişisel veri taşımaz, internet yoksa sessizce atlanır.
+        </p>
+        <p>
+          Windows’ta kurulum dosyası programın içinden indirilir ve bütünlüğü doğrulanmadan size
+          sunulmaz: indirme bitince programı kapatıp indirilen kurulum dosyasını çalıştırın.
+          Pardus/Linux’ta yeni paketi indirme sayfasından alıp kurarsınız. Verileriniz kurulum
+          klasörünün dışında durduğu için güncellemede korunur; program ayrıca her sürüm
+          güncellemesinden önce kendiliğinden bir yedek bırakır. Afişteki{" "}
+          <strong>“Daha sonra”</strong> o sürümün afişini kapatır; güncellemeyi sonradan Ayarlar →
+          Güncelleme sekmesinden yapabilirsiniz.
+        </p>
       </Adim>
 
       <Card className="p-5 sm:p-6">

@@ -5,8 +5,14 @@
 // 03.09.2026'da eklenen bölümler de kilitlidir: çizelge ataması (1. adım),
 // yürürlükteki TTK çizelgesi ve düzenlemenin kalıcı olmaması (4. adım),
 // varsayılan salon şablonu + toplu uygulama (6. adım), yerleştirme kuralının
-// tuzakları (8. adım) ve yedekten geri yükleme (9. adım). Bu özellikler
+// tuzakları (8. adım) ve yedekten geri yükleme (10. adım). Bu özellikler
 // kılavuzda ANLATILMADAN sürüme girmesin.
+//
+// 18.09.2026 (değerlendirme §3.5): yanlış bilgiler düzeltildi ("her açılışta
+// yedek" → her gün ilk açılışta; evrak onayı beklemez; olmayan "Yeniden Dağıt"
+// düğmesi; çizelge verisi paragrafı), eksik konular eklendi (yoklama, muaf
+// öğretmenler, Ayarlar → Şubeler, süreç takip kalemleri, parola/kilit/kurtarma
+// anahtarı, güncelleme, Pardus geri yükleme) ve sözlük turu yapıldı.
 //
 // NOT: `getByText` yalnız elemanın DOĞRUDAN metin çocuklarına bakar; bu yüzden
 // aranan ifade tek bir elemanın (çoğu yerde <strong>) içinde kalacak şekilde
@@ -37,8 +43,13 @@ describe("KilavuzPage", () => {
     expect(basliklar[0]).toBe("Kurulum ve okul künyesi");
     expect(basliklar).toContain("Sınav takvimi");
     expect(basliklar).toContain("Zümreler ve zümre başkanları kurulu");
+    expect(basliklar).toContain("Evrak, gözetmenler ve yoklama");
+    expect(basliklar).toContain("Bakım: yedek, parola ve güncelleme");
 
-    expect(screen.getByRole("link", { name: "Ders Havuzu" })).toHaveAttribute("href", "/dersler");
+    // Sayfa adı her yerde "Ders Havuzu"dur (4. adım + 7. adım ipucu).
+    const dersHavuzu = screen.getAllByRole("link", { name: "Ders Havuzu" });
+    expect(dersHavuzu.length).toBe(2);
+    for (const link of dersHavuzu) expect(link).toHaveAttribute("href", "/dersler");
     expect(screen.getByRole("link", { name: "Ayarlar → Zümreler" })).toHaveAttribute(
       "href",
       "/ayarlar?tab=zumreler",
@@ -77,7 +88,7 @@ describe("KilavuzPage", () => {
 
   it("küme, koltuk sabitleme ve kopyalama adımlarını anlatır", () => {
     renderPage();
-    expect(screen.getByText(/İkili eğitim yapıyorsanız derslikleri kümeleyin/)).toBeInTheDocument();
+    expect(screen.getByText(/İkili eğitim yapıyorsanız salonları kümeleyin/)).toBeInTheDocument();
     expect(screen.getByText(/kendi dersliğinde, arka sırada ve tek başına/)).toBeInTheDocument();
     expect(screen.getByText(/tanı ya da rapor bilgisi hiç kaydedilmez/)).toBeInTheDocument();
     expect(screen.getByText(/öğretmen masasına en yakın sıralara/)).toBeInTheDocument();
@@ -90,10 +101,24 @@ describe("KilavuzPage", () => {
   it("okul türünü çizelge kaynağı olarak anlatır ve kademeli dönüşümü söyler", () => {
     renderPage();
     expect(screen.getByText(/hangi MEB haftalık ders çizelgesinin/)).toBeInTheDocument();
-    expect(screen.getByText(/çizelge ataması/)).toBeInTheDocument();
+    // Tam eşleşme: kartın adı <strong> içindedir (4. adım da aynı sözü cümle içinde anar).
+    expect(screen.getByText("çizelge ataması")).toBeInTheDocument();
     expect(
-      screen.getByText(/Kademeli bir çizelgede kapsanmayan seviye kalırsa/),
+      screen.getByText(/Kademeli bir çizelgede kapsanmayan sınıf düzeyi kalırsa/),
     ).toBeInTheDocument();
+  });
+
+  it("çizelge verisinin gerçek durumunu söyler: sekiz tür var, eksikler adıyla sayılır", () => {
+    renderPage();
+    // Eski metin "çizelge verisi henüz gelmemiş türler" diyordu — sekiz türün de
+    // çizelgesi gömülüdür; eksik kalanlar docs/teknik-borc.md TB2'dekilerdir.
+    expect(screen.getByText(/sekizinin de çizelgesi programla birlikte gelir/)).toBeInTheDocument();
+    expect(screen.getByText(/Çizelgede eksik kalanlar sınırlıdır/)).toBeInTheDocument();
+    expect(screen.getByText(/alan\/dal meslek derslerini ve seçmeli dersleri/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/12\. sınıfın tabi olduğu önceki çizelge bulunmaz/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/çizelge verisi henüz gelmemiş türler/)).not.toBeInTheDocument();
   });
 
   it("ders havuzunun yürürlükteki çizelgeden türediğini ve senkron sınırlarını anlatır", () => {
@@ -114,6 +139,8 @@ describe("KilavuzPage", () => {
     expect(screen.getByText(/öğretmen masasının önünden/)).toBeInTheDocument();
     expect(screen.getByText(/“Şablonu topluca uygula”/)).toBeInTheDocument();
     expect(screen.getByText(/Yerleşimi yapılmış salonlar atlanır/)).toBeInTheDocument();
+    // Düğmenin adı "Salon kümeleri"dir (eski "Kümeler" / "Derslik Kümeleri" değil).
+    expect(screen.getByText("“Salon kümeleri”")).toBeInTheDocument();
   });
 
   it("yerleştirme kuralının seçeneklerini, zamanlamasını ve tuzaklarını anlatır", () => {
@@ -127,13 +154,84 @@ describe("KilavuzPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/Kuralı dağıtımdan önce ekleyin/)).toBeInTheDocument();
     expect(screen.getByText(/“Kendi dersliğinde” için bağlı şube şarttır/)).toBeInTheDocument();
+    // Liste dışı salon artık evrakta basılıyor (A1 düzeltmesi) — eski "o salon için
+    // evrak basılmaz" uyarısı yanlış bilgi olurdu.
     expect(
-      screen.getByText(/Kuralda seçtiğiniz salonu oturumun salon listesine de ekleyin/),
+      screen.getByText(/Kural, oturumun salon listesinde olmayan bir salonu da hedef alabilir/),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/salon sınav evrakı basılmaz/)).not.toBeInTheDocument();
     expect(
       screen.getByText(/Koltuk, numarasıyla değil koordinatıyla saklanır/),
     ).toBeInTheDocument();
     expect(screen.getByText(/eklendiği oturuma özgüdür/)).toBeInTheDocument();
+  });
+
+  it("dağıtım sonrası iki çıkış yolunu gerçek düğme adlarıyla anlatır", () => {
+    renderPage();
+    expect(
+      screen.getByRole("heading", { level: 3, name: /“Yeniden dağıt” ve “Taslağa al”/ }),
+    ).toBeInTheDocument();
+    // Düğme adı cümle düzenindedir; jargon ("çekirdek sayı") yerine sözlük terimi.
+    expect(screen.getAllByText("“Yeniden dağıt”").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Yeniden Dağıt/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/çekirdek sayı/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Aynı dağıtım\s+numarası \(seed\) aynı dağıtımı üretir/),
+    ).toBeInTheDocument();
+  });
+
+  it("takvim onayını tek “Onayla” adımıyla anlatır", () => {
+    renderPage();
+    expect(screen.getByText(/Takvimin iki durumu vardır/)).toBeInTheDocument();
+    expect(screen.queryByText(/Onaya Sunuldu/)).not.toBeInTheDocument();
+    expect(screen.getByText(/program onayın kalkacağını söyleyip sizden onay/)).toBeInTheDocument();
+  });
+
+  it("evrakın dağıtımdan itibaren basıldığını söyler (onay beklenmez)", () => {
+    renderPage();
+    expect(screen.getByText("dağıtıldığı andan itibaren")).toBeInTheDocument();
+    expect(screen.queryByText(/Oturum onaylanınca evrak paneli açılır/)).not.toBeInTheDocument();
+  });
+
+  it("muafiyetin nerede tanımlandığını söyler", () => {
+    renderPage();
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Gözetmen görevlendirme ve muaf öğretmenler" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("“Muaf öğretmenler”")).toBeInTheDocument();
+  });
+
+  it("yoklama sekmesini mazeret süresinin dayanağıyla anlatır", () => {
+    renderPage();
+    expect(
+      screen.getByRole("heading", {
+        level: 3,
+        name: "Yoklama: sınava girmeyen öğrenciler ve mazeret",
+      }),
+    ).toBeInTheDocument();
+    // Alıntı depodaki Yönerge md. 5 metniyle birebirdir (docs/mevzuat).
+    expect(
+      screen.getByText(/en geç 5 \(beş\) iş günü\s+içerisinde velisi tarafından okul müdürlüğüne/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("arşivlenmiş oturumda da güncellenebilir")).toBeInTheDocument();
+  });
+
+  it("Ayarlar → Şubeler sekmesini ve süreç takip kalemlerini anlatır", () => {
+    renderPage();
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Şube kataloğu: Ayarlar → Şubeler" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ayarlar → Şubeler" })).toHaveAttribute(
+      "href",
+      "/ayarlar?tab=subeler",
+    );
+    expect(
+      screen.getByRole("heading", {
+        level: 3,
+        name: "Süreç Takip: işleri izleme ve kalemleri düzenleme",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("“Kalem yönetimi”")).toBeInTheDocument();
   });
 
   it("yedek alma ve yedekten geri yükleme akışını anlatır", () => {
@@ -141,11 +239,45 @@ describe("KilavuzPage", () => {
     expect(
       screen.getByRole("heading", { level: 3, name: "Yedek alma ve yedekten dönme" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/her açılışta kendiliğinden bir/)).toBeInTheDocument();
+    // Günlük yedek HER açılışta değil, her gün İLK açılışta alınır (desktop/backup.py).
+    expect(screen.getByText("her gün ilk açılışta")).toBeInTheDocument();
+    expect(screen.queryByText(/her açılışta kendiliğinden bir/)).not.toBeInTheDocument();
     expect(screen.getByText(/Günlük yedekler de aynı bilgisayarda tutulur/)).toBeInTheDocument();
     expect(screen.getByText(/“Yedekten geri yükle”/)).toBeInTheDocument();
     expect(screen.getByText(/kapatılıp yeniden açılmalıdır/)).toBeInTheDocument();
     expect(screen.getByText(/“Yedekten Geri Yükle”/)).toBeInTheDocument();
+    // Pardus/Linux kurtarma komutu (docs/kurulum.md §5.1 ile aynı).
+    expect(screen.getByText("kelebek-sinav --geri-yukle")).toBeInTheDocument();
+  });
+
+  it("parola, kilit ekranı, kurtarma anahtarı ve güncellemeyi anlatır", () => {
+    renderPage();
+    expect(
+      screen.getByRole("heading", {
+        level: 3,
+        name: "Uygulama parolası, kilit ekranı ve kurtarma anahtarı",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("“Parolamı unuttum”")).toBeInTheDocument();
+    expect(screen.getByText("yalnız bir kez")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Programı güncelleme" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ayarlar → Güncelleme" })).toHaveAttribute(
+      "href",
+      "/ayarlar?tab=guncelleme",
+    );
+    expect(screen.getByText("tek isteği budur")).toBeInTheDocument();
+  });
+
+  it("sözlük: personel/derslik kümesi/ızgara/seviye sözcükleri kılavuzda geçmez", () => {
+    const { container } = renderPage();
+    const metin = container.textContent ?? "";
+    // "Personel" yalnız e-Okul raporunun adında kalır ("Personel Listesi raporu").
+    expect(metin.replace(/Personel Listesi raporu/g, "")).not.toMatch(/personel/i);
+    expect(metin).not.toMatch(/derslik kümesi|derslik kümeleri/i);
+    expect(metin).not.toMatch(/ızgara/i);
+    expect(metin).not.toMatch(/seviye/i);
   });
 
   it("Bakanlık/MEM sınavlarının takvimde ayrı göründüğünü söyler", () => {
