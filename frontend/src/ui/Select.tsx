@@ -71,6 +71,9 @@ export default function Select({
       {(error || helperText) && (
         <p
           id={describedBy}
+          // TextField ile aynı sözleşme: hata BELİRDİĞİNDE duyurulur; yardımcı
+          // metin statiktir, duyurulmaz.
+          role={error ? "alert" : undefined}
           className={`mt-1 text-body-small ${error ? "text-error" : "text-on-surface-variant"}`}
         >
           {error || helperText}
