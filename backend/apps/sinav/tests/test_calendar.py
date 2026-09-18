@@ -575,7 +575,7 @@ def test_api_takvim_akisi() -> None:
     )
     assert ekle.status_code == 201
     assert ekle.data["participant_type"] == "LEVEL"
-    assert ekle.data["participant_label"] == "Seviye geneli"
+    assert ekle.data["participant_label"] == "Sınıf düzeyinin tamamı"
     entry_id = ekle.data["id"]
     listesi = client.get(f"/api/v1/exam-calendars/{cal_id}/entries/")
     assert listesi.status_code == 200 and len(listesi.data["results"]) == 1
@@ -1208,7 +1208,7 @@ def test_api_toplu_ekleme_ve_secmeli_secenekleri() -> None:
     assert duzelt.status_code == 200
     assert duzelt.data["participant_type"] == "LEVEL"
     assert duzelt.data["section_ids"] == []
-    assert duzelt.data["participant_label"] == "Seviye geneli"
+    assert duzelt.data["participant_label"] == "Sınıf düzeyinin tamamı"
 
     # Boş liste ile SECTIONS reddi 400 (500 değil) — Türkçe mesaj servisten.
     hata = client.patch(

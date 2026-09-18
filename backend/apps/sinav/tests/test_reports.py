@@ -339,6 +339,13 @@ def test_r1_klasik_duzende_basilir() -> None:
     )
     assert "9-A Dersliği" in filtreli and "9-B Dersliği" not in filtreli
 
+    # R8: bu düzende karıştırma yoktur — motorun yazdığı "0" numarası, katı dağıtım
+    # ve dönüşümlü oturma satırları basılmaz; yerine yerleşim kuralı yazılır.
+    r8 = " ".join(_pdf_text(services.render_session_report(session, "r8").content).split())
+    assert "okul numarası sırasıyla oturur" in r8
+    for satir in ("Dağıtım numarası", "Katı dağıtım", "Dönüşümlü oturma"):
+        assert satir not in r8, f"klasik düzende R8'de anlamsız satır: {satir}"
+
 
 def test_r1_oturum_listesi_disina_pinlenen_salon_basilir() -> None:
     """Kural pini öğrenciyi oturum salon listesinde OLMAYAN dersliğe koyabilir;

@@ -52,6 +52,11 @@ kodunun yerine belgenin adı yazılır:
 | R8 | Dağıtım Doğrulama Raporu |
 | R10 | Kişiselleştirilmiş kitapçıklar |
 
+Bu adlar ARAYÜZ ve indirilen dosya adları içindir. Basılı belgenin başlığı
+resmî işlevini söyler ve daha uzun olabilir: gözetmen yazısının başlığı
+"GÖZETMEN GÖREVLENDİRME VE TEBLİĞ-TEBELLÜĞ BELGESİ"dir (öğretmen imzasıyla
+tebellüğ eder) — fark bilinçlidir, başlık kısaltılmaz.
+
 Açıklanmamış kısaltma kullanılmaz (KSD, KD, U). Kod yorumlarında ve testlerde
 kodlar serbesttir.
 

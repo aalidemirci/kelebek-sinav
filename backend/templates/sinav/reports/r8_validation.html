@@ -50,10 +50,14 @@ sözleşmesi değişmedi: sayı basılır, etiketi Türkçedir.{% endcomment %}
   {% endif %}
 
   <div class="sec">A. DAĞITIM BİLGİLERİ
-    <span class="hint">Aynı dağıtım numarası aynı yerleşimi yeniden üretir.</span>
+    {% if report.params.shuffled %}<span class="hint">Aynı dağıtım numarası aynı yerleşimi yeniden üretir.</span>{% endif %}
   </div>
   <table class="fields kv">
     <tr><td class="k">Dağıtım düzeni</td><td class="v">{{ report.params.layout_mode_label }}</td></tr>
+    {% if not report.params.shuffled %}
+    <tr><td class="k">Yerleşim kuralı</td>
+        <td class="v">Her şube kendi dersliğinde, okul numarası sırasıyla oturur (karıştırma yapılmaz).</td></tr>
+    {% else %}
     {% comment %}`unlocalize`: numara kullanıcı tarafından yeniden GİRİLİR; binlik
     ayraç açılırsa "987.654" basılır ve aynı dağıtım üretilemez.{% endcomment %}
     <tr><td class="k">Dağıtım numarası (seed)</td><td class="v">{{ report.params.seed|unlocalize }}</td></tr>
@@ -61,6 +65,7 @@ sözleşmesi değişmedi: sayı basılır, etiketi Türkçedir.{% endcomment %}
         <td class="v">{{ report.params.strict|yesno:"Açık,Kapalı" }}</td></tr>
     <tr><td class="k">Dönüşümlü oturma (iki sınavlı salonda satranç düzeni)</td>
         <td class="v">{{ report.params.checkerboard|yesno:"Uygulandı,Uygulanmadı" }}</td></tr>
+    {% endif %}
     <tr><td class="k">Yerleşen öğrenci / yeri kuralla sabitlenen</td>
         <td class="v">{{ report.params.placed }} / {{ report.params.pinned }}</td></tr>
   </table>

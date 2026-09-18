@@ -62,6 +62,24 @@ DEFAULT_LAYOUT_PLAN: dict[str, object] = {
 }
 
 
+#: Izgaranın ÖN CEPHE bandı: satır 0 öğretmen masası/tahta/kapı içindir ve
+#: kullanıcıya gösterilen "sıra" sayımına GİRMEZ. FE `planEdit.FRONT_BAND_ROWS`
+#: ile AYNI kalmalıdır.
+FRONT_BAND_ROWS = 1
+
+
+def desk_position_label(desk_row: int, desk_col: int) -> str:
+    """Kullanıcıya görünen sıra konumu: "3. sıra, 1. sütun" (docs/sozluk.md).
+
+    Izgara koordinatı 0 tabanlıdır ve ön cephe bandını da sayar; idareci ise
+    krokide sıraları 1'den sayar. Uyarı/ihlal metinleri ham `(2,1)` yerine bu
+    etiketi basar. Ön cephe bandına elle konmuş sıra "ön cephe" diye anılır — FE
+    `planEdit.seatPositionLabel` ile aynı kural.
+    """
+    row = "ön cephe" if desk_row < FRONT_BAND_ROWS else f"{desk_row - FRONT_BAND_ROWS + 1}. sıra"
+    return f"{row}, {desk_col + 1}. sütun"
+
+
 def default_section_plan(desk_rows: int = 5, cols: int = 4) -> dict[str, object]:
     """VARSAYILAN SALON ŞABLONU (Tur 637; 02.09.2026 revizyonu): ikili sıralar.
 

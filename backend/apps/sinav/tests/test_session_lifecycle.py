@@ -95,7 +95,7 @@ def test_approve_guards() -> None:
     with pytest.raises(ValidationError) as exc_info:
         services.approve_session(session)
     message = str(exc_info.value)
-    assert "sert kısıt ihlali" in message
+    assert "kural ihlali var" in message and "sert kısıt" not in message
     assert "AD0" not in message and "SOYAD" not in message  # kurucu ad kalıbı sızmadı
 
 

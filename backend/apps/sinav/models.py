@@ -177,8 +177,10 @@ class ParticipantType(models.TextChoices):
     sınav pratiğini karşılar; sapma teknik borç kütüğüne işlendi (TB7).
     """
 
-    LEVEL = "LEVEL", "Seviye geneli"
-    SECTIONS = "SECTIONS", "Şube şube"
+    # Etiketler docs/sozluk.md "Katılımcılar" kararıdır; FE `PARTICIPANT_TYPE_TR`
+    # ile AYNI sözcükler (evrak ve API `participant_label` buradan beslenir).
+    LEVEL = "LEVEL", "Sınıf düzeyinin tamamı"
+    SECTIONS = "SECTIONS", "Seçili şubeler"
 
 
 class ExamSession(BaseModel):

@@ -181,7 +181,7 @@ def test_home_classroom_rule_missing_room_raises() -> None:
     session = _kelebek_oturumu()
     sid = _ilk_ogrenci_id()
     services.create_placement_rule(student_id=sid, rule_type=RuleType.HOME_CLASSROOM)
-    with pytest.raises(ValidationError, match="bağlı derslik tanımlı değil"):
+    with pytest.raises(ValidationError, match="şubesinin dersliği tanımlı değil"):
         services.distribute_session(session, seed=1)
 
 
@@ -213,7 +213,9 @@ def test_separate_room_excluded_from_butterfly() -> None:
     in_lone = SeatAssignment.objects.filter(session=session, room_id=lone_room.pk)
     assert in_lone.count() == 1
     assert in_lone.first().student_id == sid  # type: ignore[union-attr]
-    assert any("kelebek dağıtımından çıkarıldı" in w for w in result.warnings)
+    # Uyarı salonu ADIYLA anar; kimlik ve iç kural kodu (AYRI_SALON) geçmez.
+    ayri = next(w for w in result.warnings if "kelebek dağıtımına katılmadı" in w)
+    assert "“Ayrı salon” kuralıyla" in ayri and "AYRI_SALON" not in ayri
 
 
 def test_rules_not_applied_in_home_classroom_layout() -> None:
@@ -230,7 +232,7 @@ def test_rules_not_applied_in_home_classroom_layout() -> None:
 
     _, result, _ = services.distribute_session(session, seed=1)
 
-    assert any("klasik düzende uygulanmaz" in w for w in result.warnings)
+    assert any("“Kendi dersliğinde” düzeninde uygulanmaz" in w for w in result.warnings)
     assert not SeatAssignment.objects.filter(session=session, status=SeatStatus.PINNED).exists()
 
 
