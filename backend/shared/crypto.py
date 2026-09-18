@@ -28,11 +28,12 @@ hata mesajında yankılanmaz.
 
 BLIND INDEX YOKTUR (tasarım §10.2): yerel ölçekte (≤1000 öğrenci) eşleştirme
 bellek içinde çözülür. Bunun bedeli: **şifreleme açıkken şifreli alan üzerinde
-DB tarafı filtre/LIKE çalışmaz** (`Student.objects.filter(tckn=...)` daima boş
-döner — Fernet her şifrelemede farklı token üretir). Şifreli alanla eşleştirme
-yapan tek yer içe aktarmadır; o yol `apps.okul.selectors.find_student_by_tckn`
-üzerinden Python tarafına alınmıştır. Aynı sebeple `uq_student_tckn_alive`
-kısıtı şifreli kipte KOPYA YAKALAYAMAZ — tekillik yine servis katmanında korunur.
+DB tarafı filtre/LIKE/sıralama çalışmaz** (`Student.objects.filter(first_name=…)`
+daima boş döner — Fernet her şifrelemede farklı token üretir). KS'de şifreli
+alanlar AD ve SOYADdır (öğrenci, personel ve snapshot kopyaları; TCKN hiç
+toplanmaz — CLAUDE.md §1.6); ad-temelli arama, sıralama ve teklik selector
+katmanında Python ile yapılır (tasarım §5, teknik borç TB3). Okul numarası,
+sınıf/şube ve koltuk düzeni açık kalır; teklik ve sıralama onlara dayanır.
 """
 
 from __future__ import annotations

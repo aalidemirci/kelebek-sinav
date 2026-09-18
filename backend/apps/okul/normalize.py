@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from collections.abc import Collection
 
+from shared.text import tr_upper as _tr_upper
+
 # Türkçe karakter → ASCII büyük. YALNIZ anahtar kelime eşlemesi içindir
 # ('HAZIRLIK' tanıma); şube harfine UYGULANMAZ — bkz. `_ascii_upper` / `tr_upper`.
 _TR_UPPER_MAP = str.maketrans(
@@ -36,9 +38,6 @@ _TR_UPPER_MAP = str.maketrans(
 #: Hazırlık sınıfını metinden tanıma deseni ('HAZIRLIK/A', 'HAZ A', 'HZ-B'…).
 _PREP_RE = re.compile(r"\bHA?Z(IRLIK)?\b")
 
-#: Şube harfi için Türkçe büyük harf tablosu: 'i' → 'İ', 'ı' → 'I'.
-#: (Python'un çıplak `.upper()` değeri 'i'yi 'I' yapar — Türkçede yanlıştır.)
-_TR_TITLE_MAP = str.maketrans({"i": "İ", "ı": "I"})
 
 #: Şube harfi olabilecek karakterler (Türk alfabesi + ASCII).
 _SECTION_CHARS = r"A-Za-zÇĞİÖŞÜçğıöşü"
@@ -63,7 +62,7 @@ def tr_upper(value: str) -> str:
     katlaması bu iki şubeyi tek şubeye çökertip iki ayrı sınıfın öğrencilerini
     sessizce aynı şubeye yazardı — gerçek bir e-Okul ihracında yakalandı.
     """
-    return value.translate(_TR_TITLE_MAP).upper()
+    return _tr_upper(value)  # tek uygulama: shared/text.py
 
 
 #: Türk alfabesi sırası — şube harfi artık katlanmadığı için sıralama da

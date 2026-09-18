@@ -3,8 +3,9 @@
 OYS `sinav_islemleri/services.py`'den UYARLA (tasarım §11): `created_by`/User
 damgaları düşer (tek kullanıcı — ad-snapshot + zaman kalır), core köprüleri
 yerel `apps.okul`/`apps.dersler` selector'larına bağlanır (fonksiyon imzaları
-korunur — köprü uyarlaması risk #2). Gözetmen sıfırlama ve takvim çözme
-blokları alınmadı (F7/F6'da gelir); GROUPS katılımcı tipi alınmadı (TB7).
+korunur — köprü uyarlaması risk #2). Gözetmen ELLE atanır (F7; oto-atama
+alınmadı — TB4), takvim mantığı `services_calendar.py`'dedir (F6); GROUPS
+katılımcı tipi alınmadı (TB7).
 """
 
 from __future__ import annotations
@@ -288,9 +289,8 @@ def _level_labels() -> dict[int, str]:
     return {int(o["value"]): str(o["label"]) for o in okul_selectors.grade_levels()}
 
 
-@transaction.atomic
 # --------------------------------------------------------------------------- #
-# Derslik kümeleri (seçim kolaylığı — ikili eğitimde salon listesi kalabalıklaşır)
+# Salon kümeleri (seçim kolaylığı — ikili eğitimde salon listesi kalabalıklaşır)
 # --------------------------------------------------------------------------- #
 
 
@@ -2223,7 +2223,7 @@ def _proctor_rows(session: ExamSession) -> list[reports.ProctorRow]:
 
 
 def _proctor_names_by_room(session: ExamSession) -> dict[str, str]:
-    """R9 basımı: salon adı → görevli ad(lar)ı.
+    """Salon adı → görevli ad(lar)ı — salon evrakı (R1) künyesi ve tutanak (R7) için.
 
     Salon başına tek gözetmen beklenir (Tur 235 sonrası); join mekanik olarak
     çok-adlı eski kayıtları da kaldırır. Gözetmen modülü kapalıysa boş döner —

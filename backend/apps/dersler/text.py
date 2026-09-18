@@ -11,6 +11,7 @@ from __future__ import annotations
 from django.core.exceptions import ValidationError
 
 from apps.dersler.models import PREP_COURSE_LEVEL
+from shared.text import tr_upper as _shared_tr_upper
 
 
 def level_label(level: int) -> str:
@@ -62,9 +63,9 @@ def canon_course_key(name: str) -> str:
     return course_match_key(name).removeprefix("seçmeli ")
 
 
-def tr_upper(value: str) -> str:
-    """Türkçe-duyarlı büyük harf (i→İ, ı→I)."""
-    return value.translate(str.maketrans("iı", "İI")).upper()
+#: Türkçe-duyarlı büyük harf (i→İ, ı→I) — tek uygulama `shared/text.py`'dedir;
+#: bu ad içe aktaranlar kırılmasın diye burada da dışa açıktır (üç kopya vardı).
+tr_upper = _shared_tr_upper
 
 
 def tr_lower(value: str) -> str:
