@@ -1,10 +1,11 @@
-// Sınav Takvimi — Önizleme paneli (F6) — OYS'den UYARLA. Resmi PDF'in
+// Sınav Takvimi — Önizleme paneli (F6) — OYS'den UYARLA. Resmî PDF'in
 // AÇIKLAMA bloğunu (description_text) ve DİPNOT bloğunu (footnote_text)
 // düzenleme (yalnız TASLAK) + "Varsayılan metne dön" + imza bloğuna girecek
 // zümrelerin seçimi (B7 revizyonu — seçim yoksa takvimdeki derslerden boş
-// imza çizgileri üretilir) + PDF indir + onay akışı özeti (sunum/onay
-// damgaları — B12: onaylayan ad-snapshot'ı da gösterilir). Yaşam döngüsü
-// butonları üst başlıktadır — burada yinelenmez. M3 token'ları.
+// imza çizgileri üretilir) + PDF indir + onay bilgisi (B12: onaylayan
+// ad-snapshot'ı ve onay zamanı). Yaşam döngüsü butonları üst başlıktadır —
+// burada yinelenmez. Tarih-saat yalnız lib/format ile basılır (yerel
+// `toLocaleString` kopyası kaldırıldı — docs/sozluk.md §3). M3 token'ları.
 
 import { useEffect, useId, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -12,19 +13,14 @@ import { Link } from "react-router-dom";
 
 import { ApiError } from "../../lib/api";
 import { saveBlob } from "../../lib/download";
+import { formatDateTime } from "../../lib/format";
 import Button from "../../ui/Button";
 import Icon from "../../ui/Icon";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import { okulApi } from "../okul/api";
 import type { ExamCalendar } from "./api";
-import { examCalendarApi } from "./api";
+import { calendarPdfFileName, examCalendarApi } from "./api";
 import { CalendarStatusBadge } from "./TakvimlerPage";
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString("tr-TR");
-}
 
 export default function TakvimOnizlemePaneli({
   calendar,
@@ -124,13 +120,14 @@ export default function TakvimOnizlemePaneli({
   const downloadPdf = async () => {
     try {
       const blob = await examCalendarApi.pdfBlob(calendar.id);
-      saveBlob(blob, `sinav_takvimi_${calendar.id}.pdf`);
+      saveBlob(blob, calendarPdfFileName(calendar));
     } catch (e) {
       snackbar.error(e instanceof ApiError ? e.message : "PDF indirilemedi.");
     }
   };
 
   const departments = departmentsQuery.data ?? [];
+  const onayli = calendar.status === "APPROVED";
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -152,8 +149,8 @@ export default function TakvimOnizlemePaneli({
             ) : null}
           </div>
           <p className="mb-2 text-body-small text-on-surface-variant">
-            Bu metin resmi sınav takvimi PDF'inin alt bölümünde madde madde yer alır (KSD, günde en
-            çok iki sınav, mazeret ve puan giriş süreleri vb.).
+            Bu metin resmî sınav takvimi PDF'inin alt bölümünde madde madde yer alır (konu soru
+            dağılım tablosu, günde en çok iki sınav, mazeret ve puan giriş süreleri vb.).
           </p>
           <textarea
             id={fieldId}
@@ -204,7 +201,7 @@ export default function TakvimOnizlemePaneli({
             ) : null}
           </div>
           <p className="mb-2 text-body-small text-on-surface-variant">
-            Açıklamaların altına "DİPNOT" başlığıyla basılır. Varsayılan metin, okulda yapılan
+            Açıklamaların altına “DİPNOT” başlığıyla basılır. Varsayılan metin, okulda yapılan
             sınavların mazeret sınavlarının takvimi izleyen hafta içinde; Bakanlık ya da İl/İlçe
             Millî Eğitim Müdürlüğü sınavlarının ise ilgili kılavuzda ilan edilen tarih ve saatlerde
             yapılacağını söyler. Okulunuzun uygulamasına göre değiştirebilirsiniz.
@@ -287,31 +284,40 @@ export default function TakvimOnizlemePaneli({
       </section>
 
       <aside className="flex flex-col gap-3 self-start rounded-shape-lg bg-surface-container-low p-4 shadow-elevation-1">
-        <h3 className="text-title-small text-on-surface">Onay akışı</h3>
+        <h3 className="text-title-small text-on-surface">Onay bilgisi</h3>
         <div className="flex items-center gap-2">
           <span className="text-body-small text-on-surface-variant">Durum:</span>
           <CalendarStatusBadge status={calendar.status} />
         </div>
+        {/* Onay damgası YALNIZ onaylı takvimde gösterilir: taslağa alınan takvimde
+            backend eski damgayı tarihçe olarak saklar, ama ekranda "Onaylandı:
+            <tarih>" yazması taslağı onaylı sandırırdı. Tek "Onayla" akışında
+            sunum anı onayla aynıdır; ayrı satırı yalnız eski veride (ONAYA
+            SUNULDU'da kalmış takvim) anlam taşır. */}
         <dl className="space-y-2 text-body-small">
-          <div className="flex justify-between gap-2">
-            <dt className="text-on-surface-variant">Onaya sunuldu</dt>
-            <dd className="text-on-surface">{formatDateTime(calendar.submitted_at)}</dd>
-          </div>
+          {calendar.status === "SUBMITTED" ? (
+            <div className="flex justify-between gap-2">
+              <dt className="text-on-surface-variant">Onaya sunuldu</dt>
+              <dd className="text-on-surface">{formatDateTime(calendar.submitted_at)}</dd>
+            </div>
+          ) : null}
           <div className="flex justify-between gap-2">
             <dt className="text-on-surface-variant">Onaylayan</dt>
-            <dd className="text-on-surface">{calendar.approved_by_name || "—"}</dd>
+            <dd className="text-on-surface">{onayli ? calendar.approved_by_name || "—" : "—"}</dd>
           </div>
           <div className="flex justify-between gap-2">
-            <dt className="text-on-surface-variant">Onaylandı</dt>
-            <dd className="text-on-surface">{formatDateTime(calendar.approved_at)}</dd>
+            <dt className="text-on-surface-variant">Onay tarihi</dt>
+            <dd className="text-on-surface">
+              {onayli ? formatDateTime(calendar.approved_at) : "—"}
+            </dd>
           </div>
         </dl>
         <Button variant="outlined" icon="picture_as_pdf" onClick={() => void downloadPdf()}>
           PDF indir
         </Button>
         <p className="text-body-small text-on-surface-variant">
-          Taslak ve onaya sunulmuş takvimlerin PDF'inde "TASLAK" filigranı bulunur; filigransız
-          resmi çıktı yalnız onaydan sonra üretilir.
+          Onaylanmamış takvimin PDF'inde “TASLAK” filigranı bulunur; filigransız resmî çıktı yalnız
+          onaydan sonra üretilir.
         </p>
       </aside>
     </div>

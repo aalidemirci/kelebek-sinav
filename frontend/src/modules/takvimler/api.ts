@@ -6,6 +6,8 @@
 // FE + PDF ortaktır (CLAUDE.md §3 emsali — değiştirme).
 
 import { api } from "../../lib/api";
+import { dosyaAdi } from "../../lib/download";
+import { formatDate } from "../../lib/format";
 import type { Paginated } from "../../lib/pagination";
 // Katılımcı tipi oturum modülünün kod birliğidir (LEVEL | SECTIONS — TB7);
 // takvim girdisi AYNI birliği kullanır, ikinci bir tanım açılmaz.
@@ -59,6 +61,23 @@ export interface ExamCalendar {
   approved_at: string | null;
 }
 
+/**
+ * İndirilen takvim PDF'inin adı: belge adı + takvim adı + sınav haftasının
+ * başlangıç tarihi (docs/sozluk.md §3). Eski ad `sinav_takvimi_4.pdf` masaüstünde
+ * hangi döneme ait olduğunu söylemiyordu. Takvim adı zaten "… Sınav Takvimi"
+ * diye bitiyorsa belge adı YİNELENMEZ (ön tanımlı adların hepsi böyledir).
+ */
+export function calendarPdfFileName(calendar: Pick<ExamCalendar, "name" | "start_date">): string {
+  const belgeAdi = "Sınav Takvimi";
+  const adZatenTasiyor = calendar.name
+    .toLocaleLowerCase("tr")
+    .includes(belgeAdi.toLocaleLowerCase("tr"));
+  return dosyaAdi(
+    [adZatenTasiyor ? null : belgeAdi, calendar.name, formatDate(calendar.start_date)],
+    "pdf",
+  );
+}
+
 export interface ExamCalendarEntryRow {
   id: number;
   calendar: number;
@@ -72,7 +91,11 @@ export interface ExamCalendarEntryRow {
   participant_type: ParticipantTypeCode;
   /** SECTIONS kapsamında somut şube pk'leri — küme kimliği ASLA yazılmaz. */
   section_ids: number[];
-  /** Backend'in hazır kapsam etiketi ("Seviye geneli" / "3 şube"). */
+  /**
+   * Backend'in kapsam etiketi — model seçenek adını taşır ("Seviye geneli").
+   * Arayüz bunu BASMAZ: sözlüğe uyan metni `okul/SubeKapsamSecici.katilimciOzeti`
+   * tip + şube sayısından üretir (backend etiketi sözlüğe çekilene dek).
+   */
   participant_label: string;
   /** Kapsam ders havuzundaki tanımdan farklı mı (bilinçli istisna rozeti). */
   scope_differs_from_catalog: boolean;

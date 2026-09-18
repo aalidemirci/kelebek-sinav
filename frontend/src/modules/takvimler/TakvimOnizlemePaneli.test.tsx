@@ -19,6 +19,12 @@ const calApi = vi.hoisted(() => ({
 }));
 
 const okulApiMock = vi.hoisted(() => ({ listSubjectDepartments: vi.fn() }));
+const indirme = vi.hoisted(() => ({ saveBlob: vi.fn() }));
+
+vi.mock("../../lib/download", async (importActual) => {
+  const actual = await importActual<typeof import("../../lib/download")>();
+  return { ...actual, saveBlob: indirme.saveBlob };
+});
 
 vi.mock("./api", async (importActual) => {
   const actual = await importActual<typeof import("./api")>();
@@ -108,5 +114,65 @@ describe("TakvimOnizlemePaneli", () => {
     expect(screen.getByLabelText("Takvim dipnotu")).toHaveAttribute("readonly");
     expect(screen.queryByRole("button", { name: /Dipnotu kaydet/ })).not.toBeInTheDocument();
     expect(await screen.findByRole("checkbox", { name: /Sosyal Bilimler/ })).toBeDisabled();
+  });
+
+  it("onay bilgisi onaylı takvimde damgayı İstanbul saatiyle gösterir", async () => {
+    okulApiMock.listSubjectDepartments.mockResolvedValue([]);
+    renderPanel(
+      makeCalendar({
+        status: "APPROVED",
+        approved_by_name: "Ayşe ÇELİK",
+        // 21:30 UTC = ertesi gün 00:30 İstanbul (lib/format saat dilimi sabit).
+        approved_at: "2026-10-20T21:30:00Z",
+      }),
+      false,
+    );
+
+    expect(screen.getByText("Ayşe ÇELİK")).toBeInTheDocument();
+    expect(screen.getByText("21.10.2026 00:30")).toBeInTheDocument();
+    // Tek "Onayla" akışında ayrı "Onaya sunuldu" satırı yoktur.
+    expect(screen.queryByText("Onaya sunuldu")).not.toBeInTheDocument();
+  });
+
+  it("taslağa alınmış takvimde eski onay damgası gösterilmez", async () => {
+    okulApiMock.listSubjectDepartments.mockResolvedValue([]);
+    // Backend damgayı tarihçe olarak saklar; ekran taslağı onaylı göstermemeli.
+    renderPanel(
+      makeCalendar({
+        status: "DRAFT",
+        approved_by_name: "Ayşe ÇELİK",
+        approved_at: "2026-10-20T21:30:00Z",
+      }),
+    );
+
+    expect(screen.queryByText("Ayşe ÇELİK")).not.toBeInTheDocument();
+    expect(screen.queryByText("21.10.2026 00:30")).not.toBeInTheDocument();
+  });
+
+  it("açıklama yardım metni kısaltma kullanmaz ve “resmî” yazar", async () => {
+    okulApiMock.listSubjectDepartments.mockResolvedValue([]);
+    renderPanel(makeCalendar());
+
+    expect(screen.getByText(/resmî sınav takvimi PDF'inin/)).toBeInTheDocument();
+    expect(screen.getByText(/konu soru\s+dağılım tablosu/)).toBeInTheDocument();
+    expect(screen.queryByText(/KSD/)).not.toBeInTheDocument();
+  });
+
+  it("PDF takvim adı ve tarihle indirilir", async () => {
+    const user = userEvent.setup();
+    const blob = new Blob(["pdf"]);
+    okulApiMock.listSubjectDepartments.mockResolvedValue([]);
+    calApi.pdfBlob.mockResolvedValue(blob);
+    renderPanel(makeCalendar({ name: "Kasım Ortak Sınavları" }));
+
+    await user.click(screen.getByRole("button", { name: "PDF indir" }));
+
+    // Takvim adı belge adını taşımıyorsa "Sınav Takvimi" öne eklenir.
+    await waitFor(() =>
+      expect(indirme.saveBlob).toHaveBeenCalledWith(
+        blob,
+        "Sınav-Takvimi_Kasım-Ortak-Sınavları_26.10.2026.pdf",
+      ),
+    );
   });
 });

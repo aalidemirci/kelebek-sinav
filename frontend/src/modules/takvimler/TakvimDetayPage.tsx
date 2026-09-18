@@ -1,7 +1,14 @@
 // Sınav Takvimi detay (F6) — OYS TakvimDetayPage'den UYARLA: rol dalları
-// düştü (tek kullanıcı hem hazırlar hem onaylar — B12; SUBMITTED tek tıkla
-// geçilir, APPROVED kilidi ve damgalar kalır), rota kökü `/takvimler`.
-// Havuz + yerleştirme + takip + önizleme sekmeleri + onay akışı + PDF indir.
+// düştü (tek kullanıcı hem hazırlar hem onaylar — B12). Havuz + yerleştirme +
+// takip + önizleme sekmeleri + onay akışı + PDF indir.
+//
+// Onay akışı (18.09.2026, değerlendirme K2): tek kullanıcıda "Onaya sun →
+// Onayla" iki tıklık bir ritüeldi — sunan da onaylayan da aynı kişi. Arayüzde
+// TEK birincil düğme kaldı: "Onayla". Backend durum makinesi DEĞİŞMEDİ
+// (TASLAK → ONAYA SUNULDU → ONAYLANDI); düğme taslakta `submit` + `approve`
+// uçlarını art arda çağırır, damgalar (sunum/onay zamanı, onaylayan) eskisi gibi
+// yazılır. Eski veride ONAYA SUNULDU durumunda kalmış takvimde de aynı düğme
+// görünür ve yalnız `approve` çağırır.
 
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,16 +16,18 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../../lib/api";
 import { saveBlob } from "../../lib/download";
+import { formatDate } from "../../lib/format";
 import Button from "../../ui/Button";
 import Dialog from "../../ui/Dialog";
+import EmptyState from "../../ui/EmptyState";
 import Icon from "../../ui/Icon";
 import { SkeletonList } from "../../ui/Skeleton";
 import Tabs from "../../ui/Tabs";
 import TextField from "../../ui/TextField";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import { useSnackbar } from "../../ui/SnackbarProvider";
-import { formatDate } from "../oturumlar/oturumEtiket";
-import { examCalendarApi } from "./api";
+import type { ExamCalendarStatusCode } from "./api";
+import { calendarPdfFileName, examCalendarApi } from "./api";
 import { CalendarStatusBadge } from "./TakvimlerPage";
 import TakvimHavuzPaneli from "./TakvimHavuzPaneli";
 import TakvimOnizlemePaneli from "./TakvimOnizlemePaneli";
@@ -44,16 +53,34 @@ export default function TakvimDetayPage() {
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["exam-calendar", calendarId] });
     void queryClient.invalidateQueries({ queryKey: ["exam-calendar-grid", calendarId] });
+    void queryClient.invalidateQueries({ queryKey: ["exam-calendars"] });
   };
 
-  const lifecycle = useMutation({
-    mutationFn: (action: "submit" | "approve" | "reopen") => examCalendarApi[action](calendarId),
+  // Tek "Onayla": taslakta önce sunulur, sonra onaylanır (dosya başı notu).
+  const approveMutation = useMutation({
+    mutationFn: async (status: ExamCalendarStatusCode) => {
+      if (status === "DRAFT") await examCalendarApi.submit(calendarId);
+      return examCalendarApi.approve(calendarId);
+    },
     onSuccess: () => {
-      snackbar.success("Takvim durumu güncellendi.");
+      snackbar.success("Takvim onaylandı.");
       invalidate();
     },
-    onError: (e) =>
-      snackbar.error(e instanceof ApiError ? e.message : "İşlem gerçekleştirilemedi."),
+    onError: (e) => {
+      snackbar.error(e instanceof ApiError ? e.message : "Takvim onaylanamadı.");
+      // Sunum geçip onay takıldıysa takvim ONAYA SUNULDU'da kalmıştır — ekran
+      // gerçek durumu göstersin ("Onayla" yine oradadır, yeniden denenir).
+      invalidate();
+    },
+  });
+
+  const reopenMutation = useMutation({
+    mutationFn: () => examCalendarApi.reopen(calendarId),
+    onSuccess: () => {
+      snackbar.success("Takvim taslağa alındı.");
+      invalidate();
+    },
+    onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Takvim taslağa alınamadı."),
   });
 
   const removeMutation = useMutation({
@@ -63,27 +90,75 @@ export default function TakvimDetayPage() {
       void queryClient.invalidateQueries({ queryKey: ["exam-calendars"] });
       navigate("/takvimler");
     },
-    onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Silinemedi."),
+    onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Takvim silinemedi."),
   });
-
-  const downloadPdf = async () => {
-    try {
-      const blob = await examCalendarApi.pdfBlob(calendarId);
-      saveBlob(blob, `sinav_takvimi_${calendarId}.pdf`);
-    } catch (e) {
-      snackbar.error(e instanceof ApiError ? e.message : "PDF indirilemedi.");
-    }
-  };
 
   if (calendarQuery.isPending) {
     return <SkeletonList rows={6} />;
   }
   const calendar = calendarQuery.data;
-  if (!calendar) {
-    return <div className="text-on-surface-variant">Takvim bulunamadı.</div>;
+  if (calendarQuery.isError || !calendar) {
+    const hata = calendarQuery.error;
+    // "Bulunamadı" YALNIZ 404'tür; kilitli kayıt, sunucu hatası ya da bağlantı
+    // kopması "takvim yok" diye sunulmaz — gerçek mesaj gösterilir.
+    if (hata instanceof ApiError && hata.status === 404) {
+      return (
+        <EmptyState
+          icon="event_busy"
+          title="Takvim bulunamadı."
+          description="Bu takvim silinmiş ya da bağlantı eski olabilir."
+          action={
+            <Button icon="arrow_back" onClick={() => navigate("/takvimler")}>
+              Takvimlere dön
+            </Button>
+          }
+        />
+      );
+    }
+    return (
+      <div role="alert" className="flex flex-col items-start gap-3">
+        <p className="flex items-start gap-2 rounded-shape-sm bg-error-container px-4 py-3 text-body-medium text-on-error-container">
+          <Icon name="error" size="lg" />
+          <span>
+            Takvim yüklenemedi: {hata instanceof ApiError ? hata.message : "beklenmeyen bir hata."}
+          </span>
+        </p>
+        <Button variant="tonal" icon="refresh" onClick={() => void calendarQuery.refetch()}>
+          Yeniden dene
+        </Button>
+      </div>
+    );
   }
   const isDraft = calendar.status === "DRAFT";
-  const isSubmitted = calendar.status === "SUBMITTED";
+  const isApproved = calendar.status === "APPROVED";
+  const lifecycleBusy = approveMutation.isPending || reopenMutation.isPending;
+
+  const downloadPdf = async () => {
+    try {
+      const blob = await examCalendarApi.pdfBlob(calendarId);
+      saveBlob(blob, calendarPdfFileName(calendar));
+    } catch (e) {
+      snackbar.error(e instanceof ApiError ? e.message : "PDF indirilemedi.");
+    }
+  };
+
+  // Onaylı takvimde taslağa almak onayı DÜŞÜRÜR (PDF yeniden "TASLAK" filigranlı
+  // basılır) → onay diyaloğu. Eski veride ONAYA SUNULDU'dan dönüşte düşecek bir
+  // onay yoktur; doğrudan alınır.
+  const handleReopen = () => {
+    if (!isApproved) {
+      reopenMutation.mutate();
+      return;
+    }
+    void confirm({
+      title: "Onaylı takvim taslağa alınsın mı?",
+      message:
+        "Takvimin onayı kalkar: havuz, yerleştirme ve açıklamalar yeniden düzenlenebilir olur, " +
+        "PDF yeniden “TASLAK” filigranıyla basılır. Bu takvimden üretilmiş oturumlar " +
+        "etkilenmez. Duyurmadan önce takvimi yeniden onaylamanız gerekir.",
+      confirmLabel: "Taslağa al",
+    }).then((ok) => ok && reopenMutation.mutate());
+  };
 
   const tabs = [
     { key: "havuz", label: "Havuz", icon: "playlist_add" },
@@ -110,7 +185,7 @@ export default function TakvimDetayPage() {
             aria-label="Takvim tarihlerini düzenle"
             onClick={() => setDateEditOpen(true)}
           >
-            Tarihleri Düzenle
+            Tarihleri düzenle
           </Button>
         ) : null}
         <span className="ml-auto" />
@@ -118,48 +193,35 @@ export default function TakvimDetayPage() {
           PDF
         </Button>
         {isDraft ? (
-          <>
-            <Button
-              variant="tonal"
-              icon="send"
-              disabled={lifecycle.isPending}
-              onClick={() => lifecycle.mutate("submit")}
-            >
-              Onaya Sun
-            </Button>
-            <Button
-              variant="text"
-              icon="delete"
-              disabled={removeMutation.isPending}
-              onClick={() =>
-                void confirm({
-                  title: "Takvim silinsin mi?",
-                  message: `'${calendar.name}' silinsin mi?`,
-                  confirmLabel: "Sil",
-                }).then((ok) => ok && removeMutation.mutate())
-              }
-            >
-              Sil
-            </Button>
-          </>
-        ) : null}
-        {isSubmitted ? (
           <Button
-            icon="check_circle"
-            disabled={lifecycle.isPending}
-            onClick={() => lifecycle.mutate("approve")}
+            variant="text"
+            icon="delete"
+            disabled={removeMutation.isPending}
+            onClick={() =>
+              void confirm({
+                title: "Takvim silinsin mi?",
+                message:
+                  `“${calendar.name}” havuzu, yerleştirmesi ve süreç takip işaretleriyle ` +
+                  "birlikte silinir.",
+                confirmLabel: "Sil",
+              }).then((ok) => ok && removeMutation.mutate())
+            }
           >
-            Onayla
+            Sil
           </Button>
         ) : null}
         {!isDraft ? (
+          <Button variant="text" icon="undo" disabled={lifecycleBusy} onClick={handleReopen}>
+            Taslağa al
+          </Button>
+        ) : null}
+        {!isApproved ? (
           <Button
-            variant="text"
-            icon="undo"
-            disabled={lifecycle.isPending}
-            onClick={() => lifecycle.mutate("reopen")}
+            icon="check_circle"
+            disabled={lifecycleBusy}
+            onClick={() => approveMutation.mutate(calendar.status)}
           >
-            Taslağa Al
+            {approveMutation.isPending ? "Onaylanıyor…" : "Onayla"}
           </Button>
         ) : null}
       </div>
