@@ -9,6 +9,8 @@ typeahead testi dersler uygulamasının kendi testlerindedir.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -302,6 +304,28 @@ def test_api_terms_endpoint() -> None:
     options = resp.data["terms"]
     assert any(opt["id"] == term.pk for opt in options)
     assert all(set(opt) == {"id", "label"} for opt in options)
+
+
+def test_api_list_sorgu_sayisi_oturum_sayisindan_bagimsiz(
+    django_assert_max_num_queries: Any,
+) -> None:
+    """Liste ucu iç içe ders/salon satırlarını ÖN-YÜKLER: oturum sayısı arttıkça sorgu
+    sayısı artmaz (eskiden oturum başına iki + satır başına birer sorgu atılıyordu)."""
+    course = ders("Coğrafya", levels=[9, 10])
+    room = salon("D-201")
+    for i in range(6):
+        session = oturum(name=f"Oturum {i}")
+        for level in (9, 10):
+            services.add_session_course(
+                session, course_id=course.pk, participant_type=ParticipantType.LEVEL, level=level
+            )
+        services.set_session_rooms(session, [{"room_id": room.pk}])
+
+    client = APIClient()
+    with django_assert_max_num_queries(8):
+        resp = client.get(URL)
+    assert resp.status_code == 200 and resp.data["count"] == 6
+    assert len(resp.data["results"][0]["courses"]) == 2
 
 
 def test_api_list_status_filter() -> None:

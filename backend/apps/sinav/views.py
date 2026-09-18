@@ -58,6 +58,28 @@ from apps.sinav.serializers import (
 )
 
 
+def _stored_file_exists(field_file: Any) -> bool:
+    """Kayıt var, DOSYA diskte var mı? — yedek yalnız veritabanını kapsar (A8)."""
+    return bool(field_file.name) and bool(field_file.storage.exists(field_file.name))
+
+
+def _missing_media_response(what: str) -> Response:
+    """Yedekten dönüşte medya dosyaları gelmez (yedek yalnız veritabanıdır — tasarım
+    kararı): satır durur, dosya yoktur. Eskiden ham `FileNotFoundError` 500 oluyordu."""
+    return Response(
+        {
+            "code": "media_missing",
+            "message": (
+                f"{what} bu cihazda bulunamadı. Veritabanı yedeği soru ve kitapçık "
+                "dosyalarını içermez; yedekten döndüyseniz dosyayı yeniden yükleyin "
+                "ya da kitapçıkları yeniden üretin."
+            ),
+            "fields": {},
+        },
+        status=404,
+    )
+
+
 class ExamRoomGroupViewSet(viewsets.ModelViewSet[ExamRoomGroup]):
     """Derslik kümeleri (Sabah/Öğle gibi) — yalnız seçim kolaylığı."""
 
@@ -745,6 +767,8 @@ class ExamSessionCourseViewSet(viewsets.GenericViewSet[ExamSessionCourse]):
                 {"code": "not_found", "message": "Soru dosyası yüklenmemiş.", "fields": {}},
                 status=404,
             )
+        if not _stored_file_exists(doc.file):
+            return _missing_media_response("Soru dosyası")
         return FileResponse(
             doc.file.open("rb"),
             as_attachment=True,
@@ -782,6 +806,8 @@ class BookletRunViewSet(viewsets.GenericViewSet[BookletRun]):
                 {"code": "not_ready", "message": "Koşu henüz tamamlanmadı.", "fields": {}},
                 status=409,
             )
+        if not _stored_file_exists(run.file):
+            return _missing_media_response("Kitapçık paketi")
         return FileResponse(
             run.file.open("rb"),
             as_attachment=True,

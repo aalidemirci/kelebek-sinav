@@ -509,6 +509,25 @@ def test_shared_booklet_single_file_rule() -> None:
     assert "taslağa alıp" in str(excinfo.value)
 
 
+def test_eksik_medya_dosyasinda_indirme_turkce_404() -> None:
+    """A8: yedek yalnız veritabanını kapsar; yedekten dönünce satır durur, DOSYA yoktur.
+    İndirme uçları ham `FileNotFoundError` (500) yerine açıklayıcı 404 döner."""
+    session = _distributed_session(question_pages={"Coğrafya": 1, "Fizik": 1})
+    sc = session.courses.select_related("course").get(course__name="Coğrafya")
+    run = services.request_booklet_run(session)
+    doc = QuestionDocument.objects.get(session_course=sc)
+    doc.file.storage.delete(doc.file.name)  # "yedekten dönüş": kayıt var, dosya yok
+    run.file.storage.delete(run.file.name)
+
+    client = APIClient()
+    soru = client.get(f"/api/v1/exam-session-courses/{sc.pk}/question/download/")
+    paket = client.get(f"/api/v1/booklet-runs/{run.pk}/download/")
+    for yanit in (soru, paket):
+        assert yanit.status_code == 404
+        assert yanit.data["code"] == "media_missing"
+        assert "yedeği" in yanit.data["message"]
+
+
 def test_question_delete_locked_when_approved() -> None:
     """A6: silme ucu yükleme ile AYNI durum kapısından geçer (onaylı/arşivde ret)."""
     session = _distributed_session(question_pages={"Coğrafya": 1, "Fizik": 1})

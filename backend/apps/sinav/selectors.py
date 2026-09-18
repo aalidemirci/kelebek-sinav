@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from django.db.models import Q, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 
 from apps.sinav.models import (
     BookletRun,
@@ -95,8 +95,16 @@ def section_rooms_for_levels(levels: set[int]) -> list[ExamRoom]:
 # F3 — oturum akışı
 # ---------------------------------------------------------------------------
 def exam_sessions(*, status: str | None = None) -> QuerySet[ExamSession]:
-    """Oturum listesi (tarih azalan; dönem join'li)."""
-    qs = ExamSession.objects.select_related("semester", "semester__school_year")
+    """Oturum listesi (tarih azalan; dönem join'li, ders/salon satırları ÖN-YÜKLÜ).
+
+    `ExamSessionSerializer` iç içe `courses` ve `rooms` basar; ön-yükleme
+    olmadan liste ucu oturum başına iki + satır başına birer sorgu atıyordu.
+    Ön-yükleme canlı yöneticiyle yapılır — silinmiş satır listeye sızmaz.
+    """
+    qs = ExamSession.objects.select_related("semester", "semester__school_year").prefetch_related(
+        Prefetch("courses", queryset=ExamSessionCourse.objects.select_related("course")),
+        Prefetch("rooms", queryset=ExamSessionRoom.objects.select_related("room")),
+    )
     if status:
         qs = qs.filter(status=status)
     return qs.order_by("-exam_date", "start_time")
