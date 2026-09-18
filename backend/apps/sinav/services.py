@@ -2036,15 +2036,21 @@ def _seat_course_names(group_keys: set[str]) -> dict[str, str]:
 def _room_sheets(
     session: ExamSession, rows: list[reports.SeatRow], *, room_id: int | None = None
 ) -> list[reports.RoomSheet]:
-    """R1 kroki girdileri — yalnız yerleşim almış oturum salonları, ada göre."""
-    used_names = {r.room_name for r in rows}
+    """R1 kroki girdileri — YERLEŞİM ALMIŞ salonlar, ada göre.
+
+    Kaynak `ExamSessionRoom` DEĞİL `SeatAssignment`'tır (18.09.2026 bulgusu A1):
+    klasik düzende (kendi dersliğinde) oturumun salon listesi BOŞTUR ve kural
+    pini öğrenciyi oturum listesinde olmayan bir salona koyabilir — ikisinde de
+    salon evrakı basılmalıdır; eskiden o salonlar için kroki + yoklama hiç
+    üretilmiyordu. `room_occupancy` aynı kaynağı kullanır. Silinmiş salon da
+    girer: arşivden yeniden basım, salon sonradan kaldırılsa bile kırılmaz.
+    """
     sheets: list[reports.RoomSheet] = []
-    session_rooms = ExamSessionRoom.objects.filter(session=session).select_related("room")
-    for sr in sorted(session_rooms, key=lambda sr: reports.room_name_sort_key(sr.room.name)):
-        room = sr.room
+    for room in _seated_rooms(session, include_deleted=True):
         if room_id is not None and room.pk != room_id:
             continue
-        if room.name not in used_names:
+        room_rows = tuple(r for r in rows if r.room_name == room.name)
+        if not room_rows:
             continue
         sheets.append(
             reports.RoomSheet(
@@ -2052,7 +2058,7 @@ def _room_sheets(
                 block=room.block,
                 plan=layout.validate_layout_plan(room.layout_plan),
                 numbering_scheme=room.numbering_scheme,
-                rows=tuple(r for r in rows if r.room_name == room.name),
+                rows=room_rows,
             )
         )
     return sheets
@@ -2080,8 +2086,10 @@ def render_session_report(
             raise ValidationError(
                 "Salon filtresi yalnız salon bazlı evrakta (R1 salon evrakı / R7 tutanak) geçerli."
             )
-        if not ExamSessionRoom.objects.filter(session=session, room_id=room_id).exists():
-            raise ValidationError("Salon bu oturumda tanımlı değil.")
+        # Denetim yerleşimden: klasik düzende ve oturum listesi dışına pinlenen
+        # kuralda salon `ExamSessionRoom`'da yoktur ama evrakı basılmalıdır (A1).
+        if not SeatAssignment.objects.filter(session=session, room_id=room_id).exists():
+            raise ValidationError("Bu salonda bu oturuma ait yerleşim yok.")
 
     rows = _seat_rows(session, room_id=room_id)
     if not rows:
@@ -2641,13 +2649,18 @@ def _busy_teacher_ids(session: ExamSession) -> set[int]:
     return busy
 
 
-def _seated_rooms(session: ExamSession) -> list[ExamRoom]:
-    """Yerleşim almış salonlar (ada göre) — klasikte ExamSessionRoom satırı yoktur."""
+def _seated_rooms(session: ExamSession, *, include_deleted: bool = False) -> list[ExamRoom]:
+    """Yerleşim almış salonlar (ada göre) — klasikte ExamSessionRoom satırı yoktur.
+
+    `include_deleted`: evrak basımı silinmiş salonu da ister (arşivden yeniden
+    basım); gözetmen ataması gibi CANLI işlemler istemez.
+    """
     room_ids = (
         SeatAssignment.objects.filter(session=session).values_list("room_id", flat=True).distinct()
     )
+    manager = ExamRoom.all_objects if include_deleted else ExamRoom.objects
     return sorted(
-        ExamRoom.objects.filter(pk__in=list(room_ids)),
+        manager.filter(pk__in=list(room_ids)),
         key=lambda r: reports.room_name_sort_key(r.name),
     )
 

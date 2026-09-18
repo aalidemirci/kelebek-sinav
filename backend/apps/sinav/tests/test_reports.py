@@ -27,10 +27,18 @@ from openpyxl import load_workbook
 from pypdf import PdfReader
 from rest_framework.test import APIClient
 
-from apps.okul.models import SchoolConfig
+from apps.okul.models import ClassSection, SchoolConfig, Student
 from apps.sinav import layout, reports, services
-from apps.sinav.models import ExamSession, ExamSessionRoom
-from apps.sinav.tests.oturum_yardim import dagitilmis_oturum, oturum, salon
+from apps.sinav.models import (
+    ExamRoom,
+    ExamSession,
+    ExamSessionRoom,
+    LayoutMode,
+    ParticipantType,
+    RuleType,
+    SeatAssignment,
+)
+from apps.sinav.tests.oturum_yardim import dagitilmis_oturum, ders, oturum, salon, sube
 
 pytestmark = pytest.mark.django_db
 
@@ -65,6 +73,22 @@ def _evrak_oturumu(**kwargs: Any) -> ExamSession:
     """Okul yapılandırması + dağıtılmış oturum (evrak üretimine hazır)."""
     _okul()
     return dagitilmis_oturum(**kwargs)
+
+
+def _evrak_oturumu_taslak() -> ExamSession:
+    """Okul + TASLAK kelebek oturumu (9/A + 10/A üçer öğrenci, D-201) — dağıtımdan
+    ÖNCE kural eklenen senaryolar için."""
+    _okul()
+    sube(9, "A", students=3, start_no=101)
+    sube(10, "A", students=3, start_no=201)
+    course = ders("Coğrafya", levels=[9, 10])
+    session = oturum()
+    for level in (9, 10):
+        services.add_session_course(
+            session, course_id=course.pk, participant_type=ParticipantType.LEVEL, level=level
+        )
+    services.set_session_rooms(session, [{"room_id": salon("D-201").pk}])
+    return session
 
 
 # ===========================================================================
@@ -232,8 +256,58 @@ def test_salon_filtresi() -> None:
         services.render_session_report(session, "r4", room_id=ilk.pk)
     # R7 tutanağı da salon bazlıdır (salon zarfına konur).
     services.render_session_report(session, "r7", room_id=ilk.pk)
-    with pytest.raises(ValidationError, match="tanımlı değil"):
+    with pytest.raises(ValidationError, match="yerleşim yok"):
         services.render_session_report(session, "r1", room_id=999999)
+
+
+def test_r1_klasik_duzende_basilir() -> None:
+    """KRİTİK (A1): "kendi dersliğinde" düzeninde oturumun salon listesi BOŞTUR.
+
+    Sihirbaz klasikte salon adımını atlar; R1 yaprak kaynağı `ExamSessionRoom`
+    iken salon evrakı hiç üretilmiyordu. Kaynak artık yerleşimin kendisidir.
+    """
+    _okul()
+    for harf, ilk_no in (("A", 101), ("B", 201)):
+        section = sube(9, harf, students=3, start_no=ilk_no)
+        salon(f"9-{harf} Dersliği", linked_section_id=section.pk)
+    course = ders("Coğrafya", levels=[9])
+    session = oturum(layout_mode=LayoutMode.HOME_CLASSROOM)
+    services.add_session_course(
+        session, course_id=course.pk, participant_type=ParticipantType.LEVEL, level=9
+    )
+    session, _result, report = services.distribute_session(session, seed=1)
+    assert report.is_valid
+    assert not ExamSessionRoom.objects.filter(session=session).exists()
+
+    text = _pdf_text(services.render_session_report(session, "r1").content)
+    assert "9-A Dersliği" in text and "9-B Dersliği" in text
+
+    # Salon filtresi de yerleşimden denetlenir (eskiden "tanımlı değil" derdi).
+    a_dersligi = ExamRoom.objects.get(name="9-A Dersliği")
+    filtreli = _pdf_text(
+        services.render_session_report(session, "r1", room_id=a_dersligi.pk).content
+    )
+    assert "9-A Dersliği" in filtreli and "9-B Dersliği" not in filtreli
+
+
+def test_r1_oturum_listesi_disina_pinlenen_salon_basilir() -> None:
+    """Kural pini öğrenciyi oturum salon listesinde OLMAYAN dersliğe koyabilir;
+    o salonun da krokisi ve yoklaması basılır (öğrenci hiçbir listede kaybolmaz)."""
+    session = _evrak_oturumu_taslak()
+    section = ClassSection.objects.get(class_level=9, class_section="A")
+    own_room = salon("9-A Dersliği", linked_section_id=section.pk)
+    student_id = int(
+        Student.objects.filter(class_level=9, class_section="A")
+        .order_by("student_number")
+        .values_list("pk", flat=True)[0]
+    )
+    services.create_placement_rule(student_id=student_id, rule_type=RuleType.HOME_CLASSROOM)
+    services.distribute_session(session, seed=42)
+    assert SeatAssignment.objects.filter(session=session, room_id=own_room.pk).count() == 1
+
+    text = _pdf_text(services.render_session_report(session, "r1").content)
+    assert "9-A Dersliği" in text, "pinli öğrencinin salonu evrakta yok"
+    assert "D-201" in text
 
 
 # ===========================================================================
