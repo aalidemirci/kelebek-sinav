@@ -509,6 +509,51 @@ def test_shared_booklet_single_file_rule() -> None:
     assert "taslağa alıp" in str(excinfo.value)
 
 
+def test_question_delete_locked_when_approved() -> None:
+    """A6: silme ucu yükleme ile AYNI durum kapısından geçer (onaylı/arşivde ret)."""
+    session = _distributed_session(question_pages={"Coğrafya": 1, "Fizik": 1})
+    sc = session.courses.select_related("course").get(course__name="Coğrafya")
+    services.approve_session(session)
+    sc.refresh_from_db()
+
+    with pytest.raises(ValidationError, match="değiştirilemez"):
+        services.remove_question_document(sc)
+    resp = APIClient().delete(f"/api/v1/exam-session-courses/{sc.pk}/question/")
+    assert resp.status_code == 400
+    assert QuestionDocument.objects.filter(session_course=sc).exists(), "dosya silinmemeli"
+    # Kitapçık yeniden basımı onaylı oturumda hâlâ çalışır.
+    assert services.request_booklet_run(session).status == BookletRunStatus.COMPLETED
+
+
+def test_replaced_and_removed_question_files_leave_disk(
+    django_capture_on_commit_callbacks: Any,
+) -> None:
+    """A6: değiştirilen ve kaldırılan soru PDF'i DİSKTEN de silinir (sınav gizliliği).
+
+    Satır iz olarak kalır (sha256/sayfa sayısı), içerik kalmaz. Silme commit
+    sonrasına ertelidir — geri sarılan işlemde dosya yerinde kalır.
+    """
+    session = _distributed_session()
+    sc = session.courses.select_related("course").get(course__name="Coğrafya")
+
+    first = services.upload_question_document(sc, file_bytes=_question_pdf(1, title="ILK"))
+    storage, first_name = first.file.storage, first.file.name
+    assert storage.exists(first_name)
+
+    with django_capture_on_commit_callbacks(execute=True):
+        second = services.upload_question_document(sc, file_bytes=_question_pdf(1, title="IKI"))
+    second_name = second.file.name
+    assert not storage.exists(first_name), "değiştirilen eski dosya diskte kaldı"
+    assert storage.exists(second_name)
+    old_row = QuestionDocument.all_objects.get(pk=first.pk)
+    assert old_row.deleted_at is not None and not old_row.file  # iz kalır, içerik kalmaz
+
+    with django_capture_on_commit_callbacks(execute=True):
+        assert services.remove_question_document(sc) is True
+    assert not storage.exists(second_name), "kaldırılan dosya diskte kaldı"
+    assert services.remove_question_document(sc) is False  # idempotent
+
+
 def test_tde_9_10_vakasi_uctan_uca() -> None:
     """18.09.2026 saha vakası — yanlış işaretlenmiş "aynı kitapçık" bayrağından çıkış yolu.
 

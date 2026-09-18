@@ -2316,7 +2316,7 @@ def upload_question_document(
         )
 
     with transaction.atomic():
-        QuestionDocument.objects.filter(session_course=sc).update(deleted_at=timezone.now())
+        _retire_question_documents(sc)
         doc = QuestionDocument(
             session_course=sc,
             page_count=page_count,
@@ -2327,6 +2327,47 @@ def upload_question_document(
         doc.file.save(f"soru_{sc.pk}.pdf", ContentFile(file_bytes), save=False)
         doc.save()
     return doc
+
+
+def _retire_question_documents(sc: ExamSessionCourse) -> int:
+    """Satırın canlı soru dosyalarını kapatır: satır soft-delete (iz kalır), DOSYA silinir.
+
+    Sınav öncesi gizlilik (A6, 18.09.2026): eskiden değiştirilen/kaldırılan her
+    soru PDF'i `MEDIA_ROOT`'ta kalıyordu — dosya yalnız arşiv anonimleştirmesinde
+    siliniyordu. İz (sayfa sayısı, sha256, zaman damgası) satırda durur; içerik
+    durmaz. Silme `transaction.on_commit`e ertelenir: işlem geri sarılırsa dosya
+    yerinde kalır (anonimleştirme deseni). Çağıran `transaction.atomic` içindedir.
+    """
+    docs = list(QuestionDocument.objects.filter(session_course=sc))
+    files: list[tuple[Storage, str]] = [
+        (doc.file.storage, doc.file.name) for doc in docs if doc.file and doc.file.name
+    ]
+    if not docs:
+        return 0
+    QuestionDocument.objects.filter(pk__in=[doc.pk for doc in docs]).update(
+        deleted_at=timezone.now(), file=""
+    )
+
+    def _delete_files() -> None:
+        for storage, name in files:
+            if storage.exists(name):
+                storage.delete(name)
+
+    transaction.on_commit(_delete_files)
+    return len(docs)
+
+
+@transaction.atomic
+def remove_question_document(sc: ExamSessionCourse) -> bool:
+    """Oturum dersinin soru dosyasını kaldırır — yükleme ile AYNI durum kapısı.
+
+    Eskiden view `doc.delete()`'i doğrudan çağırıyordu: onaylı/arşiv oturumda
+    yükleme reddedilirken silme serbestti ve silinen dosya kitapçık yeniden
+    basımını düşürüyordu (A6). Dosya yoksa False döner (idempotent DELETE).
+    """
+    if sc.session.status in (ExamSessionStatus.APPROVED, ExamSessionStatus.ARCHIVED):
+        raise ValidationError("Onaylı/arşiv oturumda soru dosyası değiştirilemez.")
+    return _retire_question_documents(sc) > 0
 
 
 def _session_info(session: ExamSession) -> booklet.SessionInfo:

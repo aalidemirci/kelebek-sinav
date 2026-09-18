@@ -713,8 +713,11 @@ class ExamSessionCourseViewSet(viewsets.GenericViewSet[ExamSessionCourse]):
                 )
             return Response(QuestionDocumentSerializer(doc).data)
         if request.method == "DELETE":
-            if doc is not None:
-                doc.delete()
+            # Durum kapısı + disk temizliği servis katmanında (A6) — view ORM'e dokunmaz.
+            try:
+                services.remove_question_document(sc)
+            except DjangoValidationError as exc:
+                raise drf_serializers.ValidationError(exc.messages) from exc
             return Response(status=204)
         serializer = QuestionUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
