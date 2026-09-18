@@ -15,12 +15,14 @@ import io
 import re
 import time as time_mod
 import zipfile
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.http import StreamingHttpResponse
 from pypdf import PdfReader
 from rest_framework.test import APIClient
 
@@ -585,7 +587,8 @@ def test_tde_9_10_vakasi_uctan_uca() -> None:
     started = client.post(f"{base}/booklets/", {}, format="json")
     assert started.status_code == 201 and started.data["status"] == "COMPLETED"
     download = client.get(f"/api/v1/booklet-runs/{started.data['id']}/download/")
-    zip_bytes = b"".join(download.streaming_content)
+    assert isinstance(download, StreamingHttpResponse)
+    zip_bytes = b"".join(cast(Iterable[bytes], download.streaming_content))
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         pages = _page_texts(zf.read(zf.namelist()[0]))
     text_9 = "\n".join(p for p in pages if "9/A" in p)
