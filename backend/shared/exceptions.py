@@ -11,8 +11,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
 
@@ -27,8 +29,30 @@ def _is_default_not_found_detail(message: str) -> bool:
     return message.startswith("No ") or message in {"Not found.", str(NotFound.default_detail)}
 
 
+def _service_error(exc: Exception) -> DjangoValidationError | None:
+    """Hatanın kaynağı servis katmanının Django `ValidationError`'ı mı?
+
+    Ya doğrudan o fırlatılmıştır ya da view onu `raise DRF… from exc` ile
+    çevirmiştir (`__cause__`). Serializer'ın kendi alan hataları bu yoldan GEÇMEZ.
+    """
+    if isinstance(exc, DjangoValidationError):
+        return exc
+    cause = exc.__cause__
+    return cause if isinstance(cause, DjangoValidationError) else None
+
+
 def ks_exception_handler(exc: Exception, context: dict[str, Any]) -> Response | None:
     """DRF varsayılan hata gövdesini sözleşme biçimine dönüştürür."""
+    service_error = _service_error(exc)
+    if isinstance(exc, DjangoValidationError):
+        # Servis katmanı Django `ValidationError` fırlatır; DRF onu TANIMAZ (handler
+        # None döner → 500). View'ların çoğu elle çevirir ama unutulan her yol
+        # kullanıcıya "sunucu hatası" olarak yansıyordu (A5: okul ayarında geçersiz
+        # ders saati → 500). Çeviri merkezîdir; rollback'i DRF handler'ı işaretler.
+        detail: Any = exc.message_dict if hasattr(exc, "error_dict") else exc.messages
+        converted = DRFValidationError(detail)
+        converted.__cause__ = exc
+        exc = converted
     response = drf_exception_handler(exc, context)
     if response is None:
         return None
@@ -50,9 +74,15 @@ def ks_exception_handler(exc: Exception, context: dict[str, Any]) -> Response | 
             if code == "not_found" and _is_default_not_found_detail(message):
                 message = _GENERIC_NOT_FOUND
         else:
-            # Alan-bazlı doğrulama hataları
+            # Alan-bazlı doğrulama hataları. Servis katmanının alan sözlüğüyle
+            # verdiği ret ("on_date": "Yerleştirilemez: … 4 sınava girmiş olurdu")
+            # snackbar'da GÖRÜNMELİDİR: arayüz `message`'ı basar, genel cümle asıl
+            # gerekçeyi yutuyordu. Serializer alan hatalarında ("Bu alan zorunlu.")
+            # alan adı olmadan anlamsız kalacağı için genel cümle korunur.
             fields = data
             message = "Gönderilen veride hatalar var."
+            if service_error is not None:
+                message = "; ".join(str(m) for m in service_error.messages) or message
     elif isinstance(data, list):
         message = "; ".join(str(item) for item in data)
 

@@ -7,6 +7,8 @@ denetiminin sözleşmesidir — küme değişirse FE `SetupStatus` tipi ve
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from django.core.exceptions import ValidationError
 from rest_framework.test import APIClient
@@ -221,3 +223,23 @@ def test_ders_saati_ayarlari_api_uzerinden_yazilir(client: APIClient) -> None:
     assert yanit.status_code == 200
     assert yanit.json()["daily_period_count"] == 10
     assert yanit.json()["exam_period_nos"] == [1, 2, 3]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "govde",
+    [
+        {"daily_period_count": 0},
+        {"daily_period_count": 8, "exam_period_nos": [99]},
+    ],
+)
+def test_gecersiz_ders_saati_ayari_api_400_doner(client: APIClient, govde: dict[str, Any]) -> None:
+    """A5: geçersiz ders saati ayarı 500 değil, Türkçe mesajlı 400'dür."""
+    yanit = client.put(
+        "/api/v1/setup/school-config/",
+        {"school_name": "Örnek Lise", "school_type": SchoolType.ANADOLU_LISESI, **govde},
+        format="json",
+    )
+    assert yanit.status_code == 400
+    assert yanit.json()["code"] == "validation_error"
+    assert yanit.json()["message"] != "Gönderilen veride hatalar var."
