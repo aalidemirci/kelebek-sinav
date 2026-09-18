@@ -335,14 +335,6 @@ def test_surum_anahtari_sayisal_karsilastirir_ve_on_surumu_kucuk_sayar() -> None
     assert anahtar(" 2026.10.0 ") == anahtar("2026.10.0")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "version_key ön-sürüm ekini DİZGE olarak karşılaştırıyor: 'beta.10' < 'beta.9'. "
-        "Onuncu ön-sürümde beta.9 kullanıcısına güncelleme hiç önerilmez ve sürüm "
-        "listesinden 'en yeni' diye beta.9 seçilir (VERSION şu an 2026.9.0-beta.5)."
-    ),
-)
 def test_on_surum_sirasi_onuncu_surumde_de_dogrudur(monkeypatch: pytest.MonkeyPatch) -> None:
     """İki basamaklı ön-sürüm numarası tek basamaklıdan BÜYÜKTÜR (beta.10 > beta.9)."""
 

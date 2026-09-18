@@ -217,15 +217,6 @@ def test_guncelleme_tarih_sirasini_ve_taslak_kilidini_korur(client: APIClient) -
     assert list(calendar.signatory_departments.all()) == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "PATCH {'name': '   '} 200 dönüyor ve takvim adı BOŞ kaydediliyor: serializer "
-        "oluşturmadaki 'ad verilmezse üret' anlamı için allow_blank=True; update_exam_calendar "
-        "ise boş adı olduğu gibi yazıyor (oluşturma varsayılan ada düşüyor). Arayüz şu an "
-        "güncellemede ad GÖNDERMEDİĞİNDEN kullanıcı bu yola ulaşamıyor — API sözleşmesi açığı."
-    ),
-)
 def test_guncellemede_takvim_adi_bos_kaydedilemez(client: APIClient) -> None:
     """Takvim adı PDF başlığına ve üretilen oturum adına basılır; model de boş ada izin
     vermez (`blank=False`). Boş ad ya reddedilmeli ya varsayılan ada düşmelidir."""
@@ -898,16 +889,6 @@ def test_kalem_katalogu_ekleme_sira_ve_teklik(client: APIClient) -> None:
     assert ExamTrackItem.objects.count() == 2
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "ExamTrackItemSerializer `name` alanında DRF'in tek alanlı UniqueConstraint'ten "
-        "türettiği UniqueValidator duruyor (`Meta.validators = []` yalnız Meta düzeyini "
-        "siler — SubjectDepartmentSerializer'daki tuzak). Servisin 'Bu adla canlı bir kalem "
-        "zaten var.' reddi hiç çalışmıyor; KalemYonetimiDialog yalnız `message` bastığından "
-        "kullanıcı 'Gönderilen veride hatalar var.' görüyor, NEDENİNİ göremiyor."
-    ),
-)
 def test_kalem_adi_cakismasinin_gerekcesi_snackbara_tasinir(client: APIClient) -> None:
     """Arayüz kalem hatalarını YALNIZ snackbar'da (`message`) gösterir: ad çakışmasının
     gerekçesi orada okunabilmelidir (ekleme ve yeniden adlandırma)."""

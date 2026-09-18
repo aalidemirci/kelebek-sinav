@@ -57,7 +57,21 @@ def get_app_version(*, environ: Mapping[str, str] | None = None) -> str:
     return text or FALLBACK_VERSION
 
 
-def version_key(value: str) -> tuple[tuple[int, ...], int, str]:
+def _pre_key(pre: str) -> tuple[tuple[int, int | str], ...]:
+    """Ön-sürüm ekinin DOĞAL sıralama anahtarı: "beta.10" > "beta.9".
+
+    Ek eskiden DİZGE olarak karşılaştırılıyordu ('beta.10' < 'beta.9'): onuncu
+    ön-sürümde beta.9 kullanıcısına güncelleme hiç önerilmez, sürüm listesinden
+    "en yeni" diye beta.9 seçilirdi. Rakam öbekleri sayı, gerisi metin olarak
+    karşılaştırılır; sayısal parça metinden küçüktür (semver önceliği). İki
+    `version_key` kopyası (`desktop/version.py` ve `okul/services/updates.py`)
+    AYNI kalmalıdır.
+    """
+    parts = re.findall(r"\d+|[^\d.]+", pre)
+    return tuple((0, int(part)) if part.isdigit() else (1, part.lower()) for part in parts)
+
+
+def version_key(value: str) -> tuple[tuple[int, ...], int, tuple[tuple[int, int | str], ...]]:
     """Sürümü karşılaştırılabilir anahtara çevirir ("1.0.0-dev" < "1.0.0")."""
     head, _, pre = value.strip().partition("-")
     numbers: list[int] = []
@@ -66,7 +80,7 @@ def version_key(value: str) -> tuple[tuple[int, ...], int, str]:
         numbers.append(int(match.group(0)) if match else 0)
     numbers += [0] * (4 - len(numbers))
     # Ön-sürüm (-dev/-rc1) kesin sürümden ÖNCE gelir → 0, kesin sürüm → 1.
-    return (tuple(numbers[:4]), 0 if pre else 1, pre)
+    return (tuple(numbers[:4]), 0 if pre else 1, _pre_key(pre))
 
 
 def read_version_stamp(path: Path) -> VersionStamp | None:

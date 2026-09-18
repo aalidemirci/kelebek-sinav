@@ -284,6 +284,11 @@ def update_exam_calendar(
 ) -> ExamCalendar:
     _ensure_draft(calendar)
     if name is not None:
+        # Takvim adı PDF başlığına ve slottan üretilen oturumun adına basılır.
+        # Oluşturma boş adı varsayılana düşürür; güncelleme eskiden boş adı
+        # olduğu gibi yazıyordu (model `blank=False` iken).
+        if not name.strip():
+            raise ValidationError({"name": "Takvim adı boş olamaz."})
         calendar.name = name.strip()
     if start_date is not None:
         calendar.start_date = start_date

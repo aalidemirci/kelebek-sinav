@@ -612,6 +612,13 @@ class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]
 
 
 class ExamTrackItemSerializer(serializers.ModelSerializer[ExamTrackItem]):
+    # DRF tek alanlı UniqueConstraint'ten ALAN düzeyinde UniqueValidator türetir;
+    # `Meta.validators = []` onu SİLMEZ (okul.SubjectDepartmentSerializer tuzağı).
+    # Validator kalınca servisin "Bu adla canlı bir kalem zaten var." reddi hiç
+    # çalışmıyor, arayüz snackbar'ında yalnız genel cümle görünüyordu. Alan elle
+    # tanımlanır; teklik ve boş ad denetimi servistedir.
+    name = serializers.CharField(max_length=160, validators=[])
+
     class Meta:
         model = ExamTrackItem
         fields = ("id", "name", "description", "order", "is_active")
