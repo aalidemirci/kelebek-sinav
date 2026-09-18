@@ -8,6 +8,7 @@ import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "../../lib/api";
+import { formatDateTime } from "../../lib/format";
 import { gradeLevelLabel } from "../../lib/gradeLevels";
 import Button from "../../ui/Button";
 import Dialog from "../../ui/Dialog";
@@ -40,7 +41,9 @@ function cellTitle(cell: ExamTrackCell): string {
   if (!cell.status) return "İşaretsiz";
   const parts = [STATUS_VIEW[cell.status].label];
   if (cell.marked_by_name) parts.push(cell.marked_by_name);
-  if (cell.marked_at) parts.push(new Date(cell.marked_at).toLocaleDateString("tr-TR"));
+  // Tarih/saat yalnız lib/format ile (Europe/Istanbul) — `toLocaleDateString`
+  // makinenin saat dilimine göre gün kaydırabiliyordu (docs/sozluk.md §3).
+  if (cell.marked_at) parts.push(formatDateTime(cell.marked_at));
   if (cell.note) parts.push(cell.note); // not tooltip'te görünür
   return parts.join(" · ");
 }
@@ -100,16 +103,26 @@ export default function TakvimTakipPaneli({ calendarId }: { calendarId: number }
 
   if (trackQuery.isPending) return <SkeletonList rows={5} />;
   const matrix = trackQuery.data;
-  if (!matrix || matrix.items.length === 0) {
+  // Hata "kalem yok" boş durumuyla KARIŞMAZ — yoksa idareci kalemlerinin
+  // silindiğini sanır.
+  if (trackQuery.isError || !matrix) {
+    return (
+      <p role="alert" className="text-body-medium text-error">
+        Süreç takibi yüklenemedi:{" "}
+        {trackQuery.error instanceof ApiError ? trackQuery.error.message : "beklenmeyen hata."}
+      </p>
+    );
+  }
+  if (matrix.items.length === 0) {
     return (
       <>
         <EmptyState
           icon="checklist"
           title="Süreç kalemi yok"
-          description="Takip matrisi için süreç kalemi kataloğuna kalem ekleyin."
+          description="Süreç takibi için önce izlenecek kalemleri ekleyin (soru teslimi, basım, puan girişi gibi)."
           action={
             <Button icon="tune" onClick={() => setManageOpen(true)}>
-              Kalem Yönetimi
+              Kalem yönetimi
             </Button>
           }
         />
@@ -142,7 +155,7 @@ export default function TakvimTakipPaneli({ calendarId }: { calendarId: number }
           Not modu
         </Button>
         <Button variant="text" icon="tune" onClick={() => setManageOpen(true)}>
-          Kalem Yönetimi
+          Kalem yönetimi
         </Button>
       </div>
       {noteMode ? (
@@ -152,11 +165,11 @@ export default function TakvimTakipPaneli({ calendarId }: { calendarId: number }
       ) : null}
       <div className="overflow-x-auto rounded-shape-lg bg-surface-container-low shadow-elevation-1">
         <table className="w-full border-collapse text-body-small">
-          <caption className="sr-only">Sınav süreç takip matrisi</caption>
+          <caption className="sr-only">Sınav süreç takip çizelgesi</caption>
           <thead>
             <tr className="border-b border-outline-variant">
               <th className="sticky left-0 z-10 bg-surface-container-low px-3 py-2 text-left text-label-medium text-on-surface-variant">
-                Ders / Seviye
+                Ders / Sınıf düzeyi
               </th>
               {matrix.items.map((item) => (
                 <th
