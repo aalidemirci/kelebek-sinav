@@ -11,10 +11,11 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "../../lib/api";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import type { ExamSession } from "./api";
-import { makeSession } from "./testFixtures";
+import { makeReport, makeSession } from "./testFixtures";
 
 const exam = vi.hoisted(() => ({
   get: vi.fn(),
@@ -23,6 +24,7 @@ const exam = vi.hoisted(() => ({
   archive: vi.fn(),
   revertToDraft: vi.fn(),
   remove: vi.fn(),
+  distribute: vi.fn(),
 }));
 
 vi.mock("./api", async (importActual) => {
@@ -96,10 +98,18 @@ describe("OturumDetayPage", () => {
     expect(await screen.findByText("OTURUM LİSTESİ")).toBeInTheDocument();
   });
 
-  it("DAĞITILDI: Yerleşim + Gözetmenler + Sorular + Evrak sekmeleri (Yoklama yok); Onayla approve çağırır", async () => {
-    const user = userEvent.setup();
+  it("yüklenirken iskelet gösterir; uç hatasında role=alert ve listeye dönüş yolu", async () => {
+    exam.get.mockRejectedValue(new Error("ağ koptu"));
+    renderPage();
+
+    // İlk çizimde sorgu beklemede → iskelet (düz "yükleniyor" metni değil).
+    expect(screen.getByRole("status")).toHaveTextContent("Yükleniyor…");
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Oturum yüklenemedi/);
+    expect(screen.getByRole("button", { name: "Oturum listesine dön" })).toBeInTheDocument();
+  });
+
+  it("DAĞITILDI: Yerleşim + Gözetmenler + Sorular + Evrak sekmeleri (Yoklama yok)", async () => {
     exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
-    exam.approve.mockResolvedValue(makeSession({ status: "APPROVED" }));
     renderPage();
 
     expect(await screen.findByText("YERLEŞİM PANELİ 5")).toBeInTheDocument();
@@ -109,10 +119,183 @@ describe("OturumDetayPage", () => {
     expect(screen.queryByRole("tab", { name: /Yoklama/ })).not.toBeInTheDocument();
     // Gözetmenler sekmesi F7 ile geldi (koşulsuz — kapalıysa panel mesajı).
     expect(screen.getByRole("tab", { name: /Gözetmenler/ })).toBeInTheDocument();
+    // Üç eylem: Taslağa al · Yeniden dağıt · Onayla.
+    expect(screen.getByRole("button", { name: "Taslağa al" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Yeniden dağıt" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Onayla" })).toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("button", { name: "Onayla" }));
-    await waitFor(() => expect(exam.approve).toHaveBeenCalledWith(5));
+  it("DAĞITILDI: 'Onayla' diyalogdan geçer; ad boşsa boş gönderilir (backend okul müdürünü yazar)", async () => {
+    const user = userEvent.setup();
+    exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
+    exam.approve.mockResolvedValue(makeSession({ status: "APPROVED" }));
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Onayla" }));
+    // Tek tıkla onay YOK — önce sonuç söylenir (kilit + ihlalde ret).
+    expect(exam.approve).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog", { name: "Oturum onaylansın mı?" });
+    expect(
+      within(dialog).getByText(
+        "Onay yerleşimi kilitler; yerleşimde kural ihlali varsa reddedilir.",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Onayla" }));
+    await waitFor(() => expect(exam.approve).toHaveBeenCalledWith(5, { approved_by_name: "" }));
     expect(await screen.findByText("Oturum onaylandı — yerleşim kilitlendi.")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Oturum onaylansın mı?" }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("DAĞITILDI: onaylayan adı girilirse kırpılarak approved_by_name olarak gider", async () => {
+    const user = userEvent.setup();
+    exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
+    exam.approve.mockResolvedValue(makeSession({ status: "APPROVED" }));
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Onayla" }));
+    const dialog = await screen.findByRole("dialog", { name: "Oturum onaylansın mı?" });
+    // KVKK: ad uydurmadır.
+    await user.type(
+      within(dialog).getByLabelText("Onaylayan (boş bırakılırsa okul müdürü)"),
+      " Zeynep Arslan ",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Onayla" }));
+
+    await waitFor(() =>
+      expect(exam.approve).toHaveBeenCalledWith(5, { approved_by_name: "Zeynep Arslan" }),
+    );
+  });
+
+  it("DAĞITILDI: onay reddedilirse gerekçe gösterilir ve diyalog açık kalır", async () => {
+    const user = userEvent.setup();
+    exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
+    exam.approve.mockRejectedValue(
+      new ApiError(400, "invalid", "Onay reddedildi: yerleşimde 2 kural ihlali var."),
+    );
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Onayla" }));
+    const dialog = await screen.findByRole("dialog", { name: "Oturum onaylansın mı?" });
+    await user.click(within(dialog).getByRole("button", { name: "Onayla" }));
+
+    expect(
+      await screen.findByText("Onay reddedildi: yerleşimde 2 kural ihlali var."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Oturum onaylansın mı?" })).toBeInTheDocument();
+  });
+
+  it("DAĞITILDI: 'Yeniden dağıt' sonuçları uyarır, numara + katı dağıtımı gönderir, uyarıları gösterir", async () => {
+    const user = userEvent.setup();
+    exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
+    exam.distribute.mockResolvedValue({
+      status: "DISTRIBUTED",
+      seed: 77,
+      checkerboard: true,
+      placed: 120,
+      warnings: ["Gözetmen görevlendirmeleri yeni dağıtım nedeniyle sıfırlandı; yeniden atayın."],
+      report: makeReport(),
+    });
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Yeniden dağıt" }));
+    const dialog = await screen.findByRole("dialog", { name: "Yeniden dağıtılsın mı?" });
+    expect(
+      within(dialog).getByText(
+        /Elle yapılan koltuk takasları ve gözetmen görevlendirmeleri sıfırlanır\./,
+      ),
+    ).toBeInTheDocument();
+    expect(exam.distribute).not.toHaveBeenCalled();
+
+    await user.type(
+      within(dialog).getByLabelText("Dağıtım numarası (boş bırakılırsa yeni rastgele)"),
+      "77",
+    );
+    await user.click(within(dialog).getByRole("checkbox", { name: /Katı dağıtım/ }));
+    const ilkGetSayisi = exam.get.mock.calls.length;
+    await user.click(within(dialog).getByRole("button", { name: "Yeniden dağıt" }));
+
+    await waitFor(() =>
+      expect(exam.distribute).toHaveBeenCalledWith(5, { seed: 77, strict: true }),
+    );
+    // Sonuç + backend uyarıları diyalogda kalır (snackbar'da akıp gitmez).
+    const sonuc = await screen.findByRole("dialog", { name: "Yeniden dağıtım sonucu" });
+    expect(within(sonuc).getByText(/120 öğrenci yerleşti/)).toBeInTheDocument();
+    expect(within(sonuc).getByText("Kural ihlali yok — oturum onaylanabilir.")).toBeInTheDocument();
+    expect(within(sonuc).getByText(/Gözetmen görevlendirmeleri yeni dağıtım/)).toBeInTheDocument();
+    // Oturum sorgusu tazelenir.
+    await waitFor(() => expect(exam.get.mock.calls.length).toBeGreaterThan(ilkGetSayisi));
+
+    await user.click(within(sonuc).getByRole("button", { name: "Kapat" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("DAĞITILDI: yeniden dağıtım ihlalli dönerse sonuç 'onaylanamaz' der", async () => {
+    const user = userEvent.setup();
+    exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
+    exam.distribute.mockResolvedValue({
+      status: "DISTRIBUTED",
+      seed: 9,
+      checkerboard: false,
+      placed: 40,
+      warnings: [],
+      report: makeReport({ is_valid: false, hard_violations: ["a", "b"] }),
+    });
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Yeniden dağıt" }));
+    const dialog = await screen.findByRole("dialog", { name: "Yeniden dağıtılsın mı?" });
+    await user.click(within(dialog).getByRole("button", { name: "Yeniden dağıt" }));
+
+    // Numara boş → gövdede seed yok (backend yeni rastgele numara seçer).
+    await waitFor(() =>
+      expect(exam.distribute).toHaveBeenCalledWith(5, { seed: undefined, strict: false }),
+    );
+    const sonuc = await screen.findByRole("dialog", { name: "Yeniden dağıtım sonucu" });
+    expect(within(sonuc).getByRole("alert")).toHaveTextContent(/2 kural ihlali var — onaylanamaz/);
+  });
+
+  it("'Kendi dersliğinde' düzeninde yeniden dağıtım numara/katı dağıtım sormaz, sonuçta numara yazmaz", async () => {
+    const user = userEvent.setup();
+    exam.get.mockResolvedValue(
+      makeSession({ status: "DISTRIBUTED", layout_mode: "HOME_CLASSROOM" }),
+    );
+    // Klasik düzende backend numarayı hep 0 döndürür (karıştırma yok).
+    exam.distribute.mockResolvedValue({
+      status: "DISTRIBUTED",
+      seed: 0,
+      checkerboard: false,
+      placed: 64,
+      warnings: [],
+      report: makeReport(),
+    });
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Yeniden dağıt" }));
+    const dialog = await screen.findByRole("dialog", { name: "Yeniden dağıtılsın mı?" });
+    expect(within(dialog).queryByLabelText(/Dağıtım numarası/)).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/okul numarası sırasıyla yeniden yerleştirilir/),
+    ).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Yeniden dağıt" }));
+    const sonuc = await screen.findByRole("dialog", { name: "Yeniden dağıtım sonucu" });
+    expect(within(sonuc).getByText(/64 öğrenci yerleşti/)).toBeInTheDocument();
+    expect(within(sonuc).queryByText(/Dağıtım numarası/)).not.toBeInTheDocument();
+    expect(await screen.findByText("Yeniden dağıtıldı: 64 öğrenci yerleşti.")).toBeInTheDocument();
+  });
+
+  it("'Yeniden dağıt' yalnız DAĞITILDI durumunda vardır", async () => {
+    exam.get.mockResolvedValue(makeSession({ status: "APPROVED" }));
+    renderPage();
+
+    expect(await screen.findByText("YERLEŞİM PANELİ 5")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Yeniden dağıt" })).not.toBeInTheDocument();
   });
 
   it("DAĞITILDI: Sorular ve Evrak sekmeleri panellerini açar", async () => {
