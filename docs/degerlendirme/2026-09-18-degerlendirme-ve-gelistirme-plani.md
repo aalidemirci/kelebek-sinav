@@ -469,3 +469,37 @@ Uygulama sırasında ortaya çıkan, değerlendirmede yer almayan gerçek kusurl
   okul geneli sınavına ayırıyor; istenirse Ders Havuzu yardım metnine tek cümle
   eklenebilir.
 - **Gezinme sırası** ve **R1 yaprak 1'e ek alanlar**: yukarıda gerekçeli.
+
+### 6.4 Son doğrulama ve yayın adımları
+
+`bash scripts/gates.sh` (Docker), 19.09.2026, plan dalının son ucunda — **tüm
+kapılar yeşil**:
+
+| Kapı | Değerlendirme anı (§5) | Uygulama sonu |
+|---|---|---|
+| Depo sızıntısı (KVKK) | bulgu yok | bulgu yok |
+| Backend pytest | 646 test, kapsam %87,9 | **854 test, kapsam %92,9** (eşik %75) |
+| Backend ruff / ruff format / mypy | temiz | temiz |
+| Masaüstü + paketleme pytest, ruff, mypy | 187 test, temiz | 187 test, temiz |
+| Ön yüz tsc / eslint / prettier | temiz | temiz |
+| Ön yüz vitest | 58 dosya, 328 test | **69 dosya, 473 test** |
+| Ön yüz kapsamı (yeni kapı) | ölçülmüyordu | satır %89,4 · dal %84,9 · işlev %63,1 (eşik 82/78/55) |
+
+Tam koşu bir kez kırmızı verdi ve işe yaradı: değiştirilen bir ret metnine bağlı
+test beklentisi (alt küme koşularında görünmeyen) ancak tam zincirde yakalandı.
+
+**Yapılmayan yayın adımları.** Etiket, push ve site kartı dışa açık işlemlerdir;
+otonom oturumda izin verilmedi ve dolanılmadı. `VERSION` bilerek `2026.9.0-beta.5`
+olarak bırakıldı (etiketsiz yükseltme, paketleme hattının VERSION↔etiket kapısını
+şaşırtır). Sırayla:
+
+1. `git push origin main` — kapılar GitHub'da ilk kez koşar (`kapilar.yml`).
+2. `VERSION` dosyasını `2026.9.0-beta.6` yapıp commit edin
+   (`chore(surum): 2026.9.0-beta.6`), sonra `git tag v2026.9.0-beta.6` ve
+   `git push origin main v2026.9.0-beta.6` — paketler üretilir, Release açılır,
+   dosyalar indirme alanına yüklenir.
+3. Paketler çıkınca `okulapp.org` deposunda `src/data/ks-release.json` güncellenir
+   (o deponun "Ortak çalışma düzeni" kurallarıyla: taze `origin/main`, yalnız
+   kendi alanı, commit başlığı "Kelebek Sınav: …").
+4. P0-1'in kabul ölçütü pakette sınanır: TDE 9 + TDE 10 oturumu → dağıt → iki
+   soru dosyası → kitapçık; ardından "Taslağa al" ve "Yeniden dağıt".
