@@ -34,7 +34,10 @@ kapi() {
   local etiket="$1" nobetci="$2" servis="$3" komut="$4"
   shift 4
   echo "== $etiket =="
-  docker compose run --rm "$@" "$servis" sh -c "$komut && echo KAPI_OK_$nobetci" | tee "$KAPI_LOG"
+  # `-T`: sözde-TTY ayrılmaz. Çıktı zaten tee'ye akıyor; TTY'siz ortamda (CI
+  # koşucusu, .github/workflows/kapilar.yml) `run` "input device is not a TTY"
+  # ile düşmesin. Yerelde davranış değişmez.
+  docker compose run --rm -T "$@" "$servis" sh -c "$komut && echo KAPI_OK_$nobetci" | tee "$KAPI_LOG"
   if ! grep -q "KAPI_OK_$nobetci" "$KAPI_LOG"; then
     echo "HATA: '$etiket' nöbetçi kanıtı üretmedi (çıkış kodu yutulmuş olabilir)" >&2
     exit 1
@@ -85,7 +88,7 @@ echo "== frontend: vitest =="
 # basılırdı; rapor bu durumu da yakalar). npm sarmalayıcısı zincirden çıkarıldı.
 # Rapor yoksa ya da success:true değilse kapı kırmızıdır (fail-closed).
 rm -f frontend/vitest-sonuc.json
-docker compose run --rm frontend npx vitest run \
+docker compose run --rm -T frontend npx vitest run \
   --reporter=default --reporter=json --outputFile=vitest-sonuc.json
 if ! grep -Eq '"success": ?true' frontend/vitest-sonuc.json; then
   echo "HATA: frontend test raporu başarı doğrulamadı (çıkış kodu yutulmuş olabilir)" >&2
