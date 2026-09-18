@@ -76,7 +76,7 @@ sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% en
 {% for sheet in sheets %}
 
 {# ------------------------------ YAPRAK 1 ------------------------------ #}
-<div class="sheet">
+<div class="sheet sheet-right">
   {% with scope_line="Salon: "|add:sheet.room_name scope_note="Yaprak 1/2 · Oturma planı ve gözetmen işlemleri" %}
     {% include "sinav/reports/_head.html" %}
   {% endwith %}

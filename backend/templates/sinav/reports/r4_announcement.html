@@ -42,6 +42,12 @@ fazlası başlık yinelenerek akar (base.html taşma disiplini).{% endcomment %}
            padding: 3pt 8pt; font-size: 7.8pt; color: var(--pr-secondary);
            break-inside: avoid; page-break-inside: avoid; }
   .rules b { color: var(--pr-ink); }
+  .ann-sign { width: 100%; border-collapse: collapse; margin-top: 7pt; font-size: 8pt;
+              color: var(--pr-secondary); break-inside: avoid; page-break-inside: avoid; }
+  .ann-sign td { padding: 0; vertical-align: bottom; }
+  .ann-sign .who { text-align: right; white-space: nowrap; color: var(--pr-label); }
+  .ann-sign .blank { display: inline-block; min-width: 90pt;
+                     border-bottom: 0.7pt solid var(--pr-ink); }
   .rules div { margin: 1pt 0; }
 
   /* Şube başına hesaplanan satır ölçüsü — BAŞLIKTA basılmak ZORUNDA. */
@@ -107,6 +113,12 @@ fazlası başlık yinelenerek akar (base.html taşma disiplini).{% endcomment %}
     <div>Sınava katılamayan öğrencinin mazereti <b>en geç 5 iş günü</b> içinde velisince
       okul müdürlüğüne yazılı olarak bildirilir.</div>
   </div>
+  {% comment %}Panoya asılan duyuru imzasız çıkıyordu. Tek satırlık düzenleyen alanı;
+  yüksekliği `reports._ANN_FIXED_PX` bütçesine dâhildir.{% endcomment %}
+  <table class="ann-sign"><tr>
+    <td class="basis"><b>DAYANAK:</b> MEB Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5.</td>
+    <td class="who">…… / …… / 20…… &nbsp;·&nbsp; <b>Müdür Yardımcısı</b> — İmza: <span class="blank"></span></td>
+  </tr></table>
 </div>
 {% endfor %}
 {% endblock %}

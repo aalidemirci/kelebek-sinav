@@ -17,13 +17,16 @@ TAŞMA: görevli sayısı arttıkça tablo başlığı yinelenir; onay bloğu b�
                line-height: 1.4; }
   .duty td { height: 21pt; }
   .duty .ack { width: 24%; }
-  .approve { margin-top: 20pt; text-align: center;
-             break-inside: avoid; page-break-inside: avoid; }
-  .approve .label { font-weight: bold; font-size: 12pt; letter-spacing: 1.5pt;
-                    color: var(--pr-ink); }
-  .approve .date { margin-top: 4pt; font-size: 9pt; color: var(--pr-secondary); }
-  .approve .sign { margin-top: 30pt; font-size: 9pt; }
-  .approve .sign b { font-size: 9.5pt; color: var(--pr-ink); }
+  .approve-grid { width: 100%; margin-top: 20pt; border-collapse: collapse;
+                  break-inside: avoid; page-break-inside: avoid; }
+  .approve-grid td { width: 50%; text-align: center; vertical-align: top; }
+  .approve-grid .label { font-weight: bold; font-size: 12pt; letter-spacing: 1.5pt;
+                         color: var(--pr-ink); }
+  .approve-grid .label-sm { font-weight: bold; font-size: 9.5pt; letter-spacing: 1pt;
+                            color: var(--pr-label); padding-top: 2.5pt; }
+  .approve-grid .date { margin-top: 4pt; font-size: 9pt; color: var(--pr-secondary); }
+  .approve-grid .sign { margin-top: 30pt; font-size: 9pt; }
+  .approve-grid .sign b { font-size: 9.5pt; color: var(--pr-ink); }
   .summary { margin-top: 5pt; font-size: 8.5pt; color: var(--pr-label); }
 </style>
 {% endblock %}
@@ -34,8 +37,9 @@ TAŞMA: görevli sayısı arttıkça tablo başlığı yinelenir; onay bloğu b�
   {% endwith %}
 
   <p class="duty-text">
-    Okulumuzda yapılacak &quot;{{ header.exam_name }}&quot; sınavında
-    ({{ header.exam_date }} günü, başlangıç saati {{ header.start_time }})
+    Okulumuzda {{ header.exam_date }} günü saat {{ header.start_time }} itibarıyla
+    yapılacak &quot;{{ header.exam_name }}&quot; için{% if header.duration_label %}
+    (sınav süresi: {{ header.duration_label }}){% endif %}
     aşağıda adı yazılı öğretmenler karşılarında belirtilen salonlarda
     gözetmen olarak görevlendirilmiştir. Görevli öğretmenler, sınav saatinden
     <b>en az on beş dakika önce</b> görevli oldukları salonda hazır bulunur;
@@ -68,16 +72,29 @@ TAŞMA: görevli sayısı arttıkça tablo başlığı yinelenir; onay bloğu b�
     </tbody>
   </table>
   <div class="summary">
-    Toplam görevli: <b>{{ duty.duty_count }}</b> · Salon görevlisi:
-    <b>{{ duty.room_count }}</b> · Yedek: <b>{{ duty.reserve_count }}</b>
+    Toplam görevli: <b>{{ duty.duty_count }}</b> · Gözetmen:
+    <b>{{ duty.room_count }}</b> · Yedek gözetmen: <b>{{ duty.reserve_count }}</b>
   </div>
 
-  <div class="approve">
-    <div class="label">UYGUNDUR</div>
-    <div class="date">…… / …… / 20……</div>
-    <div class="sign"><b>Okul Müdürü</b><br>
-      <span class="muted">Ad Soyad / İmza / Mühür</span></div>
-  </div>
+  {% comment %}Tebliğ-tebellüğ belgesinde TEBLİĞ EDEN de imzalar: yazıyı müdür
+  yardımcısı düzenleyip tebliğ eder, okul müdürü onaylar (eskiden yalnız onay
+  bloğu vardı — tebliğ edenin imzası ve tarihi yoktu).{% endcomment %}
+  <table class="approve-grid">
+    <tr>
+      <td>
+        <div class="label-sm">TEBLİĞ EDEN</div>
+        <div class="date">…… / …… / 20……</div>
+        <div class="sign"><b>Müdür Yardımcısı</b><br>
+          <span class="muted">Ad Soyad / İmza</span></div>
+      </td>
+      <td>
+        <div class="label">UYGUNDUR</div>
+        <div class="date">…… / …… / 20……</div>
+        <div class="sign"><b>Okul Müdürü</b><br>
+          <span class="muted">Ad Soyad / İmza / Mühür</span></div>
+      </td>
+    </tr>
+  </table>
 
   <div class="dayanak">
     <b>DAYANAK:</b> MEB Ortaöğretim Kurumları Yönetmeliği (sınav görevlendirmelerinin

@@ -36,7 +36,7 @@ taşar. Yoklama satır yüksekliği ÖĞRENCİ SAYISINA GÖRE kademelidir
       size: A4 portrait;
       margin: 1.1cm 1.3cm 1.5cm 1.3cm;
       @bottom-left {
-        content: "Üretim: {{ header.generated_at }}";
+        content: "Düzenleme: {{ header.generated_at }}";
         font-family: "DejaVu Sans"; font-size: 7pt; color: #64748b;
       }
       @bottom-center {
@@ -44,7 +44,9 @@ taşar. Yoklama satır yüksekliği ÖĞRENCİ SAYISINA GÖRE kademelidir
         font-family: "DejaVu Sans"; font-size: 7.5pt; color: #64748b;
       }
       @bottom-right {
-        content: "{{ header.exam_name }}";
+        /* CSS kaçışı Python'da (ReportHeader.css_exam_name): HTML kaçışı <style>
+           içinde çözülmez, adında kesme/tırnak olan sınav bozuk basılıyordu. */
+        content: "{{ header.css_exam_name|safe }}";
         font-family: "DejaVu Sans"; font-size: 7pt; color: #64748b;
       }
     }
@@ -54,6 +56,15 @@ taşar. Yoklama satır yüksekliği ÖĞRENCİ SAYISINA GÖRE kademelidir
     /* Sayfa birimi: salon/şube/yaprak başına bir yaprak */
     .sheet { page-break-after: always; }
     .sheet:last-child { page-break-after: avoid; }
+    /* ÇİFT YÜZ BASKI: çok yapraklı belgede (salon evrakı) her salonun 1. yaprağı
+       SAĞ (tek numaralı) sayfadan başlar. 40'ı aşan bir salonun yoklaması üçüncü
+       sayfaya taşınca sonraki TÜM salonların ön yüzü arka yüze kayıyordu. */
+    .sheet-right { break-before: right; }
+
+    /* Liste tablolarının iç çizgileri bir ton koyu (yoklama/duyuru fotokopiyle
+       çoğaltılır; açık gri hairline ikinci nesil kopyada siliniyordu). Kalınlık
+       AYNI kalır — satır yüksekliği modeli (`reports._ROW_BORDER_PX`) değişmez. */
+    .att td, .ann td { border-color: var(--pr-faint); }
 
     /* ---- Ortak üst bant (madde 7): okul + belge adı + oturum bilgisi ---- */
     .rpt-head { text-align: center; margin-bottom: 3pt; }

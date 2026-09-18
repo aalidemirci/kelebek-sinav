@@ -90,6 +90,23 @@ class ReportHeader:
     #: Boşsa basılmaz (oturumsuz boş salon planı).
     duration_label: str = ""
 
+    @property
+    def css_exam_name(self) -> str:
+        """Sınav adının CSS dizgisi içinde güvenli hâli (sayfa altbilgisi).
+
+        Altbilgi `@bottom-right { content: "…" }` ile basılır. Django'nun HTML
+        kaçışı `<style>` içinde ÇÖZÜLMEZ: adında tırnak ya da kesme işareti geçen
+        sınav ("Atatürk'ü Anma Sınavı") altbilgide `&#x27;` olarak çıkıyordu.
+        Burada CSS kaçışı uygulanır; şablon değeri `|safe` ile basar.
+        """
+        text = " ".join(self.exam_name.split())
+        return (
+            text.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("<", "\\3C ")
+            .replace(">", "\\3E ")
+        )
+
 
 @dataclass(frozen=True)
 class SeatRow:
@@ -357,7 +374,7 @@ def build_room_kroki(
 #: R1 yaprak 2 = üst bant + bölüm barı + tablo başlığı + imza bloğu + boşluklar.
 _ATT_FIXED_PX = 225.0
 #: R4 = üst bant + salon dağılımı özeti + bölüm barı + tablo başlığı + kurallar.
-_ANN_FIXED_PX = 262.0
+_ANN_FIXED_PX = 292.0
 
 #: Ad sütununun sayfa genişliğine oranı (şablondaki sütun yüzdelerinin artığı).
 #: R1 yoklama: Sıra 5 + Koltuk 8 + No 9 + Şube 8 + Yok 7 + İmza 27/17

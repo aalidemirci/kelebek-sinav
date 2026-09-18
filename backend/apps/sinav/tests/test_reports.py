@@ -553,6 +553,82 @@ def test_r4_ders_adi_seviyesiz_ve_tek_satir() -> None:
     assert etiketler == {"Coğrafya"}
 
 
+def test_altbilgi_sinav_adi_css_kacisiyla_basilir() -> None:
+    """Sınav adında kesme/tırnak varsa altbilgi bozulmaz (`&#x27;` basılıyordu):
+    HTML kaçışı `<style>` içinde çözülmez, CSS kaçışı Python'da yapılır."""
+    from dataclasses import replace
+
+    baslik = replace(_BASLIK, exam_name='Atatürk\'ü "Anma" Sınavı')
+    assert baslik.css_exam_name == 'Atatürk\'ü \\"Anma\\" Sınavı'
+    pdf = reports.render_pdf(
+        "sinav/reports/r7_tutanak.html",
+        {
+            "header": baslik,
+            "title": reports.REPORT_TITLES["r7"][0],
+            "sheets": reports.build_tutanak_sheets(_satirlar(4, dersler=("Coğrafya",))),
+        },
+    )
+    metin = _pdf_text(pdf)
+    assert 'Atatürk\'ü "Anma" Sınavı' in metin
+    assert "&#x27;" not in metin and "&quot;" not in metin
+
+
+def test_r1_cift_yuzde_her_salon_sag_sayfadan_baslar() -> None:
+    """Çift yüz baskı: ilk salonun yoklaması üçüncü sayfaya taşsa da sonraki salonun
+    1. yaprağı SAĞ (tek numaralı) sayfadan başlar — araya boş sayfa girer."""
+    kalabalik = reports.RoomSheet(
+        room_name="D-201 Dersliği",
+        block="",
+        plan=layout.validate_layout_plan(_plan(12, 4)),
+        numbering_scheme="S_PATTERN",
+        rows=tuple(_satirlar(90, dersler=("Coğrafya",))),
+    )
+    kucuk = reports.RoomSheet(
+        room_name="D-202 Dersliği",
+        block="",
+        plan=layout.validate_layout_plan(_plan(3, 2)),
+        numbering_scheme="S_PATTERN",
+        rows=tuple(
+            reports.SeatRow(**{**vars(r), "room_name": "D-202 Dersliği"})
+            for r in _satirlar(8, dersler=("Coğrafya",), cols=2)
+        ),
+    )
+    pdf = reports.render_pdf(
+        "sinav/reports/r1_salon_evraki.html",
+        {
+            "header": _BASLIK,
+            "title": reports.REPORT_TITLES["r1"][0],
+            "sheets": reports.build_room_documents([kalabalik, kucuk]),
+        },
+    )
+    sayfalar = [p.extract_text() or "" for p in PdfReader(io.BytesIO(pdf)).pages]
+    ilk_yapraklar = [
+        no
+        for no, metin in enumerate(sayfalar, start=1)
+        if "Yaprak 1/2" in metin and "D-202" in metin
+    ]
+    assert ilk_yapraklar, "ikinci salonun 1. yaprağı bulunamadı"
+    assert ilk_yapraklar[0] % 2 == 1, f"ikinci salon {ilk_yapraklar[0]}. sayfada (arka yüz)"
+
+
+def test_r4_duyurusu_duzenleyen_satiri_tasir() -> None:
+    satirlar = [
+        reports.SeatRow(**{**vars(r), "class_label": "9/A"})
+        for r in _satirlar(40, dersler=("Coğrafya",))
+    ]
+    pdf = reports.render_pdf(
+        "sinav/reports/r4_announcement.html",
+        {
+            "header": _BASLIK,
+            "title": reports.REPORT_TITLES["r4"][0],
+            "sheets": reports.build_announcements(satirlar),
+        },
+    )
+    metin = " ".join(_pdf_text(pdf).split())
+    assert "Müdür Yardımcısı" in metin and "DAYANAK:" in metin
+    assert _sayfa_sayisi(pdf) == 1
+
+
 def test_r1_cok_kalabalik_salonda_satir_kaybi_yok() -> None:
     """40'ı çok aşan salonda liste TAŞAR ama satır KAYBOLMAZ (kontrollü taşma)."""
     pdf = _r1_pdf(90, 6, 4, ("Coğrafya",))

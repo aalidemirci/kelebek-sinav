@@ -226,6 +226,11 @@ def test_r6_uretimi_ve_tr_duman() -> None:
     session, _hoca = _atamali_oturum()
     rf = services.render_session_report(session, "r6")
     assert rf.filename == f"r6_gozetmen_gorevlendirme_oturum_{session.pk}.pdf"
+    # Tebliğ-tebellüğ belgesinde tebliğ EDEN de imzalar (eskiden yalnız onay bloğu vardı).
+    r6_text = " ".join(
+        (page.extract_text() or "") for page in PdfReader(io.BytesIO(rf.content)).pages
+    )
+    assert "TEBL" in r6_text and "Müdür Yardımcısı" in r6_text and "sınav süresi" in r6_text
     text = "\n".join(p.extract_text() or "" for p in PdfReader(io.BytesIO(rf.content)).pages)
     assert "Şükrü ĞÜVENÇ" in text and "Yedek İĞNECİ" in text
     assert "Yedek" in text  # rol etiketi; yedek salonsuz satırda
