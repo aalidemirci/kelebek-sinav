@@ -45,7 +45,7 @@ function AssignmentChip({
   editable: boolean;
   canAcknowledge: boolean;
   onRemove: (a: ProctorAssignmentRow) => void;
-  onAcknowledge: (id: number) => void;
+  onAcknowledge: (a: ProctorAssignmentRow) => void;
 }) {
   return (
     <span className="flex items-center gap-1 rounded-full bg-secondary-container py-1 pl-4 pr-1 text-label-large text-on-secondary-container">
@@ -54,7 +54,7 @@ function AssignmentChip({
       {!assignment.acknowledged && canAcknowledge && (
         <button
           type="button"
-          onClick={() => onAcknowledge(assignment.id)}
+          onClick={() => onAcknowledge(assignment)}
           aria-label={`${assignment.teacher_name} tebellüğ işle`}
           title="Tebellüğ işle"
           className="flex min-h-8 min-w-8 items-center justify-center rounded-shape-sm hover:bg-on-secondary-container/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -161,12 +161,26 @@ export default function GozetmenlerPaneli({ session }: { session: ExamSession })
     }).then((ok) => ok && remove.mutate(a.id));
   };
 
+  // Tebellüğün GERİ ALMA ucu yoktur (damga düşer) → onaydan geçer
+  // (docs/sozluk.md §3; 18.09.2026 değerlendirmesi). Yanlış kişiye basılan tek
+  // tık, görevlendirmeyi kaldırıp yeniden eklemeden düzeltilemiyordu.
+  const handleAcknowledge = (a: ProctorAssignmentRow) => {
+    void confirm({
+      title: "Tebellüğ işlensin mi?",
+      message: `${a.teacher_name} görevlendirme yazısını imza karşılığı tebellüğ etmiş olarak kaydedilir. Bu kayıt geri alınamaz.`,
+      confirmLabel: "Tebellüğ işle",
+    }).then((ok) => ok && acknowledge.mutate(a.id));
+  };
+
   if (!session.proctors_enabled) {
     return (
-      <p className="text-body-medium text-on-surface-variant">
-        Gözetmen modülü bu oturumda kapalı (K2 — varsayılan). Taslakta oturum ayarlarından
-        açılabilir; kapalıyken R9 tutanağında görevli adı elle yazılır ve R6 evrak kataloğunda
-        görünmez.
+      <p className="max-w-3xl text-body-medium text-on-surface-variant">
+        Gözetmen modülü bu oturumda kapalı. Görevlendirme yazısı basılmaz; salon evrakındaki görevli
+        adı elle yazılır. {/* Açma yolu duruma göre değişir: ayar yalnız taslakta düzenlenir. */}
+        {session.status === "DISTRIBUTED" &&
+          "Açmak için oturumu taslağa alıp Oturum Bilgileri adımındaki kutuyu işaretleyin."}
+        {session.status === "APPROVED" &&
+          "Açmak için önce “Yeniden aç”, sonra “Taslağa al” deyin ve Oturum Bilgileri adımındaki kutuyu işaretleyin."}
       </p>
     );
   }
@@ -208,9 +222,10 @@ export default function GozetmenlerPaneli({ session }: { session: ExamSession })
     <div className="flex flex-col gap-4">
       {editable ? (
         <p className="max-w-3xl text-body-small text-on-surface-variant">
-          Her salon için öğretmeni LİSTEDEN seçin (ilk harfler yazılınca süzülür). Muaf, aynı saatte
-          başka oturumda görevli ve zaten atanmış öğretmenler nedeniyle birlikte görünür ama
-          seçilemez. Yedek görevli salonsuzdur (öneri: 5 salona 1 yedek).
+          Her salon için öğretmeni listeden seçin (ilk harfler yazılınca liste süzülür). Muaf, aynı
+          saatte başka oturumda görevli ve bu oturumda zaten görevli öğretmenler listede nedeniyle
+          birlikte görünür ama seçilemez. Yedek gözetmen bir salona bağlı değildir (öneri: 5 salona
+          1 yedek).
         </p>
       ) : (
         <p className="text-body-small text-on-surface-variant">
@@ -226,7 +241,9 @@ export default function GozetmenlerPaneli({ session }: { session: ExamSession })
               key={room.room_id}
               className="flex flex-wrap items-center gap-3 rounded-shape-md border border-outline-variant p-3"
             >
-              <span className="w-24 shrink-0 text-title-small text-on-surface">
+              {/* Sabit w-24 uzun salon adını ("Konferans Salonu") taşırıyordu:
+                  en az o kadar yer tutar, gerekirse büyür ve sözcük içinden kırılır. */}
+              <span className="min-w-24 max-w-full break-words text-title-small text-on-surface">
                 {room.room_name}
               </span>
               {(byRoom.get(room.room_id) ?? []).map((a) => (
@@ -236,7 +253,7 @@ export default function GozetmenlerPaneli({ session }: { session: ExamSession })
                   editable={editable}
                   canAcknowledge={canAcknowledge}
                   onRemove={handleRemove}
-                  onAcknowledge={(id) => acknowledge.mutate(id)}
+                  onAcknowledge={handleAcknowledge}
                 />
               ))}
               {(byRoom.get(room.room_id) ?? []).length === 0 && (
@@ -246,7 +263,7 @@ export default function GozetmenlerPaneli({ session }: { session: ExamSession })
             </li>
           ))}
           <li className="flex flex-wrap items-center gap-3 rounded-shape-md border border-outline-variant bg-surface-container-low p-3">
-            <span className="w-24 shrink-0 text-title-small text-on-surface">Yedekler</span>
+            <span className="min-w-24 text-title-small text-on-surface">Yedekler</span>
             {reserves.map((a) => (
               <AssignmentChip
                 key={a.id}
@@ -254,7 +271,7 @@ export default function GozetmenlerPaneli({ session }: { session: ExamSession })
                 editable={editable}
                 canAcknowledge={canAcknowledge}
                 onRemove={handleRemove}
-                onAcknowledge={(id) => acknowledge.mutate(id)}
+                onAcknowledge={handleAcknowledge}
               />
             ))}
             {reserves.length === 0 && (
@@ -282,8 +299,9 @@ export default function GozetmenlerPaneli({ session }: { session: ExamSession })
                 {a.room_name || "Salonsuz (yedek)"}
               </span>
               {a.acknowledged && (
-                <span className="rounded-full bg-primary-container px-3 py-1 text-label-small text-on-primary-container">
-                  Tebellüğ ✓
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary-container px-3 py-1 text-label-small text-on-primary-container">
+                  <Icon name="task_alt" size="sm" />
+                  Tebellüğ edildi
                 </span>
               )}
               <span className="ml-auto" />
@@ -291,7 +309,7 @@ export default function GozetmenlerPaneli({ session }: { session: ExamSession })
                 <Button
                   variant="text"
                   icon="task_alt"
-                  onClick={() => acknowledge.mutate(a.id)}
+                  onClick={() => handleAcknowledge(a)}
                   disabled={acknowledge.isPending}
                 >
                   Tebellüğ işle
@@ -370,10 +388,11 @@ function MuafiyetBolumu({ sessionId, onChanged }: { sessionId: number; onChanged
 
   return (
     <section className="rounded-shape-md bg-surface-container p-4">
-      <h3 className="text-title-small text-on-surface">Muaf personel</h3>
+      <h3 className="text-title-small text-on-surface">Muaf öğretmenler</h3>
       <p className="mb-3 mt-1 text-body-small text-on-surface-variant">
-        Muaf öğretmen elle atamada bile SEÇİLEMEZ. Gerekçe yalnız kategoridir; serbest metin alanı
-        bilinçle yoktur (KVKK md. 6). Güncelleme yerine kaldır + yeniden ekle.
+        Muaf öğretmen gözetmen olarak seçilemez. Gerekçe yalnız kategori olarak tutulur; açıklama
+        alanı bilinçli olarak yoktur (KVKK md. 6). Muafiyeti değiştirmek için kaldırıp yeniden
+        ekleyin.
       </p>
       <div className="mb-3 flex flex-wrap items-end gap-3">
         <div className="w-72">
@@ -415,7 +434,7 @@ function MuafiyetBolumu({ sessionId, onChanged }: { sessionId: number; onChanged
         </div>
       </div>
       {rows.length === 0 ? (
-        <p className="text-body-small text-on-surface-variant">Muaf personel yok.</p>
+        <p className="text-body-small text-on-surface-variant">Muaf öğretmen yok.</p>
       ) : (
         <ul className="flex flex-wrap gap-2">
           {rows.map((row) => (

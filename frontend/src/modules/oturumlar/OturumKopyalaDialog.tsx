@@ -85,8 +85,8 @@ export default function OturumKopyalaDialog({
       <div className="flex flex-col gap-4">
         <p className="text-body-medium text-on-surface-variant">
           Seçtiğiniz oturumun planı bu taslağa eklenir; sonra üzerinde değişiklik yapabilirsiniz.
-          Zaten ekli ders ve salonlar atlanır. Sınav tarihi, saati, dağıtım (seed), yoklama,
-          gözetmen görevlendirmesi ve onay damgaları KOPYALANMAZ.
+          Zaten ekli ders ve salonlar atlanır. Sınav tarihi ve saati, yerleşim ve dağıtım numarası,
+          yoklama, gözetmen görevlendirmesi ve onay bilgileri kopyalanmaz.
         </p>
 
         {oturumlar.isPending ? (
@@ -96,7 +96,7 @@ export default function OturumKopyalaDialog({
         ) : (
           <Select
             label="Kaynak oturum"
-            placeholder="— seçin —"
+            placeholder="Seçin"
             value={kaynak}
             onChange={(e) => setKaynak(e.target.value)}
             options={secenekler}
@@ -119,7 +119,7 @@ export default function OturumKopyalaDialog({
             checked={salonlar}
             onChange={(e) => setSalonlar(e.target.checked)}
           />
-          Kullanılacak derslikler
+          Kullanılacak salonlar
         </label>
 
         {rapor ? (

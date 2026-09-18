@@ -42,6 +42,39 @@ const OGRENCI = {
   status: "ACTIVE" as const,
 };
 
+/** "Belirli koltuk" kuralı — koordinat ızgara kimliğidir (0 tabanlı; satır 0 = ön cephe). */
+const SABIT_KOLTUK_KURALI = {
+  id: 3,
+  student_id: 42,
+  student_name: "Örnek ÖĞRENCİ",
+  scope: "SESSION",
+  session_id: 7,
+  rule_type: "FIXED_SEAT",
+  target_room_id: 2,
+  target_room_name: "D-101",
+  target_desk_row: 2,
+  target_desk_col: 1,
+  target_slot: 0,
+  seat_preference: "NONE",
+  solo_desk: true,
+  reason_category: "DISABILITY",
+};
+
+/** D-101 koltuk ucu: (2, 1) hücresindeki ikili sıranın iki koltuğu. */
+const D101_KOLTUKLARI = {
+  room_id: 2,
+  numbering_scheme: "S_PATTERN",
+  capacity: 40,
+  seats: [
+    { desk_row: 2, desk_col: 1, desk_type: "DOUBLE", slot: 0, seat_no: 11, x: 1, y: 2 },
+    { desk_row: 2, desk_col: 1, desk_type: "DOUBLE", slot: 1, seat_no: 12, x: 1.5, y: 2 },
+  ],
+};
+
+function kuralListesi(results: unknown[]) {
+  return { count: results.length, next: null, previous: null, results };
+}
+
 function renderPanel() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -100,36 +133,98 @@ describe("KurallarPaneli", () => {
     );
   });
 
-  it("kayıtlı kural özetinde koltuk koordinatı ve tek başına görünür", async () => {
-    ruleApi.list.mockResolvedValue({
-      count: 1,
-      next: null,
-      previous: null,
-      results: [
-        {
-          id: 3,
-          student_id: 42,
-          student_name: "Örnek ÖĞRENCİ",
-          scope: "SESSION",
-          session_id: 7,
-          rule_type: "FIXED_SEAT",
-          target_room_id: 2,
-          target_room_name: "D-101",
-          target_desk_row: 2,
-          target_desk_col: 1,
-          target_slot: 0,
-          seat_preference: "NONE",
-          solo_desk: true,
-          reason_category: "DISABILITY",
-        },
-      ],
-    });
+  it("kayıtlı kural özetinde koltuk SÖZLE ve 1 tabanlı yazılır; koltuk no salondan okunur", async () => {
+    ruleApi.list.mockResolvedValue(kuralListesi([SABIT_KOLTUK_KURALI]));
+    roomApi.seats.mockResolvedValue(D101_KOLTUKLARI);
     renderPanel();
 
     expect(await screen.findByText("Örnek ÖĞRENCİ")).toBeInTheDocument();
+    // Izgara (2, 1, 0) → 2. sıra (ön cephe bandı sayılmaz), 2. sütun, sol koltuk.
     expect(
-      screen.getByText(/Belirli koltuk · D-101 · sıra 2-1, koltuk 0 · tek başına/),
+      await screen.findByText(
+        "Belirli koltuk · D-101 · 2. sıra, 2. sütun, sol koltuk (koltuk no 11) · tek başına",
+      ),
     ).toBeInTheDocument();
+    expect(roomApi.seats).toHaveBeenCalledWith(2);
+    // Eski 0 tabanlı ham koordinat gösterimi kalmadı.
+    expect(screen.queryByText(/sıra 2-1, koltuk 0/)).not.toBeInTheDocument();
     expect(screen.getByText("Engel durumu")).toBeInTheDocument();
+  });
+
+  it("salon koltuk ucu gelmezse konum yine sözle yazılır; yalnız koltuk no ve sol/sağ düşer", async () => {
+    ruleApi.list.mockResolvedValue(kuralListesi([SABIT_KOLTUK_KURALI]));
+    roomApi.seats.mockRejectedValue(new Error("ağ koptu"));
+    renderPanel();
+
+    // Sıra tipi bilinmeden "sol/orta/sağ" tahmin edilmez → soldan sayılır.
+    expect(
+      await screen.findByText(
+        "Belirli koltuk · D-101 · 2. sıra, 2. sütun, soldan 1. koltuk · tek başına",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("koltuk seçici seçenekleri sözle gösterir; kayıt yine KOORDİNATLA gider", async () => {
+    const user = userEvent.setup();
+    ruleApi.list.mockResolvedValue(kuralListesi([]));
+    okulApiMock.listStudents.mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [OGRENCI],
+    });
+    roomApi.list.mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [{ id: 2, name: "D-101", group_name: "" }],
+    });
+    roomApi.seats.mockResolvedValue(D101_KOLTUKLARI);
+    ruleApi.create.mockResolvedValue({ id: 1 });
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: /Kural ekle/ }));
+    await user.type(await screen.findByLabelText(/Öğrenci/), "Örnek");
+    await user.click(within(await screen.findByRole("listbox")).getAllByRole("option")[0]);
+    await user.click(screen.getByRole("checkbox", { name: "Yerini ben seçeyim" }));
+
+    // Seçici yer tutucusu tek biçim: "Seçin" (docs/sozluk.md §3).
+    const salon = screen.getByLabelText("Salon");
+    expect(within(salon).getByRole("option", { name: "Seçin" })).toBeInTheDocument();
+    await user.selectOptions(salon, "2");
+
+    const koltuk = screen.getByLabelText("Koltuk");
+    const secenek = await within(koltuk).findByRole("option", {
+      name: "2. sıra, 2. sütun, sağ koltuk (koltuk no 12)",
+    });
+    await user.selectOptions(koltuk, secenek);
+    await user.click(screen.getByRole("button", { name: "Kaydet" }));
+
+    await waitFor(() =>
+      expect(ruleApi.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rule_type: "FIXED_SEAT",
+          target_room_id: 2,
+          target_desk_row: 2,
+          target_desk_col: 1,
+          target_slot: 1,
+        }),
+      ),
+    );
+  });
+
+  it("kural kaldırma onayı: başlık soru, gövde sonuç — gövdede öğrenci adı geçmez", async () => {
+    const user = userEvent.setup();
+    ruleApi.list.mockResolvedValue(kuralListesi([SABIT_KOLTUK_KURALI]));
+    roomApi.seats.mockResolvedValue(D101_KOLTUKLARI);
+    ruleApi.remove.mockResolvedValue(undefined);
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Örnek ÖĞRENCİ kuralını kaldır" }));
+    const dialog = await screen.findByRole("dialog", { name: "Kural kaldırılsın mı?" });
+    expect(dialog).not.toHaveTextContent("Örnek ÖĞRENCİ");
+    await user.click(within(dialog).getByRole("button", { name: "Kaldır" }));
+
+    await waitFor(() => expect(ruleApi.remove).toHaveBeenCalledWith(3));
   });
 });

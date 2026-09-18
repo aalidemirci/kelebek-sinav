@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../lib/api";
+import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import type { ExamSession } from "./api";
 import {
@@ -35,7 +36,12 @@ vi.mock("./api", async (importActual) => {
   const actual = await importActual<typeof import("./api")>();
   return { ...actual, examSessionApi: { ...actual.examSessionApi, ...sessionApi } };
 });
-vi.mock("../../lib/download", () => download);
+// Yalnız saveBlob sahtelenir; dosya adını kuran `dosyaAdi` GERÇEK kalır ki
+// indirilen adın biçimi de sınansın.
+vi.mock("../../lib/download", async (importActual) => {
+  const actual = await importActual<typeof import("../../lib/download")>();
+  return { ...actual, ...download };
+});
 
 import SorularPaneli from "./SorularPaneli";
 
@@ -44,7 +50,9 @@ function renderPanel(session: ExamSession) {
   return render(
     <QueryClientProvider client={qc}>
       <SnackbarProvider>
-        <SorularPaneli session={session} />
+        <ConfirmProvider>
+          <SorularPaneli session={session} />
+        </ConfirmProvider>
       </SnackbarProvider>
     </QueryClientProvider>,
   );
@@ -142,6 +150,40 @@ describe("SorularPaneli", () => {
     expect(screen.queryByRole("button", { name: "Kaldır" })).not.toBeInTheDocument();
   });
 
+  it("yüklü soru PDF'ini 'Kaldır' onaydan geçer; onaylanınca dosyanın durduğu satırdan silinir", async () => {
+    const user = userEvent.setup();
+    sessionApi.question.mockResolvedValue(makeQuestionMeta());
+    sessionApi.bookletRuns.mockResolvedValue(paginated([]));
+    sessionApi.deleteQuestion.mockResolvedValue(undefined);
+    renderPanel(dagitilmisOturum({ courses: [makeCourseRow()] }));
+
+    await user.click(await screen.findByRole("button", { name: "Kaldır" }));
+    // Tek tıkla silinmez: başlık soru, gövde sonuç (docs/sozluk.md §3).
+    expect(sessionApi.deleteQuestion).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog", { name: "Soru dosyası kaldırılsın mı?" });
+    expect(
+      within(dialog).getByText(/Matematik — 9\. Sınıf için yüklenen soru PDF'i silinir/),
+    ).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Kaldır" }));
+
+    await waitFor(() => expect(sessionApi.deleteQuestion).toHaveBeenCalledWith(21));
+    expect(await screen.findByText("Soru dosyası kaldırıldı.")).toBeInTheDocument();
+  });
+
+  it("'Kaldır' onayında 'Vazgeç' denirse dosya silinmez", async () => {
+    const user = userEvent.setup();
+    sessionApi.question.mockResolvedValue(makeQuestionMeta());
+    sessionApi.bookletRuns.mockResolvedValue(paginated([]));
+    renderPanel(dagitilmisOturum({ courses: [makeCourseRow()] }));
+
+    await user.click(await screen.findByRole("button", { name: "Kaldır" }));
+    const dialog = await screen.findByRole("dialog", { name: "Soru dosyası kaldırılsın mı?" });
+    await user.click(within(dialog).getByRole("button", { name: "Vazgeç" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(sessionApi.deleteQuestion).not.toHaveBeenCalled();
+  });
+
   it("yükleme dialogu: dosya + puan bölümü FormData ile gönderilir", async () => {
     const user = userEvent.setup();
     sessionApi.question.mockRejectedValue(
@@ -153,6 +195,9 @@ describe("SorularPaneli", () => {
 
     await user.click(await screen.findByRole("button", { name: "Yükle" }));
     const dialog = await screen.findByRole("dialog");
+    // Etiketlerde karar kodu (K5) ve rastgele büyük harf ("PUAN") yok.
+    const puan = within(dialog).getByLabelText("Puan bölümü");
+    expect(within(puan).getByRole("option", { name: "Tek puan kutusu" })).toBeInTheDocument();
     const input = within(dialog).getByLabelText(/Soru PDF dosyası/);
     await user.upload(input, new File(["%PDF-"], "soru.pdf", { type: "application/pdf" }));
     await user.click(within(dialog).getByRole("button", { name: "Yükle" }));
@@ -176,7 +221,8 @@ describe("SorularPaneli", () => {
     renderPanel(dagitilmisOturum());
 
     await user.click(await screen.findByRole("button", { name: "Word şablonunu indir" }));
-    await waitFor(() => expect(download.saveBlob).toHaveBeenCalledWith(blob, "soru_sablonu.docx"));
+    // Şablon oturuma özgü değildir → adında oturum adı/tarih yok.
+    await waitFor(() => expect(download.saveBlob).toHaveBeenCalledWith(blob, "Soru-Şablonu.docx"));
   });
 
   it("kitapçık üretimi SENKRON: başarıda 'üretildi' + liste tazelenir, ZIP indirilebilir", async () => {
@@ -194,10 +240,24 @@ describe("SorularPaneli", () => {
     await waitFor(() => expect(sessionApi.startBookletRun).toHaveBeenCalledWith(5, 0));
     expect(await screen.findByText("Kitapçıklar üretildi.")).toBeInTheDocument();
 
-    expect(await screen.findByText("Koşu #41")).toBeInTheDocument();
+    // Üretim kaydı kimlikle ("Koşu #41") değil üretim zamanıyla anılır.
+    expect(await screen.findByText(/Üretim · 01\.06\.2026.*09:05/)).toBeInTheDocument();
+    expect(screen.queryByText(/Koşu/)).not.toBeInTheDocument();
+    // Başlık ve alan etiketlerinde evrak kodu (R10) yok.
+    expect(
+      screen.getByRole("heading", { name: "Kişiselleştirilmiş kitapçıklar" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Her salon için isimsiz yedek kitapçık sayısı"),
+    ).toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: "ZIP indir" }));
+    // Dosya adı: belge adı + oturum adı + tarih (docs/sozluk.md §3).
     await waitFor(() =>
-      expect(download.saveBlob).toHaveBeenCalledWith(zip, "kitapciklar_oturum_5.zip"),
+      expect(download.saveBlob).toHaveBeenCalledWith(
+        zip,
+        "Kitapçıklar_2-Ortak-Sınav_15.06.2026.zip",
+      ),
     );
   });
 

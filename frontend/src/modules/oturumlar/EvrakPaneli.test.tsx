@@ -22,7 +22,12 @@ vi.mock("./api", async (importActual) => {
   const actual = await importActual<typeof import("./api")>();
   return { ...actual, examSessionApi: { ...actual.examSessionApi, ...sessionApi } };
 });
-vi.mock("../../lib/download", () => download);
+// Yalnız saveBlob sahtelenir; dosya adını kuran `dosyaAdi` GERÇEK kalır ki
+// indirilen adın biçimi de sınansın.
+vi.mock("../../lib/download", async (importActual) => {
+  const actual = await importActual<typeof import("../../lib/download")>();
+  return { ...actual, ...download };
+});
 
 import EvrakPaneli from "./EvrakPaneli";
 
@@ -56,14 +61,26 @@ describe("EvrakPaneli", () => {
     }
   });
 
-  it("R6 gözetmen ayarı açıkken listelenir", async () => {
+  it("R6 gözetmen ayarı açıkken sözlükteki adıyla listelenir", async () => {
     sessionApi.seating.mockResolvedValue(makeSeating());
     renderPanel(makeSession({ status: "DISTRIBUTED", proctors_enabled: true }));
 
-    expect(await screen.findByText(/Gözetmen Görevlendirme/)).toBeInTheDocument();
+    expect(await screen.findByText("Gözetmen Görevlendirme Yazısı")).toBeInTheDocument();
   });
 
-  it("tek rapor indirme: blob uca gider, dosya adı kodla kurulur (r5 → xlsx)", async () => {
+  it("panel metinlerinde evrak kodu ve 'seed' geçmez (docs/sozluk.md §2)", async () => {
+    sessionApi.seating.mockResolvedValue(makeSeating());
+    const { container } = renderPanel(
+      makeSession({ status: "DISTRIBUTED", proctors_enabled: true }),
+    );
+
+    await screen.findByText("Salon Sınav Evrakı");
+    expect(container.textContent).not.toMatch(/\bR(1|4|5|6|7|8|10)\b/);
+    expect(container.textContent).not.toMatch(/seed/i);
+    expect(screen.getByText(/“Sorular ve Kitapçıklar” sekmesinden/)).toBeInTheDocument();
+  });
+
+  it("tek belge indirme: dosya adı belge adı + oturum adı + tarih taşır (Excel → xlsx)", async () => {
     const user = userEvent.setup();
     sessionApi.seating.mockResolvedValue(makeSeating());
     const blob = new Blob(["excel"]);
@@ -75,7 +92,11 @@ describe("EvrakPaneli", () => {
     await user.click(within(satir as HTMLElement).getByRole("button", { name: "İndir" }));
 
     await waitFor(() => expect(sessionApi.reportBlob).toHaveBeenCalledWith(5, "r5", undefined));
-    expect(download.saveBlob).toHaveBeenCalledWith(blob, "r5_oturum_5.xlsx");
+    // Eski ad `r5_oturum_5.xlsx` idi: kod + kimlik, hangi sınav olduğu belirsiz.
+    expect(download.saveBlob).toHaveBeenCalledWith(
+      blob,
+      "Toplu-Dağıtım-Çizelgesi_2-Ortak-Sınav_15.06.2026.xlsx",
+    );
   });
 
   it("salon filtresi yalnız salon bazlı rapora uygulanır", async () => {
@@ -91,10 +112,24 @@ describe("EvrakPaneli", () => {
     const r1 = screen.getByText("Salon Sınav Evrakı").closest("li");
     await user.click(within(r1 as HTMLElement).getByRole("button", { name: "İndir" }));
     await waitFor(() => expect(sessionApi.reportBlob).toHaveBeenCalledWith(5, "r1", 1));
+    // Salon filtreli indirme salon adını da taşır — tüm salonlarınkiyle karışmaz.
+    await waitFor(() =>
+      expect(download.saveBlob).toHaveBeenLastCalledWith(
+        expect.anything(),
+        "Salon-Sınav-Evrakı_D-204_2-Ortak-Sınav_15.06.2026.pdf",
+      ),
+    );
 
     const r4 = screen.getByText("Şube Sınav Duyurusu").closest("li");
     await user.click(within(r4 as HTMLElement).getByRole("button", { name: "İndir" }));
     await waitFor(() => expect(sessionApi.reportBlob).toHaveBeenCalledWith(5, "r4", undefined));
+    // Salon bazlı olmayan belgenin adına salon girmez.
+    await waitFor(() =>
+      expect(download.saveBlob).toHaveBeenLastCalledWith(
+        expect.anything(),
+        "Şube-Sınav-Duyurusu_2-Ortak-Sınav_15.06.2026.pdf",
+      ),
+    );
   });
 
   it("tümünü indir ZIP ucuna gider", async () => {
@@ -107,7 +142,10 @@ describe("EvrakPaneli", () => {
     await user.click(await screen.findByRole("button", { name: /Tümünü indir/ }));
 
     await waitFor(() => expect(sessionApi.reportsZipBlob).toHaveBeenCalledWith(5));
-    expect(download.saveBlob).toHaveBeenCalledWith(blob, "sinav_evraki_oturum_5.zip");
+    expect(download.saveBlob).toHaveBeenCalledWith(
+      blob,
+      "Sınav-Evrakı_2-Ortak-Sınav_15.06.2026.zip",
+    );
   });
 
   it("uç hatasında snackbar gösterilir, indirme yapılmaz", async () => {

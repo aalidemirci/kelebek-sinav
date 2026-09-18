@@ -56,6 +56,11 @@ describe("OturumKopyalaDialog", () => {
     const secici = await screen.findByLabelText("Kaynak oturum");
     // Hedef oturum kendi listesinde OLMAMALI (kendinden kopyalanamaz).
     expect(secici).not.toHaveTextContent("Hedef");
+    // Sözlük: "seed" → "dağıtım numarası", "derslik" → "salon", yer tutucu "Seçin".
+    expect(screen.getByText(/yerleşim ve dağıtım numarası/)).toBeInTheDocument();
+    expect(screen.queryByText(/seed/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Kullanılacak salonlar" })).toBeChecked();
+    expect(screen.getByRole("option", { name: "Seçin" })).toBeInTheDocument();
     await user.selectOptions(secici, "9");
     await user.click(screen.getByRole("button", { name: /Kopyala/ }));
 

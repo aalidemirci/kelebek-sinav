@@ -5,17 +5,22 @@
 // söyler. R6 yalnız gözetmen ayarı açıkken listelenir; salon bazlı evrak
 // (salon evrakı ve tutanak) salon filtresiyle daraltılabilir. Durum kapısı
 // backend'dedir; panel yalnız sunar.
+//
+// İndirilen dosyanın adı belge adı + oturum adı + tarih taşır
+// (docs/sozluk.md §3): "Salon-Sınav-Evrakı_1-Ortak-Sınav_16.11.2026.pdf". Eski
+// `r7_oturum_3.pdf` masaüstünde hangi sınavın hangi belgesi olduğunu söylemiyordu.
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { ApiError } from "../../lib/api";
-import { saveBlob } from "../../lib/download";
+import { dosyaAdi, saveBlob } from "../../lib/download";
+import { formatDate } from "../../lib/format";
 import Button from "../../ui/Button";
 import Select from "../../ui/Select";
 import { useSnackbar } from "../../ui/SnackbarProvider";
-import type { ExamSession } from "./api";
-import { examSessionApi, REPORT_CATALOG } from "./api";
+import type { ExamSession, ReportCatalogItem } from "./api";
+import { examSessionApi, REPORT_CATALOG, REPORTS_ZIP_FILE_TITLE } from "./api";
 
 export default function EvrakPaneli({ session }: { session: ExamSession }) {
   const snackbar = useSnackbar();
@@ -32,20 +37,32 @@ export default function EvrakPaneli({ session }: { session: ExamSession }) {
   }));
 
   const catalog = REPORT_CATALOG.filter((item) => item.code !== "r6" || session.proctors_enabled);
+  const selectedRoom = roomOptions.find((r) => r.value === roomId);
 
-  const download = async (code: string, roomScoped: boolean) => {
-    setBusy(code);
+  /** Belge adı + (salon filtreliyse salon adı) + oturum adı + tarih. */
+  const fileName = (belge: string, ext: string, salon?: string) =>
+    dosyaAdi([belge, salon, session.name, formatDate(session.exam_date)], ext);
+
+  // `item` verilmezse "tümünü indir" ZIP'idir.
+  const download = async (item?: ReportCatalogItem) => {
+    setBusy(item?.code ?? "zip");
     try {
-      const blob =
-        code === "zip"
-          ? await examSessionApi.reportsZipBlob(session.id)
-          : await examSessionApi.reportBlob(
-              session.id,
-              code,
-              roomScoped && roomId !== "" ? Number(roomId) : undefined,
-            );
-      const ext = code === "zip" ? "zip" : code === "r5" ? "xlsx" : "pdf";
-      saveBlob(blob, `${code === "zip" ? "sinav_evraki" : code}_oturum_${session.id}.${ext}`);
+      if (item === undefined) {
+        const blob = await examSessionApi.reportsZipBlob(session.id);
+        saveBlob(blob, fileName(REPORTS_ZIP_FILE_TITLE, "zip"));
+        return;
+      }
+      const filtered = item.roomScoped && roomId !== "";
+      const blob = await examSessionApi.reportBlob(
+        session.id,
+        item.code,
+        filtered ? Number(roomId) : undefined,
+      );
+      // Salon filtreli indirme ayrı dosyadır; tüm salonlarınkinin üstüne yazmasın.
+      saveBlob(
+        blob,
+        fileName(item.fileTitle, item.ext, filtered ? selectedRoom?.label : undefined),
+      );
     } catch (e) {
       snackbar.error(e instanceof ApiError ? e.message : "Evrak üretilemedi.");
     } finally {
@@ -65,11 +82,7 @@ export default function EvrakPaneli({ session }: { session: ExamSession }) {
           className="w-64"
         />
         <span className="ml-auto" />
-        <Button
-          icon="folder_zip"
-          onClick={() => void download("zip", false)}
-          disabled={busy !== null}
-        >
+        <Button icon="folder_zip" onClick={() => void download()} disabled={busy !== null}>
           {busy === "zip" ? "Hazırlanıyor…" : "Tümünü indir (ZIP)"}
         </Button>
       </div>
@@ -92,7 +105,7 @@ export default function EvrakPaneli({ session }: { session: ExamSession }) {
             <Button
               variant="text"
               icon="download"
-              onClick={() => void download(item.code, item.roomScoped)}
+              onClick={() => void download(item)}
               disabled={busy !== null}
             >
               {busy === item.code ? "İndiriliyor…" : "İndir"}
@@ -101,8 +114,8 @@ export default function EvrakPaneli({ session }: { session: ExamSession }) {
         ))}
       </ul>
       <p className="text-body-small text-on-surface-variant">
-        Kişiselleştirilmiş kitapçıklar (R10) &quot;Sorular ve Kitapçıklar&quot; sekmesinden
-        üretilir. Arşivli oturumdan tüm evrak yeniden basılabilir.
+        Kişiselleştirilmiş kitapçıklar “Sorular ve Kitapçıklar” sekmesinden üretilir. Arşivlenmiş
+        oturumun evrakı da yeniden basılabilir.
       </p>
     </div>
   );
