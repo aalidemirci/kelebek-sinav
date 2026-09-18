@@ -397,7 +397,9 @@ def _validate_entry_participants(
     for sid in clean:
         section = okul_selectors.get_class_section(sid)
         if section is None:
-            raise ValidationError({"section_ids": f"Şube bulunamadı (id={sid})."})
+            raise ValidationError(
+                {"section_ids": "Seçilen şubelerden biri bulunamadı (silinmiş olabilir)."}
+            )
         if int(section.class_level) != int(level):
             raise ValidationError(
                 {
@@ -1476,7 +1478,7 @@ def calendar_validation(calendar: ExamCalendar) -> dict[str, list[str]]:
         if kayip:
             warnings.append(
                 f"{entry.course.name} — {_level_display(entry.level)}: kapsamdaki "
-                f"{len(kayip)} şube silinmiş (id={', '.join(str(s) for s in kayip)}); "
+                f"{len(kayip)} şube silinmiş; "
                 "kapsamı düzeltin, o şubeler sınava alınmaz."
             )
 

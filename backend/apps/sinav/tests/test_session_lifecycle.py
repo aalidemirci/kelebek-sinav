@@ -219,6 +219,14 @@ def test_swap_seats_guards() -> None:
     with pytest.raises(ValidationError, match="bulunamadı"):
         services.swap_seats(session, assignment_a_id=rows[0].pk, assignment_b_id=987654)
 
+    # A12: kuralla sabitlenmiş koltuk takasla sessizce bozulmaz (ret okul no ile, adsız).
+    SeatAssignment.objects.filter(pk=rows[0].pk).update(status=SeatStatus.PINNED)
+    with pytest.raises(ValidationError, match="yerleştirme kuralıyla sabitlenmiş") as excinfo:
+        services.swap_seats(session, assignment_a_id=rows[0].pk, assignment_b_id=rows[1].pk)
+    assert rows[0].student_number in str(excinfo.value)
+    assert rows[0].full_name not in str(excinfo.value)
+    SeatAssignment.objects.filter(pk=rows[0].pk).update(status=SeatStatus.NORMAL)
+
     services.approve_session(session)
     with pytest.raises(ValidationError, match="yalnız dağıtılmış"):
         services.swap_seats(session, assignment_a_id=rows[0].pk, assignment_b_id=rows[1].pk)

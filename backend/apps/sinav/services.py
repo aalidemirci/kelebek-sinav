@@ -544,12 +544,22 @@ def update_exam_session(session: ExamSession, **fields: Any) -> ExamSession:
     return session
 
 
+@transaction.atomic
 def remove_exam_session(session: ExamSession) -> None:
-    """Taslak oturumu kaldırır (soft-delete) — ders/salon satırlarıyla birlikte."""
+    """Taslak oturumu kaldırır (soft-delete) — bağlı tanım satırlarıyla birlikte.
+
+    Ders/salon satırlarının yanında OTURUM KAPSAMLI yerleştirme kuralları ve
+    gözetmenlik muafiyetleri de kapatılır (A13): eskiden canlı kalıyor, kural ve
+    muafiyet listeleri silinmiş oturumun kimliğini gösteriyordu. Kalıcı
+    (PERMANENT) kayıtlara dokunulmaz. İşlem atomiktir — yarıda kesilirse satırların
+    bir kısmı silinmiş kalmaz.
+    """
     _ensure_draft(session)
     now = timezone.now()
     ExamSessionCourse.objects.filter(session=session).update(deleted_at=now)
     ExamSessionRoom.objects.filter(session=session).update(deleted_at=now)
+    PlacementRule.objects.filter(session=session).update(deleted_at=now)
+    ProctorExemption.objects.filter(session=session).update(deleted_at=now)
     session.delete()
 
 
@@ -632,9 +642,12 @@ def _validate_participant_refs(
             raise ValidationError("Şube bazlı atamada en az bir şube seçin.")
         seen_levels: set[int] = set()
         for sid in section_ids:
-            section = okul_selectors.get_class_section(int(sid))
+            # JSON alanı tip denetimsizdir: `["abc"]` ham `int()` ile 500 veriyordu (A14).
+            if isinstance(sid, bool) or not isinstance(sid, int):
+                raise ValidationError("Şube seçimi geçersiz; şubeleri listeden seçin.")
+            section = okul_selectors.get_class_section(sid)
             if section is None:
-                raise ValidationError(f"Şube bulunamadı (id={sid}).")
+                raise ValidationError("Seçilen şubelerden biri bulunamadı (silinmiş olabilir).")
             seen_levels.add(int(section.class_level))
         if len(seen_levels) > 1:
             raise ValidationError(
@@ -788,12 +801,15 @@ def set_session_rooms(
         room_id = entry.get("room_id")
         if not isinstance(room_id, int):
             raise ValidationError("Her satırda sayısal room_id zorunludur.")
-        if room_id in seen:
-            raise ValidationError(f"Salon listede iki kez geçiyor (id={room_id}).")
-        seen.add(room_id)
         room = ExamRoom.objects.filter(pk=room_id, is_active=True).first()
+        if room_id in seen:
+            ad = f"'{room.name}' salonu" if room is not None else "Bir salon"
+            raise ValidationError(f"{ad} listede iki kez geçiyor.")
+        seen.add(room_id)
         if room is None:
-            raise ValidationError(f"Salon bulunamadı veya pasif (id={room_id}).")
+            raise ValidationError(
+                "Seçilen salonlardan biri bulunamadı ya da pasif; salon listesini yenileyin."
+            )
         resolved.append((room, entry.get("capacity_override")))
 
     ExamSessionRoom.objects.filter(session=session).exclude(
@@ -1185,6 +1201,16 @@ def swap_seats(
     if len(rows) != 2:
         raise ValidationError("Takas satırı bulunamadı (bu oturumun canlı yerleşimi değil).")
     a, b = rows
+    # Kuralla sabitlenmiş koltuk (engel durumu, BEP, sağlık…) takasla SESSİZCE
+    # bozulmaz (A12): eskiden satır uyarısız MANUAL'a dönüyor, kural fiilen
+    # deliniyordu. Yer değişecekse önce kural değiştirilir ya da kaldırılır.
+    pinned = [row for row in (a, b) if row.status == SeatStatus.PINNED]
+    if pinned:
+        numbers = ", ".join(sorted(row.student_number for row in pinned))
+        raise ValidationError(
+            f"Okul No {numbers} yerleştirme kuralıyla sabitlenmiş; takas edilemez. "
+            "Yeri değiştirmek için Yerleştirme Kuralları sekmesinden kuralı düzenleyin."
+        )
     a_seat = (a.room_id, a.desk_row, a.desk_col, a.slot, a.seat_no)
     b_seat = (b.room_id, b.desk_row, b.desk_col, b.slot, b.seat_no)
     # Koltuk tekilliği (session, room, seat_no) kısmi unique'e takılmasın diye
@@ -1556,7 +1582,10 @@ def _resolve_rule_pins(
         if room_id not in rooms_cache:
             room = ExamRoom.objects.filter(pk=room_id, is_active=True).first()
             if room is None:
-                raise ValidationError(f"Kural hedef salonu bulunamadı (id={room_id}).")
+                raise ValidationError(
+                    "Bir yerleştirme kuralının hedef salonu bulunamadı ya da pasif; "
+                    "Yerleştirme Kuralları sekmesinden kuralı düzeltin."
+                )
             rooms_cache[room_id] = _room_seats_for(room)
         return rooms_cache[room_id]
 
@@ -2588,7 +2617,7 @@ def _resolve_active_personnel(teacher_id: int) -> Personnel:
     """Aktif personeli çözer (OYS core köprüsü yerine yerel tablo — B9)."""
     teacher: Personnel | None = Personnel.objects.filter(pk=teacher_id, is_active=True).first()
     if teacher is None:
-        raise ValidationError(f"Aktif personel bulunamadı (id={teacher_id}).")
+        raise ValidationError("Seçilen öğretmen bulunamadı ya da pasif; listeyi yenileyin.")
     return teacher
 
 

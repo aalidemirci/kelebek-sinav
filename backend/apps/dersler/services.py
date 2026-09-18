@@ -754,7 +754,9 @@ def set_course_sections(
         for sid in ids:
             section = ClassSection.objects.filter(pk=sid, school_year_id=school_year_id).first()
             if section is None:
-                raise ValidationError({"section_ids": f"Şube bulunamadı (id={sid})."})
+                raise ValidationError(
+                    {"section_ids": "Seçilen şubelerden biri bulunamadı (silinmiş olabilir)."}
+                )
             if int(section.class_level) != level:
                 raise ValidationError(
                     {

@@ -17,7 +17,14 @@ from rest_framework.test import APIClient
 from apps.dersler.models import Course
 from apps.okul.models import ImportRun, SchoolConfig, Student, StudentStatus
 from apps.sinav import selectors, services
-from apps.sinav.models import ExamSessionRoom, ExamSessionStatus, ParticipantType
+from apps.sinav.models import (
+    ExamSessionRoom,
+    ExamSessionStatus,
+    ParticipantType,
+    PlacementRule,
+    RuleScope,
+    RuleType,
+)
 from apps.sinav.tests.oturum_yardim import ders, donem, oturum, salon, sube
 
 pytestmark = pytest.mark.django_db
@@ -153,9 +160,38 @@ def test_remove_exam_session_soft_deletes_children() -> None:
     room = salon("D-201")
     services.set_session_rooms(session, [{"room_id": room.pk}])
 
+    # A13: oturum kapsamlı kural ve muafiyet de kapanır; kalıcı olanlara dokunulmaz.
+    section = sube(9, "A", students=2, start_no=101)
+    del section
+    ogrenciler = list(Student.objects.order_by("student_number").values_list("pk", flat=True))
+    oturum_kurali = services.create_placement_rule(
+        student_id=ogrenciler[0],
+        rule_type=RuleType.FRONT_ROW,
+        scope=RuleScope.SESSION,
+        session=session,
+    )
+    kalici_kural = services.create_placement_rule(
+        student_id=ogrenciler[1], rule_type=RuleType.FRONT_ROW
+    )
+
     services.remove_exam_session(session)
     assert selectors.get_exam_session(session.pk) is None
     assert selectors.session_rooms(session.pk).count() == 0
+    assert not PlacementRule.objects.filter(pk=oturum_kurali.pk).exists()
+    assert PlacementRule.objects.filter(pk=kalici_kural.pk).exists()
+
+
+def test_section_ids_tip_denetimi_400_verir() -> None:
+    """A14: `section_ids` JSON alanıdır; sayı olmayan öğe 500 değil Türkçe 400'dür."""
+    session = oturum()
+    course = ders("Coğrafya", levels=[9])
+    resp = APIClient().post(
+        f"{URL}{session.pk}/courses/",
+        {"course_id": course.pk, "participant_type": "SECTIONS", "section_ids": ["abc"]},
+        format="json",
+    )
+    assert resp.status_code == 400
+    assert "şube" in resp.data["message"].lower()
 
 
 def test_pre_check_summary_counts() -> None:
