@@ -8,8 +8,12 @@ yazılmaz; bu dosyada da oturum tarafına hiç dokunulmaz.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 import pytest
+from django.core.exceptions import ValidationError
 from django.db.utils import IntegrityError
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.okul import selectors
@@ -132,3 +136,132 @@ def test_api_kume_crud_ve_toplu_atama() -> None:
 
     assert client.delete(f"/api/v1/class-section-groups/{kume_id}/").status_code == 204
     assert ClassSection.objects.filter(group_id=kume_id).count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Küme düzenleme + toplu atamanın ret/eksik girdi dalları
+# ---------------------------------------------------------------------------
+
+
+def _eskit(kume: ClassSectionGroup) -> datetime:
+    """`updated_at`'i geçmişe çeker → sonraki yazmanın damgayı yenilediği ölçülebilir."""
+    eski = timezone.now() - timedelta(days=3)
+    ClassSectionGroup.objects.filter(pk=kume.pk).update(updated_at=eski)
+    kume.refresh_from_db()
+    return eski
+
+
+def test_kume_guncelleme_degisen_alani_yazar_ve_damgayi_yeniler() -> None:
+    """`save(update_fields=…)` `auto_now`'ı kendiliğinden yazmaz — damga elle eklenir."""
+    kume = section_service.create_section_group(name="Sayısal", order=2)
+    eski = _eskit(kume)
+
+    section_service.update_section_group(kume, name="Sayısal (MF)")
+
+    kume.refresh_from_db()
+    assert (kume.name, kume.order) == ("Sayısal (MF)", 2)
+    assert kume.updated_at > eski
+
+
+def test_kume_guncelleme_degisiklik_yoksa_yazmaz() -> None:
+    kume = section_service.create_section_group(name="Dil", order=1)
+    eski = _eskit(kume)
+
+    section_service.update_section_group(kume, name="Dil", order=1)
+
+    kume.refresh_from_db()
+    assert kume.updated_at == eski
+
+
+def test_toplu_atama_olmayan_kumeyi_reddeder() -> None:
+    """Küme yoksa (ya da SİLİNMİŞSE) şubeler yetim bir kimliğe bağlanmaz."""
+    yil = _yil()
+    sube = _sube(yil, 11, "A")
+    silinmis = ClassSectionGroup.objects.create(name="Dil")
+    silinmis.delete()
+
+    for kume_id in (999_999, silinmis.pk):
+        with pytest.raises(ValidationError, match="Şube kümesi bulunamadı"):
+            section_service.assign_section_group(section_ids=[sube.pk], group_id=kume_id)
+
+    sube.refresh_from_db()
+    assert sube.group_id is None
+
+
+def test_toplu_atama_bilinmeyen_subeyi_sessizce_atlar() -> None:
+    """İdempotent toplu iş deseni: dönüş ETKİLENEN satır sayısıdır, gönderilen değil."""
+    yil = _yil()
+    kume = ClassSectionGroup.objects.create(name="Sayısal")
+    sube = _sube(yil, 11, "A")
+
+    etkilenen = section_service.assign_section_group(
+        section_ids=[sube.pk, 999_999], group_id=kume.pk
+    )
+
+    assert etkilenen == 1
+
+
+def test_sube_baska_kumeye_alininca_eskisinden_cikar() -> None:
+    """Üyelik TEKTİR: şube en çok bir kümededir, ikinci atama taşımadır."""
+    yil = _yil()
+    sayisal = ClassSectionGroup.objects.create(name="Sayısal")
+    esit = ClassSectionGroup.objects.create(name="Eşit Ağırlık")
+    sube = _sube(yil, 11, "A")
+    section_service.assign_section_group(section_ids=[sube.pk], group_id=sayisal.pk)
+
+    section_service.assign_section_group(section_ids=[sube.pk], group_id=esit.pk)
+
+    assert list(sayisal.sections.all()) == []
+    assert [s.pk for s in esit.sections.all()] == [sube.pk]
+
+
+def test_api_kume_yeniden_adlandirma_teklik_kendini_saymaz() -> None:
+    """PATCH'te teklik denetimi kaydın KENDİSİNİ dışlar; başka kümenin adı yine reddedilir."""
+    client = APIClient()
+    sayisal = ClassSectionGroup.objects.create(name="Sayısal")
+    ClassSectionGroup.objects.create(name="Dil")
+    url = f"/api/v1/class-section-groups/{sayisal.pk}/"
+
+    ayni_ad = client.patch(url, {"name": "Sayısal", "order": 3}, format="json")
+    assert ayni_ad.status_code == 200 and ayni_ad.json()["order"] == 3
+
+    cakisan = client.patch(url, {"name": "  Dil "}, format="json")
+    assert cakisan.status_code == 400
+    assert "zaten kayıtlı" in str(cakisan.json()["fields"]["name"])
+
+    yeni_ad = client.patch(url, {"name": "Sayısal  (MF)"}, format="json")
+    assert yeni_ad.status_code == 200 and yeni_ad.json()["name"] == "Sayısal (MF)"
+
+
+def test_api_toplu_atama_gecersiz_govdeyi_reddeder() -> None:
+    """Olmayan küme ve liste olmayan şube alanı 400'dür; hiçbir şube değişmez."""
+    yil = _yil()
+    sube = _sube(yil, 12, "A")
+    client = APIClient()
+    url = "/api/v1/class-section-groups/assign/"
+
+    olmayan = client.post(url, {"section_ids": [sube.pk], "group": 999_999}, format="json")
+    assert olmayan.status_code == 400 and "group" in olmayan.json()["fields"]
+
+    bozuk = client.post(url, {"section_ids": "hepsi", "group": None}, format="json")
+    assert bozuk.status_code == 400 and "section_ids" in bozuk.json()["fields"]
+
+    sube.refresh_from_db()
+    assert sube.group_id is None
+
+
+def test_api_toplu_atama_null_kume_subeyi_kumeden_cikarir() -> None:
+    yil = _yil()
+    kume = ClassSectionGroup.objects.create(name="Sayısal")
+    sube = _sube(yil, 12, "A")
+    section_service.assign_section_group(section_ids=[sube.pk], group_id=kume.pk)
+
+    yanit = APIClient().post(
+        "/api/v1/class-section-groups/assign/",
+        {"section_ids": [sube.pk], "group": None},
+        format="json",
+    )
+
+    assert yanit.status_code == 200 and yanit.json() == {"updated": 1}
+    sube.refresh_from_db()
+    assert sube.group_id is None
