@@ -80,7 +80,12 @@ cd kelebek-sinav-<sürüm>
    okur). Alternatifler: uygulamanın kendi Excel şablonu veya tabloyu panoya
    kopyalayıp yapıştırmak. Aktarmadan önce **Önizle** ile kaç kayıt geleceğini
    görebilirsiniz — önizleme hiçbir şey yazmaz.
-4. Ders havuzu MEB çizelgesinden kendiliğinden dolar (v1: Anadolu Lisesi).
+4. Ders havuzu, seçtiğiniz okul türünün yürürlükteki MEB haftalık ders
+   çizelgesinden kendiliğinden dolar (Anadolu, Fen, Sosyal Bilimler, Güzel
+   Sanatlar, Spor, Anadolu İmam Hatip, Mesleki ve Teknik Anadolu ve Çok
+   Programlı Anadolu liseleri;
+   hazırlık sınıflı programlar dahil). Okulunuzda seviyeye göre farklı
+   çizelge uygulanıyorsa Ayarlar'dan seviye-program eşlemesini yaparsınız.
 5. İsterseniz Ayarlar → Güvenlik'ten **uygulama parolası** kurarsınız: ad-soyad
    alanları şifrelenir, size TEK SEFERLİK bir kurtarma anahtarı verilir —
    yazdırıp güvenli bir yerde saklayın.

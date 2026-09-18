@@ -146,6 +146,26 @@
   geneli sınavdır. Kullanıcı metninde ders türü için "zorunlu", seviyeler arası
   tek kitapçık için "tüm seviyeler aynı kitapçık" kullanılır; "ortak" yalnız
   MEB anlamında geçer.
+- **Kullanıcı metninin sözlüğü `docs/sozluk.md`'dir (bağlayıcı):** salon/derslik,
+  öğretmen/personel, sınıf düzeyi, katılımcı kapsamı, "dağıtım numarası" (seed),
+  "kural ihlali"; iç kodlar (K5, R10, F6…) ve iç kimlikler (`id=…`) kullanıcı
+  metninde, hata mesajında ve evrakta GEÇMEZ. Sınıf düzeyi etiketi tek
+  kaynaktan: `dersler.text.level_label` / FE `gradeLevelLabel` ("9. Sınıf").
+- **Servis hatası merkezî çevrilir:** `ks_exception_handler` Django
+  `ValidationError`'ını 400'e çevirir (DRF tanımaz → 500 olurdu) ve kaynağı
+  servis hatası olan alan-sözlüğü retlerinde `message`'a GEREKÇEYİ yazar (arayüz
+  snackbar'da `message` basar). Serializer alan hatalarında genel cümle kalır.
+- **DRF tek alanlı UniqueConstraint'ten ALAN düzeyinde UniqueValidator türetir;**
+  `Meta.validators = []` onu silmez. Teklik mesajı servisten gelecekse alan elle
+  tanımlanır (`validators=[]`) — emsal `SubjectDepartmentSerializer`,
+  `ExamTrackItemSerializer`.
+- **Soft-delete `SET_NULL`'ı da tetiklemez:** silinen oturuma bağlı takvim
+  girdisinde `session_id` ölü kimliği taşır. Canlılık tek yardımcıdan sorulur
+  (`services_calendar.has_live_session`); liste/ızgara yalnız canlı kimliği döner.
+- **`version_key` iki kopyadır** (`desktop/version.py`, `okul/services/updates.py`)
+  ve AYNI kalmalıdır; ön-sürüm eki doğal sıralanır (`beta.10 > beta.9`).
+- **Mevzuat atfı depodaki metinden doğrulanır:** `docs/mevzuat/` (ÖDY, Yönerge,
+  OKY seçilmiş maddeler + atıf haritası). Yeni atıf eklerken önce metni ekleyin.
 - **SQLite:** `levels__contains` yok (Python süzme); yedek daima
   `Connection.backup()` (dosya kopyalama WAL'de yasak).
 - **Kimlik sabitleri:** `KS_*` env, `ks_oturum`, `X-KS-Token`, `.ksbak`,
@@ -176,17 +196,45 @@
   `revert_session_to_draft` (`POST /exam-sessions/{id}/revert-to-draft/`,
   FE "Taslağa al"). Yerleşim + gözetmen görevlendirmesi soft-delete,
   `distribution_params` sıfırlanır; ders/salon satırları, kural, muafiyet, soru
-  dosyası ve kitapçık koşuları KORUNUR. Onaylı oturum önce `reopen`. Yoklama
-  kayıtlarına dokunulmaz — yeniden dağıtımla aynı bilinen boşluk.
+  dosyası ve kitapçık koşuları KORUNUR. Onaylı oturum önce `reopen`.
+- **Yoklaması alınmış oturumun yerleşimi DEĞİŞMEZ:** yoklama sınavdan sonra
+  alınır; o andan itibaren yerleşim sınavın yapıldığı düzenin kaydıdır.
+  `_ensure_no_attendance` yeniden dağıtımı ve taslağa almayı REDDEDER (kayıtlar
+  sessizce silinmez — idareci isterse önce Yoklama sekmesinden kaldırır).
 - **Karma seviyeli oturumda evrak ders adı:** `_seat_course_names` aynı ders
-  ≥2 seviyedeyse adı seviyeyle basar ("Coğrafya — 9. Sınıf"; R1/R4/R5/R7),
-  tek seviyede yalın ad (sayfa bütçesi ölçümleri yalın ada göre kalibre).
+  ≥2 seviyedeyse adı seviyeyle basar ("Coğrafya — 9. Sınıf"; R1/R5/R7 ve kitapçık
+  bandı); şube duyurusunda (R4) `SeatRow.course_plain` ile SEVİYESİZ basılır
+  (şube tek seviyededir).
+- **Karışık salonda DERS KODU:** yoklama listesinin "Ders" sütunu ve kroki
+  hücresi TEK HARF taşır (A, B, C — ders etiketinin doğal sırası); açıklaması
+  listenin üstünde, künyede kod özeti, sayım tablosunda kod + tam ad + süre.
+  Gerekçe ölçümdür: gerçek ders etiketi ("Türk Dili ve Edebiyatı — 10. Sınıf")
+  dar sütunda sarıp 40 öğrencili evrakı üçüncü sayfaya taşırıyordu. Sayfa
+  bütçesi testleri bu yüzden GERÇEK uzunlukta adlarla koşar (`_GERCEK_DERSLER`);
+  "Ders 0" gibi kısa fixture'a dönmeyin. R4'te ad/ders sütun payı en uzun
+  metinlere göre bölüşülür (`_announcement_columns`).
+- **Evrakta sınav süresi:** `ReportHeader.duration_label` üst bantta
+  ("40 dk" / "derse göre 40-60 dk"), ders bazlı süre R1 sayım tablosunda;
+  ders süresi oturum süresini ezer (`_group_durations`).
+- **Soru dosyası satırı iz, dosyası geçicidir:** değiştirilen/kaldırılan soru
+  PDF'i DİSKTEN de silinir (`_retire_question_documents`, commit sonrası);
+  satır (sayfa sayısı, sha256) kalır. Silme ucu yükleme ile aynı durum
+  kapısından geçer (onaylı/arşivde ret). Yedek medya dosyalarını KAPSAMAZ;
+  dosyası olmayan kayıtta indirme `media_missing` 404 döner.
+- **Ders birleştirme grup anahtarını yeniden yazar:** `consolidate_duplicate_course`
+  sınav dersi, takvim girdisi ve seçmeli kapsamı taşır; yerleşim snapshot'larındaki
+  `conflict_group` aynı işlemde güncellenir. İki ders aynı dağıtılmış oturumdaysa
+  REDDEDER.
 - Takvim ızgarası hücre anahtarı `"<iso_tarih>|<period_no>|<level>"` — FE ve
   PDF ORTAK tüketir; hücre sözlüğüne alan eklenir, anahtar biçimi değişmez.
 - Takvim imza bloğu sözleşmesi `{"chairs": [{"name", "role"}],
   "school_chair_name"}` (`_calendar_signatures` çıktısı). Kaynak takvime seçilen
   zümrelerdir (`okul.SubjectDepartment`); seçim yoksa derslerden boş çizgi
   üretilir (B7 revizyonu) — şablon iki anahtarı görmeye devam eder.
+  `school_chair_name` slotunun ETİKETİ "Düzenleyen — Müdür Yardımcısı"dır
+  (18.09.2026; eski "Okul Zümre Başkanı" mevzuatta yoktu ve hiç dolmuyordu).
+  Antet resmî yazışma usulündedir: kurum satırı `tr_upper`, birim satırı
+  "<Okul Adı> Müdürlüğü" (`letterhead_unit`).
 - **Ceza demeti:** `engine._pair_penalty` leksikografik `(birincil, ikincil)`
   döner. Birincil sert/yumuşak yakınlık cezasıdır (sert kısıt kaynağı);
   ikincil YALNIZ eşitlik bozar (kaçınılmaz komşu çiftin öğretmen masasına
@@ -277,8 +325,10 @@ docker compose run --rm frontend npm install
 bash scripts/gates.sh
 ```
 
-(F0 tamamlanana dek bu komutlar iskelet gerektirir — faz durumu için
-`docs/tasarim/…§12`.)
+Kapı betiği GitHub'da da koşar (`.github/workflows/kapilar.yml` — her PR ve
+main push'u; betiği OLDUĞU GİBİ çağırır, ikinci komut listesi tutulmaz). Bu
+makinede Docker Desktop elle başlatılır; ana ağaçta düzenleme sürerken kapıyı
+ayrı bir `git worktree` kopyasında koşmak iki işi birbirinden ayırır.
 
 ## 5. Commit ve süreç
 

@@ -502,6 +502,37 @@ garanti `test_reports.py::test_r1_salon_evraki_iki_yaprak` ile sabittir.
 Birim uyarısı: WeasyPrint iç birimi CSS px'tir (1 pt = 4/3 px) ve tablo
 hücresine `height` vermek satırı kısaltmaz, UZATIR.
 
+**18.09.2026 evrak revizyonu (değerlendirme belgesi §3).** Örnek PDF'ler gerçek
+uzunlukta ders adlarıyla yeniden üretilip gözle incelendi; bulgular ve kararlar:
+
+* **Ders kodu.** Karışık salonda yoklama listesinin "Ders" sütunu ve kroki
+  hücresi tek harf taşır (A, B, C — ders etiketinin doğal sırası); açıklama
+  listenin üstünde ("DERS KODLARI: A = …"), künyede kod özeti, sayım tablosunda
+  kod + tam ad + süre. Gerekçe ölçümdür: "Türk Dili ve Edebiyatı — 10. Sınıf"
+  gibi gerçek bir etiket %16'lık sütunda sarıyor, 40 öğrencili R1 üçüncü sayfaya
+  taşıyordu. Bütçe testleri artık gerçek uzunlukta adlarla koşar.
+* **Seviye.** Aynı ders bir oturumda ≥2 seviyedeyse R1/R5/R7 ve kitapçık bandı
+  adı seviyeyle basar; şube duyurusu (R4) seviyesiz basar (şube tek seviyededir)
+  ve ad/ders sütun payını en uzun metinlere göre bölüşür.
+* **Süre.** Üst bantta "Süre: 40 dk" (ders süreleri farklıysa "derse göre
+  40-60 dk"); ders bazlı süre R1 sayım tablosunda. R6 görevlendirme yazısının
+  giriş cümlesi de süreyi söyler.
+* **Çift yüz baskı.** R1'in ilk yaprağı `break-before: right` ile daima ön yüze
+  düşer; toplu basımda bir salonun krokisi öncekinin arkasına basılmaz.
+* **Plan sonradan değiştiyse.** Yerleşimden sonra salon planı daraltılmışsa
+  krokide görünmeyen öğrenciler için kroki altına "DİKKAT: N öğrencinin koltuğu
+  güncel salon planında yok" notu düşer (yoklama listesi snapshot'tan tamdır).
+  Salonu silinmiş oturumun evrakı da üretilir (snapshot + `include_deleted`).
+* **R8 dili.** "İhlal", "seed", "sert/yumuşak kısıt" idareci diline çevrildi
+  ("KURAL İHLALİ YOKTUR", "Dağıtım numarası"); imza "Düzenleyen — Müdür
+  Yardımcısı". R4'e de düzenleyen imza satırı + dayanak eklendi.
+* **Antet.** Resmî yazışma usulü: kurum satırı büyük harf (`tr_upper`), birim
+  satırı "<Okul Adı> Müdürlüğü". Takvimde onay tarihi basılır.
+* **Bilinçli olarak yapılmayanlar.** R1 yaprak 1'e "sınava girmeyen öğrenci
+  numaraları" satırı ve daha büyük "tespit" kutusu eklenmedi — yaprak 1 bütçesi
+  dolu, bilgi yaprak 2'deki yoklamada zaten var. Kitapçık bandına süre
+  eklenmedi (`booklet.py` AYNEN sınıfında).
+
 Şablonlar: `templates/sinav/reports/` (base · _head · _kroki · _kroki_style ·
 r1_salon_evraki · r4_announcement · r6_assignment · r7_tutanak ·
 r8_validation · room_layout) + `booklet_overlay` + `calendar_pdf` +
@@ -631,6 +662,7 @@ app'i, guardian_* alanları.
 | **F6 eki-2 (03.09.2026)** | Ders saati ayarı (`daily_period_count` + `exam_period_nos`; varsayılan zil çizelgesi ondan türer) · aynı slotta kapsam kesişimi SERT kısıt · salon kapasitesi uyarısı · `is_pinned` sabitleme · `auto_place_entries` (FILL/REDISTRIBUTE) + `auto-place` ve `pin` uçları · kılavuz bölümü | Otomatik dağıtım günde ikiyi geçmez ve sınav saatleri dışına çıkmaz; üst makam sınavı yerleştirilmez, rapora gerekçesiyle düşer; sabitlenen girdi REDISTRIBUTE'ta yerinde kalır; kapsamı kesişen ikinci sınav 400 alır ve eski çakışmalar `calendar_validation`da görünür; aynı havuz → aynı dağıtım; `_daily_exam_load` DEĞİŞMEDEN yeşil |
 | **F6 eki-3 (03.09.2026)** | Seçmeli ders şube kapsamı ders havuzuna taşındı (`CourseSectionOffering` = (ders, ders yılı, seviye) → şubeler; Ders Havuzu ekranında "Şubeler" sütunu + diyalog) · `fill_calendar_pool` şubesi tanımlı yazılı seçmelileri de çeker · seçmeli seçim diyaloğu ve toplu ekleme kapsamı katalogdan ön-doldurur · takvim girdisi kopyayı tutar, fark "özel" rozetiyle görünür | Kapsam yalnız SEÇMELİ derse yazılır ve tam değiştirme yapar; silinmiş şube okumada düşer; kapsamsız seçmeli havuza GİRMEZ ve `skipped`'a nedeniyle yazılır; gönderilen kapsam katalogu ezer ve rozet üretir; yıl geçişinde kopyalama yok (her yıl yeniden girilir) |
 | **F3 eki-2 (18.09.2026)** | Saha vakası (TDE 9 + TDE 10 oturumu): "Ortak kitapçık" kutusu MEB'in "ortak sınav" terimiyle karışıp her satırda işaretlendi → iki seviye tek çakışma grubu sayıldı, ikinci soru dosyası reddedildi, dağıtımdan sonra geri yol yoktu. Düzeltme: bayrak ders-başı ayar (kardeşlere yayılır, ret kalktı; ekleme formundan çıktı), Sorular paneli aynı-kitapçık grubunu tek satırda gösterir, `revert_session_to_draft` (DAĞITILDI → TASLAK, "Taslağa al"), karma seviyeli evrakta ders adı seviyeli (`_seat_course_names`), R8 çok satırlı `{# #}` sızıntısı `{% comment %}` ile kapandı | Kardeş senkron + miras testi; taslağa alma yerleşimi siler ve tanımı korur, tam döngü yeniden dağıtılır; R1/R7 karma seviyede "Coğrafya — 9. Sınıf" basar; R8 çıktısında `{#` yok; FE: ders-başı kutu `updateCourse` çağırır, panelde tek satır/tek Yükle, "Taslağa al" onay diyaloğundan geçer |
+| **Değerlendirme turu (18.09.2026)** | `docs/degerlendirme/2026-09-18-…` planının uygulanması. Doğruluk: silinmiş salonun evrakı, soru dosyasının diskten silinmesi + silme ucunda durum kapısı, yoklaması alınmış oturumda yeniden dağıtım/taslağa alma reddi, sabit koltukta takas reddi, oturum silinince kural/muafiyet temizliği, ölü oturum bağının takvimde serbest kalması (`has_live_session`), ders birleştirmede grup anahtarının yeniden yazılması, MEB dersinde ad değişikliği reddi, merkezî Django `ValidationError` çevirisi, eksik medya dosyasında Türkçe 404, ön-sürüm doğal sıralaması. Evrak: §9 "18.09.2026 evrak revizyonu". Dil: `docs/sozluk.md` bağlayıcı sözlük; iç kod ve `id=` sızıntıları temizlendi; mazeret etiketleri "Mazeretli/Mazeretsiz". Mevzuat: OKY seçilmiş maddeleri depoya alındı, tüm atıflar metinden doğrulandı. Süreç: `kapilar.yml` (kapı betiği CI'da), backend test kapsamı %88 → %92 | Her düzeltme kendi regresyon testiyle; sayfa bütçesi testleri GERÇEK uzunlukta ders adlarıyla; `bash scripts/gates.sh` uçtan uca yeşil |
 | **F7 Gözetmen** | Elle atama; salon başına 1 + yedek; R6; yeniden dağıtımda sıfırlama | Ayar kapalıyken R6 katalogda görünmez |
 | **F8 Bakım** | Günlük yedek+rotasyon (iki kip); F27 elle-tetik anonimleştirme; surum.json; updates.py+UpdateBanner | Eski exe yeni DB'yi açmaz; anonimleştirme sonrası yeniden basım kırılmaz |
 | **F9 Paketleme** | PyInstaller onedir + Inno (yeni GUID, WebView2 gömülü) + .deb (bullseye; pango/fontconfig Depends); kap-ici-test debian 11+12; veri_sizintisi.py ×2 platform | Temiz Windows 11 ve Pardus 21'de: kurulum → sihirbaz → içe aktarma → dağıtım → R1 PDF uçtan uca |
@@ -646,9 +678,10 @@ app'i, guardian_* alanları.
    Selector disiplinini F1'den kurmak şart.
 4. **Konservatif düşüş kaybı:** günlük limitte "kayıtsız ders = seviyenin
    tamamı" kuralı gevşetilirse mevzuat denetimi delinir. **31.08.2026 eki:**
-   takvim girdisine şube kapsamı gelmesi bu kuralı DEĞİŞTİRMEZ — kapsam yalnız
-   katılımcı önizlemesinde ve slottan oturum üretiminde kullanılır;
-   `_daily_exam_load` şube listesine bakmaz (TB10).
+   takvim girdisine şube kapsamı gelmesi bu kuralı DEĞİŞTİRMEZ — kapsam
+   katılımcı önizlemesinde, slottan oturum üretiminde ve (03.09.2026'dan beri)
+   aynı SLOT kesişimi sert kısıtında kullanılır; `_daily_exam_load` şube
+   listesine bakmaz (TB10).
 5. **Fontconfig/DejaVu:** fonts.conf'ta DOCTYPE kalırsa sessiz ret → bozuk
    Türkçe evrak; build.ps1 ezme adımı atlanmamalı.
 6. **Kimlik çakışması:** Inno AppId GUID yenilenmez veya `DD_*` kalıntısı
