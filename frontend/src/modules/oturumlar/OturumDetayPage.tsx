@@ -20,6 +20,7 @@ import { useConfirm } from "../../ui/ConfirmProvider";
 import ModuleHeader from "../../ui/ModuleHeader";
 import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import { useSnackbar } from "../../ui/SnackbarProvider";
+import type { ExamSession } from "./api";
 import { examSessionApi } from "./api";
 import EvrakPaneli from "./EvrakPaneli";
 import GozetmenlerPaneli from "./GozetmenlerPaneli";
@@ -50,22 +51,23 @@ export default function OturumDetayPage() {
     void qc.invalidateQueries({ queryKey: ["exam-sessions"] });
   };
 
+  const TRANSITIONS = {
+    approve: examSessionApi.approve,
+    reopen: examSessionApi.reopen,
+    archive: examSessionApi.archive,
+    revert: examSessionApi.revertToDraft,
+  } as const;
+  const TRANSITION_MESSAGES: Record<ExamSession["status"], string> = {
+    DRAFT: "Oturum taslağa alındı — yerleşim silindi; sihirbazdan düzeltip yeniden dağıtın.",
+    DISTRIBUTED: "Onay geri alındı — oturum yeniden düzenlenebilir.",
+    APPROVED: "Oturum onaylandı — yerleşim kilitlendi.",
+    ARCHIVED: "Oturum arşivlendi (salt-okunur; yeniden basım açık).",
+  };
   const transition = useMutation({
-    mutationFn: (action: "approve" | "reopen" | "archive") =>
-      action === "approve"
-        ? examSessionApi.approve(sessionId)
-        : action === "reopen"
-          ? examSessionApi.reopen(sessionId)
-          : examSessionApi.archive(sessionId),
+    mutationFn: (action: keyof typeof TRANSITIONS) => TRANSITIONS[action](sessionId),
     onSuccess: (updated) => {
       refresh();
-      snackbar.success(
-        updated.status === "APPROVED"
-          ? "Oturum onaylandı — yerleşim kilitlendi."
-          : updated.status === "ARCHIVED"
-            ? "Oturum arşivlendi (salt-okunur; yeniden basım açık)."
-            : "Onay geri alındı — oturum yeniden düzenlenebilir.",
-      );
+      snackbar.success(TRANSITION_MESSAGES[updated.status]);
     },
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "İşlem yapılamadı."),
   });
@@ -130,13 +132,32 @@ export default function OturumDetayPage() {
               </Button>
             )}
             {data.status === "DISTRIBUTED" && (
-              <Button
-                icon="verified"
-                onClick={() => transition.mutate("approve")}
-                disabled={transition.isPending}
-              >
-                Onayla
-              </Button>
+              <>
+                {/* Dağıtımdan sonra fark edilen tanım hatası (yanlış seviye/şube,
+                    yanlışlıkla işaretlenmiş "aynı kitapçık") için sihirbaza dönüş yolu. */}
+                <Button
+                  variant="tonal"
+                  icon="undo"
+                  onClick={() => {
+                    void confirm({
+                      title: "Taslağa alınsın mı?",
+                      message:
+                        "Yerleşim ve gözetmen görevlendirmeleri silinir. Ders, şube ve salon seçimi, yerleştirme kuralları ve soru dosyaları korunur; sihirbazdan düzeltip yeniden dağıtırsınız.",
+                      confirmLabel: "Taslağa al",
+                    }).then((ok) => ok && transition.mutate("revert"));
+                  }}
+                  disabled={transition.isPending}
+                >
+                  Taslağa al
+                </Button>
+                <Button
+                  icon="verified"
+                  onClick={() => transition.mutate("approve")}
+                  disabled={transition.isPending}
+                >
+                  Onayla
+                </Button>
+              </>
             )}
             {data.status === "APPROVED" && (
               <>

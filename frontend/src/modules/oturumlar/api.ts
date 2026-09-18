@@ -410,6 +410,8 @@ export const examSessionApi = {
     api.post<ExamSession>(`/exam-sessions/${id}/approve/`, payload),
   reopen: (id: number) => api.post<ExamSession>(`/exam-sessions/${id}/reopen/`),
   archive: (id: number) => api.post<ExamSession>(`/exam-sessions/${id}/archive/`),
+  /** Dağıtımı geri alır — DAĞITILDI → TASLAK (yerleşim silinir; ders/salon tanımı korunur). */
+  revertToDraft: (id: number) => api.post<ExamSession>(`/exam-sessions/${id}/revert-to-draft/`),
 
   // --- Evrak (F4) — blob indirme; dosya adı panelde kurulur ---
   reportBlob: (id: number, code: string, roomId?: number) =>

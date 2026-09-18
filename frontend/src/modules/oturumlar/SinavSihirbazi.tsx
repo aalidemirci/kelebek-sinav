@@ -29,7 +29,7 @@ import { derslerApi } from "../dersler/api";
 import { okulApi } from "../okul/api";
 import { examRoomApi, examRoomGroupApi } from "../salonlar/api";
 import OturumKopyalaDialog from "./OturumKopyalaDialog";
-import type { ExamSession, LayoutModeCode, ParticipantTypeCode } from "./api";
+import type { ExamSession, ExamSessionCourseRow, LayoutModeCode, ParticipantTypeCode } from "./api";
 import { examSessionApi } from "./api";
 
 const STEPS = [
@@ -293,7 +293,6 @@ function CoursesStep({
   const [sectionIds, setSectionIds] = useState<number[]>([]);
   const [copyOpen, setCopyOpen] = useState(false);
   const closeCopy = useCallback(() => setCopyOpen(false), []);
-  const [sharedBooklet, setSharedBooklet] = useState(false);
 
   const courses = useQuery({ queryKey: ["courses"], queryFn: () => derslerApi.listCourses() });
   // Typeahead: havuz küçük ve zaten yüklü — ilk harf filtresi istemci tarafında,
@@ -335,9 +334,14 @@ function CoursesStep({
     setLevel("");
     setPtype("LEVEL");
     setSectionIds([]);
-    setSharedBooklet(false);
   };
 
+  // "Aynı kitapçık" bayrağı (shared_booklet) ekleme formunda SORULMAZ: bayrak
+  // satırın değil dersin oturum içi niteliğidir ve yalnız aynı ders birden çok
+  // seviyede eklenince anlam kazanır; listenin altındaki ders-başı kutudan
+  // ayarlanır (backend değeri kardeş satırlara yayar). Eski "Ortak kitapçık"
+  // kutusu MEB'in "ortak sınav" terimiyle karışıp her sınavda işaretleniyordu
+  // (18.09.2026 TDE 9/10 vakası).
   const addCourse = useMutation({
     mutationFn: () =>
       examSessionApi.addCourse(session.id, {
@@ -345,7 +349,6 @@ function CoursesStep({
         participant_type: ptype,
         level: ptype === "LEVEL" ? Number(level) : undefined,
         section_ids: ptype === "SECTIONS" ? sectionIds : undefined,
-        shared_booklet: sharedBooklet,
       }),
     onSuccess: () => {
       setAddOpen(false);
@@ -355,6 +358,28 @@ function CoursesStep({
     },
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Ders eklenemedi."),
   });
+
+  const setSharedBooklet = useMutation({
+    mutationFn: ({ rowId, value }: { rowId: number; value: boolean }) =>
+      examSessionApi.updateCourse(rowId, { shared_booklet: value }),
+    onSuccess: () => {
+      onChanged();
+      void qc.invalidateQueries({ queryKey: ["exam-participants", session.id] });
+    },
+    onError: (e) =>
+      snackbar.error(e instanceof ApiError ? e.message : "Kitapçık ayarı kaydedilemedi."),
+  });
+
+  // Aynı ders birden çok seviyede → ders başına "aynı kitapçık" kutusu.
+  const multiLevelCourses = useMemo(() => {
+    const byCourse = new Map<number, ExamSessionCourseRow[]>();
+    for (const row of session.courses) {
+      byCourse.set(row.course_id, [...(byCourse.get(row.course_id) ?? []), row]);
+    }
+    return [...byCourse.values()].filter((rows) => rows.length > 1);
+  }, [session.courses]);
+  const courseAlreadyInSession =
+    course !== null && session.courses.some((row) => row.course_id === course.id);
 
   const removeCourse = useMutation({
     mutationFn: (sessionCourseId: number) => examSessionApi.removeCourse(sessionCourseId),
@@ -459,6 +484,36 @@ function CoursesStep({
         })}
       </ul>
 
+      {multiLevelCourses.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-shape-md bg-surface-container p-3">
+          <h4 className="text-title-small text-on-surface">Aynı ders birden çok seviyede</h4>
+          <p className="text-body-small text-on-surface-variant">
+            Olağan durumda her seviye kendi sorularını çözer: her seviye için ayrı soru dosyası
+            yüklenir ve farklı seviyelerin öğrencileri yan yana oturabilir. Bir dersin tüm
+            seviyeleri <strong>aynı</strong> soru kitapçığını çözecekse aşağıda işaretleyin; o zaman
+            tek dosya yüklenir ve bu öğrenciler birbirinin yanına oturtulmaz.
+          </p>
+          {multiLevelCourses.map((rows) => (
+            <label
+              key={rows[0].course_id}
+              className="flex min-h-9 cursor-pointer items-center gap-3 text-body-medium text-on-surface"
+            >
+              <input
+                type="checkbox"
+                checked={rows[0].shared_booklet}
+                onChange={(e) =>
+                  setSharedBooklet.mutate({ rowId: rows[0].id, value: e.target.checked })
+                }
+                disabled={setSharedBooklet.isPending}
+                className="h-5 w-5 accent-primary"
+              />
+              {rows[0].course_name}: {rows.map((r) => gradeLevelLabel(r.level)).join(", ")} aynı
+              soru kitapçığını çözecek
+            </label>
+          ))}
+        </div>
+      )}
+
       {participants.data && participants.data.warnings.length > 0 && (
         <ul role="alert" className="text-body-small text-error">
           {participants.data.warnings.map((w) => (
@@ -537,6 +592,13 @@ function CoursesStep({
               helperText="Aynı ders adı olsa da her seviye ayrı içerik/soru demektir; satır seviye başına eklenir."
             />
           )}
+          {courseAlreadyInSession && (
+            <p className="text-body-small text-on-surface-variant">
+              Bu ders oturumda başka bir seviyede zaten var. Her seviye ayrı soru dosyası alır; tüm
+              seviyeler aynı kitapçığı çözecekse ekledikten sonra listenin altındaki kutuyu
+              işaretleyin.
+            </p>
+          )}
           <Select
             label="Katılımcı tipi"
             options={[
@@ -586,15 +648,6 @@ function CoursesStep({
               </div>
             </fieldset>
           )}
-          <label className="flex min-h-9 cursor-pointer items-center gap-3 text-body-medium text-on-surface">
-            <input
-              type="checkbox"
-              checked={sharedBooklet}
-              onChange={(e) => setSharedBooklet(e.target.checked)}
-              className="h-5 w-5 accent-primary"
-            />
-            Ortak kitapçık (bu dersin tüm seviyeleri tek kitapçık/tek çakışma grubu)
-          </label>
         </div>
       </Dialog>
 

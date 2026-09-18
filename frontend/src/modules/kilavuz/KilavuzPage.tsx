@@ -625,6 +625,45 @@ export default function KilavuzPage() {
           dağıtım (seed), yerleşim, yoklama, gözetmen görevlendirmesi ve onay damgaları kopyalanmaz
           — bunlar her oturuma özgüdür.
         </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Aynı ders birden çok seviyede: ayrı sorular mı, aynı kitapçık mı?
+        </h3>
+        <p>
+          Bir dersi iki seviyede (örneğin Türk Dili ve Edebiyatı 9 ve 10) aynı oturuma eklerseniz
+          her seviye <strong>ayrı bir sınavdır</strong>: kendi soru dosyasını alır ve kelebek
+          dağıtımda 9 ile 10. sınıf öğrencileri yan yana oturabilir, çünkü farklı soruları çözerler.
+          Program bunu varsayılan sayar; ek bir şey işaretlemeniz gerekmez.
+        </p>
+        <p>
+          Yalnız dersin tüm seviyeleri <strong>aynı soru kitapçığını</strong> çözecekse ders
+          listesinin altındaki “… aynı soru kitapçığını çözecek” kutusunu işaretleyin. O zaman
+          Sorular sekmesinde o ders tek satır olur, tek dosya yüklenir ve bu öğrenciler birbirinin
+          yanına oturtulmaz. Bu kutunun MEB mevzuatındaki “ortak sınav” kavramıyla ilgisi yoktur:
+          okul geneli ortak yazılı sınav zaten olağan durumdur ve kutu boşken yürür.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Soru dosyaları ve kişiselleştirilmiş kitapçıklar
+        </h3>
+        <p>
+          Dağıtımdan sonra <strong>Sorular ve Kitapçıklar</strong> sekmesinde her ders-seviye
+          satırına A4 dikey soru PDF dosyasını yüklersiniz. Panelden indirilen Word şablonu sayfanın
+          üst 4 santimetresini boş bırakır; oraya öğrencinin adı, numarası, salonu ve puan bölümü
+          basılır. “Kitapçıkları üret” düğmesi salon salon ZIP paketi çıkarır: her öğrenciye oturma
+          sırasında, adına basılı bir kitapçık. İsimsiz yedek kopya sayısı salon başına eklenir.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Dağıtımdan sonra fark edilen hata: “Taslağa al”
+        </h3>
+        <p>
+          Yanlış seviye, eksik şube ya da yanlış işaretlenmiş kitapçık kutusunu dağıtımdan sonra
+          fark ederseniz oturum başlığındaki <strong>“Taslağa al”</strong> düğmesi sihirbaza geri
+          döndürür: yerleşim ve gözetmen görevlendirmeleri silinir; ders, şube ve salon seçimi,
+          yerleştirme kuralları ve yüklenmiş soru dosyaları korunur. Düzeltip yeniden dağıtırsınız.
+          Onaylanmış oturumda önce “Yeniden aç”, sonra “Taslağa al” denir; arşiv geri dönüşsüzdür.
+        </p>
       </Adim>
 
       <Adim no={9} icon="description" title="Evrak, gözetmen ve yedekleme">

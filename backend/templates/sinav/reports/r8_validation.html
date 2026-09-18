@@ -92,8 +92,12 @@ sayısal denetim dili vardır.{% endcomment %}
         <td>{{ row.room_name }}</td>
         <td class="num">{{ row.capacity }}</td>
         <td class="num">{{ row.placed }}</td>
-        {# `unlocalize` CSS tuzağı için zorunlu (F25/T244 kuralı); tam sayıya
-           yuvarlamak TR metinde "95.0" gibi nokta ayraçlı okuma bırakmaz. #}
+        {% comment %}
+          `unlocalize` CSS tuzağı için zorunlu (F25/T244 kuralı); tam sayıya
+          yuvarlamak TR metinde "95.0" gibi nokta ayraçlı okuma bırakmaz.
+          NOT: Django'nun `{# #}` yorumu TEK satırlıktır — çok satıra yayılınca
+          metin olarak basılır (18.09.2026'da örnek PDF'te görüldü).
+        {% endcomment %}
         <td class="num">%{{ row.percent|unlocalize|floatformat:0 }}</td>
       </tr>
       {% endfor %}

@@ -482,11 +482,15 @@ def test_booklet_run_missing_doc_listed_per_level() -> None:
 
 
 def test_shared_booklet_single_file_rule() -> None:
-    """Ortak kitapçıkta dosya TEK satıra yüklenir; kardeş satıra ikinci yükleme reddedilir."""
+    """Aynı kitapçıkta dosya TEK satıra yüklenir; kardeş satıra ikinci yükleme reddedilir.
+
+    Mesaj çıkış yolunu söyler: dosyanın hangi seviye satırında olduğu + taslağa
+    alıp işareti kaldırma (18.09.2026 TDE 9/10 vakası).
+    """
     sube(11, "A", students=2, start_no=301)
     sube(12, "A", students=2, start_no=401)
     course = ders("Seçmeli Mantık", levels=[11, 12])
-    session = oturum(name="Ortak Kitapçık Sınavı")
+    session = oturum(name="Aynı Kitapçık Sınavı")
     rows = [
         services.add_session_course(
             session,
@@ -498,8 +502,96 @@ def test_shared_booklet_single_file_rule() -> None:
         for level in (11, 12)
     ]
     services.upload_question_document(rows[0], file_bytes=_question_pdf(1))
-    with pytest.raises(ValidationError, match="tek satıra"):
+    with pytest.raises(ValidationError, match="11. Sınıf satırında zaten yüklü") as excinfo:
         services.upload_question_document(rows[1], file_bytes=_question_pdf(1))
+    assert "taslağa alıp" in str(excinfo.value)
+
+
+def test_tde_9_10_vakasi_uctan_uca() -> None:
+    """18.09.2026 saha vakası — yanlış işaretlenmiş "aynı kitapçık" bayrağından çıkış yolu.
+
+    Eski arayüz iki satırı da `shared_booklet=True` bıraktı → tek çakışma grubu,
+    ikinci soru dosyası reddi ve dağıtımdan sonra geri yol yoktu. Yeni akış API
+    üzerinden uçtan uca: taslağa al → bayrağı TEK satırdan kaldır (kardeşe
+    yayılır) → yeniden dağıt → her seviye kendi dosyasını alır → kitapçıklar
+    seviyeye göre ayrışır. İlk yüklenen 9. sınıf dosyası taslağa almada KORUNUR.
+    """
+    sube(9, "A", students=4, start_no=101)
+    sube(10, "A", students=4, start_no=201)
+    course = ders("Türk Dili ve Edebiyatı", levels=[9, 10])
+    session = oturum(name="1. Dönem 1. Ortak Sınav")
+    rows = {
+        level: services.add_session_course(
+            session,
+            course_id=course.pk,
+            participant_type=ParticipantType.LEVEL,
+            level=level,
+            shared_booklet=True,  # eski arayüzün bıraktığı durum
+        )
+        for level in (9, 10)
+    }
+    # 8 sıra: tek grupken de (8 öğrenci) herkes ayrı sıraya oturabilsin.
+    plan: dict[str, Any] = {
+        "grid": {"rows": 4, "cols": 2},
+        "desks": [
+            {"row": r, "col": c, "type": DeskType.DOUBLE} for r in range(4) for c in range(2)
+        ],
+        "furniture": [],
+    }
+    services.set_session_rooms(session, [{"room_id": salon("D-401", plan=plan).pk}])
+    client = APIClient()
+    base = f"/api/v1/exam-sessions/{session.pk}"
+
+    def _groups() -> set[str]:
+        return set(
+            SeatAssignment.objects.filter(session=session).values_list("conflict_group", flat=True)
+        )
+
+    def _upload(level: int, title: str) -> Any:
+        return client.post(
+            f"/api/v1/exam-session-courses/{rows[level].pk}/question/",
+            {"file": io.BytesIO(_question_pdf(1, title=title))},
+            format="multipart",
+        )
+
+    # 1) Eski durum: iki seviye TEK çakışma grubu; ikinci dosya reddedilir ve
+    #    mesaj çıkış yolunu söyler.
+    assert client.post(f"{base}/distribute/", {"seed": 11}, format="json").status_code == 200
+    assert _groups() == {f"{course.pk}:*"}
+    assert _upload(9, "TDE-DOKUZ").status_code == 201
+    rejected = _upload(10, "TDE-ON")
+    assert rejected.status_code == 400
+    assert "taslağa alıp" in str(rejected.data)
+
+    # 2) Çıkış yolu: taslağa al → bayrağı tek satırdan kaldır → yeniden dağıt.
+    reverted = client.post(f"{base}/revert-to-draft/")
+    assert reverted.status_code == 200 and reverted.data["status"] == "DRAFT"
+    patched = client.patch(
+        f"/api/v1/exam-session-courses/{rows[9].pk}/", {"shared_booklet": False}, format="json"
+    )
+    assert patched.status_code == 200
+    rows[10].refresh_from_db()
+    assert rows[10].shared_booklet is False, "bayrak kardeş satıra yayılmalı"
+    redistributed = client.post(f"{base}/distribute/", {"seed": 11}, format="json")
+    assert redistributed.status_code == 200
+    assert redistributed.data["report"]["is_valid"] is True
+    assert _groups() == {f"{course.pk}:9", f"{course.pk}:10"}
+
+    # 3) 9. sınıf dosyası taslağa almada korundu; 10. sınıf kendi dosyasını alır.
+    assert client.get(f"/api/v1/exam-session-courses/{rows[9].pk}/question/").status_code == 200
+    assert _upload(10, "TDE-ON").status_code == 201
+
+    # 4) Kitapçıklar seviyeye göre ayrışır.
+    started = client.post(f"{base}/booklets/", {}, format="json")
+    assert started.status_code == 201 and started.data["status"] == "COMPLETED"
+    download = client.get(f"/api/v1/booklet-runs/{started.data['id']}/download/")
+    zip_bytes = b"".join(download.streaming_content)
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        pages = _page_texts(zf.read(zf.namelist()[0]))
+    text_9 = "\n".join(p for p in pages if "9/A" in p)
+    text_10 = "\n".join(p for p in pages if "10/A" in p)
+    assert "TDE-DOKUZ" in text_9 and "TDE-ON" not in text_9
+    assert "TDE-ON" in text_10 and "TDE-DOKUZ" not in text_10
 
 
 # ===========================================================================

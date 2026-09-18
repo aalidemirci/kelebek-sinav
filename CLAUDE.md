@@ -138,6 +138,14 @@
   ve KVKK koruması tam orada delinir. Sağlamalı örnek bir kimlik numarası test
   KAYNAĞINA yazılmaz, çalışma anında üretilir (aksi hâlde kapı kendi testini
   yakalar — `test_depo_sizintisi.py` deseni).
+- **Django `{# #}` yorumu TEK satırlıktır:** çok satıra yayılınca metin olarak
+  BASILIR (R8 doluluk tablosunda örnek PDF'e sızdı, 18.09.2026). Şablonda çok
+  satırlı açıklama `{% comment %}` bloğuyla yazılır; koruma testi
+  `test_reports.py::test_r8_yorum_sizintisi_yok`.
+- **"Ortak" sözcüğü üç anlam taşımaz:** MEB'de "ortak sınav/ortak yazılı" okul
+  geneli sınavdır. Kullanıcı metninde ders türü için "zorunlu", seviyeler arası
+  tek kitapçık için "tüm seviyeler aynı kitapçık" kullanılır; "ortak" yalnız
+  MEB anlamında geçer.
 - **SQLite:** `levels__contains` yok (Python süzme); yedek daima
   `Connection.backup()` (dosya kopyalama WAL'de yasak).
 - **Kimlik sabitleri:** `KS_*` env, `ks_oturum`, `X-KS-Token`, `.ksbak`,
@@ -154,7 +162,25 @@
 - SNAPSHOT deseni: SeatAssignment/yoklama/gözetmen kayıtlarındaki ad/no/şube
   kopyaları arşiv evrakının sabitliği içindir — kaldırılmaz.
 - `ExamSessionCourse` tek-seviyeli; kitapçık sözlüğü grup anahtarıyla
-  (OYS Tur 241 dersi).
+  (OYS Tur 241 dersi). **`shared_booklet` dersin oturum içi niteliğidir,
+  satırın değil** (18.09.2026): kardeş satırlar daima aynı değeri taşır — açık
+  verilen değer `_sync_shared_booklet` ile kardeşlere YAYILIR, verilmeyen değer
+  kardeşten miras alınır (eski "uyuşmazlıkta ret" kalktı; idareci ilk satırda
+  yanlış işaretlediği bayrağı ikinci satıra zorla taşıyor, sonra soru dosyası
+  yükleyemiyordu). Arayüz: ekleme formunda SORULMAZ; yalnız aynı ders ≥2
+  seviyedeyken listenin altındaki ders-başı kutu vardır ve Sorular paneli grubu
+  TEK satırda gösterir (`groupQuestionRows`). Kullanıcıya "ortak kitapçık"
+  DENMEZ — MEB'de "ortak sınav" okul geneli sınavdır; ek metni tek yerde
+  (`SHARED_BOOKLET_SUFFIX`).
+- **Durum makinesinde geri yol** (18.09.2026): DAĞITILDI → TASLAK
+  `revert_session_to_draft` (`POST /exam-sessions/{id}/revert-to-draft/`,
+  FE "Taslağa al"). Yerleşim + gözetmen görevlendirmesi soft-delete,
+  `distribution_params` sıfırlanır; ders/salon satırları, kural, muafiyet, soru
+  dosyası ve kitapçık koşuları KORUNUR. Onaylı oturum önce `reopen`. Yoklama
+  kayıtlarına dokunulmaz — yeniden dağıtımla aynı bilinen boşluk.
+- **Karma seviyeli oturumda evrak ders adı:** `_seat_course_names` aynı ders
+  ≥2 seviyedeyse adı seviyeyle basar ("Coğrafya — 9. Sınıf"; R1/R4/R5/R7),
+  tek seviyede yalın ad (sayfa bütçesi ölçümleri yalın ada göre kalibre).
 - Takvim ızgarası hücre anahtarı `"<iso_tarih>|<period_no>|<level>"` — FE ve
   PDF ORTAK tüketir; hücre sözlüğüne alan eklenir, anahtar biçimi değişmez.
 - Takvim imza bloğu sözleşmesi `{"chairs": [{"name", "role"}],
