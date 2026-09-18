@@ -496,9 +496,15 @@ def test_takvim_pdf_yatay_taslak_filigrani_ve_tr_duman() -> None:
     assert "TASLAK" in text  # onaysız PDF filigranlı
     eksik = [h for h in TURKCE_DUMAN if h != " " and h not in text]
     assert not eksik, f"Takvim PDF'inde Türkçe glif kaybı: {eksik}"
-    assert "SANCAKTEPE KAYMAKAMLIĞI" not in text  # antet ilçeyi olduğu gibi basar
-    assert "Sancaktepe KAYMAKAMLIĞI" in text
+    # Antet resmî yazışma usulüyle: kurum satırı TÜRKÇE büyük harf (tr_upper —
+    # i→İ), birim satırı "<Okul Adı> Müdürlüğü" tek satır (18.09.2026).
+    assert "SANCAKTEPE KAYMAKAMLIĞI" in text
+    assert "Anadolu Lisesi Müdürlüğü" in text
     assert "Zümre Başkanı" in text  # boş imza çizgileri (B7)
+    assert "Okul Zümre Başkanı" not in text  # mevzuatta olmayan, hiç dolmayan slot kalktı
+    assert "Düzenleyen — Müdür Yardımcısı" in text
+    assert "· 08:30" in text  # ders saatinin başlangıcı satır başlığında
+    assert "…… / …… / 20……" in text  # onaysız takvimde boş tarih çizgisi
 
     takvim.submit_calendar(calendar)
     takvim.approve_calendar(calendar)
@@ -703,7 +709,7 @@ def test_pdf_makam_etiketi_ve_dipnotu_basiyor() -> None:
     metin = "\n".join(p.extract_text() or "" for p in reader.pages)
     assert "İL MEM SINAVI" in metin
     assert "DİPNOT" in metin and "Mazeret sınavları izleyen hafta yapılır." in metin
-    assert "2026-2027 EĞİTİM ÖĞRETİM YILI" in metin  # dönem üzerinden ders yılı
+    assert "2026-2027 EĞİTİM VE ÖĞRETİM YILI" in metin  # dönem üzerinden ders yılı
 
 
 def test_api_makam_dipnot_ve_imza_zumresi_sozlesmesi() -> None:

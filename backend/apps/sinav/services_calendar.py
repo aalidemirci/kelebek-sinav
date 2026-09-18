@@ -1929,6 +1929,13 @@ def render_calendar_pdf(calendar: ExamCalendar) -> bytes:
         "principal_name": config.principal_name,
         "is_draft": calendar.status != ExamCalendarStatus.APPROVED,
         "generated_at": timezone.now(),
+        # Onay tarihi UYGUNDUR bloğuna basılır (belgede hiçbir tarih yoktu); onaysız
+        # takvimde elle doldurulacak boş tarih çizgisi kalır. Yerel tarih — UTC değil.
+        "approved_on": (
+            timezone.localtime(calendar.approved_at).strftime("%d.%m.%Y")
+            if calendar.status == ExamCalendarStatus.APPROVED and calendar.approved_at
+            else ""
+        ),
     }
     html = render_to_string("sinav/calendar_pdf.html", context)
     return bytes(HTML(string=html).write_pdf())
