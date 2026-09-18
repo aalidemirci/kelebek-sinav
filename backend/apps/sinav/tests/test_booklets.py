@@ -355,6 +355,53 @@ def test_api_upload_download_and_booklet_flow() -> None:
     assert client.get(f"/api/v1/exam-session-courses/{sc.pk}/question/").status_code == 404
 
 
+def test_yerlesim_degisince_kitapcik_uretimi_bayat_isaretlenir() -> None:
+    """Kitapçık salon/koltuk/ad taşır: üretimden sonra yerleşim değişirse ZIP yanlış
+    koltuğa kitapçık demektir. Dosya silinmez ama API `is_stale` ile işaretler.
+
+    Üç tetikleyici: elle koltuk takası, yeniden dağıtım, taslağa alma.
+    """
+    session = _distributed_session(question_pages={"Coğrafya": 2, "Fizik": 2})
+    client = APIClient()
+    url = f"/api/v1/booklet-runs/?session={session.pk}"
+
+    def bayatlik() -> list[bool]:
+        return [row["is_stale"] for row in client.get(url).data["results"]]
+
+    services.request_booklet_run(session)
+    assert bayatlik() == [False]
+
+    # 1) Elle takas: iki öğrencinin koltuğu değişir.
+    a, b = list(SeatAssignment.objects.filter(session=session).order_by("id")[:2])
+    services.swap_seats(session, assignment_a_id=a.pk, assignment_b_id=b.pk)
+    assert bayatlik() == [True]
+
+    # Yeniden üretim günceldir; eskisi bayat kalır (liste en yeni önce).
+    services.request_booklet_run(session)
+    assert bayatlik() == [False, True]
+
+    # 2) Yeniden dağıtım: yeni yerleşim yazılır → iki üretim de bayat.
+    services.distribute_session(session, seed=99)
+    assert bayatlik() == [True, True]
+
+    # 3) Taslağa alma: yerleşim yok → hâlâ bayat (indirilirse eski düzeni taşır).
+    services.revert_session_to_draft(session)
+    assert bayatlik() == [True, True]
+
+
+def test_basarisiz_uretim_bayat_sayilmaz() -> None:
+    """`is_stale` yalnız indirilebilir (tamamlanmış) üretim için anlamlıdır."""
+    session = _distributed_session(question_pages={"Coğrafya": 2, "Fizik": 2})
+    for qd in QuestionDocument.objects.filter(session_course__session=session):
+        Path(qd.file.path).unlink()
+    failed = services.request_booklet_run(session)
+    assert failed.status == BookletRunStatus.FAILED
+    services.distribute_session(session, seed=7)
+
+    rows = APIClient().get(f"/api/v1/booklet-runs/?session={session.pk}").data["results"]
+    assert [row["is_stale"] for row in rows] == [False]
+
+
 # ===========================================================================
 # Ölçekleme yasağı + Word şablonu
 # ===========================================================================

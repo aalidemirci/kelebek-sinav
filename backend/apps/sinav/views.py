@@ -803,7 +803,11 @@ class BookletRunViewSet(viewsets.GenericViewSet[BookletRun]):
         run = self.get_object()
         if run.status != BookletRunStatus.COMPLETED or not run.file:
             return Response(
-                {"code": "not_ready", "message": "Koşu henüz tamamlanmadı.", "fields": {}},
+                {
+                    "code": "not_ready",
+                    "message": "Kitapçık üretimi henüz tamamlanmadı.",
+                    "fields": {},
+                },
                 status=409,
             )
         if not _stored_file_exists(run.file):

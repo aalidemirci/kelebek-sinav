@@ -6,7 +6,7 @@ from typing import Any
 
 from rest_framework import serializers
 
-from apps.sinav import services, services_calendar
+from apps.sinav import selectors, services, services_calendar
 from apps.sinav.models import (
     BookletRun,
     ExamAttendanceRecord,
@@ -463,7 +463,13 @@ class QuestionDocumentSerializer(serializers.ModelSerializer[QuestionDocument]):
 
 
 class BookletRunSerializer(serializers.ModelSerializer[BookletRun]):
-    """Kitapçık koşusu durumu (manifest PII içermez)."""
+    """Kitapçık koşusu durumu (manifest PII içermez).
+
+    `is_stale`: üretimden sonra yerleşim değişti (yeniden dağıtım, taslağa alma,
+    koltuk takası) — ZIP eski salon/koltuklara göredir, yeniden üretilmelidir.
+    """
+
+    is_stale = serializers.SerializerMethodField()
 
     class Meta:
         model = BookletRun
@@ -475,8 +481,17 @@ class BookletRunSerializer(serializers.ModelSerializer[BookletRun]):
             "error_message",
             "created_at",
             "completed_at",
+            "is_stale",
         )
         read_only_fields = fields
+
+    def get_is_stale(self, obj: BookletRun) -> bool:
+        # Liste yolunda koşuların hepsi aynı oturumdandır: yerleşim anı oturum
+        # başına BİR kez sorulur (context kök serializer'da paylaşılır).
+        cache: dict[int, Any] = self.context.setdefault("_seating_changed_at", {})
+        if obj.session_id not in cache:
+            cache[obj.session_id] = selectors.seating_changed_at(obj.session_id)
+        return selectors.booklet_run_is_stale(obj, cache[obj.session_id])
 
 
 # --------------------------------------------------------------------------- #
