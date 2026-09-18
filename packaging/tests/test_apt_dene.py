@@ -80,6 +80,80 @@ def test_kalici_hatada_pes_eder_ve_hata_doner(tmp_path: Path) -> None:
     assert "3 denemede de başarısız" in sonuc.stderr
 
 
+BULLSEYE_KAYNAKLARI = """# deb http://snapshot.debian.org/archive/debian/20250721T000000Z bullseye main
+deb http://deb.debian.org/debian bullseye main
+deb http://deb.debian.org/debian-security bullseye-security main
+deb http://deb.debian.org/debian bullseye-updates main
+"""
+
+
+ANLIK_TARIH = "20260903T000000Z"
+ARSIV_SATIRI = (
+    "deb [check-valid-until=no] "
+    f"http://snapshot.debian.org/archive/debian-security/{ANLIK_TARIH} bullseye-security main"
+)
+
+
+def _kaynak_sabitle(kok: Path) -> subprocess.CompletedProcess[str]:
+    # S603: komut satırı testin kendisi tarafından üretiliyor, dış girdi yok.
+    return subprocess.run(  # noqa: S603
+        [BASH, "-c", f'. "{SARMAL}"\napt_bullseye_guvenlik_kaynagini_sabitle\n'],
+        capture_output=True,
+        text=True,
+        env={"PATH": "/usr/bin:/bin", "APT_KAYNAK_KOKU": str(kok)},
+        check=False,
+    )
+
+
+def test_bullseye_guvenlik_kaynagi_tarihli_arsive_sabitlenir(tmp_path: Path) -> None:
+    """19.09.2026 vakası: Debian 11 LTS bitti, canlı `bullseye-security` havuzu
+    boşaltıldı ama dizini bayat → KALICI 404 (yeniden deneme çözmez). Etkin satır
+    Debian'ın tarihli arşivine çevrilir; ana depo, güncelleme kaynağı ve yorum
+    satırları olduğu gibi kalır. İşlev idempotenttir.
+    """
+    (tmp_path / "sources.list").write_text(BULLSEYE_KAYNAKLARI, encoding="utf-8")
+
+    ilk = _kaynak_sabitle(tmp_path)
+    ikinci = _kaynak_sabitle(tmp_path)
+
+    satirlar = (tmp_path / "sources.list").read_text(encoding="utf-8").splitlines()
+    assert [s for s in satirlar if s.startswith("deb ")] == [
+        "deb http://deb.debian.org/debian bullseye main",
+        ARSIV_SATIRI,
+        "deb http://deb.debian.org/debian bullseye-updates main",
+    ]
+    # İmajın kendi yorum satırı (snapshot notu) bozulmadı.
+    assert satirlar[0].startswith("# deb http://snapshot.debian.org/archive/debian/")
+    assert ilk.returncode == 0 and "tarihli arşive sabitlendi" in ilk.stderr
+    # İkinci çağrıda yapılacak iş yoktur: ileti basılmaz, satır yeniden yazılmaz.
+    assert ikinci.returncode == 0 and ikinci.stderr == ""
+
+
+def test_baska_dagitimin_kaynaklarina_dokunulmaz(tmp_path: Path) -> None:
+    """Bookworm (ve deb822 kullanan imajlar) etkilenmez; dosya yoksa da hata vermez."""
+    icerik = "deb http://deb.debian.org/debian-security bookworm-security main\n"
+    (tmp_path / "sources.list").write_text(icerik, encoding="utf-8")
+
+    sonuc = _kaynak_sabitle(tmp_path)
+    bos = _kaynak_sabitle(tmp_path / "yok")
+
+    assert (tmp_path / "sources.list").read_text(encoding="utf-8") == icerik
+    assert sonuc.returncode == 0 and sonuc.stderr == ""
+    assert bos.returncode == 0
+
+
+def test_arsiv_tarihi_betikte_ve_is_akisinda_ayni() -> None:
+    """Kurulum provası adımı checkout'tan ÖNCE koşar ve betiği okuyamaz: tarih iki
+    yerde yazılıdır. Biri değişip öbürü kalırsa derleme ile prova farklı paket
+    kümeleri görür — ikisi birlikte değişmelidir."""
+    depo = Path(__file__).resolve().parents[2]
+    betik = SARMAL.read_text(encoding="utf-8")
+    is_akisi = (depo / ".github" / "workflows" / "paketleme.yml").read_text(encoding="utf-8")
+
+    assert f"APT_BULLSEYE_GUVENLIK_ANLIK:-{ANLIK_TARIH}}}" in betik
+    assert ARSIV_SATIRI in is_akisi
+
+
 @pytest.mark.parametrize("azami", ["1", "2"])
 def test_deneme_sayisi_ayarlanabilir(tmp_path: Path, azami: str) -> None:
     sahte_dizin = tmp_path / "bin"

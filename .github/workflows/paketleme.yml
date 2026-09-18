@@ -114,8 +114,19 @@ jobs:
       # bu adımda `libperl5.32` için 404 alıp düştü (aynı commit yeniden
       # denemede geçti); listeler her denemede silinir, çünkü asıl sorun kap
       # imajındaki BAYAT apt indeksidir.
+      #
+      # 19.09.2026: Debian 11 LTS 31.08.2026'da bitti; `bullseye-security`
+      # havuzu 03-05.09.2026 arasında boşaltıldı, dizini silinen paketlere işaret
+      # ediyor → KALICI 404 (v2026.9.0-beta.6 koşusu). Kaynak Debian'ın tarihli
+      # arşivine sabitlenir (kapatmak yetmez: temel paketler güvenlik sürümünde
+      # kurulu, `git` bağımlılıkları kırılır). Tarih apt_dene.sh içindeki
+      # APT_BULLSEYE_GUVENLIK_ANLIK ile AYNI kalmalıdır (koruma testi var).
+      # debian:12 imajında sources.list yoktur (deb822) — koşul orada atlar.
       - name: git
         run: |
+          if [ -w /etc/apt/sources.list ]; then
+            sed -i -E '/snapshot\.debian\.org/! s#^[[:space:]]*deb[[:space:]].*bullseye-security.*$#deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260903T000000Z bullseye-security main#' /etc/apt/sources.list
+          fi
           deneme=1
           while :; do
             if apt-get update -qq && apt-get install -y -qq \

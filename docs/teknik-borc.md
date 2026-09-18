@@ -70,6 +70,17 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
   sınıfındaki imzalar korunarak ayrı bir oturumda yapılmalı — düzeltme
   turlarıyla karıştırılırsa `git blame` izini ve incelemeyi zorlaştırır.
 
+- **TB13 — Linux derleme tabanı Debian 11 destek dışı (19.09.2026):** `.deb`
+  Pardus 21 uyumu için `python:3.12-bullseye` kabında derlenir ve `debian:11`'de
+  sınanır; Debian 11 LTS 31.08.2026'da bitti. Güvenlik deposu boşaltıldığı için
+  kaynak tarihli arşive sabitlendi (`packaging/README.md` "Debian 11 güvenlik
+  deposu…"). Sıradaki kırılma: `deb.debian.org/debian bullseye` ANA deposu da
+  arşive (`archive.debian.org`) taşınacak — o gün `bullseye` ve
+  `bullseye-updates` satırları için de aynı sabitleme gerekir; belirtisi yine
+  derleme kabında 404'tür. Kalıcı çözüm Pardus 21 desteğinin ne zaman
+  bırakılacağı kararıdır (taban bookworm'a çıkarsa glibc yükselir, Pardus 21'de
+  paket açılmaz) — karar kullanıcıdadır, saha kurulumlarına bakılarak verilir.
+
 ## Kapanan
 
 - **TB8 — Yerleştirme kuralları arayüzü (31.08.2026'da kapandı, kütüğe

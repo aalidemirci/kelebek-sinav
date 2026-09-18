@@ -111,6 +111,33 @@ bulunmayan `libharfbuzz-subset0`) sarmala GİRMEZ: yokluğu beklenen durumdur.
 koşar ve betik henüz diskte yoktur. Davranış `packaging/tests/test_apt_dene.py`
 ile sabitlenir (sahte `apt-get` ile: kurtarma, pes etme, deneme sayısı).
 
+### Debian 11 güvenlik deposu tarihli arşive sabitlenir
+
+19.09.2026 vakası: `v2026.9.0-beta.6` etiket koşusu Linux paketinde düştü —
+`libglib2.0-0 …+deb11u8` için 404, üç denemede de. Sebep geçici değildi:
+**Debian 11 (bullseye) uzun dönem desteği 31.08.2026'da bitti** ve
+`bullseye-security` deposunun paket havuzu 03-05.09.2026 arasında boşaltıldı;
+dizini ise hâlâ silinen paketlere işaret ediyor (04.09.2026'daki `libperl` 404'ü
+aynı boşaltmanın ilk belirtisiydi). Canlı kaynak açık kaldıkça derleme kabı
+(`python:3.12-bullseye`) ve kurulum provası (`debian:11`) kalıcı olarak düşer.
+
+Çözüm `apt_dene.sh::apt_bullseye_guvenlik_kaynagini_sabitle`: etkin
+`bullseye-security` satırı Debian'ın tarihli arşivine çevrilir —
+`snapshot.debian.org/archive/debian-security/20260903T000000Z`
+(`check-valid-until=no` ile; arşivdeki Release'in süresi dolmuştur). O tarihte
+dizin ve havuz eksiksizdir ve bir daha değişmez. Kaynağı **kapatmak** çözüm
+değildir (denendi): temiz `debian:11` imajında temel paketler güvenlik sürümünde
+kuruludur, ana depodaki eşleri birebir sürüm ister (`perl` ↔ `perl-base`) ve
+`git` kurulumu "held broken packages" ile düşer.
+
+Tarih İKİ yerde yazılıdır — betikte (`APT_BULLSEYE_GUVENLIK_ANLIK`) ve iş
+akışının `git` adımında (checkout'tan önce koştuğu için betiği okuyamaz);
+`test_apt_dene.py::test_arsiv_tarihi_betikte_ve_is_akisinda_ayni` ikisini
+karşılaştırır. Ürüne etkisi yoktur: pango/glib/fontconfig pakete gömülmez, hedef
+makinenin (Pardus 21) kendi deposundan gelir. Sıradaki risk teknik borç
+kütüğünde (TB13): `bullseye` ANA deposu da arşive taşındığında aynı işlem o
+satırlar için gerekecek.
+
 ### Yayın hattı (etiket push'undan sonra)
 
 `v*` etiketi `paketleme.yml`'nin `yayin` işini tetikler; iş sırasıyla
