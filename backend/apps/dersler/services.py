@@ -8,9 +8,9 @@ OYS `ders_yapisi.services`'ten KELEBEK KESİTİ (tasarım §7 + §11):
   korunur** — idarenin pasifleştirdiği ders import'la sessizce geri açılmaz.
   `exam_mode` bu korumanın DIŞINDADIR (çizelge verisidir; gerekçe fonksiyon
   docstring'inde).
-- `consolidate_duplicate_course`: referans taşıma KS kesitine indirildi
-  (takma adlar + sınav dersleri; sınav modeli F3'te geldiğinden `get_model`
-  çağrısı yokluğa dayanıklıdır).
+- `consolidate_duplicate_course`: takma adlar + sınav dersleri + takvim
+  girdileri + seçmeli şube kapsamları kanoniğe taşınır; yerleşimi olan oturumun
+  çakışma grubu anahtarları aynı işlemde yeniden yazılır (A3, 18.09.2026).
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from apps.dersler.models import (
     Course,
     CourseAlias,
     CourseExamMode,
+    CourseSectionOffering,
     CourseSource,
     CourseType,
 )
@@ -523,14 +524,21 @@ def ensure_seeded() -> None:
 def consolidate_duplicate_course(*, duplicate: Course, canonical: Course) -> dict[str, int]:
     """Mükerrer dersi kanonik derse birleştirir — referansları taşır.
 
-    - Takma adlar kanoniğe taşınır; sınav dersleri (F3'te gelir) varsa
-      `get_model` ile taşınır — model yokken sessizce 0.
+    - Takma adlar kanoniğe taşınır.
+    - Sınav dersleri (`ExamSessionCourse`), takvim girdileri ve seçmeli şube
+      kapsamları kanoniğe taşınır (`_move_course_references`). Soft-delete FK
+      korumasını tetiklemediğinden taşınmayan her referans silinmiş derse bakan
+      yetim kayıt olurdu.
+    - **Yerleşimi olan oturum bozulmaz (A3, 18.09.2026):** çakışma grubu anahtarı
+      ders kimliğini taşır (`"<course_id>:<level>"`); ders taşınırken
+      `SeatAssignment.conflict_group` de aynı işlemde yeniden yazılır, yoksa
+      kitapçık üretimi her öğrenci için "soru dosyası eksik" derdi. İki ders aynı
+      dağıtılmış oturumda birlikte yer alıyorsa birleştirme REDDEDİLİR — iki ayrı
+      kitapçık grubu tek gruba çökerdi.
     - Kanonik `levels`, kopyanınkiyle BİRLEŞTİRİLİR (seviye kaybı yok).
     - Kopya adı → kanonik için CourseAlias öğrenilir (sonraki importlar tekrar
       mükerrer üretmez); kopya soft-delete edilir.
     """
-    from django.apps import apps as django_apps
-
     if duplicate.pk == canonical.pk:
         raise ValidationError("Kaynak ve hedef ders aynı olamaz.")
     if canonical.deleted_at is not None:
@@ -539,31 +547,10 @@ def consolidate_duplicate_course(*, duplicate: Course, canonical: Course) -> dic
         raise ValidationError("Kaynak ders zaten silinmiş.")
 
     now = timezone.now()
+    moved = _move_course_references(duplicate=duplicate, canonical=canonical)
     moved_aliases = CourseAlias.objects.filter(course=duplicate).update(
         course=canonical, updated_at=now
     )
-
-    moved_exams = 0
-    dropped_exams = 0
-    try:
-        esc = django_apps.get_model("sinav", "ExamSessionCourse")
-    except LookupError:
-        esc = None  # sınav modülü F3'te gelir
-    if esc is not None:
-        for sc in esc.objects.filter(course=duplicate, deleted_at__isnull=True):
-            clash = esc.objects.filter(
-                session_id=sc.session_id,
-                course=canonical,
-                level=sc.level,
-                deleted_at__isnull=True,
-            ).exists()
-            if clash:
-                sc.delete()
-                dropped_exams += 1
-            else:
-                sc.course = canonical
-                sc.save(update_fields=["course", "updated_at"])
-                moved_exams += 1
 
     canon_levels = sorted(int(lvl) for lvl in (canonical.levels or []))
     merged = sorted({*canon_levels, *(int(lvl) for lvl in (duplicate.levels or []))})
@@ -574,11 +561,130 @@ def consolidate_duplicate_course(*, duplicate: Course, canonical: Course) -> dic
     learn_course_alias(name=duplicate.name, course=canonical)
     duplicate.delete()
 
+    return {"aliases": moved_aliases, **moved}
+
+
+def _move_course_references(*, duplicate: Course, canonical: Course) -> dict[str, int]:
+    """Kopya derse bakan sınav/takvim/kapsam kayıtlarını kanoniğe taşır.
+
+    ÖNCE denetler, SONRA yazar: reddedilecek bir durum varsa hiçbir kayda
+    dokunulmaz (çağıran `transaction.atomic` olsa da mesaj ilk satırda dursun).
+    Sınav modelleri fonksiyon içinden alınır — `apps.sinav` bu modülü import
+    eder, modül düzeyi import döngü kurardı.
+    """
+    from apps.sinav.models import (
+        ExamCalendarEntry,
+        ExamSessionCourse,
+        ExamSessionStatus,
+        SeatAssignment,
+    )
+
+    session_rows = list(
+        ExamSessionCourse.objects.filter(course=duplicate).select_related("session")
+    )
+    canonical_sessions = set(
+        ExamSessionCourse.objects.filter(course=canonical).values_list("session_id", flat=True)
+    )
+    for sc in session_rows:
+        if sc.session.status != ExamSessionStatus.DRAFT and sc.session_id in canonical_sessions:
+            raise ValidationError(
+                f"'{duplicate.name}' ve '{canonical.name}' aynı oturumda birlikte yer alıyor "
+                f"('{sc.session.name}', {sc.session.get_status_display()}); birleştirme iki "
+                "ayrı kitapçık grubunu tek gruba çökertirdi. Önce o oturumu taslağa alıp "
+                "mükerrer dersi çıkarın."
+            )
+    entries = list(ExamCalendarEntry.objects.filter(course=duplicate))
+    for entry in entries:
+        clash = _calendar_entry_clash(entry, canonical)
+        if clash and (entry.placed_date is not None or entry.session_id is not None):
+            raise ValidationError(
+                f"'{duplicate.name}' ve '{canonical.name}' aynı sınav takviminde aynı sınıf "
+                "düzeyi ve türle yer alıyor ve mükerrer girdi yerleştirilmiş; önce takvimde "
+                "mükerrer girdiyi havuza alıp silin."
+            )
+
+    moved_exams = dropped_exams = 0
+    for sc in session_rows:
+        clash = ExamSessionCourse.objects.filter(
+            session_id=sc.session_id, course=canonical, level=sc.level
+        ).exists()
+        if clash:  # yalnız TASLAK oturumda mümkün (yukarıdaki denetim)
+            sc.delete()
+            dropped_exams += 1
+            continue
+        sibling = (
+            ExamSessionCourse.objects.filter(session_id=sc.session_id, course=canonical)
+            .order_by("id")
+            .first()
+        )
+        sc.course = canonical
+        if sibling is not None:
+            # `shared_booklet` dersin oturum içi niteliğidir — kardeşle senkron kalır.
+            sc.shared_booklet = sibling.shared_booklet
+        sc.save(update_fields=["course", "shared_booklet", "updated_at"])
+        moved_exams += 1
+        # Yerleşim snapshot'larındaki grup anahtarı ("<id>:<seviye>" / "<id>:*").
+        prefix = f"{duplicate.pk}:"
+        keys = (
+            SeatAssignment.all_objects.filter(
+                session_id=sc.session_id, conflict_group__startswith=prefix
+            )
+            .values_list("conflict_group", flat=True)
+            .distinct()
+        )
+        for key in list(keys):
+            SeatAssignment.all_objects.filter(session_id=sc.session_id, conflict_group=key).update(
+                conflict_group=f"{canonical.pk}:{key.split(':', 1)[1]}"
+            )
+
+    moved_entries = dropped_entries = 0
+    for entry in entries:
+        if _calendar_entry_clash(entry, canonical):
+            entry.delete()  # yerleşmemiş ve oturumsuz (yukarıdaki denetim)
+            dropped_entries += 1
+        else:
+            entry.course = canonical
+            entry.save(update_fields=["course", "updated_at"])
+            moved_entries += 1
+
+    moved_offerings = 0
+    for offering in CourseSectionOffering.objects.filter(course=duplicate):
+        target = CourseSectionOffering.objects.filter(
+            course=canonical, school_year_id=offering.school_year_id, level=offering.level
+        ).first()
+        if target is None:
+            offering.course = canonical
+            offering.save(update_fields=["course", "updated_at"])
+        else:
+            merged_ids = list(
+                dict.fromkeys([*(target.section_ids or []), *(offering.section_ids or [])])
+            )
+            target.section_ids = merged_ids
+            target.save(update_fields=["section_ids", "updated_at"])
+            offering.delete()
+        moved_offerings += 1
+
     return {
-        "aliases": moved_aliases,
         "exams": moved_exams,
         "dropped_exams": dropped_exams,
+        "calendar_entries": moved_entries,
+        "dropped_calendar_entries": dropped_entries,
+        "offerings": moved_offerings,
     }
+
+
+def _calendar_entry_clash(entry: Any, canonical: Course) -> bool:
+    """Kanonik ders aynı takvimde aynı (sınıf düzeyi, tür) ile zaten var mı?"""
+    from apps.sinav.models import ExamCalendarEntry
+
+    return bool(
+        ExamCalendarEntry.objects.filter(
+            calendar_id=entry.calendar_id,
+            course=canonical,
+            level=entry.level,
+            exam_kind=entry.exam_kind,
+        ).exists()
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -617,7 +723,6 @@ def set_course_sections(
     ders yılına ve verilen seviyeye ait olmalı. Küme kimliği yazılmaz —
     arayüz kümeyi somut şube listesine açar (CLAUDE.md §3).
     """
-    from apps.dersler.models import CourseSectionOffering
     from apps.okul.models import ClassSection, SchoolYear
 
     course = Course.objects.filter(pk=course_id).first()
