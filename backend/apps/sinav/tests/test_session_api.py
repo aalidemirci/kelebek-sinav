@@ -94,7 +94,7 @@ def test_add_session_course_validations() -> None:
         services.add_session_course(
             session, course_id=inactive.pk, participant_type=ParticipantType.LEVEL, level=9
         )
-    with pytest.raises(ValidationError, match="seviye seçin"):
+    with pytest.raises(ValidationError, match="sınıf düzeyini seçin"):
         services.add_session_course(
             session, course_id=course.pk, participant_type=ParticipantType.LEVEL
         )
