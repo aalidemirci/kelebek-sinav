@@ -232,23 +232,27 @@ export default function Autocomplete<T>({
           )}
         </div>
       ) : (
-        // Arama input'u
+        // Arama input'u. ARIA 1.2 combobox deseni: rol ve durum öznitelikleri
+        // SARMALAYICIDA değil, odağı alan INPUT'tadır (1.1'deki sarmalayıcı deseni
+        // ekran okuyucularda "açılır liste" duyurusunu düşürüyordu — odak input'ta,
+        // rol div'deydi). `aria-controls` yalnız liste DOM'dayken verilir: kapalıyken
+        // var olmayan bir kimliğe işaret etmesin.
         <div
           className={`flex h-14 items-center rounded-shape-xs border bg-surface px-4 ${
             error
               ? "border-error focus-within:border-error focus-within:ring-2 focus-within:ring-error"
               : "border-outline focus-within:border-primary focus-within:ring-2 focus-within:ring-primary"
           }`}
-          role="combobox"
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          aria-controls={listId}
         >
           <Icon name="search" size="base" className="mr-2 text-on-surface-variant" />
           <input
             ref={inputRef}
             id={inputId}
             type="text"
+            role="combobox"
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            aria-controls={open ? listId : undefined}
             autoComplete="off"
             disabled={disabled}
             required={required && !allowFreeText}
@@ -306,7 +310,7 @@ export default function Autocomplete<T>({
               {emptyText}
               {allowFreeText && query.trim() && (
                 <span className="ml-2 text-label-small">
-                  ("{query.trim()}" serbest metin olarak kalır)
+                  (“{query.trim()}” serbest metin olarak kalır)
                 </span>
               )}
             </li>

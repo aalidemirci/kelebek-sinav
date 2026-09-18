@@ -35,7 +35,8 @@ export default function ModuleHeader({ backTo, moduleLabel, title, actions }: Mo
         </span>
         <h1 className="ks-page-title">{title}</h1>
       </div>
-      {actions ? <div className="flex items-end gap-3">{actions}</div> : null}
+      {/* flex-wrap: üç eylemli başlıklar (oturum detayı — DAĞITILDI) dar pencerede taşmasın. */}
+      {actions ? <div className="flex flex-wrap items-end gap-3">{actions}</div> : null}
     </div>
   );
 }
