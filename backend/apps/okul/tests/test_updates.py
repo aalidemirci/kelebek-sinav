@@ -32,6 +32,13 @@ def client() -> APIClient:
     return APIClient()
 
 
+@pytest.fixture(autouse=True)
+def _surum_onbellegi_yalitilir(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sürüm önbelleği modül düzeyinde yaşar (15 dk): her test boş önbellekle başlar ve
+    sahte sürüm sonraki teste sızmaz — testler koşu sırasından bağımsız kalır."""
+    monkeypatch.setattr(updates, "_cached_release", None)
+
+
 def _release(
     *, digest: str = "", checksums: updates.ReleaseAsset | None = None
 ) -> updates.ReleaseInfo:
@@ -510,14 +517,13 @@ def test_on_surum_listesinde_yayimlanmis_surum_yoksa_surum_yok_denir(
 
 @pytest.fixture
 def sayac(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
-    """Boş önbellek + çağrı sayan sahte ağ + elle ilerletilen saat."""
+    """Çağrı sayan sahte ağ + elle ilerletilen saat (önbellek autouse fixture'la boştur)."""
     durum: dict[str, Any] = {"cagri": 0, "saat": 1000.0, "etiket": "v2026.10.0"}
 
     def sahte_read_url(_url: str, *, max_bytes: int) -> bytes:
         durum["cagri"] += 1
         return json.dumps({"tag_name": durum["etiket"]}).encode("utf-8")
 
-    monkeypatch.setattr(updates, "_cached_release", None)
     monkeypatch.setattr(updates, "_read_url", sahte_read_url)
     monkeypatch.setattr(time, "monotonic", lambda: durum["saat"])
     return durum
