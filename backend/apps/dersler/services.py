@@ -136,6 +136,16 @@ def update_course(
     """Ders alanlarını güncelle (kısmi). `source` elle değiştirilemez."""
     if name is not None:
         cleaned = text.normalize_course_name(name)
+        # Çizelge dersi ADIYLA eşleşir (`sync_catalog`): adı değişen MEB dersi sonraki
+        # eşitlemede "çizelge dışı" sayılıp pasifleşir, asıl adla YENİ bir kayıt açılır
+        # ve oturum/takvim girdileri pasif kayda bağlı kalırdı (A15). Düzenleme formu
+        # adı her kayıtta gönderdiğinden yalnız GERÇEK değişiklik reddedilir.
+        if cleaned != course.name and course.source == CourseSource.MEB_CATALOG:
+            raise ValidationError(
+                f"'{course.name}' MEB ders çizelgesinden gelir; adı değiştirilemez (çizelge "
+                "eşitlemesi dersi adıyla tanır). Okulunuzda farklı adla anılıyorsa e-Okul "
+                "aktarımının tanıması için takma ad ekleyin."
+            )
         if Course.objects.exclude(pk=course.pk).filter(name=cleaned).exists():
             raise ValidationError(f"'{cleaned}' adlı ders zaten havuzda var.")
         course.name = cleaned

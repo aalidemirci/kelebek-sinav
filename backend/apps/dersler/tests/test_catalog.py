@@ -338,6 +338,20 @@ class TestAliasRules:
 
 
 @pytest.mark.django_db
+def test_meb_dersinin_adi_degistirilemez_ama_ayni_adla_kayit_serbest() -> None:
+    """A15: çizelge dersi adıyla eşleşir; adı değişirse sonraki eşitleme onu pasifleştirip
+    asıl adla yenisini açardı. Form adı HER kayıtta gönderir — aynı ad reddedilmez."""
+    meb = services.create_course(name="Coğrafya", levels=[9], source=CourseSource.MEB_CATALOG)
+    elle = services.create_course(name="Okul Tanıtım", levels=[9])
+
+    with pytest.raises(ValidationError, match="adı değiştirilemez"):
+        services.update_course(meb, name="Coğrafya (Yeni)")
+    guncel = services.update_course(meb, name="Coğrafya", levels=[9, 10])  # aynı ad → serbest
+    assert guncel.levels == [9, 10]
+    assert services.update_course(elle, name="Okul Tanıtımı").name == "Okul Tanıtımı"
+
+
+@pytest.mark.django_db
 class TestDuplicatesAndMerge:
     def test_mukerrer_tespiti_ve_oneri(self) -> None:
         onekli = services.create_course(
