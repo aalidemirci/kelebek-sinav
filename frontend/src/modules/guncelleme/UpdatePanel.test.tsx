@@ -99,6 +99,22 @@ describe("UpdatePanel", () => {
     expect(screen.getByRole("button", { name: "Doğrula ve indir" })).toBeDisabled();
   });
 
+  it("Pardus/Linux’ta Windows kurulum dosyası önermez, paketle güncellemeye yönlendirir", async () => {
+    mocks.check.mockResolvedValue({
+      ...YENI_SURUM,
+      platform: "linux",
+      can_download: false,
+      installer_name: "",
+      installer_size: 0,
+    });
+    renderPanel();
+
+    expect(await screen.findByText("Yeni sürüm hazır: 2026.10.0")).toBeInTheDocument();
+    expect(screen.getByText(/güncelleme paketle yapılır/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Doğrula ve indir" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Windows kurulum dosyası/)).not.toBeInTheDocument();
+  });
+
   it("denetim başarısızsa hata canlı bölgede gösterilir", async () => {
     mocks.check.mockRejectedValue(new Error("ağ yok"));
     renderPanel();

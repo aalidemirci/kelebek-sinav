@@ -39,6 +39,16 @@ def _surum_onbellegi_yalitilir(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(updates, "_cached_release", None)
 
 
+@pytest.fixture(autouse=True)
+def _windows_platformu(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Uygulama içi indirme yalnız Windows'ta açıktır; testler Linux kabında koşar.
+
+    Akış testleri Windows'u varsayar; Pardus davranışını sınayan testler bu
+    değeri kendileri `False`'a çevirir.
+    """
+    monkeypatch.setattr(updates, "installer_supported", lambda: True)
+
+
 def _release(
     *, digest: str = "", checksums: updates.ReleaseAsset | None = None
 ) -> updates.ReleaseInfo:
@@ -57,6 +67,36 @@ def _release(
         installer=installer,
         checksums=checksums,
     )
+
+
+def test_pardusta_windows_kurulum_dosyasi_onerilmez(
+    monkeypatch: pytest.MonkeyPatch, client: APIClient
+) -> None:
+    """Pardus/Linux'ta "Doğrula ve indir" Windows `setup.exe`'sini öneriyordu.
+
+    Güncelleme orada paketle (.deb/.tar.gz) yapılır: durum `platform: linux` ve
+    `can_download: false` döner, kurulum dosyası adı/boyutu BOŞTUR; indirme ucu
+    da (arayüz atlansa bile) anlaşılır Türkçe ret verir.
+    """
+    monkeypatch.setattr(updates, "installer_supported", lambda: False)
+    monkeypatch.setattr(updates, "latest_release", lambda *, force=False: _release())
+
+    durum = updates.update_status(current_version="2026.9.0")
+    assert durum["update_available"] is True
+    assert (durum["platform"], durum["can_download"]) == ("linux", False)
+    assert (durum["installer_name"], durum["installer_size"]) == ("", 0)
+
+    with pytest.raises(updates.UpdateError, match="yalnız Windows"):
+        updates.download_latest_installer()
+
+
+def test_windowsta_platform_alani_ve_indirme_acik(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(updates, "latest_release", lambda *, force=False: _release())
+
+    durum = updates.update_status(current_version="2026.9.0")
+
+    assert (durum["platform"], durum["can_download"]) == ("windows", True)
+    assert durum["installer_name"].endswith("-win64-setup.exe")
 
 
 def test_release_yaniti_windows_kurucusunu_ve_ozeti_cozer() -> None:

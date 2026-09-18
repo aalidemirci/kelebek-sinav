@@ -125,24 +125,36 @@ export default function UpdatePanel() {
                 Windows kurulum dosyası: {formatBytes(status.installer_size)}
               </p>
             )}
-            <p className="mt-2 text-body-small">
-              İndirme tamamlanınca programı kapatın ve indirilen kurulum dosyasını çalıştırın.
-              Verileriniz kurulum klasörünün dışında tutulduğu için korunur.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button
-                icon="download"
-                disabled={!status.can_download || downloading}
-                onClick={() => void download()}
-              >
-                {downloading ? "İndiriliyor…" : "Doğrula ve indir"}
-              </Button>
-              {!status.can_download && (
-                <span className="self-center text-label-small">
-                  Bu sürümde Windows kurulum dosyası bulunmuyor.
-                </span>
-              )}
-            </div>
+            {status.platform === "linux" ? (
+              // Pardus/Linux: uygulama içi indirme Windows kurulum dosyasını verirdi —
+              // burada çalışmaz. Güncelleme paketle yapılır (docs/kurulum.md §3).
+              <p className="mt-2 text-body-small">
+                Pardus ve Linux’ta güncelleme paketle yapılır: yeni sürümün <code>.deb</code> (ya da{" "}
+                <code>.tar.gz</code>) dosyasını indirme sayfasından alıp eski sürümün üzerine kurun.
+                Verileriniz kurulum klasörünün dışında tutulduğu için korunur.
+              </p>
+            ) : (
+              <>
+                <p className="mt-2 text-body-small">
+                  İndirme tamamlanınca programı kapatın ve indirilen kurulum dosyasını çalıştırın.
+                  Verileriniz kurulum klasörünün dışında tutulduğu için korunur.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    icon="download"
+                    disabled={!status.can_download || downloading}
+                    onClick={() => void download()}
+                  >
+                    {downloading ? "İndiriliyor…" : "Doğrula ve indir"}
+                  </Button>
+                  {!status.can_download && (
+                    <span className="self-center text-label-small">
+                      Bu sürümde Windows kurulum dosyası bulunmuyor.
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
       </Card>
