@@ -1,6 +1,6 @@
 // Sınav Yoklaması (F3) — OYS Tur 245 panelinden UYARLANDI: ONAYLI/ARŞİV
 // oturumda sınava GİRMEYEN öğrenciler işaretlenir; mazeret durumu
-// (Beklemede/Özürlü/Özürsüz) + belge notu (no/tarih — dosya yüklenmez) izlenir.
+// (Beklemede/Mazeretli/Mazeretsiz) + belge notu (no/tarih — dosya yüklenmez) izlenir.
 // Mazeret güncellemesi ARŞİVDE DE açıktır (belge sınavdan sonra 5 iş günü
 // içinde veliden gelir — MEB yazılı/uygulamalı sınavlar yönergesi). Durum
 // kapısı backend'dedir; panel yalnız sunar.

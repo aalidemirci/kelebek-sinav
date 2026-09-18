@@ -25,16 +25,41 @@ export type ParticipantTypeCode = "LEVEL" | "SECTIONS";
 export type SeatStatusCode = "NORMAL" | "PINNED" | "MANUAL";
 export type ExcuseStatusCode = "PENDING" | "EXCUSED" | "UNEXCUSED";
 
+// Kullanıcıya görünen etiketler docs/sozluk.md'ye bağlıdır (§1 kavram sözlüğü).
+
 export const LAYOUT_MODE_TR: Record<LayoutModeCode, string> = {
   BUTTERFLY: "Kelebek",
   HOME_CLASSROOM: "Kendi dersliğinde",
 };
 
+/**
+ * "Düzen" seçicisinin seçenekleri — yeni oturum diyaloğu ile sihirbazın Oturum
+ * Bilgileri adımı AYNI listeyi gösterir. Sözlük: "klasik" ve "(KD)" kullanılmaz.
+ */
+export const LAYOUT_MODE_OPTIONS: { value: LayoutModeCode; label: string }[] = [
+  { value: "BUTTERFLY", label: "Kelebek (karışık dağıtım)" },
+  { value: "HOME_CLASSROOM", label: "Kendi dersliğinde" },
+];
+
+/**
+ * Dağıtım numarası (seed) ve katı dağıtım yalnız KELEBEK düzeninde anlamlıdır.
+ * "Kendi dersliğinde" düzeninde karıştırma yoktur (`engine.distribute_home_classroom`:
+ * şube kendi dersliğine, okul no sırasıyla) ve backend numarayı hep 0 döndürür —
+ * o düzende numara ne sorulur ne gösterilir.
+ */
+export function usesDistributionNumber(layoutMode: LayoutModeCode): boolean {
+  return layoutMode === "BUTTERFLY";
+}
+
+/** Gözetmen anahtarının (`proctors_enabled`) kutu etiketi — aynı iki ekranda, tek metin. */
+export const PROCTORS_ENABLED_LABEL =
+  "Gözetmen görevlendirmesi yapılacak (görevlendirme yazısı basılır)";
+
 export const EXAM_SESSION_STATUS_TR: Record<ExamSessionStatusCode, string> = {
   DRAFT: "Taslak",
   DISTRIBUTED: "Dağıtıldı",
   APPROVED: "Onaylandı",
-  ARCHIVED: "Arşiv",
+  ARCHIVED: "Arşivlendi",
 };
 
 export const EXAM_SESSION_TYPE_TR: Record<ExamSessionTypeCode, string> = {
@@ -44,15 +69,17 @@ export const EXAM_SESSION_TYPE_TR: Record<ExamSessionTypeCode, string> = {
   NATIONAL: "Ülke",
 };
 
+/** "Katılımcılar" alanının seçenekleri — oturum sihirbazı ve takvim aynı sözcükleri kullanır. */
 export const PARTICIPANT_TYPE_TR: Record<ParticipantTypeCode, string> = {
-  LEVEL: "Seviye geneli",
-  SECTIONS: "Şube şube",
+  LEVEL: "Sınıf düzeyinin tamamı",
+  SECTIONS: "Seçili şubeler",
 };
 
+/** Mevzuat "mazeret" der; "özürlü" engellilik çağrışımı taşıdığı için kullanılmaz. */
 export const EXCUSE_STATUS_TR: Record<ExcuseStatusCode, string> = {
   PENDING: "Beklemede",
-  EXCUSED: "Özürlü",
-  UNEXCUSED: "Özürsüz",
+  EXCUSED: "Mazeretli",
+  UNEXCUSED: "Mazeretsiz",
 };
 
 // ---------------------------------------------------------------------------
@@ -286,50 +313,74 @@ export interface BookletRun {
  * kapı listesi kaldırıldı. `note` satırı, hangi belgenin nereye gittiğini
  * panelde söyler — evrak seti küçüldüğü için "hangisini basayım" sorusu
  * listeden değil bu satırdan cevaplanır.
+ *
+ * `code` yalnız uç adresidir; kullanıcıya GÖRÜNMEZ (docs/sozluk.md §2 — evrak
+ * kodunun yerine belgenin adı yazılır). `fileTitle` indirilen dosyanın adına
+ * giren belge adıdır (aynı tablo); `ext` dosya uzantısıdır.
  */
-export const REPORT_CATALOG: {
+export interface ReportCatalogItem {
   code: string;
   title: string;
+  fileTitle: string;
   note: string;
   roomScoped: boolean;
-}[] = [
+  ext: "pdf" | "xlsx";
+}
+
+export const REPORT_CATALOG: ReportCatalogItem[] = [
   {
     code: "r1",
     title: "Salon Sınav Evrakı",
+    fileTitle: "Salon Sınav Evrakı",
     note: "Oturma planı · yoklama ve imza · evrak sayımı · teslim zinciri — salon başına 2 yaprak",
     roomScoped: true,
+    ext: "pdf",
   },
   {
     code: "r4",
     title: "Şube Sınav Duyurusu",
+    fileTitle: "Şube Sınav Duyurusu",
     note: "Öğrenci → salon ve koltuk; sınıf panosuna asılır",
     roomScoped: false,
+    ext: "pdf",
   },
   {
     code: "r7",
     title: "Sınav İhlal ve Kopya Tutanağı",
+    fileTitle: "Sınav İhlal ve Kopya Tutanağı",
     note: "Salon zarfına konan boş form; yalnız olay hâlinde doldurulur",
     roomScoped: true,
+    ext: "pdf",
   },
   {
     code: "r6",
-    title: "Gözetmen Görevlendirme / Tebliğ-Tebellüğ",
-    note: "Müdür onaylı görevlendirme yazısı",
+    title: "Gözetmen Görevlendirme Yazısı",
+    fileTitle: "Gözetmen Görevlendirme Yazısı",
+    note: "Müdür onaylı görevlendirme yazısı; tebellüğ imzaları bu belgede toplanır",
     roomScoped: false,
+    ext: "pdf",
   },
   {
     code: "r8",
     title: "Dağıtım Doğrulama Raporu",
-    note: "Seed ve kısıt metrikleri; idare nüshası",
+    fileTitle: "Dağıtım Doğrulama Raporu",
+    note: "Dağıtım numarası ve kural denetiminin sonucu; idare nüshası",
     roomScoped: false,
+    ext: "pdf",
   },
   {
     code: "r5",
     title: "Toplu Dağıtım Çizelgesi (Excel)",
+    fileTitle: "Toplu Dağıtım Çizelgesi",
     note: "İdare çalışma kopyası; basılmaz",
     roomScoped: false,
+    ext: "xlsx",
   },
 ];
+
+/** "Tümünü indir" ZIP'inin ve kitapçık ZIP'inin dosya adındaki belge adları. */
+export const REPORTS_ZIP_FILE_TITLE = "Sınav Evrakı";
+export const BOOKLETS_ZIP_FILE_TITLE = "Kitapçıklar";
 
 export const examSessionApi = {
   // Okul ölçeğinde oturum sayısı küçüktür; tek sayfada tümü (limit=100).

@@ -127,6 +127,63 @@ export function deskRowCount(plan: LayoutPlan): number {
   return Math.max(0, plan.grid.rows - FRONT_BAND_ROWS);
 }
 
+// ---------------------------------------------------------------------------
+// Koltuk konumunun kullanıcıya SÖZLE gösterimi (docs/sozluk.md §3)
+// ---------------------------------------------------------------------------
+// Koordinat depoda 0 tabanlı ızgara kimliğidir (`desk_row`, `desk_col`, `slot`);
+// kullanıcıya 1 tabanlı ve sözle verilir: "3. sıra, 1. sütun, sol koltuk
+// (koltuk no 5)". Salon editörü, kural listesi ve koltuk seçici AYNI yardımcıyı
+// kullanır — eskiden kural ekranı "sıra 2-1, koltuk 0" basıyor, editör ise aynı
+// hücreye "Sıra 2, sütun 2" diyordu.
+
+/**
+ * Izgara satırı → kullanıcının saydığı sıra numarası. ÖN CEPHE bandı sayıma
+ * girmediği için ızgaranın 1. satırı "1. sıra"dır (yalın `row + 1` YANLIŞ olur:
+ * bandı da sayar). Bandın içindeki satır için 0 döner.
+ */
+export function deskRowNumber(gridRow: number): number {
+  return Math.max(0, gridRow - FRONT_BAND_ROWS + 1);
+}
+
+const SLOT_WORDS: Record<DeskTypeCode, string[]> = {
+  SINGLE: ["tek koltuk"],
+  DOUBLE: ["sol koltuk", "sağ koltuk"],
+  TRIPLE: ["sol koltuk", "orta koltuk", "sağ koltuk"],
+};
+
+/**
+ * Sıra içi konum. `slot` her zaman fiziksel sol→sağ indekstir (layout.py kural 6).
+ * Sıra tipi bilinmiyorsa "orta" ile "sağ" ayırt edilemez (ikili sıranın 1. koltuğu
+ * sağ, üçlününki ortadır) — o zaman tahmin yürütülmez, soldan sayılır.
+ */
+export function slotLabel(slot: number, deskType?: DeskTypeCode | string): string {
+  const words = deskType !== undefined ? SLOT_WORDS[deskType as DeskTypeCode] : undefined;
+  return words?.[slot] ?? `soldan ${slot + 1}. koltuk`;
+}
+
+export interface SeatPosition {
+  deskRow: number;
+  deskCol: number;
+  slot: number;
+  /** Sıra tipi (salon koltuk ucundan); bilinmiyorsa konum soldan sayılır. */
+  deskType?: DeskTypeCode | string;
+  /** Salonun GÜNCEL numaralandırmasındaki koltuk no; bilinmiyorsa yazılmaz. */
+  seatNo?: number;
+}
+
+/** "3. sıra, 1. sütun, sol koltuk (koltuk no 5)" — ön cephe bandındaki sıra "ön cephe". */
+export function seatPositionLabel({
+  deskRow,
+  deskCol,
+  slot,
+  deskType,
+  seatNo,
+}: SeatPosition): string {
+  const sira = deskRow < FRONT_BAND_ROWS ? "ön cephe" : `${deskRowNumber(deskRow)}. sıra`;
+  const no = seatNo !== undefined ? ` (koltuk no ${seatNo})` : "";
+  return `${sira}, ${deskCol + 1}. sütun, ${slotLabel(slot, deskType)}${no}`;
+}
+
 /** ÖĞRENCİ ALANINI boyutlandırır; ön cephe bandı korunur. */
 export function resizeDeskArea(plan: LayoutPlan, deskRows: number, cols: number): LayoutPlan {
   return resizeGrid(plan, deskRows + FRONT_BAND_ROWS, cols);

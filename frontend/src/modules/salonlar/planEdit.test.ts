@@ -10,10 +10,13 @@ import {
   capacityOf,
   cellContent,
   deskRowCount,
+  deskRowNumber,
   emptyPlan,
   matchesDefaultTemplate,
   resizeDeskArea,
   resizeGrid,
+  seatPositionLabel,
+  slotLabel,
 } from "./planEdit";
 
 /** Varsayılan şablonun aynası (backend `layout.default_section_plan`). */
@@ -172,5 +175,46 @@ describe("ön cephe bandı (31.08.2026 saha bulgusu)", () => {
     expect(kucuk.grid.rows).toBe(3);
     expect(kucuk.desks).toHaveLength(1); // satır 5 kırpıldı
     expect(kucuk.furniture).toHaveLength(1);
+  });
+});
+
+describe("koltuk konumunun sözle gösterimi (docs/sozluk.md §3)", () => {
+  it("sıra numarası ön cephe bandını SAYMAZ: ızgaranın 1. satırı '1. sıra'dır", () => {
+    expect(FRONT_BAND_ROWS).toBe(1);
+    expect(deskRowNumber(1)).toBe(1);
+    expect(deskRowNumber(3)).toBe(3);
+    // Bandın kendisi sıra değildir.
+    expect(deskRowNumber(0)).toBe(0);
+  });
+
+  it("sıra içi konum sıra tipine göre adlandırılır: ikilide sol/sağ, üçlüde sol/orta/sağ", () => {
+    expect(slotLabel(0, "DOUBLE")).toBe("sol koltuk");
+    expect(slotLabel(1, "DOUBLE")).toBe("sağ koltuk");
+    expect(slotLabel(0, "TRIPLE")).toBe("sol koltuk");
+    expect(slotLabel(1, "TRIPLE")).toBe("orta koltuk");
+    expect(slotLabel(2, "TRIPLE")).toBe("sağ koltuk");
+    expect(slotLabel(0, "SINGLE")).toBe("tek koltuk");
+  });
+
+  it("sıra tipi bilinmiyorsa 'orta' mı 'sağ' mı tahmin edilmez — soldan sayılır", () => {
+    expect(slotLabel(1)).toBe("soldan 2. koltuk");
+    expect(slotLabel(1, "BILINMEYEN")).toBe("soldan 2. koltuk");
+    // Tipin taşımadığı bir indeks de (bozuk kayıt) soldan sayılır.
+    expect(slotLabel(2, "DOUBLE")).toBe("soldan 3. koltuk");
+  });
+
+  it("koordinat 1 tabanlı ve sözle yazılır; koltuk no biliniyorsa eklenir", () => {
+    expect(
+      seatPositionLabel({ deskRow: 3, deskCol: 0, slot: 0, deskType: "DOUBLE", seatNo: 5 }),
+    ).toBe("3. sıra, 1. sütun, sol koltuk (koltuk no 5)");
+    expect(seatPositionLabel({ deskRow: 2, deskCol: 1, slot: 1, deskType: "TRIPLE" })).toBe(
+      "2. sıra, 2. sütun, orta koltuk",
+    );
+  });
+
+  it("ön cephe bandına konmuş sıra '0. sıra' değil 'ön cephe' diye anılır", () => {
+    expect(seatPositionLabel({ deskRow: 0, deskCol: 2, slot: 1, deskType: "DOUBLE" })).toBe(
+      "ön cephe, 3. sütun, sağ koltuk",
+    );
   });
 });
