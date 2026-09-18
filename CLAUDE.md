@@ -225,6 +225,24 @@
   sınav dersi, takvim girdisi ve seçmeli kapsamı taşır; yerleşim snapshot'larındaki
   `conflict_group` aynı işlemde güncellenir. İki ders aynı dağıtılmış oturumdaysa
   REDDEDER.
+- **İhlal/uyarı metni idareci diliyle, denetim kimlikle:** `validator.PlacedStudent`
+  ve `engine.RoomSeats` isteğe bağlı ETİKET alanları taşır (salon adı, sıra konumu,
+  ders etiketi, okul no). Etiketler denetime ve yerleşime GİRMEZ; etiketsiz kurulumda
+  eski ham metin korunur (motor testleri değişmeden yeşil — `focus` ile aynı
+  genişletme deseni). Konum tek yerden: `layout.desk_position_label` ("3. sıra,
+  1. sütun"; ön cephe bandı sayılmaz, FE `planEdit.seatPositionLabel` ile AYNI).
+  Yeni bir uyarıya `room_id`, `id=`, `(2,1)` ya da iç kural kodu (`AYRI_SALON`)
+  yazmayın; KVKK gereği öğrenci ADI da yazılmaz, okul numarası yazılır.
+- **Kitapçık üretimi yerleşimin kopyasıdır:** ZIP salon/koltuk/ad taşır. Yerleşim
+  sonradan değişirse (yeniden dağıtım, taslağa alma, koltuk takası) üretim
+  `is_stale` olur (`selectors.booklet_run_is_stale` — canlı yerleşimin son
+  `updated_at`'i üretimden yeniyse). Dosya silinmez; arayüz satırı uyarıyla
+  işaretler. Yerleşime dokunan yeni bir işlem `updated_at`'i İLERLETMELİDİR
+  (`QuerySet.update()` ilerletmez).
+- **Uygulama içi güncelleme yalnız Windows'tadır:** `updates.installer_supported`;
+  Linux'ta `can_download` false + `platform: "linux"` döner, arayüz paketle
+  güncellemeye yönlendirir. Testler Linux kabında koştuğu için güncelleme
+  testlerinde platform fixture'la Windows'a çevrilir.
 - Takvim ızgarası hücre anahtarı `"<iso_tarih>|<period_no>|<level>"` — FE ve
   PDF ORTAK tüketir; hücre sözlüğüne alan eklenir, anahtar biçimi değişmez.
 - Takvim imza bloğu sözleşmesi `{"chairs": [{"name", "role"}],
@@ -324,6 +342,11 @@ docker compose run --rm backend python manage.py migrate
 docker compose run --rm frontend npm install
 bash scripts/gates.sh
 ```
+
+Ön yüz testleri kapıda KAPSAMLA koşar; eşikler `frontend/vitest.config.ts`te
+(19.09.2026 ölçümü: satır %89,5 · dal %84,9 · işlev %63,2 → eşik 82/78/55). JSON
+raporunun `success` alanı eşiği SÖYLEMEZ; kapı özet satırının varlığını ve
+"does not meet" satırının yokluğunu ayrıca arar.
 
 Kapı betiği GitHub'da da koşar (`.github/workflows/kapilar.yml` — her PR ve
 main push'u; betiği OLDUĞU GİBİ çağırır, ikinci komut listesi tutulmaz). Bu

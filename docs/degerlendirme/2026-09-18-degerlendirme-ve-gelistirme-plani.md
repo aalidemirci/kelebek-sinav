@@ -371,3 +371,101 @@ proje hafızasında.
 Değişiklikler çalışma ağacında, **commit edilmedi** (kullanıcı kararı):
 `feat(sinav): aynı kitapçık bayrağı ders-başı ayar, taslağa alma, karma seviyede
 evrak ders adı, R8 yorum sızıntısı` önerilen başlıktır.
+
+> **Not (19.09.2026):** Yukarıdaki §5, değerlendirmenin yazıldığı andaki durumdur.
+> O oturumun değişiklikleri sonradan commit edildi; planın uygulanması ve son
+> doğrulama §6'dadır.
+
+---
+
+## 6. Uygulama günlüğü (18-19.09.2026)
+
+Plan `gelistirme/plan-2026-09` dalında uygulandı. K1-K6 kararlarında planın kendi
+önerileri benimsendi. Ön yüz işi iki paralel ajana (oturumlar+salonlar+ui /
+takvim+kişiler+ayarlar+kılavuz), backend test kapsamı üçüncü bir ajana verildi;
+hepsinin işi tek tek gözden geçirilip bu dala alındı.
+
+### 6.1 Kalem kalem durum
+
+| # | Durum | Not |
+|---|---|---|
+| P0-1 | **Yapılmadı (kullanıcıya bırakıldı)** | Etiket, push ve okulapp.org sürüm kartı dışa açık işlemlerdir; oturumun izin sınıflandırıcısı reddetti. Komutlar §6.4'te |
+| P0-2 | Yapıldı | `_room_sheets` yerleşimden beslenir; klasik düzende ve oturum listesi dışına pinlenen salonda R1 basılır |
+| P0-3 | Yapıldı | Silme ucu durum kapısından geçer; değiştirilen/kaldırılan soru PDF'i commit sonrası diskten silinir |
+| P0-4 | Yapıldı | Birleştirme sınav dersini, takvim girdisini ve seçmeli kapsamı taşır, `conflict_group`'u yeniden yazar; iki ders aynı dağıtılmış oturumdaysa reddeder |
+| P0-5 | Yapıldı (genişletildi) | Yalnız ayar ucu değil: `ks_exception_handler` çevrilmemiş her Django `ValidationError`'ı 400'e çevirir ve gerekçeyi `message`'a yazar |
+| P0-6 | Yapıldı | R8 idareci diliyle; imza "Düzenleyen — Müdür Yardımcısı"; numara `unlocalize` |
+| P0-7 | Yapıldı | Kılavuzda yanlış bilgiler düzeltildi, eksik konular eklendi (yeni "Bakım" adımı dahil) |
+| P1-1 | Yapıldı | `has_live_session` / `live_session_ids`; liste ve ızgara yalnız canlı oturum kimliğini döner |
+| P1-2 | Yapıldı | `_ensure_no_attendance`: yoklaması alınmış oturumda yeniden dağıtım ve taslağa alma reddedilir |
+| P1-3 | **Kısmen (bilinçli)** | Plan değişikliği kilidi konmadı — tek salonu editörden değiştirmek CLAUDE.md'de belgeli bilinçli karardır. Yerine R1 krokisine "N öğrencinin koltuğu güncel salon planında yok" uyarısı ve doğrulamada salon adıyla ihlal |
+| P1-4 | Yapıldı | Sabit koltukta takas reddi; oturum silinince kural ve muafiyet temizliği; `section_ids` tip denetimi |
+| P1-5 | Yapıldı | `docs/sozluk.md` bağlayıcı; iki ön yüz taraması + backend metinleri (ihlal, uyarı, ret, evrak). İç kod ve `id=` sızıntısı kalmadı |
+| P1-6 | Yapıldı | Tebellüğ işleme, soru dosyası kaldırma, takvimi taslağa alma, süreç kalemi pasifleştirme onaydan geçer; oturum onayı onaylayan adını sorar |
+| P1-7 | Yapıldı | DAĞITILDI oturumda "Yeniden dağıt" diyaloğu; sonuç ve backend uyarıları diyalogda kalır |
+| P1-8 | Yapıldı | Üst bantta süre, R1 sayım tablosunda ders bazlı süre, R6 giriş cümlesinde süre. Kitapçık bandına eklenmedi (`booklet.py` AYNEN) |
+| P1-9 | Yapıldı | `.github/workflows/kapilar.yml` kapı betiğini olduğu gibi çağırır (ilk koşusu push'tan sonra görülecek) |
+| P1-10 | Yapıldı | Örnek evrak üreticisi gerçek uzunlukta ders adları ve karma seviyeyle çalışır |
+| P2-1 | Yapıldı | Antet resmî yazışma düzeninde, ders saati başlangıcı, onay tarihi, "N öğrenci", "(Uygulamalı)" |
+| P2-2 | Yapıldı | Tebliğ eden / uygundur imza bloğu, süreli giriş cümlesi, "Gözetmen / Yedek gözetmen" |
+| P2-3 | **Kısmen (bilinçli)** | Karışık salonda ders kodu + açıklama, R4'te düzenleyen satırı ve dayanak yapıldı. "Girmeyen öğrenci numaraları" satırı ve büyük tespit kutusu eklenmedi: yaprak 1 bütçesi dolu, bilgi yaprak 2'deki yoklamada var |
+| P2-4 | Yapıldı | `break-before: right`, tablo çizgileri, altbilgide CSS kaçışı |
+| P2-5 | Yapıldı | Sihirbaz kaldığı adımdan açılır, tamamlanan adımlara tıklanır, ön kontrolde onaylayan adı |
+| P2-6 | **Kısmen (bilinçli)** | Dosya adları (`dosyaAdi`), yükleme/boş/hata kalıpları, düğme yazımı, tırnak ve simge birliği yapıldı. Gezinme sırası DEĞİŞTİRİLMEDİ: mevcut sıra günlük kullanım sırasıdır, kurulum sırası değil |
+| P2-7 | Yapıldı | Kalıcı `UyariBandi`; "Kelebek değil" kutusu "Düzen" seçimine döndü; tür ve düzen rozetleri |
+| P2-8 | Yapıldı | K3 kararı: yedek medyayı kapsamaz (TB11); indirme uçları `media_missing` 404 döner |
+| P2-9 | Yapıldı | TB8 kapandı, TB10 güncellendi, TB11/TB12 eklendi; kurulum.md, packaging/README, CLAUDE.md, tasarım §9/§12 |
+| P2-10 | Yapıldı | Backend kapsamı %87,9 → %92,9 (≈200 yeni test). Ön yüzde 58 → 69 test dosyası, 328 → 473 test; doğrudan testi olmayan bileşenlerin tamamı üst sayfa testinden geçiyor. Ön yüz kapsam eşiği kapıda: ölçüm satır %89,5 · dal %84,9 · işlev %63,2; eşik 82/78/55 |
+| P3 | **Kısmen** | `tr_upper` ve `level_label` tek kaynak, oturum listesi ön-yüklemeli, OKY metni depoda ve atıflar doğrulandı, Autocomplete ARIA 1.2, hata sözleşmesi (servis + serializer retleri `message`'da). `services.py` bölünmesi yapılmadı → TB12 |
+
+### 6.2 Plan dışında bulunup düzeltilenler
+
+Uygulama sırasında ortaya çıkan, değerlendirmede yer almayan gerçek kusurlar:
+
+- **Sayfa bütçesi gerçek adlarla kırılıyordu.** Karma seviye etiketi ("Türk Dili
+  ve Edebiyatı — 10. Sınıf") dar "Ders" sütununda sarıp 40 öğrencili R1'i üçüncü,
+  R4'ü ikinci sayfaya taşırıyordu; bütçe testleri "Ders 0" gibi kısa adlarla
+  koştuğu için yeşildi. Çözüm ders kodu + açıklama; testler artık gerçek
+  uzunlukta adlarla koşuyor.
+- **Ön-sürüm sıralaması.** `beta.10 < beta.9` (dizge karşılaştırması): onuncu
+  ön-sürümde güncelleme hiç önerilmezdi. İki `version_key` kopyası da doğal
+  sıralamaya geçti.
+- **Pardus'ta Windows kurulum dosyası öneriliyordu.** `can_download` platforma
+  bakmıyordu. Artık `platform` alanı var; Linux'ta paketle güncellemeye yönlendirir.
+- **Bayat kitapçık paketi.** Yeniden dağıtım, taslağa alma ya da koltuk takasından
+  sonra eski ZIP uyarısız indirilebiliyordu; basılırsa kitapçıklar yanlış koltuğa
+  giderdi. API `is_stale` döner, Sorular paneli satırı uyarıyla işaretler.
+- **İhlal ve uyarı metinlerinde iç kimlikler.** "salon 3 sıra (2,1) pozisyon 0",
+  "'10:9' grubundan", "id=42", "AYRI_SALON kuralına". Artık salon adı, ders adı,
+  okul numarası ve krokiyle aynı sayımda "3. sıra, 1. sütun".
+- **Süreç kalemi adı çakışması** genel "Gönderilen veride hatalar var" cümlesinin
+  arkasında kalıyordu (DRF alan düzeyi `UniqueValidator`); **boş takvim adı**
+  güncellemede kabul ediliyordu.
+- **"Gerekirse geri alınabilir" vaadi.** Kişi silme onayı böyle diyordu ama geri
+  alma ucu yok. Doğrusu yazıldı.
+- **Seçmeli ders şubeleri diyaloğu** kayıtlı şubeler okunamadan "Kaydet"e izin
+  veriyordu; kayıt tam değiştirme yaptığı için boş seçim var olan tanımı
+  silebiliyordu.
+- **Onaylı görünen taslak takvim.** Backend taslağa alınan takvimin eski onay
+  damgasını saklıyor; önizleme damgayı her durumda basıyordu.
+- **"Kendi dersliğinde" düzeninde** dağıtım numarası (hep 0), katı dağıtım ve
+  dönüşümlü oturma hem sihirbazda soruluyor hem R8'de basılıyordu.
+- **`formatDateTime`** günü sıfırsız basıyordu ("1.06.2026"); aynı ekranda iki
+  yazım çıkıyordu.
+
+### 6.3 Bilinçli olarak yapılmayanlar ve açık kalanlar
+
+- **`services.py` bölünmesi (TB12).** Saf taşıma işidir; düzeltme turuyla aynı
+  dalda yapılırsa inceleme ve `git blame` izi bozulur. Ayrı oturuma bırakıldı.
+- **Ön yüz işlev kapsamı düşük (%63).** Satır içi olay işleyicileri ayrı işlev
+  sayıldığı için satır/dal oranının altında kalır; eşik buna göre 55'tir.
+  Kapsamlı koşu kapıyı yaklaşık yüzde otuz uzatır (205 sn → 267 sn) — kabul edildi.
+- **Silinen kişiyi geri alma ucu.** Şifreli ad alanları ve numara tekliği
+  yüzünden küçük iş değildir; ihtiyaç doğarsa ayrı kalem.
+- **`ExamTrackItem` DELETE ucu** duruyor ama arayüz artık çağırmıyor (yerine
+  pasifleştir/etkinleştir). Zararsız; kaldırılması ayrı bir API temizliği.
+- **TTK çizelgesindeki "Ortak Dersler" başlığı** ile programdaki "Zorunlu" türü
+  arasında kılavuzda köprü cümlesi yok. Sözlük "ortak" sözcüğünü yalnız MEB'in
+  okul geneli sınavına ayırıyor; istenirse Ders Havuzu yardım metnine tek cümle
+  eklenebilir.
+- **Gezinme sırası** ve **R1 yaprak 1'e ek alanlar**: yukarıda gerekçeli.
