@@ -218,8 +218,8 @@ function DersYillariPanel({
       <Card elevation={1} className="p-6">
         <p className="text-title-medium text-on-surface">Ders yılları</p>
         <p className="mt-1 text-body-medium text-on-surface-variant">
-          Aynı anda yalnız BİR ders yılı aktif olabilir. Kurul, tutanak ve disiplin kayıtları aktif
-          yıla bağlanır.
+          Aynı anda yalnız BİR ders yılı aktif olabilir. Şube kataloğu, sınav takvimleri ve
+          oturumlar aktif yıla bağlanır.
         </p>
 
         {loading ? (
