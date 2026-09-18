@@ -228,8 +228,8 @@
 - **İhlal/uyarı metni idareci diliyle, denetim kimlikle:** `validator.PlacedStudent`
   ve `engine.RoomSeats` isteğe bağlı ETİKET alanları taşır (salon adı, sıra konumu,
   ders etiketi, okul no). Etiketler denetime ve yerleşime GİRMEZ; etiketsiz kurulumda
-  eski ham metin korunur (motor testleri değişmeden yeşil — `focus` ile aynı
-  genişletme deseni). Konum tek yerden: `layout.desk_position_label` ("3. sıra,
+  metin ham kimlik ve koordinata düşer (motor testleri değişmeden yeşil — `focus`
+  ile aynı genişletme deseni). Konum tek yerden: `layout.desk_position_label` ("3. sıra,
   1. sütun"; ön cephe bandı sayılmaz, FE `planEdit.seatPositionLabel` ile AYNI).
   Yeni bir uyarıya `room_id`, `id=`, `(2,1)` ya da iç kural kodu (`AYRI_SALON`)
   yazmayın; KVKK gereği öğrenci ADI da yazılmaz, okul numarası yazılır.
