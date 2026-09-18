@@ -36,7 +36,12 @@ ADLAR = (
     "AHMET EFE YILDIRIMLI",
     "ELİF SUDE DEMİRÖZ",
 )
-DERSLER = ("Coğrafya 9", "Coğrafya 10", "Matematik 11")
+#: Gerçek etiket biçimi: aynı ders birden çok seviyedeyse ad seviyeyle basılır
+#: (`services._seat_course_names`), tek seviyede yalın ad. Eski örnek seviyeyi
+#: ders ADINA gömüyordu ("Coğrafya 9") ve karma seviye kusurunu gizliyordu.
+DERSLER = ("Coğrafya — 9. Sınıf", "Coğrafya — 10. Sınıf", "Matematik")
+#: Ders bazlı süre oturum süresini ezebilir — örnekte üçüncü ders 60 dk.
+SURELER = (40, 40, 60)
 ODA = "A-201 Dersliği"
 GOZETMEN = "Nurten ÖZDEMİRCİ"
 
@@ -48,6 +53,7 @@ BASLIK = reports.ReportHeader(
     exam_date="16.11.2026",
     start_time="09:00",
     generated_at="16.11.2026 08:30",
+    duration_label="40 dk",
 )
 
 
@@ -201,11 +207,15 @@ class Command(BaseCommand):
                 class_label=f"{9 + i % 3}/{'ABÇ'[i % 3]}",
                 room_name=ODA,
                 seat_no=i + 1,
-                desk_row=i // 8,
+                # 0. satır ön cephe bandıdır (öğretmen masası/tahta); sıralar 1'den başlar.
+                # Eski `i // 8` ilk sekiz öğrenciyi mobilya satırına koyuyor, örnek kroki
+                # onları gösteremiyordu.
+                desk_row=1 + i // 8,
                 desk_col=(i % 8) // 2,
                 slot=i % 2,
                 course_name=dersler[i % len(dersler)],
                 status="NORMAL",
+                duration_minutes=SURELER[i % len(dersler)],
             )
             for i in range(adet)
         ]
@@ -215,7 +225,7 @@ class Command(BaseCommand):
             reports.ProctorRow(
                 teacher_name=ADLAR[i % len(ADLAR)],
                 role="PROCTOR" if i < 8 else "RESERVE",
-                role_label="Salon Görevlisi" if i < 8 else "Yedek",
+                role_label="Gözetmen" if i < 8 else "Yedek Gözetmen",
                 room_name=f"A-2{i:02d} Dersliği" if i < 8 else "",
             )
             for i in range(10)

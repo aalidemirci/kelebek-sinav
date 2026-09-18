@@ -38,7 +38,7 @@ Değerler Python'da METİN olarak biçimlenir (TR locale ondalığı virgülle b
               {% else %}
               <div class="seat-name">{{ seat.full_name }}</div>
               {% if not room.metrics.compact %}
-              <div class="seat-meta">{{ seat.student_number }} · {{ seat.class_label }}</div>
+              <div class="seat-meta">{{ seat.student_number }} · {{ seat.class_label }}{% if seat.course_code %} · <b>{{ seat.course_code }}</b>{% endif %}</div>
               {% endif %}
               {% endif %}
             {% endif %}

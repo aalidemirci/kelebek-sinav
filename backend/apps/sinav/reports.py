@@ -38,8 +38,10 @@ bölünmezliği listeyi düzgün akıtır. Sayfa sayısı garantileri testte sab
 from __future__ import annotations
 
 import io
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from apps.okul import normalize as okul_normalize
 from apps.sinav import layout
@@ -82,6 +84,11 @@ class ReportHeader:
     exam_date: str  # gg.aa.yyyy
     start_time: str  # SS:DD
     generated_at: str  # gg.aa.yyyy SS:DD
+    #: Sınav süresi künyesi ("40 dk" / "derse göre 40-60 dk"). Eskiden HİÇBİR
+    #: evrakta süre yoktu; salon evrakının kontrol listesi "süresi duyuruldu"
+    #: derken gözetmen süreyi evraktan okuyamıyordu (18.09.2026 evrak bulgusu).
+    #: Boşsa basılmaz (oturumsuz boş salon planı).
+    duration_label: str = ""
 
 
 @dataclass(frozen=True)
@@ -98,6 +105,13 @@ class SeatRow:
     slot: int
     course_name: str
     status: str  # SeatStatus değeri
+    #: Öğrencinin gireceği sınavın süresi (dk) — ders bazlı süre oturum süresini
+    #: ezebilir; karışık salonda iki dersin süresi FARKLI olabilir. None = bilinmiyor.
+    duration_minutes: int | None = None
+    #: Dersin SEVİYESİZ adı. `course_name` aynı ders birden çok seviyedeyken
+    #: seviyelidir ("Coğrafya — 9. Sınıf"); şube duyurusunda şube zaten tek
+    #: seviyedir ve ek yalnız sütunu sardırır. Boşsa `course_name` kullanılır.
+    course_plain: str = ""
 
 
 @dataclass(frozen=True)
@@ -256,6 +270,7 @@ def build_room_kroki(
     *,
     box_height_px: float = KROKI_BOX_R1_PX,
     with_names: bool = True,
+    course_codes: dict[str, str] | None = None,
 ) -> dict[str, object]:
     """Salon krokisi şablon bağlamı: rows×cols hücre matrisi + ölçü sözlüğü.
 
@@ -296,6 +311,13 @@ def build_room_kroki(
                             "full_name": assigned.full_name if assigned else "",
                             "student_number": assigned.student_number if assigned else "",
                             "class_label": assigned.class_label if assigned else "",
+                            # Karışık salonda hücre ders KODUNU da taşır: gözetmen
+                            # kimin hangi sınava girdiğini krokiden görür.
+                            "course_code": (
+                                (course_codes or {}).get(assigned.course_name or "—", "")
+                                if assigned
+                                else ""
+                            ),
                             "empty": assigned is None,
                         }
                     )
@@ -341,9 +363,22 @@ _ANN_FIXED_PX = 262.0
 #: R1 yoklama: Sıra 5 + Koltuk 8 + No 9 + Şube 8 + Yok 7 + İmza 27/17
 #: (+ Ders 16) → ada 36 % (tek ders) veya 30 % (karışık salon).
 #: Şablonda `table-layout: fixed` olduğu için bu oranlar BİREBİR uygulanır.
-_ATT_NAME_RATIO, _ATT_NAME_RATIO_MIXED = 0.36, 0.30
+_ATT_NAME_RATIO, _ATT_NAME_RATIO_MIXED = 0.36, 0.34
+#: Karışık salonda yoklama listesinin üstüne basılan DERS KODU açıklaması
+#: (iki satıra kadar) — sabit yüksekliğe eklenir, satır ölçüsü ona göre küçülür.
+_ATT_LEGEND_PX = 30.0
+#: Ders kodları — karışık salonda yoklama "Ders" sütunu ve kroki hücresi TEK
+#: HARF taşır. Ders etiketi ("Türk Dili ve Edebiyatı — 10. Sınıf") 16 %'lik
+#: sütunda iki satıra sarıyor, satır yüksekliğini ikiye katlayıp 40 öğrencili
+#: salon evrakını üçüncü sayfaya taşırıyordu (18.09.2026, örnek PDF'te
+#: ÖLÇÜLDÜ; bütçe testi "Ders 0" gibi kısa adlarla koştuğu için görmüyordu).
+_COURSE_CODES = "ABCDEFGHIJKLMNOPRSTUVYZ"
 #: R4 duyuru: Okul No 10 + Salon 22 + Koltuk 13 (+ Ders 22) → ada 55 % / 33 %.
 _ANN_NAME_RATIO, _ANN_NAME_RATIO_MIXED = 0.55, 0.33
+#: R4 karışık şubede AD + DERS sütunlarının toplam payı; bölüşüm
+#: `_announcement_columns` ile en uzun metinlere göre yapılır. Kalan: Okul No 9 +
+#: Salon 18 + Koltuk 10.
+_ANN_TEXT_TOTAL_RATIO = 0.63
 
 #: Satır yüksekliği modeli (ÖLÇÜLDÜ, DejaVu + line-height 1.05, px cinsinden):
 #:     satır ≈ 1.4 × punto(pt) + 2.667 × dolgu(pt) + 0.667
@@ -371,7 +406,13 @@ _NAME_MAX_CHARS = 28.0
 _NAME_CELL_CHROME_PX = 14.0 + 10.0 * 4.0 / 3.0
 
 
-def list_row_metrics(count: int, *, fixed_px: float, name_col_ratio: float) -> dict[str, str]:
+def list_row_metrics(
+    count: int,
+    *,
+    fixed_px: float,
+    name_col_ratio: float,
+    text_cols: tuple[tuple[float, int], ...] = (),
+) -> dict[str, str]:
     """Liste satırının PUNTO ve DOLGU değerlerini sayfa bütçesinden hesaplar.
 
     Kademeli sınıf yerine sürekli değer: hedef satır = (bütçe - sabitler) / n.
@@ -381,6 +422,9 @@ def list_row_metrics(count: int, *, fixed_px: float, name_col_ratio: float) -> d
     Punto ayrıca AD SÜTUNU GENİŞLİĞİNDEN sınırlanır (`name_col_ratio`, sayfa
     genişliğine oran): sarmayan ad = öngörülebilir satır yüksekliği. Ders
     sütunu açıldığında ad sütunu daralır ve punto kendiliğinden küçülür.
+    `text_cols` aynı sınırı BAŞKA serbest metin sütunlarına uygular:
+    `(sütun oranı, en uzun metnin karakter sayısı)` — şube duyurusundaki ders
+    sütunu gibi; sarmayan her hücre = öngörülebilir satır.
 
     Böylece 40 öğrenci tek sayfaya SIĞAR (garanti testle sabitlenir); punto
     tabanına dayanan çok kalabalık salonda liste bölünmeden akar (başlık
@@ -394,6 +438,12 @@ def list_row_metrics(count: int, *, fixed_px: float, name_col_ratio: float) -> d
     by_width = (_CONTENT_WIDTH_PX * name_col_ratio - _NAME_CELL_CHROME_PX) / (
         _NAME_MAX_CHARS * _NAME_CHAR_PX_PER_PT
     )
+    for ratio, max_chars in text_cols:
+        by_width = min(
+            by_width,
+            (_CONTENT_WIDTH_PX * ratio - _NAME_CELL_CHROME_PX)
+            / (max(1, max_chars) * _NAME_CHAR_PX_PER_PT),
+        )
     font = min(max(min(by_height, by_width), _ROW_FONT_MIN_PT), _ROW_FONT_MAX_PT)
     pad = (target - _ROW_EXTRA_PX - _ROW_FONT_COEF * font - _ROW_BORDER_PX) / _ROW_PAD_COEF
     pad = min(max(pad, 0.0), _ROW_PAD_MAX_PT)
@@ -409,16 +459,72 @@ def list_row_metrics(count: int, *, fixed_px: float, name_col_ratio: float) -> d
 
 
 def _course_breakdown(rows: list[SeatRow] | tuple[SeatRow, ...]) -> list[dict[str, object]]:
-    """Ders → kayıtlı sayısı (deste sayımı ve künye özeti için)."""
+    """Ders → kayıtlı sayısı + süre (deste sayımı ve künye özeti için)."""
     counts: dict[str, int] = {}
+    durations: dict[str, int | None] = {}
     for row in rows:
-        counts[row.course_name or "—"] = counts.get(row.course_name or "—", 0) + 1
-    return [{"course_name": name, "count": count} for name, count in sorted(counts.items())]
+        name = row.course_name or "—"
+        counts[name] = counts.get(name, 0) + 1
+        if durations.get(name) is None:
+            durations[name] = row.duration_minutes
+    # Doğal sıralama: "Coğrafya — 9. Sınıf", "Coğrafya — 10. Sınıf"dan ÖNCE gelir.
+    ordered = sorted(counts.items(), key=lambda kv: _natural_key(kv[0]))
+    mixed = len(ordered) > 1
+    return [
+        {
+            "course_name": name,
+            "count": count,
+            "duration_label": duration_label(durations[name]),
+            # Kod yalnız KARIŞIK salonda vardır (tek derste ayırt edilecek şey yok).
+            "code": _COURSE_CODES[index % len(_COURSE_CODES)] if mixed else "",
+        }
+        for index, (name, count) in enumerate(ordered)
+    ]
 
 
-def _course_summary(courses: list[dict[str, object]]) -> str:
-    """Künye satırı: "Coğrafya (20) · Matematik (18)"."""
+def duration_label(minutes: int | None) -> str:
+    """Süre görünümü: 40 → "40 dk"; bilinmiyorsa boş (evrakta elle yazılır)."""
+    return f"{minutes} dk" if minutes else ""
+
+
+def _natural_key(text: str) -> tuple[tuple[int, Any], ...]:
+    """Rakam öbeklerini sayısal karşılaştıran sıralama anahtarı (ders adları için).
+
+    Salon adlarında bilinçli olarak KULLANILMAZ (`room_name_sort_key` notu);
+    ders etiketleri "<ad> — <n>. Sınıf" biçimindedir ve karışık tip üretmez.
+    """
+    return tuple(
+        (0, int(part)) if part.isdigit() else (1, okul_normalize.tr_sort_key(part))
+        for part in re.split(r"(\d+)", text)
+        if part
+    )
+
+
+def _course_summary(courses: list[dict[str, object]], *, coded: bool = False) -> str:
+    """Künye satırı: "Coğrafya (20) · Matematik (18)".
+
+    `coded` (R1 yaprak 1, karışık salon): adlar yerine ders KODLARI basılır —
+    "A (14) · B (13) · C (13)". Künye hücresi dardır; üç uzun ders etiketi altı
+    satıra sarıp yaprak 1'i taşırıyordu (ölçüldü). Adlar aynı yaprağın sayım
+    tablosunda kodlarıyla birlikte yazılıdır.
+    """
+    if coded:
+        return " · ".join(f"{c['code']} ({c['count']})" for c in courses) or "—"
     return " · ".join(f"{c['course_name']} ({c['count']})" for c in courses) or "—"
+
+
+def _announcement_columns(name_chars: int, course_chars: int) -> dict[str, str]:
+    """R4 karışık şubede AD ve DERS sütun oranları — ikisi de TEK SATIR kalsın.
+
+    Sabit 33/22 bölüşümünde uzun ders adı ("Seçmeli Peygamberimizin Hayatı")
+    sarıyor, 40 öğrencilik duyuruyu ikinci sayfaya taşırıyordu (ölçüldü).
+    Ad + ders toplam payı (63 %) en uzun metinlerin karakter sayısıyla orantılı
+    bölüşülür; ders payı 18-38 % aralığında tutulur. Yüzdeler METİN döner.
+    """
+    total = _ANN_TEXT_TOTAL_RATIO
+    course = total * course_chars / max(1, name_chars + course_chars)
+    course = min(max(course, 0.18), 0.38)
+    return {"name": f"{(total - course) * 100:.2f}", "course": f"{course * 100:.2f}"}
 
 
 # ---------------------------------------------------------------------------
@@ -442,23 +548,36 @@ def build_room_documents(
     for sheet in sheets:
         ordered = sorted(sheet.rows, key=lambda r: r.seat_no)
         courses = _course_breakdown(ordered)
+        mixed = len(courses) > 1
+        codes = {str(c["course_name"]): str(c["code"]) for c in courses}
         documents.append(
             {
                 "room_name": sheet.room_name,
                 "block": sheet.block,
-                "kroki": build_room_kroki(sheet, box_height_px=KROKI_BOX_R1_PX),
-                "rows": ordered,
+                "kroki": build_room_kroki(
+                    sheet, box_height_px=KROKI_BOX_R1_PX, course_codes=codes if mixed else None
+                ),
+                # Satır görünümü: şablon `row.course_code` okur (SeatRow dondurulmuştur).
+                "rows": [
+                    {**vars(row), "course_code": codes.get(row.course_name or "—", "")}
+                    for row in ordered
+                ],
+                "course_legend": (
+                    " · ".join(f"{c['code']} = {c['course_name']}" for c in courses)
+                    if mixed
+                    else ""
+                ),
                 "registered": len(ordered),
                 "capacity": sheet.plan.capacity,
                 "courses": courses,
-                "course_summary": _course_summary(courses),
+                "course_summary": _course_summary(courses, coded=mixed),
                 # Ders sütunu yalnız KARIŞIK salonda anlamlı — tek derste
                 # sütun yerine imza alanı genişler.
-                "show_course": len(courses) > 1,
+                "show_course": mixed,
                 "row": list_row_metrics(
                     len(ordered),
-                    fixed_px=_ATT_FIXED_PX,
-                    name_col_ratio=_ATT_NAME_RATIO_MIXED if len(courses) > 1 else _ATT_NAME_RATIO,
+                    fixed_px=_ATT_FIXED_PX + (_ATT_LEGEND_PX if mixed else 0.0),
+                    name_col_ratio=_ATT_NAME_RATIO_MIXED if mixed else _ATT_NAME_RATIO,
                 ),
                 "proctor_name": names.get(sheet.room_name, ""),
             }
@@ -480,14 +599,22 @@ def build_announcements(rows: list[SeatRow]) -> list[dict[str, object]]:
         rows, key=lambda r: r.class_label, sort_key=class_label_sort_key
     ).items():
         ordered = sorted(group, key=lambda r: student_number_sort_key(r.student_number))
-        mixed = len({row.course_name for row in ordered}) > 1
+        # Şube tek seviyededir: ders adı SEVİYESİZ basılır (ek yalnız sütunu sardırır).
+        labels = [row.course_plain or row.course_name for row in ordered]
+        mixed = len(set(labels)) > 1
+        columns = _announcement_columns(
+            int(_NAME_MAX_CHARS), max((len(label) for label in labels), default=1)
+        )
         room_counts: dict[str, int] = {}
         for row in ordered:
             room_counts[row.room_name] = room_counts.get(row.room_name, 0) + 1
         sheets.append(
             {
                 "class_label": class_label,
-                "rows": ordered,
+                "rows": [
+                    {**vars(row), "course_label": label}
+                    for row, label in zip(ordered, labels, strict=True)
+                ],
                 "room_summary": " · ".join(
                     f"{name} ({count})"
                     for name, count in sorted(
@@ -497,9 +624,17 @@ def build_announcements(rows: list[SeatRow]) -> list[dict[str, object]]:
                 "row": list_row_metrics(
                     len(ordered),
                     fixed_px=_ANN_FIXED_PX,
-                    name_col_ratio=_ANN_NAME_RATIO_MIXED if mixed else _ANN_NAME_RATIO,
+                    name_col_ratio=(float(columns["name"]) / 100.0 if mixed else _ANN_NAME_RATIO),
+                    # Ders sütunu da TEK SATIR kalmalı: punto en uzun ders adına
+                    # göre de sınırlanır ("Seçmeli Peygamberimizin Hayatı" ≈ 30 kr.).
+                    text_cols=(
+                        ((float(columns["course"]) / 100.0, max(len(label) for label in labels)),)
+                        if mixed
+                        else ()
+                    ),
                 ),
                 "show_course": mixed,
+                "columns": columns,
             }
         )
     return sheets

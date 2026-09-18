@@ -1987,7 +1987,27 @@ def _report_header(session: ExamSession) -> reports.ReportHeader:
         exam_date=session.exam_date.strftime("%d.%m.%Y"),
         start_time=session.start_time.strftime("%H:%M"),
         generated_at=timezone.localtime().strftime("%d.%m.%Y %H:%M"),
+        duration_label=_session_duration_label(session),
     )
+
+
+def _group_durations(session: ExamSession) -> dict[str, int]:
+    """Çakışma grubu anahtarı → sınav süresi (dk): ders bazlı süre oturum süresini ezer."""
+    durations: dict[str, int] = {}
+    for sc in ExamSessionCourse.objects.filter(session=session):
+        if sc.level is None and not sc.shared_booklet:
+            continue  # bozuk satır; anahtarı üretilemez
+        key = _session_course_group_key(sc)
+        durations.setdefault(key, int(sc.duration_minutes or session.duration_minutes))
+    return durations
+
+
+def _session_duration_label(session: ExamSession) -> str:
+    """Üst bant süre künyesi: tek süre "40 dk"; dersler farklıysa "derse göre 40-60 dk"."""
+    values = set(_group_durations(session).values()) or {int(session.duration_minutes)}
+    if len(values) == 1:
+        return reports.duration_label(next(iter(values)))
+    return f"derse göre {min(values)}-{max(values)} dk"
 
 
 def render_room_layout_pdf(room: ExamRoom) -> ReportFile:
@@ -2038,6 +2058,10 @@ def _seat_rows(session: ExamSession, *, room_id: int | None = None) -> list[repo
         qs = qs.filter(room_id=room_id)
     assignments = list(qs)
     course_names = _seat_course_names({a.conflict_group for a in assignments})
+    plain_names: dict[int, str] = ders_selectors.course_names_by_ids(
+        {int(a.conflict_group.split(":", 1)[0]) for a in assignments}
+    )
+    durations = _group_durations(session)
     return [
         reports.SeatRow(
             full_name=a.full_name,
@@ -2050,6 +2074,8 @@ def _seat_rows(session: ExamSession, *, room_id: int | None = None) -> list[repo
             slot=a.slot,
             course_name=course_names.get(a.conflict_group, ""),
             status=a.status,
+            duration_minutes=durations.get(a.conflict_group),
+            course_plain=plain_names.get(int(a.conflict_group.split(":", 1)[0]), ""),
         )
         for a in assignments
     ]

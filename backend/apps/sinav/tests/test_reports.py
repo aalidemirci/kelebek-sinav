@@ -18,7 +18,7 @@ import io
 import re
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from django.conf import settings
@@ -166,6 +166,23 @@ def test_karma_seviyeli_oturumda_ders_adi_seviyeli_basilir() -> None:
         text = " ".join(_pdf_text(services.render_session_report(session, code).content).split())
         assert "Coğrafya — 9. Sınıf" in text, f"{code}: 9. sınıf etiketi yok"
         assert "Coğrafya — 10. Sınıf" in text, f"{code}: 10. sınıf etiketi yok"
+
+
+def test_evrakta_sinav_suresi_basilir() -> None:
+    """Süre üst bantta ve salon evrakının sayım tablosunda basılır; ders bazlı süre
+    oturum süresini ezer (eskiden HİÇBİR evrakta süre yoktu)."""
+    session = _evrak_oturumu_taslak()  # oturum süresi 60 dk
+    sc9 = session.courses.get(level=9)
+    services.update_session_course(sc9, duration_minutes=40)
+    services.distribute_session(session, seed=3)
+
+    r1 = " ".join(_pdf_text(services.render_session_report(session, "r1").content).split())
+    assert "Süre: derse göre 40-60 dk" in r1
+    assert "40 dk" in r1 and "60 dk" in r1
+    # Öğrenciye dönük duyuru ve tutanak da süreyi üst bantta taşır.
+    for code in ("r4", "r7"):
+        text = " ".join(_pdf_text(services.render_session_report(session, code).content).split())
+        assert "Süre: derse göre 40-60 dk" in text, code
 
 
 def test_r1_plan_degisince_dusen_ogrenci_bildirilir() -> None:
@@ -411,6 +428,14 @@ _BASLIK = reports.ReportHeader(
 )
 
 
+#: Katalogdaki en uzun etiket sınıfı: çok seviyeli ders (seviye ekiyle) + uzun seçmeli.
+_GERCEK_DERSLER: tuple[str, ...] = (
+    "Türk Dili ve Edebiyatı — 9. Sınıf",
+    "Türk Dili ve Edebiyatı — 10. Sınıf",
+    "Seçmeli Peygamberimizin Hayatı",
+)
+
+
 def _plan(rows: int, cols: int) -> dict[str, Any]:
     """rows×cols ikili sıra ızgarası (demirbaşsız)."""
     return {
@@ -420,7 +445,10 @@ def _plan(rows: int, cols: int) -> dict[str, Any]:
     }
 
 
-def _satirlar(n: int, *, dersler: tuple[str, ...]) -> list[reports.SeatRow]:
+def _satirlar(n: int, *, dersler: tuple[str, ...], cols: int = 4) -> list[reports.SeatRow]:
+    """`cols` ikili sıralı plana SIRAYLA oturan n öğrenci — koordinatlar planla örtüşür
+    (örtüşmezse kroki "koltuğu planda yok" uyarısı basar)."""
+    per_row = cols * 2
     return [
         reports.SeatRow(
             full_name=_UZUN_ADLAR[i % len(_UZUN_ADLAR)],
@@ -428,8 +456,8 @@ def _satirlar(n: int, *, dersler: tuple[str, ...]) -> list[reports.SeatRow]:
             class_label=f"{9 + i % 4}/{'ABCÇ'[i % 4]}",
             room_name="D-201 Dersliği",
             seat_no=i + 1,
-            desk_row=i // 8,
-            desk_col=(i % 8) // 2,
+            desk_row=i // per_row,
+            desk_col=(i % per_row) // 2,
             slot=i % 2,
             course_name=dersler[i % len(dersler)],
             status="NORMAL",
@@ -448,7 +476,7 @@ def _r1_pdf(n: int, rows: int, cols: int, dersler: tuple[str, ...]) -> bytes:
         block="A Blok · 2. kat",
         plan=layout.validate_layout_plan(_plan(rows, cols)),
         numbering_scheme="S_PATTERN",
-        rows=tuple(_satirlar(n, dersler=dersler)),
+        rows=tuple(_satirlar(n, dersler=dersler, cols=cols)),
     )
     return reports.render_pdf(
         "sinav/reports/r1_salon_evraki.html",
@@ -479,11 +507,50 @@ def test_r1_salon_evraki_iki_yaprak(ogrenci: int, rows: int, cols: int, ders_say
     Kırılırsa bakılacak yer: `reports.KROKI_BOX_R1_PX`, `_ATT_FIXED_PX` ve
     yaprak 1'in sabit bölümleri (şablon yorumundaki sayfa bütçesi).
     """
-    dersler = tuple(f"Ders {i}" for i in range(ders_sayisi))
+    # GERÇEK uzunlukta ders etiketleri: bütçe eskiden "Ders 0" gibi kısa adlarla
+    # sınanıyordu ve uzun etiketin yoklama satırını SARDIRIP evrakı üçüncü
+    # sayfaya taşırdığını göremiyordu (18.09.2026, örnek PDF'te ölçüldü).
+    dersler = _GERCEK_DERSLER[:ders_sayisi]
     pdf = _r1_pdf(ogrenci, rows, cols, dersler)
     assert (
         _sayfa_sayisi(pdf) == 2
     ), f"{ogrenci} öğrenci / {rows}x{cols} salonda yaprak sayısı 2 değil — sayfa bütçesi bozuldu."
+
+
+def test_r1_karisik_salonda_ders_kodu_ve_aciklamasi() -> None:
+    """Karışık salonda yoklama "Ders" sütunu TEK HARF taşır, açıklaması üstte basılır;
+    sayım tablosu ve kroki hücresi aynı kodu gösterir. Tek dersli salonda kod yoktur."""
+    karisik = " ".join(_pdf_text(_r1_pdf(12, 3, 2, _GERCEK_DERSLER)).split())
+    assert "DERS KODLARI:" in karisik
+    # Kodlar ders adının DOĞAL sırasına göre verilir (9. Sınıf, 10. Sınıf'tan önce).
+    assert "A = Seçmeli Peygamberimizin Hayatı" in karisik
+    assert "B = Türk Dili ve Edebiyatı — 9. Sınıf" in karisik
+    assert "C = Türk Dili ve Edebiyatı — 10. Sınıf" in karisik
+    # Künye hücresi kod özetini taşır (uzun adlar yaprak 1'i taşırıyordu).
+    assert "A (4) · B (4) · C (4)" in karisik
+
+    tek = " ".join(_pdf_text(_r1_pdf(12, 3, 2, ("Coğrafya",))).split())
+    assert "DERS KODLARI:" not in tek
+
+
+def test_r4_ders_adi_seviyesiz_ve_tek_satir() -> None:
+    """Şube duyurusunda ders adı SEVİYESİZ basılır (şube tek seviyededir) —
+    `course_plain` doluysa o kullanılır; aynı yalın ada inen satırlar Ders sütunu açmaz."""
+    satirlar = [
+        reports.SeatRow(
+            **{
+                **vars(r),
+                "class_label": "9/A",
+                "course_name": "Coğrafya — 9. Sınıf",
+                "course_plain": "Coğrafya",
+            }
+        )
+        for r in _satirlar(10, dersler=("Coğrafya",))
+    ]
+    sheet = reports.build_announcements(satirlar)[0]
+    assert sheet["show_course"] is False
+    etiketler = {row["course_label"] for row in cast(list[dict[str, Any]], sheet["rows"])}
+    assert etiketler == {"Coğrafya"}
 
 
 def test_r1_cok_kalabalik_salonda_satir_kaybi_yok() -> None:
@@ -497,7 +564,7 @@ def test_r1_cok_kalabalik_salonda_satir_kaybi_yok() -> None:
 
 def test_r4_sube_duyurusu_tek_yaprak() -> None:
     """Şube duyurusu 40 öğrencide tek sayfa — ders sütunu açıkken de."""
-    for dersler in (("Coğrafya",), ("Coğrafya", "Matematik")):
+    for dersler in (("Coğrafya",), ("Coğrafya", "Matematik"), _GERCEK_DERSLER):
         satirlar = [
             reports.SeatRow(**{**vars(r), "class_label": "9/A", "room_name": f"D-20{i % 3 + 1}"})
             for i, r in enumerate(_satirlar(40, dersler=dersler))

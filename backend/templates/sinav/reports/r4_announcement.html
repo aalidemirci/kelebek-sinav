@@ -70,11 +70,20 @@ fazlası başlık yinelenerek akar (base.html taşma disiplini).{% endcomment %}
   <table class="rpt-table ann ann{{ forloop.counter }}">
     <thead>
       <tr>
+        {% comment %}Karışık şubede ad/ders payı en uzun metinlere göre hesaplanır
+        (reports._announcement_columns) — ikisi de TEK SATIR kalsın diye.{% endcomment %}
+        {% if sheet.show_course %}
+        <th class="num" style="width: 9%;">Okul No</th>
+        <th style="width: {{ sheet.columns.name }}%;">Adı Soyadı</th>
+        <th style="width: {{ sheet.columns.course }}%;">Ders</th>
+        <th class="center" style="width: 18%;">Salon</th>
+        <th class="num" style="width: 10%;">Koltuk</th>
+        {% else %}
         <th class="num" style="width: 10%;">Okul No</th>
-        <th style="width: {% if sheet.show_course %}33{% else %}55{% endif %}%;">Adı Soyadı</th>
-        {% if sheet.show_course %}<th style="width: 22%;">Ders</th>{% endif %}
+        <th style="width: 55%;">Adı Soyadı</th>
         <th class="center" style="width: 22%;">Salon</th>
         <th class="num" style="width: 13%;">Koltuk</th>
+        {% endif %}
       </tr>
     </thead>
     <tbody>
@@ -82,7 +91,7 @@ fazlası başlık yinelenerek akar (base.html taşma disiplini).{% endcomment %}
       <tr{% if forloop.counter|divisibleby:5 and not forloop.last %} class="mark5"{% endif %}>
         <td class="num">{{ row.student_number }}</td>
         <td class="name">{{ row.full_name }}</td>
-        {% if sheet.show_course %}<td>{{ row.course_name }}</td>{% endif %}
+        {% if sheet.show_course %}<td>{{ row.course_label }}</td>{% endif %}
         <td class="center room">{{ row.room_name }}</td>
         <td class="num seat">{{ row.seat_no }}</td>
       </tr>
