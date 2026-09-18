@@ -546,6 +546,9 @@ class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]
 
     course_name = serializers.CharField(source="course.name", read_only=True)
     participant_label = serializers.SerializerMethodField()
+    # Yalnız CANLI oturum bağı görünür (A4): soft-silinmiş oturumun kimliği
+    # arayüzde "oturumlu" rozeti basıp girdiyi kilitli gösteriyordu.
+    session = serializers.SerializerMethodField()
     # Kapsam ders havuzundaki tanımdan farklıysa arayüz rozet basar (03.09.2026):
     # kaynak katalog, girdi ise kopyadır — fark bilinçli olmalı, sessiz kalmamalı.
     scope_differs_from_catalog = serializers.SerializerMethodField()
@@ -591,6 +594,13 @@ class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]
 
     def get_participant_label(self, obj: ExamCalendarEntry) -> str:
         return services_calendar.participant_scope_label(obj.participant_type, obj.section_ids)
+
+    def get_session(self, obj: ExamCalendarEntry) -> int | None:
+        # Liste yolunda canlı oturum kümesi context'ten gelir (tek sorgu).
+        live_ids = self.context.get("live_session_ids")
+        if live_ids is not None:
+            return obj.session_id if obj.session_id in live_ids else None
+        return obj.session_id if services_calendar.has_live_session(obj) else None
 
     def get_scope_differs_from_catalog(self, obj: ExamCalendarEntry) -> bool:
         # Liste yolunda küme context'ten gelir (tek sorgu); tekil yanıtlarda

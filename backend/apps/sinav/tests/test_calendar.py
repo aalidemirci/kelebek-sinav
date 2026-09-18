@@ -31,6 +31,7 @@ from apps.okul.models import (
     SubjectDepartment,
 )
 from apps.okul.services import sections
+from apps.sinav import services as sinav_services
 from apps.sinav import services_calendar as takvim
 from apps.sinav.models import (
     ExamAuthority,
@@ -373,6 +374,36 @@ def test_create_session_from_slot() -> None:
     assert ExamCalendarEntry.objects.filter(calendar=calendar, session=session).count() == 2
     with pytest.raises(ValidationError, match="zaten oturumlu"):
         takvim.create_session_from_slot(calendar, on_date=gun, period_no=1)
+
+
+def test_silinen_oturumun_girdisi_kilitli_kalmaz() -> None:
+    """A4: slottan üretilen TASLAK oturum silinince girdi takvimde kilitlenmez.
+
+    `session` FK'sı SET_NULL'dır ama soft-delete onu tetiklemez: `session_id` ölü
+    oturumu göstermeye devam eder. Eskiden havuza alma ve silme yalnız
+    `session_id is not None` baktığı için ikisi de 400 veriyor, ızgara ve liste
+    ölü kimlikle "oturumlu" rozeti basıyordu.
+    """
+    calendar, gun = _onayli_yerlesik_takvim()
+    session = takvim.create_session_from_slot(calendar, on_date=gun, period_no=1)
+    sinav_services.remove_exam_session(session)
+    takvim.reopen_calendar(calendar)
+    entry = ExamCalendarEntry.objects.filter(calendar=calendar).order_by("pk").first()
+    assert entry is not None and entry.session_id == session.pk  # ölü bağ duruyor
+
+    # Izgara ve liste ölü bağı "oturumsuz" gösterir.
+    grid = takvim.calendar_grid(calendar)
+    cells = [cell for group in grid["cells"].values() for cell in group]
+    assert cells and all(cell["session_id"] is None for cell in cells)
+    listed = APIClient().get(f"/api/v1/exam-calendars/{calendar.pk}/entries/")
+    assert listed.status_code == 200
+    assert all(row["session"] is None for row in listed.data["results"])
+
+    # Havuza alma ölü bağı temizler; silme de artık mümkündür.
+    entry = takvim.unplace_entry(entry)
+    assert entry.session_id is None and entry.placed_date is None
+    takvim.remove_calendar_entry(entry)
+    assert not ExamCalendarEntry.objects.filter(pk=entry.pk).exists()
 
 
 def test_create_session_yalniz_onayli_takvimden() -> None:

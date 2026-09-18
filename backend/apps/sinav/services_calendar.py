@@ -19,6 +19,7 @@ KS kesimleri:
 from __future__ import annotations
 
 import calendar as _calmod
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from typing import Any
@@ -800,9 +801,30 @@ def update_calendar_entry(
     return entry
 
 
+def has_live_session(entry: ExamCalendarEntry) -> bool:
+    """Girdi CANLI bir oturuma bağlı mı? — tek doğruluk kaynağı (A4, 18.09.2026).
+
+    `session` FK'sı `SET_NULL`'dır ama silme her yerde soft olduğundan SET_NULL
+    hiç tetiklenmez: slottan üretilen taslak oturum silinince `session_id` ölü
+    oturumu göstermeye devam eder. Yerleştirme/otomatik yerleştirme/oturum
+    üretme bunu zaten denetliyordu; silme ve havuza alma denetlemediği için
+    girdi ne silinebiliyor ne havuza alınabiliyordu (400) — takvimde kilitli
+    kalıyordu.
+    """
+    return entry.session_id is not None and ExamSession.objects.filter(pk=entry.session_id).exists()
+
+
+def live_session_ids(entries: Iterable[ExamCalendarEntry]) -> set[int]:
+    """Girdilerin bağlı olduğu CANLI oturum kimlikleri — liste/ızgara için tek sorgu."""
+    ids = [e.session_id for e in entries if e.session_id is not None]
+    if not ids:
+        return set()
+    return set(ExamSession.objects.filter(pk__in=ids).values_list("pk", flat=True))
+
+
 def remove_calendar_entry(entry: ExamCalendarEntry) -> None:
     _ensure_draft(entry.calendar)
-    if entry.session_id is not None:
+    if has_live_session(entry):
         raise ValidationError("Oturumu üretilmiş girdi silinemez — önce oturumu kaldırın.")
     entry.delete()
 
@@ -958,7 +980,7 @@ def place_entry(
     # OYS Tur 644: CANLI oturuma bağlı girdi başka slota TAŞINAMAZ — aksi hâlde
     # takvim ile üretilmiş oturum sessizce ayrışır. (Bağlı oturumu soft-silinmiş
     # girdi taşınabilir — create_session_from_slot aday mantığıyla tutarlı.)
-    if entry.session_id is not None and ExamSession.objects.filter(pk=entry.session_id).exists():
+    if has_live_session(entry):
         raise ValidationError("Oturumu üretilmiş girdi taşınamaz — önce oturumu kaldırın.")
     warnings: list[str] = []
 
@@ -1061,14 +1083,17 @@ def place_entry(
 @transaction.atomic
 def unplace_entry(entry: ExamCalendarEntry) -> ExamCalendarEntry:
     _ensure_draft(entry.calendar)
-    if entry.session_id is not None:
+    if has_live_session(entry):
         raise ValidationError("Oturumu üretilmiş girdi havuza geri alınamaz.")
+    # Ölü oturum bağı burada temizlenir: havuza dönen girdi yeniden yerleşip
+    # yeniden oturum üretecektir, eski kimliği taşımasın.
+    entry.session = None
     entry.placed_date = None
     entry.period_no = None
     # Havuza dönen girdinin sabitlenecek slotu yoktur; bayrak burada düşmezse
     # sonraki otomatik yerleştirme girdiyi "sabit" sanıp hiç yerleştirmezdi.
     entry.is_pinned = False
-    entry.save(update_fields=["placed_date", "period_no", "is_pinned", "updated_at"])
+    entry.save(update_fields=["session", "placed_date", "period_no", "is_pinned", "updated_at"])
     return entry
 
 
@@ -1155,10 +1180,7 @@ def auto_place_entries(calendar: ExamCalendar, *, mode: str = AUTO_MODE_FILL) ->
         for yerlesik in ExamCalendarEntry.objects.filter(
             calendar=calendar, placed_date__isnull=False, is_pinned=False
         ):
-            if (
-                yerlesik.session_id is not None
-                and ExamSession.objects.filter(pk=yerlesik.session_id).exists()
-            ):
+            if has_live_session(yerlesik):
                 continue  # oturumu üretilmiş girdi taşınamaz (OYS Tur 644)
             yerlesik.placed_date = None
             yerlesik.period_no = None
@@ -1350,11 +1372,7 @@ def create_session_from_slot(calendar: ExamCalendar, *, on_date: date, period_no
         selectors.entries_for_slot(calendar.pk, on_date, period_no).filter(is_butterfly=True)
     )
     # Bağı boş VEYA soft-silinmiş oturuma bağlı olanlar (yeniden üretim).
-    candidates = [
-        e
-        for e in slot_entries
-        if e.session_id is None or not ExamSession.objects.filter(pk=e.session_id).exists()
-    ]
+    candidates = [e for e in slot_entries if not has_live_session(e)]
     if not candidates:
         raise ValidationError(
             "Bu slotta oturum üretilecek (kelebek) girdi yok — hepsi zaten oturumlu."
@@ -1707,6 +1725,10 @@ def calendar_grid(calendar: ExamCalendar) -> dict[str, Any]:
         )
         cur += timedelta(days=1)
 
+    # Soft-silinmiş oturum bağı "oturumlu" rozeti basmasın (A4): canlı oturum
+    # kimlikleri tek sorguda toplanır, ölü bağ hücrede None görünür.
+    live_ids = live_session_ids(entries)
+
     cells: dict[str, list[dict[str, Any]]] = {}
     unplaced: list[dict[str, Any]] = []
     for e in entries:
@@ -1723,7 +1745,7 @@ def calendar_grid(calendar: ExamCalendar) -> dict[str, Any]:
             "participant_type": e.participant_type,
             "section_ids": list(e.section_ids or []),
             "participant_label": participant_scope_label(e.participant_type, e.section_ids),
-            "session_id": e.session_id,
+            "session_id": e.session_id if e.session_id in live_ids else None,
             "note": e.note,
             # Sabitleme ızgara çipinde kilit ikonudur; otomatik yerleştirme
             # bu bayraklı girdileri yerinden oynatmaz.
