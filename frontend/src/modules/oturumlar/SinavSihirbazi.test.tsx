@@ -4,7 +4,7 @@
 // dosyasına import YOK — OYS Tur 232).
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -18,6 +18,7 @@ const sessionApi = vi.hoisted(() => ({
   update: vi.fn(),
   participants: vi.fn(),
   addCourse: vi.fn(),
+  updateCourse: vi.fn(),
   removeCourse: vi.fn(),
   setRooms: vi.fn(),
   distribute: vi.fn(),
@@ -198,6 +199,54 @@ describe("SinavSihirbazi — adım geçişleri", () => {
     expect(await screen.findByText(/dağıtım engellenecek/)).toBeInTheDocument();
     expect(screen.getByText(/Öğrenci 154 iki derse düşüyor\./)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Devam" })).toBeDisabled();
+  });
+
+  it("aynı ders iki seviyede: ders-başı 'aynı kitapçık' kutusu updateCourse'u çağırır; ekleme formunda kutu yok", async () => {
+    const user = userEvent.setup();
+    const session = makeSession({
+      transfer_check_confirmed_at: "2026-06-10T10:00:00+03:00",
+      courses: [
+        makeCourseRow(),
+        makeCourseRow({ id: 12, level: 10, display_label: "Coğrafya — 10. Sınıf" }),
+      ],
+    });
+    sessionApi.update.mockResolvedValue(session);
+    sessionApi.participants.mockResolvedValue(makeParticipants());
+    sessionApi.updateCourse.mockResolvedValue(makeCourseRow({ shared_booklet: true }));
+    const { onChanged } = renderWizard(session);
+
+    await user.click(await screen.findByRole("button", { name: "Kaydet ve devam et" }));
+    const kutu = await screen.findByRole("checkbox", {
+      name: /Coğrafya: 9\. sınıf, 10\. sınıf aynı soru kitapçığını çözecek/,
+    });
+    expect(kutu).not.toBeChecked();
+    await user.click(kutu);
+    // Bayrak dersin niteliğidir: tek satırdan gönderilir, backend kardeşlere yayar.
+    await waitFor(() =>
+      expect(sessionApi.updateCourse).toHaveBeenCalledWith(11, { shared_booklet: true }),
+    );
+    expect(onChanged).toHaveBeenCalled();
+
+    // "Ders ekle" penceresinde eski "Ortak kitapçık" kutusu artık yok.
+    await user.click(screen.getByRole("button", { name: "Ders ekle" }));
+    const dialog = await screen.findByRole("dialog", { name: "Ders ekle" });
+    expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/Ortak kitapçık/)).not.toBeInTheDocument();
+  });
+
+  it("tek seviyeli ders listesinde 'aynı kitapçık' bölümü görünmez", async () => {
+    const user = userEvent.setup();
+    const session = makeSession({
+      transfer_check_confirmed_at: "2026-06-10T10:00:00+03:00",
+      courses: [makeCourseRow()],
+    });
+    sessionApi.update.mockResolvedValue(session);
+    sessionApi.participants.mockResolvedValue(makeParticipants());
+    renderWizard(session);
+
+    await user.click(await screen.findByRole("button", { name: "Kaydet ve devam et" }));
+    expect(await screen.findByText("Coğrafya — 9. Sınıf")).toBeInTheDocument();
+    expect(screen.queryByText("Aynı ders birden çok seviyede")).not.toBeInTheDocument();
   });
 
   it("HOME_CLASSROOM: salon adımı atlanır (2→4) ve dağıtım koşar", async () => {

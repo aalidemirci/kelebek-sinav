@@ -406,16 +406,24 @@ def generate_section_rooms() -> dict[str, Any]:
 # ===========================================================================
 
 
+#: Kullanıcıya görünen "shared_booklet" eki. "Ortak kitapçık" DEĞİL: MEB
+#: dilinde "ortak sınav/ortak yazılı" okul geneli aynı seviyede yapılan sınavdır;
+#: idareci o anlamı okuyup her ortak sınavda kutuyu işaretledi (18.09.2026 TDE
+#: 9/10 vakası). Bayrağın gerçek anlamı "dersin oturumdaki TÜM seviyeleri aynı
+#: soru kitapçığını çözer" olduğundan ek bunu söyler.
+SHARED_BOOKLET_SUFFIX = "tüm seviyeler aynı kitapçık"
+
+
 def session_course_label(course_name: str, level: int | None, *, shared_booklet: bool) -> str:
-    """Oturum dersi görünüm etiketi: "Matematik — 9. Sınıf" (+ ortak kitapçık eki)."""
+    """Oturum dersi görünüm etiketi: "Matematik — 9. Sınıf" (+ aynı kitapçık eki)."""
     base = course_name if level is None else f"{course_name} — {ders_services.level_label(level)}"
-    return f"{base} (ortak kitapçık)" if shared_booklet else base
+    return f"{base} ({SHARED_BOOKLET_SUFFIX})" if shared_booklet else base
 
 
 def conflict_group_labels(keys: set[str] | frozenset[str]) -> dict[str, str]:
     """Çakışma grubu anahtarlarını insan-okur etikete çözer (motor sözleşmesi §3).
 
-    "12:9" → "Matematik — 9. Sınıf", "12:*" → "Matematik — Ortak kitapçık".
+    "12:9" → "Matematik — 9. Sınıf", "12:*" → "Matematik — Tüm seviyeler (aynı kitapçık)".
     R8 doğrulama raporu ve seating ucu aynı kaynaktan beslenir.
     """
     course_names = ders_selectors.course_names_by_ids({int(key.split(":")[0]) for key in keys})
@@ -424,7 +432,7 @@ def conflict_group_labels(keys: set[str] | frozenset[str]) -> dict[str, str]:
         cid_raw, level = key.split(":", 1)
         name = course_names.get(int(cid_raw), f"Ders {cid_raw}")
         labels[key] = (
-            f"{name} — Ortak kitapçık"
+            f"{name} — Tüm seviyeler (aynı kitapçık)"
             if level == "*"
             else f"{name} — {ders_services.level_label(int(level))}"
         )
@@ -619,18 +627,33 @@ def _validate_participant_refs(
     raise ValidationError(f"Geçersiz katılımcı tipi: {participant_type!r}.")
 
 
-def _ensure_shared_booklet_sync(
+def _sync_shared_booklet(
     session: ExamSession, course: Any, shared_booklet: bool, *, exclude_pk: int | None = None
 ) -> None:
-    """Aynı dersin oturumdaki tüm satırlarında shared_booklet senkron olmalı (K7)."""
+    """Bayrağı dersin oturumdaki TÜM kardeş satırlarına yazar (K7 senkronu).
+
+    `shared_booklet` satırın değil, dersin oturum içindeki niteliğidir ("bu
+    dersin seviyeleri aynı kitapçığı mı çözüyor"); kardeşler daima aynı değeri
+    taşır. 18.09.2026'ya kadar uyuşmazlık REDDEDİLİYORDU: idareci ilk satırda
+    yanlışlıkla işaretlediği bayrağı ikinci satırda da işaretlemek zorunda
+    kalıyor, sonra soru dosyası yükleyemiyordu (TDE 9/10 vakası). Artık açıkça
+    verilen değer kazanır ve kardeşlere yayılır; verilmeyen değer kardeşten
+    miras alınır (`add_session_course`).
+    """
     siblings = ExamSessionCourse.objects.filter(session=session, course=course)
     if exclude_pk is not None:
         siblings = siblings.exclude(pk=exclude_pk)
-    if siblings.filter(shared_booklet=not shared_booklet).exists():
-        raise ValidationError(
-            f"'{course.name}' dersinin oturumdaki diğer satırlarıyla ortak kitapçık "
-            "işareti uyuşmuyor — bayrak aynı dersin tüm satırlarında aynı olmalı."
-        )
+    siblings.exclude(shared_booklet=shared_booklet).update(
+        shared_booklet=shared_booklet, updated_at=timezone.now()
+    )
+
+
+def _inherited_shared_booklet(session: ExamSession, course: Any) -> bool:
+    """Kardeş satır varsa onun bayrağı, yoksa False (tek seviyeli dersin eki yok)."""
+    sibling = (
+        ExamSessionCourse.objects.filter(session=session, course=course).order_by("id").first()
+    )
+    return bool(sibling.shared_booklet) if sibling is not None else False
 
 
 @transaction.atomic
@@ -642,9 +665,13 @@ def add_session_course(
     level: int | None = None,
     section_ids: list[int] | None = None,
     duration_minutes: int | None = None,
-    shared_booklet: bool = False,
+    shared_booklet: bool | None = None,
 ) -> ExamSessionCourse:
-    """Taslak oturuma TEK seviyeli ders + katılımcı tanımı ekler (Tur 241)."""
+    """Taslak oturuma TEK seviyeli ders + katılımcı tanımı ekler (Tur 241).
+
+    `shared_booklet` None ise kardeş satırdan miras alınır (yoksa False);
+    açıkça verilirse dersin tüm kardeş satırlarına yayılır (`_sync_shared_booklet`).
+    """
     _ensure_draft(session)
     course = ders_selectors.get_course(course_id, active_only=True)
     if course is None:
@@ -664,7 +691,11 @@ def add_session_course(
             f"'{session_course_label(course.name, lv, shared_booklet=False)}' "
             "bu oturuma zaten ekli."
         )
-    _ensure_shared_booklet_sync(session, course, shared_booklet)
+    if shared_booklet is None:
+        shared = _inherited_shared_booklet(session, course)
+    else:
+        shared = bool(shared_booklet)
+        _sync_shared_booklet(session, course, shared)
     row: ExamSessionCourse = ExamSessionCourse.objects.create(
         session=session,
         course=course,
@@ -672,7 +703,7 @@ def add_session_course(
         level=lv,
         section_ids=sec,
         duration_minutes=duration_minutes,
-        shared_booklet=shared_booklet,
+        shared_booklet=shared,
     )
     return row
 
@@ -701,7 +732,9 @@ def update_session_course(sc: ExamSessionCourse, **fields: Any) -> ExamSessionCo
             "bu oturuma zaten ekli."
         )
     shared = bool(fields.get("shared_booklet", sc.shared_booklet))
-    _ensure_shared_booklet_sync(sc.session, sc.course, shared, exclude_pk=sc.pk)
+    if "shared_booklet" in fields:
+        # Bayrak dersin niteliğidir: tek satırdan değiştirilse de kardeşlere yayılır.
+        _sync_shared_booklet(sc.session, sc.course, shared, exclude_pk=sc.pk)
     sc.participant_type = participant_type
     sc.level = lv
     sc.section_ids = sec
@@ -1319,6 +1352,34 @@ def reopen_session(session: ExamSession) -> ExamSession:
 
 
 @transaction.atomic
+def revert_session_to_draft(session: ExamSession) -> ExamSession:
+    """Dağıtımı geri alır (DAĞITILDI → TASLAK) — ders/salon tanımını düzeltme yolu.
+
+    Dağıtımdan sonra fark edilen tanım hatası (yanlış seviye, eksik şube,
+    yanlışlıkla işaretlenmiş "aynı kitapçık" bayrağı) sihirbaza dönmeden
+    düzeltilemezdi; tek çare oturumu baştan kurmaktı (18.09.2026 TDE 9/10
+    vakası). Temizlik `distribute_session`in yeniden dağıtımdakiyle aynıdır:
+    canlı yerleşim ve gözetmen görevlendirmeleri soft-delete edilir,
+    dağıtım parametreleri sıfırlanır. Ders/salon satırları, yerleştirme
+    kuralları, muafiyetler, soru dosyaları ve kitapçık koşuları KORUNUR
+    (koşular tarihsel izdir; yeni dağıtımda yeniden üretilir). Onaylı oturum
+    önce `reopen_session` ile açılır; arşiv geri dönüşsüzdür.
+    """
+    if session.status != ExamSessionStatus.DISTRIBUTED:
+        raise ValidationError(
+            f"Oturum '{session.get_status_display()}' durumunda; yalnız dağıtılmış oturum "
+            "taslağa alınabilir."
+        )
+    now = timezone.now()
+    SeatAssignment.objects.filter(session=session).update(deleted_at=now)
+    ProctorAssignment.objects.filter(session=session).update(deleted_at=now)
+    session.status = ExamSessionStatus.DRAFT
+    session.distribution_params = {}
+    session.save(update_fields=["status", "distribution_params", "updated_at"])
+    return session
+
+
+@transaction.atomic
 def archive_session(session: ExamSession) -> ExamSession:
     """Oturumu arşivler (ONAYLANDI → ARŞİV) — geri dönüşsüz, salt-okunur.
 
@@ -1927,8 +1988,7 @@ def _seat_rows(session: ExamSession, *, room_id: int | None = None) -> list[repo
     if room_id is not None:
         qs = qs.filter(room_id=room_id)
     assignments = list(qs)
-    course_ids = {int(a.conflict_group.split(":")[0]) for a in assignments}
-    course_names: dict[int, str] = ders_selectors.course_names_by_ids(course_ids)
+    course_names = _seat_course_names({a.conflict_group for a in assignments})
     return [
         reports.SeatRow(
             full_name=a.full_name,
@@ -1939,11 +1999,38 @@ def _seat_rows(session: ExamSession, *, room_id: int | None = None) -> list[repo
             desk_row=a.desk_row,
             desk_col=a.desk_col,
             slot=a.slot,
-            course_name=course_names.get(int(a.conflict_group.split(":")[0]), ""),
+            course_name=course_names.get(a.conflict_group, ""),
             status=a.status,
         )
         for a in assignments
     ]
+
+
+def _seat_course_names(group_keys: set[str]) -> dict[str, str]:
+    """Çakışma grubu anahtarı → evrakta basılacak ders adı.
+
+    Yalın ders adı yeter (sayfa bütçesi ölçümleri yalın ada göre — tasarım §9);
+    ama AYNI ders oturumda birden çok seviyedeyse (Coğrafya 9 + Coğrafya 10 aynı
+    salonda) ad seviyeyle ayrışır. Aksi hâlde R1/R4/R7 iki kitapçık grubunu
+    "Coğrafya (40)" diye BİRLEŞTİRİR ve gözetmen hangi öğrencinin hangi kitapçığı
+    alacağını göremez (18.09.2026 evrak bulgusu). "Aynı kitapçık" grubunda
+    ("<id>:*") seviye anahtarda yoktur ve zaten tek kitapçık dağıtılır.
+    """
+    course_ids = {int(key.split(":", 1)[0]) for key in group_keys}
+    names: dict[int, str] = ders_selectors.course_names_by_ids(course_ids)
+    levels_by_course: dict[int, set[str]] = {}
+    for key in group_keys:
+        cid_raw, level = key.split(":", 1)
+        levels_by_course.setdefault(int(cid_raw), set()).add(level)
+    labels: dict[str, str] = {}
+    for key in group_keys:
+        cid_raw, level = key.split(":", 1)
+        cid = int(cid_raw)
+        name = names.get(cid, "")
+        if name and level != participants.SHARED_LEVEL_KEY and len(levels_by_course[cid]) > 1:
+            name = session_course_label(name, int(level), shared_booklet=False)
+        labels[key] = name
+    return labels
 
 
 def _room_sheets(
@@ -2157,17 +2244,30 @@ def upload_question_document(
     if sc.session.status in (ExamSessionStatus.APPROVED, ExamSessionStatus.ARCHIVED):
         raise ValidationError("Onaylı/arşiv oturumda soru dosyası değiştirilemez.")
     if sc.shared_booklet:
-        # K7 ortak kitapçık: aynı dersin tüm satırları tek dosya kullanır —
-        # kardeş satırda canlı dosya varsa ikinci yükleme reddedilir.
-        sibling_doc = QuestionDocument.objects.filter(
-            session_course__session=sc.session,
-            session_course__course=sc.course,
-            session_course__deleted_at__isnull=True,
-        ).exclude(session_course=sc)
-        if sibling_doc.exists():
+        # K7 aynı kitapçık: dersin tüm seviyeleri tek dosya kullanır — kardeş
+        # satırda canlı dosya varsa ikinci yükleme reddedilir. Arayüz bu
+        # satırları tek satırda birleştirir (SorularPaneli); mesaj yine de
+        # çıkış yolunu söyler (taslağa al → işareti kaldır).
+        sibling_doc = (
+            QuestionDocument.objects.filter(
+                session_course__session=sc.session,
+                session_course__course=sc.course,
+                session_course__deleted_at__isnull=True,
+            )
+            .exclude(session_course=sc)
+            .select_related("session_course")
+            .first()
+        )
+        if sibling_doc is not None:
+            carrier_level = sibling_doc.session_course.level
+            carrier_label = (
+                ders_services.level_label(carrier_level) if carrier_level is not None else "diğer"
+            )
             raise ValidationError(
-                "Ortak kitapçıkta soru dosyası tek satıra yüklenir — "
-                f"'{sc.course.name}' için dosya başka bir seviyede zaten yüklü."
+                f"'{sc.course.name}' dersi bu oturumda '{SHARED_BOOKLET_SUFFIX}' olarak "
+                f"işaretli: tek soru dosyası yeter ve dosya {carrier_label} satırında zaten "
+                "yüklü. Seviyeler farklı sorular çözecekse oturumu taslağa alıp Ders ve "
+                "Katılımcılar adımında bu işareti kaldırın, sonra yeniden dağıtın."
             )
     if not file_bytes:
         raise ValidationError("Boş dosya yüklenemez.")

@@ -21,6 +21,7 @@ const exam = vi.hoisted(() => ({
   approve: vi.fn(),
   reopen: vi.fn(),
   archive: vi.fn(),
+  revertToDraft: vi.fn(),
   remove: vi.fn(),
 }));
 
@@ -148,6 +149,22 @@ describe("OturumDetayPage", () => {
     await user.click(screen.getByRole("button", { name: /Yeniden aç/ }));
     await waitFor(() => expect(exam.reopen).toHaveBeenCalledWith(5));
     expect(await screen.findByText(/Onay geri alındı/)).toBeInTheDocument();
+  });
+
+  it("DAĞITILDI: 'Taslağa al' onay diyaloğundan geçer ve revertToDraft çağrılır", async () => {
+    const user = userEvent.setup();
+    exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
+    exam.revertToDraft.mockResolvedValue(makeSession({ status: "DRAFT" }));
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: /Taslağa al/ }));
+    // Sayfadaki buton ile onay butonu aynı adı taşır → diyalog içinde ara.
+    const dialog = await screen.findByRole("dialog", { name: "Taslağa alınsın mı?" });
+    expect(within(dialog).getByText(/soru dosyaları korunur/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Taslağa al" }));
+
+    await waitFor(() => expect(exam.revertToDraft).toHaveBeenCalledWith(5));
+    expect(await screen.findByText(/Oturum taslağa alındı/)).toBeInTheDocument();
   });
 
   it("ONAYLI: arşivleme onay diyaloğundan geçer ve archive çağrılır", async () => {

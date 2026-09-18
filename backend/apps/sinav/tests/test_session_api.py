@@ -295,7 +295,7 @@ def test_api_session_course_patch_delete() -> None:
     )
     assert resp.status_code == 200
     assert resp.data["level"] == 10
-    assert resp.data["display_label"] == "Coğrafya — 10. Sınıf (ortak kitapçık)"
+    assert resp.data["display_label"] == "Coğrafya — 10. Sınıf (tüm seviyeler aynı kitapçık)"
     assert resp.data["shared_booklet"] is True
 
     assert client.delete(f"/api/v1/exam-session-courses/{row.pk}/").status_code == 204
@@ -368,20 +368,51 @@ def test_sections_mixed_levels_rejected() -> None:
 
 
 def test_shared_booklet_flag_synced_across_siblings() -> None:
+    """Bayrak dersin oturum içi niteliğidir (18.09.2026): verilmeyen değer kardeşten
+    miras alınır, açık değer kardeşlere YAYILIR — uyuşmazlık artık reddedilmez
+    (eski ret, yanlış işaretlenen ilk satırın bayrağını ikinci satıra zorluyordu)."""
     session = oturum()
-    course = ders("Kimya", levels=[9, 10])
-    services.add_session_course(
+    course = ders("Kimya", levels=[9, 10, 11])
+    row9 = services.add_session_course(
         session,
         course_id=course.pk,
         participant_type=ParticipantType.LEVEL,
         level=9,
         shared_booklet=True,
     )
-    with pytest.raises(ValidationError, match="ortak kitapçık"):
-        services.add_session_course(
-            session,
-            course_id=course.pk,
-            participant_type=ParticipantType.LEVEL,
-            level=10,
-            shared_booklet=False,
-        )
+    # Bayrak verilmedi → kardeşten miras (idareci her satırda yeniden işaretlemez).
+    row10 = services.add_session_course(
+        session, course_id=course.pk, participant_type=ParticipantType.LEVEL, level=10
+    )
+    assert row10.shared_booklet is True
+
+    # Açık False (yanlış işaretin düzeltilmesi) → kardeşler de düşer, ret yok.
+    row11 = services.add_session_course(
+        session,
+        course_id=course.pk,
+        participant_type=ParticipantType.LEVEL,
+        level=11,
+        shared_booklet=False,
+    )
+    row9.refresh_from_db()
+    row10.refresh_from_db()
+    assert (row9.shared_booklet, row10.shared_booklet, row11.shared_booklet) == (
+        False,
+        False,
+        False,
+    )
+
+    # Tek satırdan güncelleme de kardeşlere yayılır (sihirbazdaki ders-başı kutu).
+    services.update_session_course(row10, shared_booklet=True)
+    row9.refresh_from_db()
+    row11.refresh_from_db()
+    assert row9.shared_booklet is True and row11.shared_booklet is True
+
+    # Başka dersin satırına dokunulmaz; tek seviyeli ders bayraksız kalır.
+    fizik = ders("Fizik", levels=[9])
+    fizik_row = services.add_session_course(
+        session, course_id=fizik.pk, participant_type=ParticipantType.LEVEL, level=9
+    )
+    assert fizik_row.shared_booklet is False
+    row9.refresh_from_db()
+    assert row9.shared_booklet is True

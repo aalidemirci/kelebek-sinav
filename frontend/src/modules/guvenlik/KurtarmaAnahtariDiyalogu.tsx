@@ -42,7 +42,7 @@ interface KurtarmaAnahtariDiyaloguProps {
 function metinCiktisi(anahtar: string, okulAdi: string): string {
   const tarih = new Date().toLocaleDateString("tr-TR");
   return [
-    "DİSİPLİN DEFTERİ — KURTARMA ANAHTARI",
+    "KELEBEK SINAV — KURTARMA ANAHTARI",
     okulAdi ? `Kurum: ${okulAdi}` : "",
     `Oluşturma tarihi: ${tarih}`,
     "",

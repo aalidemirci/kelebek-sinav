@@ -629,6 +629,11 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
         """Arşivler — ONAYLANDI → ARŞİV (salt-okunur; yeniden basım açık)."""
         return self._transition(services.archive_session)
 
+    @action(detail=True, methods=["post"], url_path="revert-to-draft")
+    def revert_to_draft(self, request: Request, pk: str | None = None) -> Response:
+        """Dağıtımı geri alır — DAĞITILDI → TASLAK (tanım düzeltme yolu; yerleşim silinir)."""
+        return self._transition(services.revert_session_to_draft)
+
     # ÇOK METOTLU `@action` — GET süresi dolan arşiv adayları · POST kullanıcı
     # onaylı GERİ DÖNÜŞSÜZ anonimleştirme (F27/F8, K14). POST gövdesi aday
     # id listesini AÇIKÇA taşır: FE onay diyaloğu listeyi göstermeden tetik

@@ -131,6 +131,27 @@ def test_r8_seed_ve_ders_etiketi_basilir() -> None:
     assert "Coğrafya" in text
 
 
+def test_karma_seviyeli_oturumda_ders_adi_seviyeli_basilir() -> None:
+    """Aynı ders iki seviyede (Coğrafya 9 + 10): R1 ve R7 ders adını SEVİYEYLE basar.
+
+    Eskiden `_seat_rows` yalnız ders kimliğinden ad çözüyor, iki kitapçık grubu
+    evrakta tek "Coğrafya" satırında birleşiyordu (18.09.2026 evrak bulgusu).
+    """
+    session = _evrak_oturumu()
+    for code in ("r1", "r7"):
+        text = " ".join(_pdf_text(services.render_session_report(session, code).content).split())
+        assert "Coğrafya — 9. Sınıf" in text, f"{code}: 9. sınıf etiketi yok"
+        assert "Coğrafya — 10. Sınıf" in text, f"{code}: 10. sınıf etiketi yok"
+
+
+def test_r8_yorum_sizintisi_yok() -> None:
+    """Şablon yorumu çıktıya basılmaz — çok satırlı `{# #}` Django'da metin olur
+    (örnek PDF'te görüldü, 18.09.2026); `{% comment %}` bloğu kullanılır."""
+    session = _evrak_oturumu()
+    text = _pdf_text(services.render_session_report(session, "r8").content)
+    assert "{#" not in text and "unlocalize" not in text
+
+
 # ===========================================================================
 # Tümü-ZIP
 # ===========================================================================

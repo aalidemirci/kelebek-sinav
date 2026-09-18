@@ -81,6 +81,55 @@ describe("SorularPaneli", () => {
     expect(screen.getByRole("button", { name: "Yükle" })).toBeInTheDocument();
   });
 
+  it("aynı kitapçık satırları tek satırda birleşir; dosya taşıyıcı satırdan okunur ve oraya yüklenir", async () => {
+    const user = userEvent.setup();
+    // Dosya 10. sınıf satırında (id 22) duruyor; 9. sınıf satırı (id 21) boş.
+    sessionApi.question.mockImplementation((id: number) =>
+      id === 22
+        ? Promise.resolve(makeQuestionMeta())
+        : Promise.reject(new ApiError(404, "not_found", "Soru dosyası yüklenmemiş.")),
+    );
+    sessionApi.bookletRuns.mockResolvedValue(paginated([]));
+    sessionApi.uploadQuestion.mockResolvedValue(makeQuestionMeta());
+    renderPanel(
+      dagitilmisOturum({
+        courses: [
+          makeCourseRow({
+            shared_booklet: true,
+            display_label: "Matematik — 9. Sınıf (tüm seviyeler aynı kitapçık)",
+          }),
+          makeCourseRow({
+            id: 22,
+            level: 10,
+            shared_booklet: true,
+            display_label: "Matematik — 10. Sınıf (tüm seviyeler aynı kitapçık)",
+          }),
+        ],
+      }),
+    );
+
+    expect(
+      await screen.findByText("Matematik — 9. ve 10. Sınıf (aynı kitapçık)"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Matematik — 9\. Sınıf \(/)).not.toBeInTheDocument();
+    expect(await screen.findByText(/2 sayfa · tek puan kutusu/)).toBeInTheDocument();
+    // Tek satır, tek "Değiştir" — ikinci bir "Yükle" YOK (eski hata kaynağı).
+    expect(screen.getAllByRole("button", { name: "Değiştir" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Yükle" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Soru dosyası yüklenmedi")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Değiştir" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.upload(
+      within(dialog).getByLabelText(/Soru PDF dosyası/),
+      new File(["%PDF-"], "soru.pdf", { type: "application/pdf" }),
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Yükle" }));
+    await waitFor(() => expect(sessionApi.uploadQuestion).toHaveBeenCalledTimes(1));
+    // Yükleme dosyanın durduğu (taşıyıcı) satıra gider — kardeşe değil.
+    expect((sessionApi.uploadQuestion.mock.calls[0] as [number, FormData])[0]).toBe(22);
+  });
+
   it("onaylı oturumda yükleme kilitli — yalnız önizleme kalır", async () => {
     sessionApi.question.mockResolvedValue(makeQuestionMeta());
     sessionApi.bookletRuns.mockResolvedValue(paginated([]));

@@ -6,8 +6,8 @@
 // gizlilik sınıfındadır; dosyalar yalnız yerel API'den (X-KS-Token) sunulur.
 // Bant sabit 4 cm üst alana basılır (ölçekleme yok — OYS Tur 236).
 
-import { useCallback, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "../../lib/api";
 import { saveBlob } from "../../lib/download";
@@ -19,7 +19,60 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import type { ExamSession, ExamSessionCourseRow, ScoreModeCode } from "./api";
 import { examSessionApi } from "./api";
 
-function CourseQuestionRow({ row, locked }: { row: ExamSessionCourseRow; locked: boolean }) {
+/**
+ * Soru dosyası satırı: olağan durumda bir oturum dersi satırı; "aynı kitapçık"
+ * (shared_booklet) dersinde ise dersin TÜM seviye satırları tek gruptur —
+ * backend o gruba tek dosya kabul eder (`upload_question_document`), panel de
+ * tek satır gösterir. Eskiden satır başına "Yükle" çıkıyor, ikinci yükleme
+ * "tek satıra yüklenir" hatasıyla dönüyordu (18.09.2026 TDE 9/10 vakası).
+ */
+interface QuestionGroup {
+  key: string;
+  label: string;
+  rows: ExamSessionCourseRow[];
+  shared: boolean;
+}
+
+/** "9. ve 10. Sınıf" / "9., 10. ve 11. Sınıf" / "Hazırlık ve 9. Sınıf". */
+function levelsPhrase(levels: (number | null)[]): string {
+  const parts = levels.map((lv) => (lv === null ? "—" : lv === 0 ? "Hazırlık" : `${lv}.`));
+  const joined =
+    parts.length > 1
+      ? `${parts.slice(0, -1).join(", ")} ve ${parts[parts.length - 1]}`
+      : (parts[0] ?? "");
+  return levels.some((lv) => lv !== null && lv !== 0) ? `${joined} Sınıf` : joined;
+}
+
+export function groupQuestionRows(courses: ExamSessionCourseRow[]): QuestionGroup[] {
+  const groups: QuestionGroup[] = [];
+  const sharedByCourse = new Map<number, QuestionGroup>();
+  for (const row of courses) {
+    if (!row.shared_booklet) {
+      groups.push({ key: `sc:${row.id}`, label: row.display_label, rows: [row], shared: false });
+      continue;
+    }
+    const existing = sharedByCourse.get(row.course_id);
+    if (existing) {
+      existing.rows.push(row);
+      continue;
+    }
+    const group: QuestionGroup = {
+      key: `course:${row.course_id}`,
+      label: "",
+      rows: [row],
+      shared: true,
+    };
+    sharedByCourse.set(row.course_id, group);
+    groups.push(group);
+  }
+  for (const group of sharedByCourse.values()) {
+    const levels = [...group.rows].sort((a, b) => (a.level ?? 0) - (b.level ?? 0));
+    group.label = `${group.rows[0].course_name} — ${levelsPhrase(levels.map((r) => r.level))} (aynı kitapçık)`;
+  }
+  return groups;
+}
+
+function CourseQuestionRow({ group, locked }: { group: QuestionGroup; locked: boolean }) {
   const snackbar = useSnackbar();
   const qc = useQueryClient();
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -29,12 +82,24 @@ function CourseQuestionRow({ row, locked }: { row: ExamSessionCourseRow; locked:
   const [questionCount, setQuestionCount] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const question = useQuery({
-    queryKey: ["exam-question", row.id],
-    queryFn: () => examSessionApi.question(row.id),
-    retry: false, // 404 = yüklenmemiş (olağan durum)
+  // Grubun her satırı sorgulanır; dosya hangi satırdaysa o satır "taşıyıcı"dır
+  // (aynı kitapçıkta dosya kardeşlerden yalnız birinde durur). Dosya yoksa
+  // yükleme ilk satıra gider.
+  const questions = useQueries({
+    queries: group.rows.map((row) => ({
+      queryKey: ["exam-question", row.id],
+      queryFn: () => examSessionApi.question(row.id),
+      retry: false, // 404 = yüklenmemiş (olağan durum)
+    })),
   });
-  const meta = question.data;
+  const carrierIndex = questions.findIndex((q) => q.data !== undefined);
+  const meta = carrierIndex >= 0 ? questions[carrierIndex].data : undefined;
+  const carrier = carrierIndex >= 0 ? group.rows[carrierIndex] : group.rows[0];
+  const invalidateGroup = () => {
+    for (const row of group.rows) {
+      void qc.invalidateQueries({ queryKey: ["exam-question", row.id] });
+    }
+  };
 
   const upload = useMutation({
     mutationFn: () => {
@@ -44,29 +109,29 @@ function CourseQuestionRow({ row, locked }: { row: ExamSessionCourseRow; locked:
       if (scoreMode === "QUESTION_TABLE" && questionCount) {
         form.append("question_count", questionCount);
       }
-      return examSessionApi.uploadQuestion(row.id, form);
+      return examSessionApi.uploadQuestion(carrier.id, form);
     },
     onSuccess: () => {
       setUploadOpen(false);
       setFile(null);
       snackbar.success("Soru dosyası yüklendi.");
-      void qc.invalidateQueries({ queryKey: ["exam-question", row.id] });
+      invalidateGroup();
     },
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Yükleme başarısız."),
   });
 
   const remove = useMutation({
-    mutationFn: () => examSessionApi.deleteQuestion(row.id),
+    mutationFn: () => examSessionApi.deleteQuestion(carrier.id),
     onSuccess: () => {
       snackbar.success("Soru dosyası kaldırıldı.");
-      void qc.invalidateQueries({ queryKey: ["exam-question", row.id] });
+      invalidateGroup();
     },
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Kaldırılamadı."),
   });
 
   const openPreview = async () => {
     try {
-      const blob = await examSessionApi.questionBlob(row.id);
+      const blob = await examSessionApi.questionBlob(carrier.id);
       setPreviewUrl(URL.createObjectURL(blob));
     } catch (e) {
       snackbar.error(e instanceof ApiError ? e.message : "Önizleme alınamadı.");
@@ -81,7 +146,12 @@ function CourseQuestionRow({ row, locked }: { row: ExamSessionCourseRow; locked:
 
   return (
     <li className="flex flex-wrap items-center gap-3 rounded-shape-md border border-outline-variant p-3">
-      <span className="text-title-small text-on-surface">{row.display_label}</span>
+      <span className="text-title-small text-on-surface">{group.label}</span>
+      {group.shared && (
+        <span className="text-body-small text-on-surface-variant">
+          tek dosya — bu seviyelerin tümü aynı kitapçığı alır
+        </span>
+      )}
       {meta ? (
         <span className="text-body-small text-on-surface-variant">
           {meta.page_count} sayfa ·{" "}
@@ -119,7 +189,7 @@ function CourseQuestionRow({ row, locked }: { row: ExamSessionCourseRow; locked:
       <Dialog
         open={uploadOpen}
         onClose={closeUpload}
-        title={`Soru PDF'i — ${row.display_label}`}
+        title={`Soru PDF'i — ${group.label}`}
         actions={
           <>
             <Button variant="text" onClick={closeUpload}>
@@ -167,7 +237,7 @@ function CourseQuestionRow({ row, locked }: { row: ExamSessionCourseRow; locked:
       <Dialog
         open={previewUrl !== null}
         onClose={closePreview}
-        title={`Önizleme — ${row.display_label}`}
+        title={`Önizleme — ${group.label}`}
         wide
         actions={
           <Button variant="text" onClick={closePreview}>
@@ -179,7 +249,7 @@ function CourseQuestionRow({ row, locked }: { row: ExamSessionCourseRow; locked:
           <embed
             src={previewUrl}
             type="application/pdf"
-            aria-label={`${row.display_label} soru dosyası önizlemesi`}
+            aria-label={`${group.label} soru dosyası önizlemesi`}
             className="h-[60vh] w-full rounded-shape-sm"
           />
         )}
@@ -201,6 +271,7 @@ export default function SorularPaneli({ session }: { session: ExamSession }) {
   const [backupCopies, setBackupCopies] = useState("0");
   const [templateDownloading, setTemplateDownloading] = useState(false);
   const locked = session.status !== "DISTRIBUTED"; // onaylı/arşivde dosya değişmez (T9 kilidi)
+  const groups = useMemo(() => groupQuestionRows(session.courses), [session.courses]);
 
   const downloadTemplate = async () => {
     setTemplateDownloading(true);
@@ -284,8 +355,8 @@ export default function SorularPaneli({ session }: { session: ExamSession }) {
         </ol>
       </div>
       <ul className="flex flex-col gap-2">
-        {session.courses.map((row) => (
-          <CourseQuestionRow key={row.id} row={row} locked={locked} />
+        {groups.map((group) => (
+          <CourseQuestionRow key={group.key} group={group} locked={locked} />
         ))}
       </ul>
 

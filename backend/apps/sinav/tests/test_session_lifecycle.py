@@ -99,6 +99,40 @@ def test_approve_guards() -> None:
     assert "AD0" not in message and "SOYAD" not in message  # kurucu ad kalıbı sızmadı
 
 
+def test_revert_to_draft_clears_seating_keeps_definitions() -> None:
+    """DAĞITILDI → TASLAK (18.09.2026): yerleşim silinir, tanım korunur, yeniden dağıtılır."""
+    session = _dagitilmis_oturum()
+    course_count = session.courses.count()
+    room_count = session.rooms.count()
+    assert SeatAssignment.objects.filter(session=session).exists()
+    assert session.distribution_params.get("seed") is not None
+
+    session = services.revert_session_to_draft(session)
+    assert session.status == ExamSessionStatus.DRAFT
+    assert session.distribution_params == {}
+    assert not SeatAssignment.objects.filter(session=session).exists()
+    # Sihirbaz Adım 2-3 dolu döner: ders/salon satırlarına dokunulmaz.
+    assert session.courses.count() == course_count
+    assert session.rooms.count() == room_count
+
+    # Taslak yeniden düzenlenebilir ve yeniden dağıtılabilir (tam döngü).
+    services.update_exam_session(session, name="Düzeltilmiş Oturum")
+    session, _result, report = services.distribute_session(session, seed=3)
+    assert session.status == ExamSessionStatus.DISTRIBUTED and report.is_valid
+    assert SeatAssignment.objects.filter(session=session).exists()
+
+
+def test_revert_to_draft_guards() -> None:
+    draft = oturum(name="Taslak Oturum")
+    with pytest.raises(ValidationError, match="yalnız dağıtılmış"):
+        services.revert_session_to_draft(draft)
+
+    session = _dagitilmis_oturum()
+    services.approve_session(session)
+    with pytest.raises(ValidationError, match="yalnız dağıtılmış"):
+        services.revert_session_to_draft(session)
+
+
 def test_locked_session_rejects_edits() -> None:
     session = _dagitilmis_oturum()
     services.approve_session(session)
@@ -144,6 +178,16 @@ def test_api_lifecycle() -> None:
 
     draft = oturum(name="Taslak Oturum")
     assert client.post(f"/api/v1/exam-sessions/{draft.pk}/approve/").status_code == 400
+
+
+def test_api_revert_to_draft() -> None:
+    session = _dagitilmis_oturum()
+    client = APIClient()
+    base = f"/api/v1/exam-sessions/{session.pk}"
+
+    resp = client.post(f"{base}/revert-to-draft/")
+    assert resp.status_code == 200 and resp.data["status"] == "DRAFT"
+    assert client.post(f"{base}/revert-to-draft/").status_code == 400  # taslak yeniden alınamaz
 
 
 # ===========================================================================
