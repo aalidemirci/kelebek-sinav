@@ -478,12 +478,12 @@ kapılar yeşil**:
 | Kapı | Değerlendirme anı (§5) | Uygulama sonu |
 |---|---|---|
 | Depo sızıntısı (KVKK) | bulgu yok | bulgu yok |
-| Backend pytest | 646 test, kapsam %87,9 | **854 test, kapsam %92,9** (eşik %75) |
+| Backend pytest | 646 test, kapsam %87,9 | **855 test, kapsam %92,9** (eşik %75) |
 | Backend ruff / ruff format / mypy | temiz | temiz |
 | Masaüstü + paketleme pytest, ruff, mypy | 187 test, temiz | 187 test, temiz |
 | Ön yüz tsc / eslint / prettier | temiz | temiz |
 | Ön yüz vitest | 58 dosya, 328 test | **69 dosya, 473 test** |
-| Ön yüz kapsamı (yeni kapı) | ölçülmüyordu | satır %89,4 · dal %84,9 · işlev %63,1 (eşik 82/78/55) |
+| Ön yüz kapsamı (yeni kapı) | ölçülmüyordu | satır %89,5 · dal %84,9 · işlev %63,2 (eşik 82/78/55) |
 
 Tam koşu bir kez kırmızı verdi ve işe yaradı: değiştirilen bir ret metnine bağlı
 test beklentisi (alt küme koşularında görünmeyen) ancak tam zincirde yakalandı.
