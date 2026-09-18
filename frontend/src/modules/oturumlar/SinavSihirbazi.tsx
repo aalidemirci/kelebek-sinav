@@ -6,11 +6,12 @@
 //   2 Ders ve katılımcılar (LEVEL | SECTIONS — GROUPS kaldırıldı, TB7;
 //     canlı sayılar + çakışma uyarıları)
 //   3 Salon seçimi (klasikte adım atlanır) + kapasite yeterlilik çubuğu
-//   4 Dağıt & Önizle (seed/katı mod; sonuç bağımsız doğrulayıcıdan)
+//   4 Dağıt (dağıtım numarası/katı dağıtım; sonuç bağımsız doğrulayıcıdan)
 // Tüm iş kuralları backend'de; sihirbaz yalnız uçları sırayla sürer.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 
 import { ApiError } from "../../lib/api";
 import { formatDateTime } from "../../lib/format";
@@ -19,6 +20,7 @@ import Autocomplete from "../../ui/Autocomplete";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import Dialog from "../../ui/Dialog";
+import Icon from "../../ui/Icon";
 import Select from "../../ui/Select";
 import Stepper from "../../ui/Stepper";
 import type { StepperItem, StepperStatus } from "../../ui/Stepper";
@@ -28,16 +30,34 @@ import type { Course } from "../dersler/api";
 import { derslerApi } from "../dersler/api";
 import { okulApi } from "../okul/api";
 import { examRoomApi, examRoomGroupApi } from "../salonlar/api";
+import DagitimSecenekleri, {
+  BOS_DAGITIM_SECENEKLERI,
+  DagitimSonucu,
+  dagitimCumlesi,
+  dagitimGovdesi,
+} from "./DagitimSecenekleri";
 import OturumKopyalaDialog from "./OturumKopyalaDialog";
-import type { ExamSession, ExamSessionCourseRow, LayoutModeCode, ParticipantTypeCode } from "./api";
-import { examSessionApi } from "./api";
+import type {
+  DistributeResult,
+  ExamSession,
+  ExamSessionCourseRow,
+  LayoutModeCode,
+  ParticipantTypeCode,
+} from "./api";
+import {
+  examSessionApi,
+  LAYOUT_MODE_OPTIONS,
+  PARTICIPANT_TYPE_TR,
+  PROCTORS_ENABLED_LABEL,
+  usesDistributionNumber,
+} from "./api";
 
 const STEPS = [
   { key: "precheck", label: "Veri Ön Kontrolü", icon: "fact_check" },
   { key: "info", label: "Oturum Bilgileri", icon: "event" },
   { key: "courses", label: "Ders ve Katılımcılar", icon: "menu_book" },
   { key: "rooms", label: "Salonlar", icon: "meeting_room" },
-  { key: "distribute", label: "Dağıt & Önizle", icon: "shuffle" },
+  { key: "distribute", label: "Dağıt", icon: "shuffle" },
 ];
 
 interface SihirbazProps {
@@ -45,9 +65,32 @@ interface SihirbazProps {
   onChanged: () => void; // oturum verisi değişti — detay sorgusunu tazele
 }
 
+/**
+ * Sihirbazın açıldığı adım — kullanıcının KALDIĞI yer (18.09.2026 değerlendirmesi:
+ * sihirbaz her açılışta başa dönüyordu). Ön kontrol onayı yoksa 0; onaylı ve ders
+ * yoksa 1; ders varsa 2 — "Taslağa al"dan dönen kullanıcı düzeltmeye tanımların
+ * olduğu adımdan başlar, önceki adımlara Stepper'dan tek tıkla döner.
+ */
+export function initialStep(session: ExamSession): number {
+  if (session.transfer_check_confirmed_at === null) return 0;
+  return session.courses.length > 0 ? 2 : 1;
+}
+
+/** Hata/uyarı satırı — metne ham "⚠" yazılmaz (docs/sozluk.md §3). */
+function WarningItem({ text }: { text: string }) {
+  return (
+    <li className="flex items-start gap-1">
+      <Icon name="warning" size="sm" className="mt-0.5 shrink-0" />
+      <span>{text}</span>
+    </li>
+  );
+}
+
 export default function SinavSihirbazi({ session, onChanged }: SihirbazProps) {
-  // Ön kontrol onayı verilmişse Adım 0 atlanır (onay oturuma yazılıdır).
-  const [step, setStep] = useState(session.transfer_check_confirmed_at ? 1 : 0);
+  const [step, setStep] = useState(() => initialStep(session));
+  // Dağıtım yazıldı ama kullanıcı henüz uyarıları okuyor (bkz. DistributeStep):
+  // oturum backend'de artık TASLAK değildir, önceki adımlara dönüş kapatılır.
+  const [distributed, setDistributed] = useState(false);
   const isClassic = session.layout_mode === "HOME_CLASSROOM";
 
   const items: StepperItem[] = STEPS.map((s, i) => {
@@ -62,7 +105,13 @@ export default function SinavSihirbazi({ session, onChanged }: SihirbazProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      <Stepper items={items} ariaLabel="Sınav sihirbazı adımları" />
+      {/* Tamamlanmış adımlar tıklanır; "atlandı" (klasikte Salonlar) tıklanamaz —
+          Stepper yalnız "done" adımı düğme yapar. */}
+      <Stepper
+        items={items}
+        ariaLabel="Sınav sihirbazı adımları"
+        onSelect={distributed ? undefined : (_key, index) => setStep(index)}
+      />
       {step === 0 && <PreCheckStep session={session} onChanged={onChanged} onNext={goNext} />}
       {step === 1 && (
         <InfoStep session={session} onChanged={onChanged} onNext={goNext} onBack={goBack} />
@@ -73,7 +122,14 @@ export default function SinavSihirbazi({ session, onChanged }: SihirbazProps) {
       {step === 3 && !isClassic && (
         <RoomsStep session={session} onChanged={onChanged} onNext={goNext} onBack={goBack} />
       )}
-      {step === 4 && <DistributeStep session={session} onChanged={onChanged} onBack={goBack} />}
+      {step === 4 && (
+        <DistributeStep
+          session={session}
+          onChanged={onChanged}
+          onBack={goBack}
+          onDistributed={() => setDistributed(true)}
+        />
+      )}
     </div>
   );
 }
@@ -85,10 +141,15 @@ function PreCheckStep({ session, onChanged, onNext }: SihirbazProps & { onNext: 
   const snackbar = useSnackbar();
   const summary = useQuery({ queryKey: ["exam-pre-check"], queryFn: examSessionApi.preCheck });
   const [checked, setChecked] = useState(false);
+  // Onaylayan adı: boş bırakılırsa backend kurulumdaki okul müdürünün adını
+  // damgalar (`services.confirm_transfer_check`). Eskiden ad hiç sorulmuyor,
+  // ekran ise "kim/ne zaman yazılır" diyordu (değerlendirme §3.2).
+  const [confirmedBy, setConfirmedBy] = useState("");
   const confirmed = session.transfer_check_confirmed_at !== null;
 
   const confirm = useMutation({
-    mutationFn: () => examSessionApi.confirmTransferCheck(session.id),
+    mutationFn: () =>
+      examSessionApi.confirmTransferCheck(session.id, { confirmed_by_name: confirmedBy.trim() }),
     onSuccess: () => {
       snackbar.success("Ön kontrol onayı kaydedildi.");
       onChanged();
@@ -104,8 +165,9 @@ function PreCheckStep({ session, onChanged, onNext }: SihirbazProps & { onNext: 
     <Card elevation={1} className="flex flex-col gap-4 p-5">
       <h3 className="text-title-medium text-on-surface">Veri Ön Kontrolü</h3>
       <p className="text-body-medium text-on-surface-variant">
-        Dağıtım öğrenci sicilinden beslenir. Nakil gelen/giden güncellemelerinin işlendiğini
-        onaylamadan devam edilemez; onay kim/ne zaman bilgisiyle oturuma yazılır.
+        Dağıtım, Kişiler ekranındaki öğrenci listesinden beslenir. Nakil gelen ve giden öğrencilerin
+        listeye işlendiğini onaylamadan devam edilemez; onaylayanın adı ve onay zamanı oturuma
+        kaydedilir.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
@@ -128,7 +190,14 @@ function PreCheckStep({ session, onChanged, onNext }: SihirbazProps & { onNext: 
           <h4 className="mb-1 text-title-small text-on-surface">Son öğrenci aktarımı</h4>
           {summary.isSuccess && lastImport === null && (
             <p role="alert" className="text-body-medium text-error">
-              Henüz öğrenci aktarımı yapılmamış — önce Okul modülünden e-Okul listesini aktarın.
+              Henüz öğrenci aktarımı yapılmamış — önce{" "}
+              <Link
+                to="/kisiler"
+                className="font-medium underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                Kişiler ekranından
+              </Link>{" "}
+              e-Okul listesini aktarın.
             </p>
           )}
           {lastImport && (
@@ -146,27 +215,39 @@ function PreCheckStep({ session, onChanged, onNext }: SihirbazProps & { onNext: 
         </div>
       </div>
       {confirmed ? (
-        <p className="text-body-medium text-on-surface-variant">
-          ✓ Onaylandı: {session.transfer_check_confirmed_by_name || "—"} —{" "}
-          {formatDateTime(session.transfer_check_confirmed_at)}
+        <p className="flex items-center gap-2 text-body-medium text-on-surface-variant">
+          <Icon name="check_circle" size="lg" className="text-primary" />
+          <span>
+            Onaylandı: {session.transfer_check_confirmed_by_name || "—"} —{" "}
+            {formatDateTime(session.transfer_check_confirmed_at)}
+          </span>
         </p>
       ) : (
-        <label className="flex min-h-9 cursor-pointer items-center gap-3 text-body-medium text-on-surface">
-          <input
-            type="checkbox"
-            checked={checked}
-            onChange={(e) => setChecked(e.target.checked)}
-            className="h-5 w-5 accent-primary"
+        <>
+          <label className="flex min-h-9 cursor-pointer items-center gap-3 text-body-medium text-on-surface">
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={(e) => setChecked(e.target.checked)}
+              className="h-5 w-5 accent-primary"
+            />
+            Nakil gelen/giden öğrenci güncellemeleri yapıldı; liste günceldir.
+          </label>
+          <TextField
+            label="Onaylayan (boş bırakılırsa okul müdürü)"
+            value={confirmedBy}
+            onChange={(e) => setConfirmedBy(e.target.value)}
+            maxLength={128}
+            className="max-w-md"
           />
-          Nakil gelen/giden öğrenci güncellemeleri yapıldı; liste günceldir.
-        </label>
+        </>
       )}
       <div className="flex justify-end gap-2">
         {confirmed ? (
           <Button onClick={onNext}>Devam</Button>
         ) : (
           <Button onClick={() => confirm.mutate()} disabled={!checked || confirm.isPending}>
-            Onayla ve devam et
+            Kaydet ve devam et
           </Button>
         )}
       </div>
@@ -243,13 +324,10 @@ function InfoStep({
       </div>
       <Select
         label="Düzen"
-        options={[
-          { value: "BUTTERFLY", label: "Kelebek (karışık dağıtım)" },
-          { value: "HOME_CLASSROOM", label: "Kendi dersliğinde (klasik)" },
-        ]}
+        options={LAYOUT_MODE_OPTIONS}
         value={form.layout_mode}
         onChange={(e) => setForm((f) => ({ ...f, layout_mode: e.target.value as LayoutModeCode }))}
-        helperText="Klasikte salon seçimi yoktur — öğrenciler bağlı dersliklerine yerleşir."
+        helperText="“Kendi dersliğinde” düzeninde salon seçilmez; her şube kendi şube dersliğine yerleşir."
       />
       <label className="flex min-h-9 items-center gap-2 text-body-medium text-on-surface">
         <input
@@ -258,7 +336,7 @@ function InfoStep({
           checked={form.proctors_enabled}
           onChange={(e) => setForm((f) => ({ ...f, proctors_enabled: e.target.checked }))}
         />
-        Gözetmen modülü açık (görevlendirme + R6 belgesi)
+        {PROCTORS_ENABLED_LABEL}
       </label>
       <p className="text-body-small text-on-surface-variant">Dönem: {session.term_label}</p>
       <div className="flex justify-between">
@@ -440,8 +518,9 @@ function CoursesStep({
 
       {session.courses.length === 0 && (
         <p className="text-body-medium text-on-surface-variant">
-          Henüz ders eklenmedi. Her ders için katılımcılar seviye geneli veya şube şube atanır (aynı
-          seviye + aynı ders = aynı kitapçık → çakışma grubu).
+          Henüz ders eklenmedi. Her ders için sınava kimlerin gireceğini belirleyin: sınıf düzeyinin
+          tamamı ya da seçili şubeler. Aynı sınıf düzeyinde aynı dersin sınavına girenler aynı
+          kitapçığı çözer; dağıtımda bu öğrenciler yan yana oturtulmaz.
         </p>
       )}
 
@@ -455,7 +534,7 @@ function CoursesStep({
             >
               <span className="text-title-small text-on-surface">{row.display_label}</span>
               <span className="text-body-small text-on-surface-variant">
-                {row.participant_type === "LEVEL" && "Seviye geneli"}
+                {row.participant_type === "LEVEL" && PARTICIPANT_TYPE_TR.LEVEL}
                 {row.participant_type === "SECTIONS" && `${row.section_ids.length} şube`}
               </span>
               {info && (
@@ -473,9 +552,9 @@ function CoursesStep({
                 Çıkar
               </Button>
               {info && info.warnings.length > 0 && (
-                <ul className="w-full text-body-small text-error">
+                <ul className="flex w-full flex-col gap-0.5 text-body-small text-error">
                   {info.warnings.map((w) => (
-                    <li key={w}>⚠ {w}</li>
+                    <WarningItem key={w} text={w} />
                   ))}
                 </ul>
               )}
@@ -486,11 +565,11 @@ function CoursesStep({
 
       {multiLevelCourses.length > 0 && (
         <div className="flex flex-col gap-2 rounded-shape-md bg-surface-container p-3">
-          <h4 className="text-title-small text-on-surface">Aynı ders birden çok seviyede</h4>
+          <h4 className="text-title-small text-on-surface">Aynı ders birden çok sınıf düzeyinde</h4>
           <p className="text-body-small text-on-surface-variant">
-            Olağan durumda her seviye kendi sorularını çözer: her seviye için ayrı soru dosyası
-            yüklenir ve farklı seviyelerin öğrencileri yan yana oturabilir. Bir dersin tüm
-            seviyeleri <strong>aynı</strong> soru kitapçığını çözecekse aşağıda işaretleyin; o zaman
+            Olağan durumda her sınıf düzeyi kendi sorularını çözer: her düzey için ayrı soru dosyası
+            yüklenir ve farklı düzeylerin öğrencileri yan yana oturabilir. Bir dersin tüm sınıf
+            düzeyleri <strong>aynı</strong> soru kitapçığını çözecekse aşağıda işaretleyin; o zaman
             tek dosya yüklenir ve bu öğrenciler birbirinin yanına oturtulmaz.
           </p>
           {multiLevelCourses.map((rows) => (
@@ -515,9 +594,9 @@ function CoursesStep({
       )}
 
       {participants.data && participants.data.warnings.length > 0 && (
-        <ul role="alert" className="text-body-small text-error">
+        <ul role="alert" className="flex flex-col gap-0.5 text-body-small text-error">
           {participants.data.warnings.map((w) => (
-            <li key={w}>⚠ {w}</li>
+            <WarningItem key={w} text={w} />
           ))}
         </ul>
       )}
@@ -573,11 +652,11 @@ function CoursesStep({
             search={searchCourses}
             getKey={(c) => c.id}
             getLabel={(c) => c.name}
-            getSublabel={(c) => `Seviyeler: ${c.level_labels.join(", ")}`}
+            getSublabel={(c) => `Sınıf düzeyleri: ${c.level_labels.join(", ")}`}
           />
           {course && (
             <Select
-              label="Seviye"
+              label="Sınıf düzeyi"
               options={course.levels.map((lv) => ({
                 value: String(lv),
                 label: gradeLevelLabel(lv),
@@ -589,22 +668,22 @@ function CoursesStep({
                 setSectionIds([]);
               }}
               required
-              helperText="Aynı ders adı olsa da her seviye ayrı içerik/soru demektir; satır seviye başına eklenir."
+              helperText="Ders adı aynı olsa da her sınıf düzeyinin soruları ayrıdır; her düzey ayrı satır olarak eklenir."
             />
           )}
           {courseAlreadyInSession && (
             <p className="text-body-small text-on-surface-variant">
-              Bu ders oturumda başka bir seviyede zaten var. Her seviye ayrı soru dosyası alır; tüm
-              seviyeler aynı kitapçığı çözecekse ekledikten sonra listenin altındaki kutuyu
+              Bu ders oturumda başka bir sınıf düzeyinde zaten var. Her düzey ayrı soru dosyası
+              alır; hepsi aynı kitapçığı çözecekse ekledikten sonra listenin altındaki kutuyu
               işaretleyin.
             </p>
           )}
           <Select
-            label="Katılımcı tipi"
-            options={[
-              { value: "LEVEL", label: "Seviye geneli" },
-              { value: "SECTIONS", label: "Şube şube" },
-            ]}
+            label="Katılımcılar"
+            options={(Object.keys(PARTICIPANT_TYPE_TR) as ParticipantTypeCode[]).map((value) => ({
+              value,
+              label: PARTICIPANT_TYPE_TR[value],
+            }))}
             value={ptype}
             onChange={(e) => setPtype(e.target.value as ParticipantTypeCode)}
           />
@@ -615,7 +694,9 @@ function CoursesStep({
               </legend>
               {(sectionGroups.data ?? []).length > 0 && (
                 <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <span className="text-body-small text-on-surface-variant">Kümeden ekle:</span>
+                  <span className="text-body-small text-on-surface-variant">
+                    Şube kümesinden ekle:
+                  </span>
                   {(sectionGroups.data ?? []).map((g) => (
                     <button
                       key={g.id}
@@ -628,7 +709,8 @@ function CoursesStep({
                   ))}
                 </div>
               )}
-              <div className="grid max-h-48 grid-cols-3 gap-1 overflow-y-auto">
+              {/* Dar pencerede üç sütun şube etiketini sıkıştırıyordu → 2, sm'den itibaren 3. */}
+              <div className="grid max-h-48 grid-cols-2 gap-1 overflow-y-auto sm:grid-cols-3">
                 {(sections.data ?? [])
                   .filter((s) => level === "" || s.class_level === Number(level))
                   .map((s) => (
@@ -676,7 +758,7 @@ function RoomsStep({
 }: SihirbazProps & { onNext: () => void; onBack: () => void }) {
   const snackbar = useSnackbar();
   const rooms = useQuery({ queryKey: ["exam-rooms"], queryFn: () => examRoomApi.list(false) });
-  // Derslik kümeleri (Sabah/Öğle) — ikili eğitimde salon listesi kalabalıklaşır.
+  // Salon kümeleri (Sabah/Öğle) — ikili eğitimde salon listesi kalabalıklaşır.
   const roomGroups = useQuery({
     queryKey: ["exam-room-groups"],
     queryFn: () => examRoomGroupApi.list(),
@@ -739,7 +821,7 @@ function RoomsStep({
       </div>
       {(roomGroups.data?.results ?? []).length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-body-small text-on-surface-variant">Kümeden ekle:</span>
+          <span className="text-body-small text-on-surface-variant">Salon kümesinden ekle:</span>
           {(roomGroups.data?.results ?? []).map((g) => (
             <button
               key={g.id}
@@ -812,54 +894,99 @@ function RoomsStep({
 }
 
 // ---------------------------------------------------------------------------
-// Adım 4 — Dağıt & Önizle
+// Adım 4 — Dağıt
 // ---------------------------------------------------------------------------
-function DistributeStep({ session, onChanged, onBack }: SihirbazProps & { onBack: () => void }) {
+function DistributeStep({
+  session,
+  onChanged,
+  onBack,
+  onDistributed,
+}: SihirbazProps & { onBack: () => void; onDistributed: () => void }) {
   const snackbar = useSnackbar();
-  const [seed, setSeed] = useState("");
-  const [strict, setStrict] = useState(false);
+  const [options, setOptions] = useState(BOS_DAGITIM_SECENEKLERI);
+  // Uyarılı sonuç: sekmeli görünüme geçmeden ÖNCE gösterilir. Eskiden `warnings`
+  // hiç okunmuyordu — uygulanamayan bir yerleştirme kuralı sessizce geçiyordu.
+  const [warned, setWarned] = useState<DistributeResult | null>(null);
+
+  // Uyarılar okunurken oturum sorgusu BİLEREK tazelenmez (tazelenirse durum
+  // DAĞITILDI'ya döner ve sihirbaz, uyarılarıyla birlikte ekrandan kalkar).
+  // Kullanıcı düğmeye basmadan sayfadan ayrılırsa tazeleme sökülürken yapılır —
+  // aksi hâlde liste 30 sn boyunca oturumu hâlâ "Taslak" gösterirdi.
+  const refreshPending = useRef(false);
+  const onChangedRef = useRef(onChanged);
+  useEffect(() => {
+    onChangedRef.current = onChanged;
+  });
+  useEffect(
+    () => () => {
+      if (refreshPending.current) onChangedRef.current();
+    },
+    [],
+  );
+
+  // "Kendi dersliğinde" düzeninde karıştırma YOKTUR (engine.distribute_home_classroom:
+  // şube kendi dersliğine, okul no sırasıyla) — dağıtım numarası ve katı dağıtım
+  // sonucu değiştirmez; o düzende sorulmaz/gösterilmez, açıklama da ona göre yazılır.
+  const numarali = usesDistributionNumber(session.layout_mode);
 
   const distribute = useMutation({
-    mutationFn: () =>
-      examSessionApi.distribute(session.id, {
-        seed: seed === "" ? undefined : Number(seed),
-        strict,
-      }),
+    mutationFn: () => examSessionApi.distribute(session.id, dagitimGovdesi(options)),
     onSuccess: (result) => {
-      snackbar.success(`Dağıtım tamam: ${result.placed} öğrenci yerleşti (seed ${result.seed}).`);
+      snackbar.success(dagitimCumlesi("Dağıtım tamamlandı", result, numarali));
+      if (result.warnings.length > 0) {
+        refreshPending.current = true;
+        setWarned(result);
+        onDistributed();
+        return;
+      }
       onChanged(); // durum DISTRIBUTED → detay sekmeli görünüme geçer
     },
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Dağıtım başarısız."),
   });
 
+  if (warned) {
+    return (
+      <Card elevation={1} className="flex flex-col gap-4 p-5">
+        <h3 className="text-title-medium text-on-surface">Dağıtım tamamlandı</h3>
+        <DagitimSonucu result={warned} numarali={numarali} />
+        <div className="flex justify-end">
+          <Button
+            icon="grid_on"
+            onClick={() => {
+              refreshPending.current = false;
+              onChanged();
+            }}
+          >
+            Yerleşimi görüntüle
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card elevation={1} className="flex flex-col gap-4 p-5">
-      <h3 className="text-title-medium text-on-surface">Dağıt &amp; Önizle</h3>
-      <p className="text-body-medium text-on-surface-variant">
-        Kelebek motoru aynı kitapçığı cevaplayanları bitiştirmez ve salon geometrisinde
-        olabildiğince uzak tutar; sonuç bağımsız doğrulayıcıdan geçer. Aynı seed aynı yerleşimi
-        üretir.
-      </p>
-      <div className="grid grid-cols-2 gap-3">
-        <TextField
-          label="Seed (boş = rastgele)"
-          type="number"
-          min={1}
-          max={999999}
-          value={seed}
-          onChange={(e) => setSeed(e.target.value)}
-          helperText="Seed, rastgele karıştırmanın başlangıç değeridir: aynı seed her zaman AYNI yerleşimi üretir. Boş bırakılırsa her dağıtımda yeni rastgele seed seçilir; kullanılan değer dağıtım sonrası gösterilir — bir yerleşimi yeniden üretmek için onu girin."
-        />
-        <label className="flex min-h-9 cursor-pointer items-center gap-3 text-body-medium text-on-surface">
-          <input
-            type="checkbox"
-            checked={strict}
-            onChange={(e) => setStrict(e.target.checked)}
-            className="h-5 w-5 accent-primary"
+      <h3 className="text-title-medium text-on-surface">Dağıt</h3>
+      {!numarali ? (
+        <p className="text-body-medium text-on-surface-variant">
+          Her şube kendi şube dersliğine, okul numarası sırasıyla yerleştirilir. Bu düzende
+          öğrenciler karıştırılmaz; yerleştirme kuralları da uygulanmaz. Yerleşimi dağıtımdan sonra
+          Yerleşim sekmesinde incelersiniz.
+        </p>
+      ) : (
+        <>
+          <p className="text-body-medium text-on-surface-variant">
+            Aynı kitapçığı çözen öğrenciler yan yana oturtulmaz ve salonda birbirinden olabildiğince
+            uzağa yerleştirilir; sonuç ayrıca kural denetiminden geçer. Yerleşimi dağıtımdan sonra
+            Yerleşim sekmesinde inceler, gerekirse yeniden dağıtırsınız.
+          </p>
+          <DagitimSecenekleri
+            deger={options}
+            onChange={setOptions}
+            seedLabel="Dağıtım numarası (boş bırakılırsa rastgele)"
           />
-          Katı mod (1. halka — yan/ön/arka — da sert kısıt)
-        </label>
-      </div>
+        </>
+      )}
       <div className="flex justify-between">
         <Button variant="text" onClick={onBack}>
           Geri
