@@ -129,15 +129,15 @@ export default function CizelgeAtamaMatrisi({ schoolType, hasPrepClass, value, o
 
       {!status.data_available && (
         <p className="mt-2 rounded-shape-sm bg-tertiary-container px-3 py-2 text-body-small text-on-tertiary-container">
-          Bu okul türü için çizelge verisi bu sürümde yok: ders havuzu boş başlar, dersler
-          &quot;Ders havuzu&quot; ekranından elle eklenir. Aşağıdaki listeden başka bir türün
-          çizelgesini de uygulayabilirsiniz.
+          Bu okul türü için çizelge verisi bu sürümde yok: ders havuzu boş başlar, dersler “Ders
+          Havuzu” ekranından elle eklenir. Aşağıdaki listeden başka bir türün çizelgesini de
+          uygulayabilirsiniz.
         </p>
       )}
 
       {ortak ? (
         <p className="mt-2 text-body-medium text-on-surface-variant">
-          Tüm seviyeler: <span className="text-on-surface">{ortak.join(" + ")}</span>
+          Tüm sınıf düzeyleri: <span className="text-on-surface">{ortak.join(" + ")}</span>
         </p>
       ) : (
         <ul className="mt-2 space-y-1 text-body-medium text-on-surface-variant">
@@ -178,21 +178,25 @@ export default function CizelgeAtamaMatrisi({ schoolType, hasPrepClass, value, o
           </Button>
         ) : (
           <Button variant="tonal" icon="tune" onClick={ozellestir}>
-            Seviye bazında özelleştir
+            Sınıf düzeyine göre özelleştir
           </Button>
         )}
         <span className="text-body-small text-on-surface-variant">
           Kademeli dönüşümde (ör. Anadolu Lisesi → Fen Lisesi) yeni tür 9. sınıftan başlar, üst
-          sınıflar eski çizelgede kalır; çok programlı okulda aynı seviyeye birden çok çizelge
+          sınıflar eski çizelgede kalır; çok programlı okulda aynı sınıf düzeyine birden çok çizelge
           işaretlenir.
         </span>
       </div>
 
       {custom && (
         <div className="mt-3 overflow-x-auto">
-          <label className="mb-2 flex items-center gap-2 text-body-small text-on-surface-variant">
+          {/* Onay kutuları diğer formlarla AYNI ölçü ve renkte (h-5 w-5 accent-primary):
+              boyutsuz kutu tarayıcı varsayılanına (13px) düşüyor, hem dokunma hedefi
+              küçülüyor hem tema rengi yerine sistem mavisi basılıyordu. */}
+          <label className="mb-2 flex min-h-9 items-center gap-2 text-body-small text-on-surface-variant">
             <input
               type="checkbox"
+              className="h-5 w-5 accent-primary"
               checked={tumProgramlar}
               onChange={(e) => setTumProgramlar(e.target.checked)}
             />
@@ -225,6 +229,7 @@ export default function CizelgeAtamaMatrisi({ schoolType, hasPrepClass, value, o
                     <td key={lv.level} className="px-2 py-2 text-center">
                       <input
                         type="checkbox"
+                        className="h-5 w-5 accent-primary"
                         aria-label={`${p.name} — ${lv.label}`}
                         checked={seviyeListesi(lv.level).includes(p.key)}
                         onChange={(e) => degistir(lv.level, p.key, e.target.checked)}
