@@ -168,6 +168,17 @@ def test_karma_seviyeli_oturumda_ders_adi_seviyeli_basilir() -> None:
         assert "Coğrafya — 10. Sınıf" in text, f"{code}: 10. sınıf etiketi yok"
 
 
+def test_r8_idareci_diliyle_yazilir() -> None:
+    """R8'i okul müdürü imzalar: motor jargonu ve mevzuatta olmayan organ adı basılmaz."""
+    session = _evrak_oturumu(seed=987654)
+    text = " ".join(_pdf_text(services.render_session_report(session, "r8").content).split())
+    assert "KURAL İHLALİ YOKTUR" in text
+    assert "Dağıtım numarası (seed)" in text and "987654" in text
+    assert "Düzenleyen — Müdür Yardımcısı" in text
+    for jargon in ("SERT KISIT", "halka", "Σ", "Satranç modu", "Sınav Komisyonu", "tohum"):
+        assert jargon not in text, f"R8'de jargon kaldı: {jargon}"
+
+
 def test_r8_yorum_sizintisi_yok() -> None:
     """Şablon yorumu çıktıya basılmaz — çok satırlı `{# #}` Django'da metin olur
     (örnek PDF'te görüldü, 18.09.2026); `{% comment %}` bloğu kullanılır."""
