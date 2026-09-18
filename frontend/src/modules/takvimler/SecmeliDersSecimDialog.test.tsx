@@ -5,7 +5,7 @@
 // mock'lanmazsa çip hiç çizilmez (SinavSihirbazi.test.tsx'teki tuzak).
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -74,7 +74,7 @@ function renderDialog(onSaved: () => void = () => {}) {
 afterEach(() => vi.clearAllMocks());
 
 describe("SecmeliDersSecimDialog", () => {
-  it("seviye sekmesi değişince o seviyenin seçmelileri listelenir", async () => {
+  it("sınıf düzeyi sekmesi değişince o düzeyin seçmelileri listelenir", async () => {
     const user = userEvent.setup();
     calApi.electiveOptions.mockResolvedValue(makeElectiveOptions());
     okul.listClassSections.mockResolvedValue(SUBELER);
@@ -186,7 +186,7 @@ describe("SecmeliDersSecimDialog", () => {
     expect(screen.getByText(/ders pasif/)).toBeInTheDocument();
   });
 
-  it("şube seçilmemiş “Şube seç” satırı kaydetmeyi kapatır", async () => {
+  it("şube seçilmemiş “Seçili şubeler” satırı kaydetmeyi kapatır", async () => {
     const user = userEvent.setup();
     calApi.electiveOptions.mockResolvedValue(makeElectiveOptions());
     okul.listClassSections.mockResolvedValue(SUBELER);
@@ -200,7 +200,28 @@ describe("SecmeliDersSecimDialog", () => {
     );
 
     expect(screen.getByRole("button", { name: /Havuza ekle/ })).toBeDisabled();
-    expect(await screen.findByRole("alert")).toHaveTextContent(/Şube seçilmemiş ders var/);
+    const uyari = await screen.findByRole("alert");
+    expect(uyari).toHaveTextContent(/Şube seçilmemiş ders var/);
+    // Çıkış yolu sözlük adıyla söylenir ("Seviye geneli" artık kullanılmaz).
+    expect(uyari).toHaveTextContent("“Sınıf düzeyinin tamamı” seçeneğine dönün.");
+    expect(uyari).not.toHaveTextContent(/Seviye geneli/);
+  });
+
+  it("katılımcı seçenekleri ve sekme listesi sözlük sözcükleriyle adlandırılır", async () => {
+    const user = userEvent.setup();
+    calApi.electiveOptions.mockResolvedValue(makeElectiveOptions());
+    okul.listClassSections.mockResolvedValue(SUBELER);
+    okul.listClassSectionGroups.mockResolvedValue([kume()]);
+
+    renderDialog();
+    await user.click(await screen.findByRole("checkbox", { name: /Çağdaş Türk ve Dünya Tarihi/ }));
+
+    expect(screen.getByRole("tablist", { name: "Sınıf düzeyleri" })).toBeInTheDocument();
+    const toplu = screen.getByRole("combobox", { name: "Katılımcılar" });
+    expect(within(toplu).getByRole("option", { name: "Sınıf düzeyinin tamamı" })).toBeDefined();
+    expect(within(toplu).getByRole("option", { name: "Seçili şubeler" })).toBeDefined();
+    expect(screen.queryByRole("option", { name: "Seviye geneli" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Şube seç" })).not.toBeInTheDocument();
   });
 
   it("toplu kapsam kısayolu aktif seviyedeki seçili derslere uygulanır", async () => {
@@ -213,7 +234,7 @@ describe("SecmeliDersSecimDialog", () => {
     renderDialog();
     await user.click(await screen.findByRole("checkbox", { name: /Çağdaş Türk ve Dünya Tarihi/ }));
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Kapsam" }), "SECTIONS");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Katılımcılar" }), "SECTIONS");
     await user.click(await screen.findByRole("checkbox", { name: "Toplu: 9/A" }));
     await user.click(screen.getByRole("button", { name: /Seçili 1 derse uygula/ }));
 

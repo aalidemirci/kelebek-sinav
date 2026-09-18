@@ -22,7 +22,11 @@ import { okulApi } from "../okul/api";
 import type { ParticipantTypeCode } from "../oturumlar/api";
 import type { ExamCalendarEntryRow } from "./api";
 import { examCalendarApi } from "./api";
-import SubeSecici, { KAPSAM_SECENEKLERI } from "../okul/SubeKapsamSecici";
+import SubeSecici, {
+  KAPSAM_SECENEKLERI,
+  KATILIMCILAR_ETIKETI,
+  SINIF_DUZEYININ_TAMAMI,
+} from "../okul/SubeKapsamSecici";
 
 export default function KapsamDuzenleDialog({
   entry,
@@ -68,10 +72,11 @@ export default function KapsamDuzenleDialog({
         section_ids: ptype === "SECTIONS" ? sectionIds : [],
       }),
     onSuccess: () => {
-      snackbar.success("Katılımcı kapsamı güncellendi.");
+      snackbar.success("Katılımcılar güncellendi.");
       onSaved();
     },
-    onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Kapsam güncellenemedi."),
+    onError: (e) =>
+      snackbar.error(e instanceof ApiError ? e.message : "Katılımcılar güncellenemedi."),
   });
 
   const eksikSube = ptype === "SECTIONS" && sectionIds.length === 0;
@@ -98,12 +103,12 @@ export default function KapsamDuzenleDialog({
     >
       <div className="flex flex-col gap-3">
         <p className="text-body-medium text-on-surface-variant">
-          {entry.course_name} — {gradeLevelLabel(entry.level)}: sınav ya seviyenin tamamına ya da
-          seçilen şubelere yapılır.
+          {entry.course_name} — {gradeLevelLabel(entry.level)}: sınav ya sınıf düzeyinin tamamına ya
+          da seçilen şubelere yapılır.
         </p>
-        <div className="w-44">
+        <div className="w-56">
           <Select
-            label="Kapsam"
+            label={KATILIMCILAR_ETIKETI}
             aria-label={`${entry.course_name} katılımcı kapsamı`}
             options={KAPSAM_SECENEKLERI}
             value={ptype}
@@ -131,7 +136,7 @@ export default function KapsamDuzenleDialog({
         ) : null}
         {eksikSube ? (
           <p role="alert" className="text-body-medium text-error">
-            En az bir şube seçin ya da kapsamı “Seviye geneli” yapın.
+            {`En az bir şube seçin ya da “${SINIF_DUZEYININ_TAMAMI}” seçeneğine dönün.`}
           </p>
         ) : null}
       </div>

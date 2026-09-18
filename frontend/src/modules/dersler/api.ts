@@ -9,12 +9,15 @@ export type CourseSource = "MEB_CATALOG" | "MANUAL";
 /** Dersin sınav biçimi — backend `dersler.CourseExamMode` ile birebir. */
 export type CourseExamMode = "WRITTEN" | "PRACTICE" | "NONE";
 
+// `COMMON` kullanıcıya "Zorunlu" diye gösterilir: MEB dilinde "ortak sınav/ortak
+// yazılı" okul geneli sınav demektir; ders türüne de "Ortak" demek iki kavramı
+// karıştırıyordu (docs/sozluk.md, CLAUDE.md §2). Kod değeri değişmedi.
 export const COURSE_TYPE_TR: Record<CourseType, string> = {
-  COMMON: "Ortak",
+  COMMON: "Zorunlu",
   ELECTIVE: "Seçmeli",
 };
 
-// Takvim havuzunun "Zorunlu dersleri ekle" yolu YALNIZ ortak + YAZILI dersleri
+// Takvim havuzunun "Dersleri ekle" yolu YALNIZ zorunlu + YAZILI dersleri
 // çeker; uygulama sınavı yapılan (Beden/Görsel/Müzik) ya da hiç sınavı olmayan
 // (Rehberlik) ders idarecinin tek tek silmesi gereken satır olmaktan çıksın.
 export const COURSE_EXAM_MODE_TR: Record<CourseExamMode, string> = {

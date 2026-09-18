@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 
 import { ApiError } from "../../lib/api";
+import { formatDate } from "../../lib/format";
 import Button from "../../ui/Button";
 import DataTable from "../../ui/DataTable";
 import Dialog from "../../ui/Dialog";
@@ -18,7 +19,6 @@ import TextField from "../../ui/TextField";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import { examSessionApi } from "../oturumlar/api";
-import { formatDate } from "../oturumlar/oturumEtiket";
 import type { ExamCalendar, ExamCalendarStatusCode } from "./api";
 import { CALENDAR_STATUS_TR, examCalendarApi } from "./api";
 
@@ -68,10 +68,10 @@ export default function TakvimlerPage() {
 
   const handleGenerate = () => {
     void confirm({
-      title: "Ön tanımlı takvimleri üret",
+      title: "Ön tanımlı takvimler üretilsin mi?",
       message:
         "Aktif ders yılının dönemleri için mevzuat pencerelerine göre sınav takvimi " +
-        "taslakları üretilecek ve havuzları ders kataloğundan doldurulacak. " +
+        "taslakları üretilir ve havuzları ders havuzundan doldurulur. " +
         "Var olan takvimler atlanır.",
       confirmLabel: "Üret",
     }).then((ok) => ok && generateMutation.mutate());
@@ -82,7 +82,7 @@ export default function TakvimlerPage() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-end gap-3">
-        <h1 className="text-headline-medium text-on-surface">Sınav Takvimi</h1>
+        <h1 className="text-headline-medium text-on-surface">Sınav Takvimleri</h1>
         <span className="ml-auto" />
         <div className="w-56">
           <Select
@@ -117,7 +117,7 @@ export default function TakvimlerPage() {
           disabled={generateMutation.isPending}
           onClick={handleGenerate}
         >
-          Ön Tanımlı Takvimleri Üret
+          Ön tanımlı takvimleri üret
         </Button>
         <Button icon="add" onClick={() => setCreateOpen(true)}>
           Yeni takvim
@@ -126,6 +126,14 @@ export default function TakvimlerPage() {
 
       {calendarsQuery.isPending ? (
         <SkeletonList rows={5} />
+      ) : calendarsQuery.isError ? (
+        // Hata "henüz takvim yok" boş durumuyla karışmaz — mesaj gösterilir.
+        <p role="alert" className="text-body-medium text-error">
+          Takvim listesi yüklenemedi:{" "}
+          {calendarsQuery.error instanceof ApiError
+            ? calendarsQuery.error.message
+            : "beklenmeyen hata."}
+        </p>
       ) : calendars.length === 0 ? (
         <EmptyState
           icon="event_note"
@@ -133,7 +141,7 @@ export default function TakvimlerPage() {
           description="Ön tanımlı takvimleri üretin veya yeni takvim ekleyin."
           action={
             <Button icon="auto_awesome" onClick={handleGenerate}>
-              Ön Tanımlı Takvimleri Üret
+              Ön tanımlı takvimleri üret
             </Button>
           }
         />
@@ -206,7 +214,7 @@ function CreateDialog({
     <Dialog
       open
       onClose={onClose}
-      title="Yeni Sınav Takvimi"
+      title="Yeni sınav takvimi"
       actions={
         <>
           <Button variant="text" onClick={onClose}>
@@ -224,7 +232,7 @@ function CreateDialog({
       <div className="flex flex-col gap-4">
         <Select
           label="Dönem"
-          placeholder="Dönem seçin…"
+          placeholder="Seçin"
           options={semesterOptions}
           value={semester}
           onChange={(e) => setSemester(e.target.value)}

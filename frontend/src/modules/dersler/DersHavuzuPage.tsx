@@ -11,10 +11,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { ApiError } from "../../lib/api";
+import { gradeLevelLabel } from "../../lib/gradeLevels";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import Dialog from "../../ui/Dialog";
+import EmptyState from "../../ui/EmptyState";
 import Icon from "../../ui/Icon";
 import Select from "../../ui/Select";
 import { SkeletonList } from "../../ui/Skeleton";
@@ -22,6 +24,7 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import TextField from "../../ui/TextField";
 import { okulApi } from "../okul/api";
 import type { GradeLevelOption } from "../okul/api";
+import { SINIF_DUZEYININ_TAMAMI } from "../okul/SubeKapsamSecici";
 import { COURSE_EXAM_MODE_TR, COURSE_SOURCE_TR, COURSE_TYPE_TR, derslerApi } from "./api";
 import type { CatalogStatus, Course, CourseExamMode, CourseType, DuplicateCluster } from "./api";
 import DersSubeKapsamiDialog from "./DersSubeKapsamiDialog";
@@ -56,7 +59,7 @@ export default function DersHavuzuPage() {
     retry: false,
   });
 
-  /** course_id → seviye bazlı şube etiketleri ("9: A, B"). */
+  /** course_id → sınıf düzeyi bazlı şube etiketleri ("9: A, B"). */
   const kapsamOzetleri = useMemo(() => {
     const etiket = new Map((sectionCatalog.data ?? []).map((s) => [s.id, s.class_label] as const));
     const ozet = new Map<number, string[]>();
@@ -65,7 +68,8 @@ export default function DersHavuzuPage() {
         .map((id) => etiket.get(id))
         .filter((x): x is string => Boolean(x));
       if (adlar.length === 0) continue;
-      const parca = `${row.level === 0 ? "Hz" : row.level}: ${adlar
+      // "Hz" açıklanmamış kısaltmaydı (docs/sozluk.md §2) → "Hazırlık".
+      const parca = `${row.level === 0 ? "Hazırlık" : row.level}: ${adlar
         .map((a) => a.split("/")[1] ?? a)
         .join(", ")}`;
       ozet.set(row.course, [...(ozet.get(row.course) ?? []), parca]);
@@ -115,13 +119,13 @@ export default function DersHavuzuPage() {
     <div className="space-y-6">
       <div className="ks-page-header">
         <div>
-          <h1 className="ks-page-title">Ders havuzu</h1>
+          <h1 className="ks-page-title">Ders Havuzu</h1>
           <p className="ks-page-description">
             Sınav oturumları dersleri bu havuzdan seçer. Havuz, MEB haftalık ders çizelgesinden
-            (okul türünüze göre) kendiliğinden tohumlanır; listede olmayan dersi elle
-            ekleyebilirsiniz. Ders silinmez — pasifleştirilir. <strong>Sınav</strong> sütunu dersin
-            yazılı mı, uygulama mı olduğunu (ya da hiç sınavı olmadığını) söyler; takvim havuzuna
-            zorunlu dersler eklenirken yalnız <em>Yazılı</em> dersler çekilir.
+            (okul türünüze göre) kendiliğinden dolar; listede olmayan dersi elle ekleyebilirsiniz.
+            Ders silinmez — pasifleştirilir. <strong>Sınav</strong> sütunu dersin yazılı mı,
+            uygulama mı olduğunu (ya da hiç sınavı olmadığını) söyler; takvim havuzuna zorunlu
+            dersler eklenirken yalnız <em>Yazılı</em> dersler çekilir.
           </p>
         </div>
         <Button icon="add" onClick={() => setAdding(true)}>
@@ -144,14 +148,18 @@ export default function DersHavuzuPage() {
             placeholder="Ders adı…"
           />
           <Select
-            label="Seviye"
+            label="Sınıf düzeyi"
             value={level === null ? "" : String(level)}
             onChange={(event) =>
               setLevel(event.target.value === "" ? null : Number(event.target.value))
             }
             options={[
               { value: "", label: "Tümü" },
-              ...levels.map((item) => ({ value: String(item.value), label: item.label })),
+              // Değer biçimi tek kaynaktan: "9. Sınıf" / "Hazırlık" (docs/sozluk.md).
+              ...levels.map((item) => ({
+                value: String(item.value),
+                label: gradeLevelLabel(item.value),
+              })),
             ]}
           />
           <Select
@@ -181,21 +189,21 @@ export default function DersHavuzuPage() {
       {loading ? (
         <SkeletonList rows={6} />
       ) : rows.length === 0 ? (
-        <Card elevation={1} className="p-8 text-center">
-          <Icon name="menu_book" size="xl" className="mx-auto text-on-surface-variant" />
-          <p className="mt-3 text-title-medium text-on-surface">Havuzda ders yok</p>
-          <p className="mt-1 text-body-medium text-on-surface-variant">
-            Süzgeçleri genişletin ya da “Ders ekle” ile elle ekleyin. MEB çizelge verisi paketle
-            birlikte gelir; okul türünüz için veri yoksa havuz boş başlar.
-          </p>
-        </Card>
+        // Yükleme hatasında bant yukarıdadır; hata "havuzda ders yok" diye sunulmaz.
+        error ? null : (
+          <EmptyState
+            icon="menu_book"
+            title="Havuzda ders yok"
+            description="Süzgeçleri genişletin ya da “Ders ekle” ile elle ekleyin. MEB çizelge verisi programla birlikte gelir; okul türünüz için veri yoksa havuz boş başlar."
+          />
+        )
       ) : (
         <Card elevation={1} className="overflow-x-auto">
           <table className="w-full text-left text-body-medium">
             <thead>
               <tr className="border-b border-outline-variant text-label-medium text-on-surface-variant">
                 <th className="px-4 py-3">Ders</th>
-                <th className="px-4 py-3">Seviyeler</th>
+                <th className="px-4 py-3">Sınıf düzeyleri</th>
                 <th className="px-4 py-3">Tür</th>
                 <th className="px-4 py-3">Sınav</th>
                 <th className="px-4 py-3">Şubeler</th>
@@ -264,9 +272,9 @@ function ExamModeBadge({ course }: { course: Course }) {
 
 /**
  * "Şubeler" hücresi — kapsam YALNIZ seçmeli derste anlamlıdır: zorunlu ders
- * seviyenin tamamında okutulur ve takvim havuzuna seviye geneli girer.
+ * sınıf düzeyinin tamamında okutulur ve takvim havuzuna öyle girer.
  * Kapsamı girilmemiş YAZILI seçmeli, havuz doldurmada atlanacağı için ayrıca
- * uyarılır (sessiz düşme olmasın).
+ * uyarılır (sessiz düşme olmasın) — uyarı simgesi `Icon`'dur, ham "⚠" değil.
  */
 function SubeKapsamiHucresi({
   course,
@@ -278,8 +286,9 @@ function SubeKapsamiHucresi({
   onEdit: () => void;
 }) {
   if (course.course_type !== "ELECTIVE") {
-    return <span className="text-on-surface-variant">Seviye geneli</span>;
+    return <span className="text-on-surface-variant">{SINIF_DUZEYININ_TAMAMI}</span>;
   }
+  const uyarili = course.exam_mode === "WRITTEN";
   return (
     <button
       type="button"
@@ -291,14 +300,22 @@ function SubeKapsamiHucresi({
         <span className="text-on-surface">{ozet.join(" · ")}</span>
       ) : (
         <span
-          className="text-on-surface-variant"
+          className="inline-flex items-center gap-1 text-on-surface-variant"
           title={
-            course.exam_mode === "WRITTEN"
+            uyarili
               ? "Şubeleri girilmediği için sınav takvimi havuzuna kendiliğinden girmez."
-              : "Bu dersin yazılı sınavı yok; kapsam yalnız bilgi amaçlıdır."
+              : "Bu dersin yazılı sınavı yok; şube bilgisi yalnız bilgi amaçlıdır."
           }
         >
-          {course.exam_mode === "WRITTEN" ? "Girilmedi ⚠" : "Girilmedi"}
+          Girilmedi
+          {uyarili ? (
+            <Icon
+              name="warning"
+              size="sm"
+              className="text-error"
+              label="Uyarı: takvim havuzuna kendiliğinden girmez"
+            />
+          ) : null}
         </span>
       )}
     </button>
@@ -325,8 +342,8 @@ function CourseRow({
   const toggleActive = async () => {
     if (course.is_active) {
       const approved = await confirm({
-        title: "Dersi pasifleştir",
-        message: `'${course.name}' yeni sınav planlamalarında seçilemeyecek. Geçmiş kayıtlar etkilenmez.`,
+        title: "Ders pasifleştirilsin mi?",
+        message: `“${course.name}” yeni sınav planlamalarında seçilemez ve takvim havuzuna kendiliğinden eklenmez. Geçmiş kayıtlar etkilenmez; dersi istediğiniz an yeniden aktifleştirebilirsiniz.`,
         confirmLabel: "Pasifleştir",
       });
       if (!approved) return;
@@ -336,8 +353,8 @@ function CourseRow({
       await derslerApi.updateCourse(course.id, { is_active: !course.is_active });
       snackbar.success(
         course.is_active
-          ? `'${course.name}' pasifleştirildi.`
-          : `'${course.name}' aktifleştirildi.`,
+          ? `“${course.name}” pasifleştirildi.`
+          : `“${course.name}” aktifleştirildi.`,
       );
       onChanged();
     } catch (err) {
@@ -449,7 +466,7 @@ function CizelgePaneli({ status, onResynced }: { status: CatalogStatus; onResync
           </p>
           {tek ? (
             <p className="mt-1 text-body-medium text-on-surface-variant">
-              Tüm seviyeler:{" "}
+              Tüm sınıf düzeyleri:{" "}
               {tek.map((p) => (
                 <span key={p.key} className="text-on-surface">
                   {p.name}
@@ -511,17 +528,18 @@ function DuplicatesPanel({
     const duplicate = cluster.courses.find((c) => c.id !== cluster.suggested_canonical_id);
     if (!canonical || !duplicate) return;
     const approved = await confirm({
-      title: "Mükerrer dersi birleştir",
+      title: "Mükerrer ders birleştirilsin mi?",
       message:
-        `'${duplicate.name}' kaydı '${canonical.name}' dersine birleştirilecek; ` +
-        "tüm başvurular taşınır, kopya ad takma ad olarak öğrenilir. Bu işlem geri alınamaz.",
+        `“${duplicate.name}” kaydı “${canonical.name}” dersine birleştirilir; ` +
+        "bu dersi kullanan takvim ve oturum kayıtları asıl kayda taşınır, kopya ad takma ad " +
+        "olarak öğrenilir. Bu işlem geri alınamaz.",
       confirmLabel: "Birleştir",
     });
     if (!approved) return;
     setBusy(true);
     try {
       await derslerApi.mergeCourses(duplicate.id, canonical.id);
-      snackbar.success(`'${duplicate.name}' → '${canonical.name}' birleştirildi.`);
+      snackbar.success(`“${duplicate.name}”, “${canonical.name}” dersiyle birleştirildi.`);
       onMerged();
     } catch (err) {
       snackbar.error(err instanceof ApiError ? err.message : "Birleştirme yapılamadı.");
@@ -537,7 +555,7 @@ function DuplicatesPanel({
         Olası mükerrer dersler ({clusters.length})
       </p>
       <p className="mt-1 text-body-medium text-on-surface-variant">
-        İçe aktarma veya elle giriş aynı dersi iki kez açmış olabilir. Önerilen kanonik kayda
+        İçe aktarma veya elle giriş aynı dersi iki kez açmış olabilir. Önerilen asıl kayda
         birleştirebilirsiniz; ikiden fazla kayıt varsa en uygun ikilisi önerilir.
       </p>
       <ul className="mt-3 space-y-2">
@@ -603,7 +621,7 @@ function CourseDialog({
       return;
     }
     if (selected.length === 0) {
-      setError("En az bir seviye seçin.");
+      setError("En az bir sınıf düzeyi seçin.");
       return;
     }
     setBusy(true);
@@ -617,10 +635,10 @@ function CourseDialog({
     try {
       if (course) {
         await derslerApi.updateCourse(course.id, body);
-        snackbar.success(`'${body.name}' güncellendi.`);
+        snackbar.success(`“${body.name}” güncellendi.`);
       } else {
         await derslerApi.createCourse(body);
-        snackbar.success(`'${body.name}' havuza eklendi.`);
+        snackbar.success(`“${body.name}” havuza eklendi.`);
       }
       onSaved();
     } catch (err) {
@@ -661,7 +679,7 @@ function CourseDialog({
           placeholder="Örn. Astronomi ve Uzay Bilimleri"
         />
         <div>
-          <p className="text-label-medium text-on-surface-variant">Seviyeler</p>
+          <p className="text-label-medium text-on-surface-variant">Sınıf düzeyleri</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {levels.map((item) => {
               const active = selected.includes(item.value);
@@ -677,7 +695,7 @@ function CourseDialog({
                       : "border-outline-variant bg-surface-container-low text-on-surface"
                   }`}
                 >
-                  {item.label}
+                  {gradeLevelLabel(item.value)}
                 </button>
               );
             })}
@@ -691,7 +709,7 @@ function CourseDialog({
             { value: "COMMON", label: COURSE_TYPE_TR.COMMON },
             { value: "ELECTIVE", label: COURSE_TYPE_TR.ELECTIVE },
           ]}
-          helperText="Ortak dersler takvim havuzuna topluca eklenir; seçmeliler seviye seviye seçilir."
+          helperText="Zorunlu dersler takvim havuzuna topluca eklenir; seçmeliler sınıf düzeyi sekmelerinden seçilir."
         />
         <Select
           label="Sınav"

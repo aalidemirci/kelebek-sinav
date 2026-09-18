@@ -1,14 +1,20 @@
 // Sınav Takvimi — Havuz paneli (F6) — OYS TakvimHavuzPaneli'nden UYARLA.
-// Havuz iki yoldan dolar: "Dersleri ekle" (fill-pool ucu — ortak + YAZILI
+// Havuz iki yoldan dolar: "Dersleri ekle" (fill-pool ucu — zorunlu + YAZILI
 // dersler ve ŞUBESİ TANIMLI yazılı seçmeliler; uygulama sınavı ve sınavsız
-// dersler dışarıda) ve "Seçmeli ders seç" dialog'u (seviye seviye, katılımcı
-// kapsamıyla — kutular ders havuzundaki tanımdan ön dolar). Kaynak
-// hâlâ aktif ders kataloğu × öğrencisi olan seviyeler (KS sapması B6/B8:
-// program verisi yok). Elle ekleme formu kenar durumlar için kalır: kelebek
-// olmayan sınav, uygulama sınavı, üst makam sınavı. Katılımcı sayısı/kapsam
-// dipnotu önizleme; "Kapsam" hücresi taslakta DÜZENLEME yoludur
-// (KapsamDuzenleDialog — seçmeli dialog havuzdaki dersi kilitli gösterir). Yalnız taslakta düzenlenebilir; round 3 havuzunda otomatik
-// doldurma yoktur ama seçmeli seçimi çalışır (backend tekil ekleme yolu).
+// dersler dışarıda) ve "Seçmeli ders seç" dialog'u (sınıf düzeyi sekmeleriyle,
+// katılımcı kapsamıyla — kutular ders havuzundaki tanımdan ön dolar). Kaynak
+// hâlâ aktif ders kataloğu × öğrencisi olan sınıf düzeyleri (KS sapması B6/B8:
+// program verisi yok). Elle ekleme formu kenar durumlar için kalır: kendi
+// dersliğinde yapılan sınav, uygulama sınavı, üst makam sınavı. Öğrenci sayısı
+// önizlemedir; "Katılımcılar" hücresi taslakta DÜZENLEME yoludur
+// (KapsamDuzenleDialog — seçmeli dialog havuzdaki dersi kilitli gösterir).
+// Yalnız taslakta düzenlenebilir; round 3 havuzunda otomatik doldurma yoktur
+// ama seçmeli seçimi çalışır (backend tekil ekleme yolu).
+//
+// Sözlük (docs/sozluk.md): ders türü "zorunlu"dur ("ortak" yalnız MEB'in okul
+// geneli sınav anlamında); alan adları "Sınıf düzeyi", "Katılımcılar", "Düzen".
+// Düzen eskiden "Kelebek değil" onay kutusuydu (çift olumsuz: işaretli = kelebek
+// DEĞİL); seçim alanına çevrildi, gönderilen alan aynı kaldı (`is_butterfly`).
 
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -26,11 +32,20 @@ import { useConfirm } from "../../ui/ConfirmProvider";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import type { Course } from "../dersler/api";
 import { derslerApi } from "../dersler/api";
-import { PARTICIPANT_TYPE_TR } from "../oturumlar/api";
+import { KATILIMCILAR_ETIKETI, katilimciOzeti } from "../okul/SubeKapsamSecici";
 import type { ExamAuthorityCode, ExamCalendarEntryRow, ExamKindCode } from "./api";
 import { EXAM_AUTHORITY_TR, examCalendarApi } from "./api";
 import KapsamDuzenleDialog from "./KapsamDuzenleDialog";
 import SecmeliDersSecimDialog from "./SecmeliDersSecimDialog";
+
+/** "Düzen" seçimi — değerler docs/sozluk.md `LayoutMode` sözcükleridir. */
+const DUZEN_SECENEKLERI = [
+  { value: "BUTTERFLY", label: "Kelebek" },
+  { value: "HOME_CLASSROOM", label: "Kendi dersliğinde" },
+];
+
+const ROZET_SINIFI =
+  "ml-2 rounded-full bg-surface-container-high px-2 py-0.5 text-label-small text-on-surface-variant";
 
 export default function TakvimHavuzPaneli({
   calendarId,
@@ -102,9 +117,14 @@ export default function TakvimHavuzPaneli({
   });
 
   const removeMutation = useMutation({
-    mutationFn: (entryId: number) => examCalendarApi.removeEntry(entryId),
-    onSuccess: invalidate,
-    onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Kaldırılamadı."),
+    mutationFn: (entry: ExamCalendarEntryRow) => examCalendarApi.removeEntry(entry.id),
+    // Sessiz işlem bırakılmaz: satır kaybolur ama NE olduğu söylenmeliydi.
+    onSuccess: (_data, entry) => {
+      snackbar.success(`“${entry.course_name}” havuzdan kaldırıldı.`);
+      invalidate();
+    },
+    onError: (e) =>
+      snackbar.error(e instanceof ApiError ? e.message : "Ders havuzdan kaldırılamadı."),
   });
 
   // Var olan girdinin makamı satır içinde değişir (Bakanlık/MEM duyurusu
@@ -117,7 +137,7 @@ export default function TakvimHavuzPaneli({
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Makam değiştirilemedi."),
   });
 
-  // Zorunlu (ortak + YAZILI) dersleri ekle — idempotent (var olan atlanır);
+  // Zorunlu + YAZILI dersleri ekle — idempotent (var olan atlanır);
   // skipped sessiz düşmez, uyarıyla raporlanır.
   const fillMutation = useMutation({
     mutationFn: () => examCalendarApi.fillPool(calendarId),
@@ -141,11 +161,11 @@ export default function TakvimHavuzPaneli({
   const canFill = editable && round !== 3;
   const handleFill = () => {
     void confirm({
-      title: "Dersleri havuza ekle",
+      title: "Dersler havuza eklensin mi?",
       message:
-        "Ders havuzundaki ZORUNLU (ortak) ve sınavı YAZILI dersler, öğrencisi olan " +
-        "seviyeler bazında takvim havuzuna eklenecek; var olan girdiler atlanır. " +
-        "Şubeleri Ders Havuzu ekranında girilmiş SEÇMELİ dersler de kapsamlarıyla " +
+        "Ders havuzundaki ZORUNLU ve sınavı YAZILI dersler, öğrencisi olan her sınıf " +
+        "düzeyi için takvim havuzuna eklenir; var olan girdiler atlanır. " +
+        "Şubeleri Ders Havuzu ekranında girilmiş SEÇMELİ dersler de o şubelerle " +
         "birlikte eklenir — şubesi girilmemiş seçmeli atlanır ve raporlanır, " +
         "“Seçmeli ders seç” ile elle işaretleyebilirsiniz. Uygulama sınavı yapılan " +
         "ve sınavı olmayan dersler eklenmez. Hazırlayan makam varsayılanı Okul — " +
@@ -202,7 +222,7 @@ export default function TakvimHavuzPaneli({
           </div>
           <div className="w-36">
             <Select
-              label="Seviye"
+              label="Sınıf düzeyi"
               options={
                 gridQuery.data?.levels.map((l) => ({
                   value: String(l.value),
@@ -236,15 +256,14 @@ export default function TakvimHavuzPaneli({
               helperText="Bakanlık/MEM sınavı takvimde ayrı görünür."
             />
           </div>
-          <label className="flex min-h-9 items-center gap-2 text-body-medium text-on-surface">
-            <input
-              type="checkbox"
-              className="h-5 w-5 accent-primary"
-              checked={!butterfly}
-              onChange={(e) => setButterfly(!e.target.checked)}
+          <div className="w-48">
+            <Select
+              label="Düzen"
+              options={DUZEN_SECENEKLERI}
+              value={butterfly ? "BUTTERFLY" : "HOME_CLASSROOM"}
+              onChange={(e) => setButterfly(e.target.value === "BUTTERFLY")}
             />
-            Kelebek değil
-          </label>
+          </div>
           <Button
             icon="add"
             disabled={!course || addMutation.isPending}
@@ -271,7 +290,7 @@ export default function TakvimHavuzPaneli({
           title="Havuz boş"
           description={
             canFill
-              ? "Zorunlu dersleri ve şubesi tanımlı seçmelileri tek tıkla ekleyin; kalan seçmelileri seviye seviye seçin, kenar durumlar için yukarıdaki form kalır."
+              ? "Zorunlu dersleri ve şubesi tanımlı seçmelileri tek tıkla ekleyin; kalan seçmelileri “Seçmeli ders seç” ile işaretleyin. Özel durumlar için yukarıdaki form kalır."
               : editable
                 ? "Seçmeli dersleri seçin ya da yukarıdan elle ekleyin."
                 : "Bu takvime ders eklenmemiş."
@@ -297,36 +316,33 @@ export default function TakvimHavuzPaneli({
               cell: (e: ExamCalendarEntryRow) => (
                 <span>
                   {e.course_name}
-                  {e.exam_kind === "PRACTICE" ? " [Uygulama]" : ""}
-                  {!e.is_butterfly ? (
-                    <span className="ml-2 rounded-full bg-surface-container-high px-2 py-0.5 text-label-small text-on-surface-variant">
-                      Kelebek değil
-                    </span>
+                  {/* Tür ve düzen ders adına yapışık köşeli ek değil, rozettir;
+                      yazılı + kelebek olağan durumdur ve rozetsizdir. */}
+                  {e.exam_kind === "PRACTICE" ? (
+                    <span className={ROZET_SINIFI}>Uygulama</span>
                   ) : null}
+                  {!e.is_butterfly ? <span className={ROZET_SINIFI}>Kendi dersliğinde</span> : null}
                 </span>
               ),
             },
-            { header: "Seviye", cell: (e) => gradeLevelLabel(e.level) },
+            { header: "Sınıf düzeyi", cell: (e) => gradeLevelLabel(e.level) },
             {
-              // Kapsam sayısı katılımcı SAYISINDAN ayrı sütun: "3 şube" ile
+              // Katılımcı kapsamı öğrenci SAYISINDAN ayrı sütun: "3 şube" ile
               // "78 öğrenci" aynı hücrede okunamıyordu. Taslakta hücre aynı
               // zamanda DÜZELTME yoludur (31.08.2026 denetimi): seçmeli dialog
               // havuzdaki dersi kilitli gösterdiğinden yanlış şube seçimi
               // eskiden ancak girdiyi silip yeniden ekleyerek düzeliyordu.
-              header: "Kapsam",
+              header: KATILIMCILAR_ETIKETI,
               cell: (e: ExamCalendarEntryRow) => {
-                const etiket =
-                  e.participant_label ||
-                  (e.participant_type === "SECTIONS"
-                    ? `${e.section_ids.length} şube`
-                    : PARTICIPANT_TYPE_TR.LEVEL);
+                // Metin tipten ÜRETİLİR (backend etiketi "Seviye geneli" der).
+                const etiket = katilimciOzeti(e.participant_type, e.section_ids.length);
                 // Kapsamın KAYNAĞI ders havuzudur; buradaki değişiklik o
                 // takvime mahsus bir istisnadır ve rozetle görünür kalır
                 // (03.09.2026) — sessizce ayrışmasın.
                 const rozet = e.scope_differs_from_catalog ? (
                   <span
                     className="ml-1 rounded-shape-sm bg-tertiary-container px-1.5 py-0.5 text-label-small text-on-tertiary-container"
-                    title="Bu takvimde ders havuzundaki şube tanımından farklı bir kapsam seçilmiş."
+                    title="Bu takvimde ders havuzundaki şube tanımından farklı katılımcılar seçilmiş."
                   >
                     özel
                   </span>
@@ -384,7 +400,7 @@ export default function TakvimHavuzPaneli({
                 ),
             },
             {
-              header: "Katılımcı",
+              header: "Öğrenci sayısı",
               cell: (e) => {
                 const p = preview[String(e.id)];
                 if (!p) return "—";
@@ -414,7 +430,7 @@ export default function TakvimHavuzPaneli({
                         icon="delete"
                         aria-label={`${e.course_name} girdisini kaldır`}
                         disabled={e.placed_date !== null || removeMutation.isPending}
-                        onClick={() => removeMutation.mutate(e.id)}
+                        onClick={() => removeMutation.mutate(e)}
                       >
                         Kaldır
                       </Button>

@@ -7,6 +7,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "../../lib/api";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import { makeCalendar, paginated } from "./testFixtures";
@@ -78,8 +79,21 @@ describe("TakvimlerPage", () => {
     expect(within(satir2).getByText("Onaylandı")).toBeInTheDocument();
     expect(screen.getAllByText("26.10.2026 – 06.11.2026").length).toBe(2);
 
+    // Sayfa başlığı üst çubuktaki adla aynıdır (docs/sozluk.md §4).
+    expect(screen.getByRole("heading", { level: 1, name: "Sınav Takvimleri" })).toBeInTheDocument();
+
     await user.click(satir1);
     expect(await screen.findByText("TAKVİM DETAY")).toBeInTheDocument();
+  });
+
+  it("liste yüklenemezse hata “henüz takvim yok” diye sunulmaz", async () => {
+    calApi.list.mockRejectedValue(new ApiError(500, "server_error", "Veritabanı kilitli."));
+    renderPage();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Takvim listesi yüklenemedi: Veritabanı kilitli.",
+    );
+    expect(screen.queryByText("Henüz sınav takvimi yok")).not.toBeInTheDocument();
   });
 
   it("ön tanımlı üretim confirm'den geçer ve sonucu bildirir", async () => {
@@ -89,10 +103,12 @@ describe("TakvimlerPage", () => {
     renderPage();
 
     const butonlar = await screen.findAllByRole("button", {
-      name: "Ön Tanımlı Takvimleri Üret",
+      name: "Ön tanımlı takvimleri üret",
     });
     await user.click(butonlar[0]);
-    const dialog = await screen.findByRole("dialog", { name: "Ön tanımlı takvimleri üret" });
+    const dialog = await screen.findByRole("dialog", {
+      name: "Ön tanımlı takvimler üretilsin mi?",
+    });
     await user.click(within(dialog).getByRole("button", { name: "Üret" }));
 
     await waitFor(() => expect(calApi.generateDefaults).toHaveBeenCalledTimes(1));
@@ -106,7 +122,7 @@ describe("TakvimlerPage", () => {
     renderPage();
 
     await user.click(await screen.findByRole("button", { name: "Yeni takvim" }));
-    const dialog = await screen.findByRole("dialog", { name: "Yeni Sınav Takvimi" });
+    const dialog = await screen.findByRole("dialog", { name: "Yeni sınav takvimi" });
     await user.selectOptions(within(dialog).getByLabelText("Dönem"), "3");
     await user.selectOptions(within(dialog).getByLabelText("Sınav turu"), "3");
     await user.type(within(dialog).getByLabelText("Başlangıç tarihi"), "2027-01-02");

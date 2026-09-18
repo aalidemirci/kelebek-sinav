@@ -10,6 +10,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "../../lib/api";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import type { Course, CourseSectionOffering, CourseSectionOfferingRow } from "./api";
@@ -235,7 +236,8 @@ describe("DersHavuzuPage", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Havuza ders ekle" });
     await user.type(within(dialog).getByLabelText(/Ders adı/), "Görsel Sanatlar");
-    await user.click(within(dialog).getByRole("button", { name: "9" }));
+    // Sınıf düzeyi çipleri tek kaynaktan etiketlenir: "9. Sınıf" (docs/sozluk.md).
+    await user.click(within(dialog).getByRole("button", { name: "9. Sınıf" }));
     await user.selectOptions(within(dialog).getByRole("combobox", { name: "Sınav" }), "PRACTICE");
     await user.click(within(dialog).getByRole("button", { name: "Ekle" }));
 
@@ -248,7 +250,40 @@ describe("DersHavuzuPage", () => {
       }),
     );
   });
-  it("Şubeler sütunu: zorunlu derste 'Seviye geneli', seçmelide kapsam özeti", async () => {
+  it("ders türü “Zorunlu” diye adlandırılır — “Ortak” yalnız MEB'in sınav terimidir", async () => {
+    dersler.listCourses.mockResolvedValue([ders()]);
+
+    renderPage();
+
+    const tablo = within(await screen.findByRole("table"));
+    expect(tablo.getByText("Zorunlu")).toBeInTheDocument();
+    expect(tablo.queryByText("Ortak")).not.toBeInTheDocument();
+    const tur = screen.getByRole("combobox", { name: "Tür" });
+    expect(within(tur).getByRole("option", { name: "Zorunlu" })).toBeDefined();
+    // Süzgeç ve sütun "Sınıf düzeyi" der; değerler "9. Sınıf" biçimindedir.
+    const duzey = screen.getByRole("combobox", { name: "Sınıf düzeyi" });
+    expect(within(duzey).getByRole("option", { name: "9. Sınıf" })).toBeDefined();
+    expect(screen.getByRole("columnheader", { name: "Sınıf düzeyleri" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Ders Havuzu" })).toBeInTheDocument();
+  });
+
+  it("pasifleştirme başlığı soru olan onaydan geçer", async () => {
+    const user = userEvent.setup();
+    dersler.listCourses.mockResolvedValue([ders()]);
+    dersler.updateCourse.mockResolvedValue(ders({ is_active: false }));
+
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Coğrafya dersini pasifleştir" }));
+
+    const onay = await screen.findByRole("dialog", { name: "Ders pasifleştirilsin mi?" });
+    expect(within(onay).getByText(/yeni sınav planlamalarında seçilemez/)).toBeInTheDocument();
+    await user.click(within(onay).getByRole("button", { name: "Pasifleştir" }));
+
+    await waitFor(() => expect(dersler.updateCourse).toHaveBeenCalledWith(1, { is_active: false }));
+    expect(await screen.findByText("“Coğrafya” pasifleştirildi.")).toBeInTheDocument();
+  });
+
+  it("Şubeler sütunu: zorunlu derste “Sınıf düzeyinin tamamı”, seçmelide şube özeti", async () => {
     dersler.listCourses.mockResolvedValue([
       ders({ id: 1, name: "Matematik", course_type: "COMMON" }),
       ders({ id: 2, name: "Almanca", course_type: "ELECTIVE" }),
@@ -261,8 +296,9 @@ describe("DersHavuzuPage", () => {
     renderPage();
 
     expect(await screen.findByRole("columnheader", { name: "Şubeler" })).toBeInTheDocument();
-    // Zorunlu ders seviyenin tamamında okutulur; kapsam düğmesi çizilmez.
-    expect(screen.getByText("Seviye geneli")).toBeInTheDocument();
+    // Zorunlu ders sınıf düzeyinin tamamında okutulur; şube düğmesi çizilmez.
+    expect(screen.getByText("Sınıf düzeyinin tamamı")).toBeInTheDocument();
+    expect(screen.queryByText("Seviye geneli")).not.toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "Almanca dersinin şubelerini düzenle" }),
     ).toHaveTextContent("9: A, B");
@@ -277,9 +313,56 @@ describe("DersHavuzuPage", () => {
 
     renderPage();
 
+    const dugme = await screen.findByRole("button", {
+      name: "Almanca dersinin şubelerini düzenle",
+    });
+    expect(dugme).toHaveTextContent("Girilmedi");
+    // Uyarı simgesi Icon bileşenidir; metne ham "⚠" yazılmaz (docs/sozluk.md §3).
     expect(
+      within(dugme).getByRole("img", { name: /takvim havuzuna kendiliğinden girmez/ }),
+    ).toBeInTheDocument();
+    expect(dugme).not.toHaveTextContent("⚠");
+  });
+
+  it("sınavı yazılı olmayan seçmelide “Girilmedi” uyarısız görünür", async () => {
+    dersler.listCourses.mockResolvedValue([
+      ders({
+        id: 2,
+        name: "Müzik",
+        course_type: "ELECTIVE",
+        exam_mode: "PRACTICE",
+        exam_mode_label: "Uygulama",
+      }),
+    ]);
+    dersler.sectionOfferings.mockResolvedValue({ school_year: 1, results: [] });
+
+    renderPage();
+
+    const dugme = await screen.findByRole("button", { name: "Müzik dersinin şubelerini düzenle" });
+    expect(dugme).toHaveTextContent("Girilmedi");
+    expect(within(dugme).queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("kayıtlı şubeler okunamazsa kaydetme kapalıdır (boş seçim var olan tanımı silmesin)", async () => {
+    const user = userEvent.setup();
+    dersler.listCourses.mockResolvedValue([
+      ders({ id: 2, name: "Almanca", course_type: "ELECTIVE", levels: [9] }),
+    ]);
+    dersler.courseSections.mockRejectedValue(
+      new ApiError(400, "validation_error", "Aktif ders yılı yok."),
+    );
+
+    renderPage();
+    await user.click(
       await screen.findByRole("button", { name: "Almanca dersinin şubelerini düzenle" }),
-    ).toHaveTextContent("Girilmedi ⚠");
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "Almanca — şubeler" });
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "Şubeler yüklenemedi: Aktif ders yılı yok.",
+    );
+    expect(within(dialog).getByRole("button", { name: "Kaydet" })).toBeDisabled();
+    expect(dersler.setCourseSections).not.toHaveBeenCalled();
   });
 
   it("şube kapsamı diyaloğu seçimi seviye seviye kaydeder", async () => {

@@ -81,16 +81,17 @@ export default function DersSubeKapsamiDialog({
           .filter((o) => o.section_ids.length > 0),
       ),
     onSuccess: () => {
-      snackbar.success(`'${course.name}' şube kapsamı kaydedildi.`);
+      snackbar.success(`“${course.name}” dersinin şubeleri kaydedildi.`);
       // Takvim havuzu ve seçmeli seçim diyaloğu aynı kaynaktan besleniyor.
       void queryClient.invalidateQueries({ queryKey: ["course-section-offerings"] });
       onSaved();
     },
-    onError: (e) =>
-      snackbar.error(e instanceof ApiError ? e.message : "Şube kapsamı kaydedilemedi."),
+    onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Şubeler kaydedilemedi."),
   });
 
   const yukleniyor = kapsamQuery.isPending || sections.isPending;
+  // Aktif ders yılı yokken uç 400 döner; hata "şube yok" diye sunulmaz.
+  const yuklemeHatasi = kapsamQuery.error ?? sections.error;
 
   return (
     <Dialog
@@ -102,7 +103,13 @@ export default function DersSubeKapsamiDialog({
           <Button variant="text" onClick={onClose} disabled={kaydet.isPending}>
             Vazgeç
           </Button>
-          <Button icon="check" onClick={() => kaydet.mutate()} disabled={kaydet.isPending}>
+          {/* Kaydetme TAM DEĞİŞTİRMEDİR: kayıtlı şubeler okunamadan (yükleniyor/hata)
+              kaydetmek boş seçimi yazıp var olan tanımı silerdi — düğme kapalı kalır. */}
+          <Button
+            icon="check"
+            onClick={() => kaydet.mutate()}
+            disabled={kaydet.isPending || yukleniyor || yuklemeHatasi !== null}
+          >
             {kaydet.isPending ? "Kaydediliyor…" : "Kaydet"}
           </Button>
         </>
@@ -110,14 +117,20 @@ export default function DersSubeKapsamiDialog({
     >
       <p className="mb-3 text-body-small text-on-surface-variant">
         Bu seçmeli dersi hangi şubelerin aldığını işaretleyin. Sınav takvimi havuzu bu bilgiyi
-        kullanır: kapsamı girilmiş seçmeliler havuza kendiliğinden girer, takvimde tekrar şube
-        seçmezsiniz. Bir seviyeyi boş bırakırsanız o seviyede kapsam tanımsız kalır.
+        kullanır: şubeleri girilmiş seçmeliler havuza kendiliğinden girer, takvimde tekrar şube
+        seçmezsiniz. Bir sınıf düzeyini boş bırakırsanız o düzeyde şubeler tanımsız kalır.
       </p>
       {yukleniyor ? (
         <SkeletonList rows={3} />
+      ) : yuklemeHatasi ? (
+        <p role="alert" className="text-body-medium text-error">
+          Şubeler yüklenemedi:{" "}
+          {yuklemeHatasi instanceof ApiError ? yuklemeHatasi.message : "beklenmeyen hata."}
+        </p>
       ) : seviyeler.length === 0 ? (
         <p className="text-body-medium text-on-surface-variant">
-          Bu dersin seviyesi tanımlı değil — önce “Düzenle” ile okutulduğu sınıf düzeylerini girin.
+          Bu dersin sınıf düzeyi tanımlı değil — önce “Düzenle” ile okutulduğu sınıf düzeylerini
+          girin.
         </p>
       ) : (
         <div className="flex flex-col gap-4">
@@ -129,7 +142,7 @@ export default function DersSubeKapsamiDialog({
                 <p className="mb-1 text-label-large text-on-surface">
                   {gradeLevelLabel(level)}
                   <span className="ml-2 text-body-small text-on-surface-variant">
-                    {secili.length > 0 ? `${secili.length} şube` : "kapsam girilmedi"}
+                    {secili.length > 0 ? `${secili.length} şube` : "şube girilmedi"}
                   </span>
                 </p>
                 <SubeSecici
