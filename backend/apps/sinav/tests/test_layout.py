@@ -316,6 +316,17 @@ def test_mixed_desk_types_full_route() -> None:
     ]
 
 
+def test_sira_konumu_etiketi_bir_tabanli_ve_on_cepheyi_saymaz() -> None:
+    """Uyarı/ihlal metinlerindeki konum: krokideki sayımla AYNI (docs/sozluk.md)."""
+    assert layout.desk_position_label(1, 0) == "1. sıra, 1. sütun"
+    assert layout.desk_position_label(5, 3) == "5. sıra, 4. sütun"
+    # Ön cephe bandına elle konmuş sıra (eski planlar) numara almaz.
+    assert layout.desk_position_label(0, 2) == "ön cephe, 3. sütun"
+    # Varsayılan şablonun ilk sırası bandın hemen arkasındadır.
+    ilk = min(d.row for d in layout.validate_layout_plan(layout.default_section_plan()).desks)
+    assert ilk == layout.FRONT_BAND_ROWS
+
+
 def test_determinism_same_plan_same_route() -> None:
     desks = [_desk(r, c, DeskType.DOUBLE) for r in range(4) for c in range(3)]
     plan_dict = _plan(desks, [_teacher_desk(4, 0)], rows=5, cols=3)

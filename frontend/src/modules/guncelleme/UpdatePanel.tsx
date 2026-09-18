@@ -1,17 +1,24 @@
+// Ayarlar → Güncelleme. Metin kullanıcı dilindedir (docs/sozluk.md §1): sürüm
+// kaynağı "yayımlanan son sürüm", paket "kurulum dosyası"dır — "GitHub sürümü",
+// "Release", "kurucu" ve özet algoritmasının adı yüzeye çıkmaz.
+
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError } from "../../lib/api";
 import { saveBlob } from "../../lib/download";
+import { formatNumber } from "../../lib/format";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import Icon from "../../ui/Icon";
+import { SkeletonList } from "../../ui/Skeleton";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import { updateApi } from "./api";
 import type { UpdateStatus } from "./api";
 
+/** Dosya boyutu — Türkçe sayı biçimiyle (ondalık virgül): "41,5 MB". */
 function formatBytes(bytes: number): string {
   if (bytes <= 0) return "";
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${formatNumber(Math.round((bytes / (1024 * 1024)) * 10) / 10)} MB`;
 }
 
 export default function UpdatePanel() {
@@ -48,7 +55,7 @@ export default function UpdatePanel() {
     try {
       const blob = await updateApi.downloadInstaller();
       saveBlob(blob, status.installer_name || `kelebek-sinav-${status.latest_version}.exe`);
-      snackbar.success("Kurulum dosyası SHA-256 doğrulamasından geçerek indirildi.");
+      snackbar.success("Kurulum dosyası doğrulanarak indirildi.");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Güncelleme dosyası indirilemedi.");
     } finally {
@@ -63,8 +70,8 @@ export default function UpdatePanel() {
           <div>
             <p className="text-title-medium text-on-surface">Uygulama güncellemesi</p>
             <p className="mt-1 text-body-medium text-on-surface-variant">
-              GitHub'daki son kararlı sürüm denetlenir. Kurulum dosyası SHA-256 özeti doğrulanmadan
-              indirmeye sunulmaz.
+              Yayımlanan son sürüm denetlenir; programın internete çıkan tek isteği budur ve kişisel
+              veri taşımaz. Kurulum dosyası, bütünlüğü doğrulanmadan indirmeye sunulmaz.
             </p>
           </div>
           <Button
@@ -87,6 +94,9 @@ export default function UpdatePanel() {
           </div>
         )}
 
+        {/* İlk denetim sürerken kart boş kalmasın (diğer panellerle aynı kalıp). */}
+        {checking && !status && !error && <SkeletonList rows={2} className="mt-5" />}
+
         {status && (
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <div className="rounded-shape-md bg-surface-container p-4">
@@ -94,7 +104,7 @@ export default function UpdatePanel() {
               <p className="mt-1 text-title-large text-on-surface">{status.current_version}</p>
             </div>
             <div className="rounded-shape-md bg-surface-container p-4">
-              <p className="text-label-medium text-on-surface-variant">Son GitHub sürümü</p>
+              <p className="text-label-medium text-on-surface-variant">Yayımlanan son sürüm</p>
               <p className="mt-1 text-title-large text-on-surface">{status.latest_version}</p>
             </div>
           </div>
@@ -115,24 +125,36 @@ export default function UpdatePanel() {
                 Windows kurulum dosyası: {formatBytes(status.installer_size)}
               </p>
             )}
-            <p className="mt-2 text-body-small">
-              İndirme tamamlanınca programı kapatın ve indirilen kurulum dosyasını çalıştırın.
-              Kullanıcı veritabanı kurulum dizininin dışında tutulduğu için korunur.
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button
-                icon="download"
-                disabled={!status.can_download || downloading}
-                onClick={() => void download()}
-              >
-                {downloading ? "İndiriliyor…" : "Doğrula ve indir"}
-              </Button>
-              {!status.can_download && (
-                <span className="self-center text-label-small">
-                  Bu Release içinde Windows kurucusu bulunmuyor.
-                </span>
-              )}
-            </div>
+            {status.platform === "linux" ? (
+              // Pardus/Linux: uygulama içi indirme Windows kurulum dosyasını verirdi —
+              // burada çalışmaz. Güncelleme paketle yapılır (docs/kurulum.md §3).
+              <p className="mt-2 text-body-small">
+                Pardus ve Linux’ta güncelleme paketle yapılır: yeni sürümün <code>.deb</code> (ya da{" "}
+                <code>.tar.gz</code>) dosyasını indirme sayfasından alıp eski sürümün üzerine kurun.
+                Verileriniz kurulum klasörünün dışında tutulduğu için korunur.
+              </p>
+            ) : (
+              <>
+                <p className="mt-2 text-body-small">
+                  İndirme tamamlanınca programı kapatın ve indirilen kurulum dosyasını çalıştırın.
+                  Verileriniz kurulum klasörünün dışında tutulduğu için korunur.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    icon="download"
+                    disabled={!status.can_download || downloading}
+                    onClick={() => void download()}
+                  >
+                    {downloading ? "İndiriliyor…" : "Doğrula ve indir"}
+                  </Button>
+                  {!status.can_download && (
+                    <span className="self-center text-label-small">
+                      Bu sürümde Windows kurulum dosyası bulunmuyor.
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
       </Card>

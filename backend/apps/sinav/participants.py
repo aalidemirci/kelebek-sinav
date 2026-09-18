@@ -138,7 +138,7 @@ def _resolve_level(sc: ExamSessionCourse, resolution: CourseResolution) -> None:
     # OYS Tur 241: satır TEK seviyeli — `level` alanı servis katmanında zorunlu.
     if sc.level is None:
         resolution.warnings.append(
-            f"Oturum dersi (id={sc.pk}) seviyesiz — kaydı düzenleyip seviye seçin."
+            f"'{sc.course.name}' dersinin sınıf düzeyi eksik — dersi çıkarıp yeniden ekleyin."
         )
         return
     level = int(sc.level)
@@ -154,7 +154,9 @@ def _resolve_sections(sc: ExamSessionCourse, resolution: CourseResolution) -> No
     for section_id in sc.section_ids:
         section = okul_selectors.get_class_section(int(section_id))
         if section is None:
-            resolution.warnings.append(f"Şube bulunamadı (id={section_id}); atlandı.")
+            resolution.warnings.append(
+                "Katılımcı tanımındaki bir şube artık yok (silinmiş); o şube atlandı."
+            )
             continue
         students = _roster(section.class_level, section.class_section)
         if not students:

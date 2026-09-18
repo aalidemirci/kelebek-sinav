@@ -1,7 +1,14 @@
+// Elle şifreli yedek kartı (Güvenlik sekmesi). Metin kullanıcı dilindedir:
+// şifreleme algoritmalarının adı (teknik ayrıntı) burada geçmez — yalnız
+// Hakkında sayfası ve kurulum belgesi anar (docs/sozluk.md §1). Dosya adındaki
+// tarih YEREL tarihtir (`todayIso`): `toISOString()` UTC verir, gece yarısına
+// yakın alınan yedeğe bir önceki günün tarihini yazardı (CLAUDE.md §2).
+
 import { useState } from "react";
 
 import { api } from "../../lib/api";
 import { saveBlob } from "../../lib/download";
+import { todayIso } from "../../lib/format";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import Icon from "../../ui/Icon";
@@ -11,9 +18,9 @@ function hataMesaji(error: unknown): string {
   return error instanceof Error ? error.message : "Şifreli yedek oluşturulamadı.";
 }
 
+/** `kelebek-sinav-yedek-2026-09-18.ksbak` — ad sıralanınca tarih sırası çıkar. */
 function yedekDosyaAdi(): string {
-  const timestamp = new Date().toISOString().replace("T", "-").slice(0, 19).replace(/:/g, "");
-  return `kelebek-sinav-yedek-${timestamp}.ksbak`;
+  return `kelebek-sinav-yedek-${todayIso()}.ksbak`;
 }
 
 export default function SifreliYedekleme({ parolaKurulu }: { parolaKurulu: boolean }) {
@@ -40,14 +47,14 @@ export default function SifreliYedekleme({ parolaKurulu }: { parolaKurulu: boole
         <div className="min-w-0 flex-1">
           <h2 className="text-title-large text-on-surface">Şifreli veritabanı yedeği</h2>
           <p className="mt-2 text-body-medium text-on-surface-variant">
-            Veritabanının tutarlı bir görüntüsü cihazda X25519 ve AES-256-GCM ile şifrelenir,
-            ardından <span className="font-mono">.ksbak</span> dosyası olarak indirilir. Düz metin
-            yedek veya bulut bağlantısı oluşturulmaz.
+            Kayıtlarınızın tutarlı bir kopyası bu bilgisayarda hazırlanır ve güçlü şifrelemeyle
+            korunur, ardından <span className="font-mono">.ksbak</span> dosyası olarak indirilir.
+            Şifresiz kopya üretilmez; dosya hiçbir yere kendiliğinden gönderilmez.
           </p>
           <p className="mt-2 text-body-small text-on-surface-variant">
-            İndirdiğiniz dosyayı USB belleğe, NAS'a veya tercih ettiğiniz bulut klasörüne kendiniz
-            kopyalayın. Yedeği açmak için uygulama parolanızı ya da kurtarma anahtarınızı güvenli
-            biçimde saklayın.
+            İndirdiğiniz dosyayı USB belleğe, ağ diskine veya tercih ettiğiniz bulut klasörüne
+            kendiniz kopyalayın. Yedeği açmak için uygulama parolanız ya da kurtarma anahtarınız
+            gerekir; ikisini de güvenli biçimde saklayın.
           </p>
           {!parolaKurulu && (
             <p className="mt-3 rounded-shape-md bg-error-container p-3 text-body-small text-on-error-container">

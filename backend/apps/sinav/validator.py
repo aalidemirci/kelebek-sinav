@@ -36,6 +36,14 @@ class PlacedStudent:
     # aynı-şube komşuluğu metriği için. Varsayılanlı (geriye uyumlu — eski
     # çağıranlar/testler etiketsiz kurabilir; boş etiket metriğe girmez).
     section_label: str = ""
+    # İhlal metninin İDARECİ DİLİ (18.09.2026): salon adı, sıra konumu ("3. sıra,
+    # 1. sütun"), ders etiketi ve okul numarası. Doğrulayıcı saf kalır — etiketleri
+    # servis verir; hiçbiri denetime GİRMEZ (denetim kimlik ve koordinattandır).
+    # Etiketsiz kurulumda metinler eski ham biçimine düşer (motor testleri).
+    room_label: str = ""
+    desk_label: str = ""
+    group_label: str = ""
+    student_number: str = ""
 
 
 @dataclass
@@ -62,6 +70,18 @@ class SeatingReport:
     @property
     def is_valid(self) -> bool:
         return not self.hard_violations
+
+
+def _where(p: PlacedStudent) -> str:
+    """İhlalin yeri: "Salon 101, 3. sıra, 1. sütun" (etiketsizse ham koordinat)."""
+    room = p.room_label or f"salon {p.room_id}"
+    desk = p.desk_label or f"sıra ({p.desk_row},{p.desk_col})"
+    return f"{room}, {desk}"
+
+
+def _exam_text(p: PlacedStudent) -> str:
+    """İhlalin konusu: ders etiketi (etiketsizse ham çakışma grubu anahtarı)."""
+    return f"“{p.group_label}”" if p.group_label else f"'{p.conflict_group}' grubu"
 
 
 def _same_desk(a: PlacedStudent, b: PlacedStudent) -> bool:
@@ -98,12 +118,13 @@ def validate_seating(
         key = (p.room_id, p.desk_row, p.desk_col, p.slot)
         if key in seat_keys:
             report.hard_violations.append(
-                f"Koltuk çifte dolu: salon {p.room_id} sıra ({p.desk_row},{p.desk_col}) "
-                f"pozisyon {p.slot}."
+                f"Koltuk çifte dolu: {_where(p)}, {p.slot + 1}. koltuğa iki öğrenci yazılmış."
             )
         seat_keys[key] = p.student_id
         if p.student_id in student_seen:
-            report.hard_violations.append(f"Öğrenci iki koltukta: id={p.student_id}.")
+            # KVKK: ihlal metninde öğrenci ADI geçmez; okul numarası yeter.
+            who = f"okul no {p.student_number}" if p.student_number else f"id={p.student_id}"
+            report.hard_violations.append(f"Öğrenci iki koltukta: {who}.")
         student_seen.add(p.student_id)
         # Doluluk sayacı (K1) — her düzende dolar (klasik dahil).
         report.room_counts[p.room_id] = report.room_counts.get(p.room_id, 0) + 1
@@ -141,8 +162,8 @@ def validate_seating(
                     continue
                 if _same_desk(a, b):
                     report.hard_violations.append(
-                        f"Bitişik masa ihlali: '{group}' grubundan iki öğrenci aynı sırada "
-                        f"(salon {a.room_id}, sıra ({a.desk_row},{a.desk_col}))."
+                        f"Bitişik masa ihlali: {_exam_text(a)} sınavına giren iki öğrenci "
+                        f"aynı sırada oturuyor ({_where(a)})."
                     )
                     continue
                 dist = math.dist((a.x, a.y), (b.x, b.y))
@@ -151,10 +172,10 @@ def validate_seating(
                 if _first_ring(a, b):
                     report.first_ring_same_group_pairs += 1
                     if strict:
+                        other = b.desk_label or f"({b.desk_row},{b.desk_col})"
                         report.hard_violations.append(
-                            f"Katı mod ihlali: '{group}' grubundan iki öğrenci komşu sırada "
-                            f"(salon {a.room_id}, ({a.desk_row},{a.desk_col}) ↔ "
-                            f"({b.desk_row},{b.desk_col}))."
+                            f"Katı dağıtım ihlali: {_exam_text(a)} sınavına giren iki öğrenci "
+                            f"komşu sıralarda oturuyor ({_where(a)} ↔ {other})."
                         )
         if len(members) > 1 and math.isfinite(min_dist):
             report.min_same_group_distance[group] = round(min_dist, 4)

@@ -36,7 +36,7 @@ import math
 import random
 from dataclasses import dataclass, field
 
-from apps.sinav.layout import Seat
+from apps.sinav.layout import Seat, desk_position_label
 from apps.sinav.participants import Participant
 
 #: Yerel arama iterasyon bütçesi katsayısı (koltuk başına) ve tavanı.
@@ -67,11 +67,21 @@ class RoomSeats:
     y=satır). `layout.reference_cell` (satır, sütun) döndürür; çeviriyi
     çağıran yapar. Varsayılan (0.0, 0.0) mobilyasız planların bugünkü
     davranışını korur.
+
+    `label` salonun ADIDIR (servis verir): uyarı metinleri idareciye kimlikle
+    ("Salon 3") değil adla konuşur. Varsayılanı boştur — etiketsiz kuran eski
+    çağıranlar/testler değişmeden çalışır (`focus` ile aynı genişletme deseni).
     """
 
     room_id: int
     seats: tuple[Seat, ...]
     focus: tuple[float, float] = (0.0, 0.0)
+    label: str = ""
+
+
+def _room_text(room: RoomSeats) -> str:
+    """Uyarı metnindeki salon adı; etiketsiz çağrıda kimliğe düşer."""
+    return room.label or f"Salon {room.room_id}"
 
 
 @dataclass(frozen=True)
@@ -323,14 +333,17 @@ def _constructive_fill(
             chosen_idx = best_idx
             if math.isinf(best_penalty[0]):
                 warnings.append(
-                    f"Salon {room.room_id}: ({seat.desk_row},{seat.desk_col}) sırasında "
-                    f"sert kısıt kaçınılmaz oldu (kuyrukta uygun aday yok)."
+                    f"{_room_text(room)}, {desk_position_label(seat.desk_row, seat.desk_col)}: "
+                    "aynı sınava giren iki öğrencinin aynı sıraya oturması kaçınılmaz oldu "
+                    "(yerleştirilecek başka uygun öğrenci kalmadı)."
                 )
         student = queue.pop(chosen_idx)
         occupied.append((seat, student.conflict_group))
         placements.append(Placement(participant=student, room_id=room.room_id, seat=seat))
     if queue:
-        warnings.append(f"Salon {room.room_id}: {len(queue)} öğrenci koltuk bulamadı (kota aşımı).")
+        warnings.append(
+            f"{_room_text(room)}: {len(queue)} öğrenci koltuk bulamadı (salonun payı doldu)."
+        )
     return placements
 
 
@@ -443,7 +456,7 @@ def _checkerboard_seats(room: RoomSeats) -> RoomSeats:
         picked.append(seat)
     # focus TAŞINMALI — yeniden kurulan RoomSeats'te düşerse satranç modunda
     # odak sessizce (0,0)'a döner ve ikincil ceza yanlış ucu seçer.
-    return RoomSeats(room_id=room.room_id, seats=tuple(picked), focus=room.focus)
+    return RoomSeats(room_id=room.room_id, seats=tuple(picked), focus=room.focus, label=room.label)
 
 
 def distribute_butterfly(
@@ -564,7 +577,7 @@ def distribute_home_classroom(
         ordered = sorted(students, key=_number_key)
         if len(ordered) > len(room.seats):
             raise ValueError(
-                f"{label} dersliği ({room.room_id}) kapasitesi yetersiz: "
+                f"{label} dersliği ({_room_text(room)}) kapasitesi yetersiz: "
                 f"{len(ordered)} öğrenci / {len(room.seats)} koltuk."
             )
         for seat, student in zip(room.seats, ordered, strict=False):

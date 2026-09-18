@@ -1,7 +1,9 @@
 // Tur 108 — Stepper primitifi: render + durum işaretleri + aria-current. RTL + Vitest.
+// 18.09.2026: `onSelect` ile tamamlanmış adımlar tıklanabilir/klavyeyle seçilebilir.
 
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 
 import Stepper from "./Stepper";
 import type { StepperItem } from "./Stepper";
@@ -30,5 +32,39 @@ describe("Stepper", () => {
   it("atlanan adımda 'atlandı' notu gösterilir", () => {
     render(<Stepper items={ITEMS} />);
     expect(screen.getByText("atlandı")).toBeInTheDocument();
+  });
+
+  it("onSelect verilmezse ray salt görseldir — hiçbir adım düğme değildir", () => {
+    render(<Stepper items={ITEMS} />);
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("onSelect verilince YALNIZ tamamlanmış adım düğmedir; tıklanınca anahtar + sıra döner", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(<Stepper items={ITEMS} onSelect={onSelect} />);
+
+    // Atlanan, güncel ve gelecek adım tıklanamaz — tek düğme tamamlanmış adımdır.
+    const dugmeler = screen.getAllByRole("button");
+    expect(dugmeler).toHaveLength(1);
+    expect(dugmeler[0]).toHaveAccessibleName("Dilekçe adımına dön");
+    expect(screen.queryByRole("button", { name: /Rehberlik/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Müdür değ\./ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Kurul/ })).not.toBeInTheDocument();
+
+    await user.click(dugmeler[0]);
+    expect(onSelect).toHaveBeenCalledWith("a", 0);
+  });
+
+  it("tamamlanmış adım klavyeyle seçilir (Tab ile odak, Enter ile çalıştırma)", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(<Stepper items={ITEMS} onSelect={onSelect} />);
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Dilekçe adımına dön" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith("a", 0);
   });
 });

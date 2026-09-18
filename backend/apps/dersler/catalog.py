@@ -215,7 +215,12 @@ class LevelPlan:
         return tuple(seen)
 
 
-def level_label(level: int) -> str:
+def _level_phrase(level: int) -> str:
+    """Sınıf düzeyinin CÜMLE İÇİ yazımı ("12. sınıf zorunlu dersleri için…").
+
+    Etiket/değer yazımı ("12. Sınıf") `text.level_label`'dadır; bu yardımcı
+    yalnız uyarı cümlelerinde kullanılır.
+    """
     return "Hazırlık" if level == PREP_COURSE_LEVEL else f"{level}. sınıf"
 
 
@@ -284,9 +289,12 @@ def default_assignment(
                 pick = _newest_covering(has_level, level, year, course_type)
                 if pick is None:
                     pick = max(has_level, key=lambda p: (p.start_year or -1, p.key))
-                    tur = "ortak" if course_type == CourseType.COMMON else "seçmeli"
+                    # Kullanıcı metninde ders türü "zorunlu"dur (docs/sozluk.md): "ortak"
+                    # yalnız MEB'in okul geneli sınavı için kullanılır. TTK çizelgesinin
+                    # "Ortak Dersler" başlığı bu türün resmî adıdır, ekranda geçmez.
+                    tur = "zorunlu" if course_type == CourseType.COMMON else "seçmeli"
                     warnings.append(
-                        f"{level_label(level)} {tur} dersleri için {year}-{year + 1} yılında "
+                        f"{_level_phrase(level)} {tur} dersleri için {year}-{year + 1} yılında "
                         f"yürürlükteki önceki çizelge bu sürümde yok; '{pick.name}' kullanıldı."
                     )
                 if pick.key not in bucket:
@@ -326,7 +334,9 @@ def apply_overrides(
             if str(key) in programs:
                 keys.append(str(key))
             else:
-                warnings.append(f"{level_label(level)}: '{key}' adlı çizelge programı bulunamadı.")
+                warnings.append(
+                    f"{_level_phrase(level)}: '{key}' adlı çizelge programı bulunamadı."
+                )
         result[level] = LevelPlan(
             level=level,
             common_from=tuple(keys),

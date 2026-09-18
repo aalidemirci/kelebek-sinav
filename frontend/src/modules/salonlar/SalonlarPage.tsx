@@ -10,6 +10,7 @@ import { ApiError } from "../../lib/api";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import Dialog from "../../ui/Dialog";
+import EmptyState from "../../ui/EmptyState";
 import Icon from "../../ui/Icon";
 import { SkeletonList } from "../../ui/Skeleton";
 import TextField from "../../ui/TextField";
@@ -102,9 +103,10 @@ export default function SalonlarPage() {
 
   const handleGenerateSectionRooms = () => {
     void confirm({
-      title: "Şube dersliklerini oluştur",
+      // Başlık soru, gövde sonuç (docs/sozluk.md §3).
+      title: "Şube derslikleri oluşturulsun mu?",
       message:
-        "Her aktif şube için varsayılan derslik planı üretilecek: 4 sütun × 5 sıra ikili (40 koltuk), öğretmen masası ön-sol, numaralar masanın önünden başlar. Farklı olan salonları sonradan editörden değiştirebilirsiniz; zaten tanımlı salonlar atlanır.",
+        "Her şube için varsayılan planla bir şube dersliği (salon) oluşturulur: 4 sütun × 5 sıra ikili (40 koltuk), öğretmen masası ön-sol, numaralar masanın önünden başlar. Farklı olan salonları sonradan editörden değiştirebilirsiniz; zaten tanımlı salonlar atlanır.",
       confirmLabel: "Oluştur",
     }).then((ok) => {
       if (ok) generateSectionRooms.mutate();
@@ -137,7 +139,7 @@ export default function SalonlarPage() {
             <h1 className="text-headline-medium text-on-surface">Sınav Salonları</h1>
             <span className="ml-auto" />
             <Button variant="text" icon="category" onClick={() => setGroupsOpen(true)}>
-              Derslik Kümeleri
+              Salon kümeleri
             </Button>
             <Button variant="text" icon="grid_view" onClick={() => setSablonOpen(true)}>
               Şablonu topluca uygula
@@ -155,9 +157,10 @@ export default function SalonlarPage() {
             </Button>
           </div>
           <p className="mb-4 text-body-medium text-on-surface-variant">
-            Salon planları kroki (R1) ve kelebek dağıtımının temelidir. Bir salonu şubeye bağlamak
-            klasik (kendi dersliğinde) düzeni mümkün kılar. Salon sayısı kalabalıksa (ikili eğitim)
-            "Kümeler" ile Sabah/Öğle gibi kümeler tanımlayın — sihirbazda tek tıkla seçilirler.
+            Salon planları, salon sınav evrakındaki krokinin ve kelebek dağıtımının temelidir. Bir
+            salonu şubeye bağlamak “Kendi dersliğinde” düzenini mümkün kılar. Salon sayısı çoksa
+            (ikili eğitim) “Salon kümeleri” ile Sabah/Öğle gibi kümeler tanımlayın; sihirbazda tek
+            tıkla seçilirler.
           </p>
 
           {rooms.isPending && <SkeletonList rows={4} />}
@@ -170,11 +173,20 @@ export default function SalonlarPage() {
             </Card>
           )}
           {rooms.isSuccess && list.length === 0 && (
-            <Card elevation={1} className="p-6">
-              <p className="text-body-medium text-on-surface-variant">
-                Henüz salon tanımlı değil. &quot;Yeni salon&quot; ile başlayın.
-              </p>
-            </Card>
+            <EmptyState
+              icon="meeting_room"
+              title="Henüz salon tanımlı değil"
+              description="Her şube için bir şube dersliğini tek seferde oluşturabilir, laboratuvar ya da konferans salonu gibi diğer salonları “Yeni salon” ile ekleyebilirsiniz."
+              action={
+                <Button
+                  icon="domain_add"
+                  disabled={generateSectionRooms.isPending}
+                  onClick={handleGenerateSectionRooms}
+                >
+                  Şube dersliklerini oluştur
+                </Button>
+              }
+            />
           )}
 
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

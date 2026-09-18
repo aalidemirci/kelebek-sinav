@@ -6,7 +6,7 @@ from typing import Any
 
 from rest_framework import serializers
 
-from apps.sinav import services, services_calendar
+from apps.sinav import selectors, services, services_calendar
 from apps.sinav.models import (
     BookletRun,
     ExamAttendanceRecord,
@@ -463,7 +463,13 @@ class QuestionDocumentSerializer(serializers.ModelSerializer[QuestionDocument]):
 
 
 class BookletRunSerializer(serializers.ModelSerializer[BookletRun]):
-    """Kitapçık koşusu durumu (manifest PII içermez)."""
+    """Kitapçık koşusu durumu (manifest PII içermez).
+
+    `is_stale`: üretimden sonra yerleşim değişti (yeniden dağıtım, taslağa alma,
+    koltuk takası) — ZIP eski salon/koltuklara göredir, yeniden üretilmelidir.
+    """
+
+    is_stale = serializers.SerializerMethodField()
 
     class Meta:
         model = BookletRun
@@ -475,8 +481,17 @@ class BookletRunSerializer(serializers.ModelSerializer[BookletRun]):
             "error_message",
             "created_at",
             "completed_at",
+            "is_stale",
         )
         read_only_fields = fields
+
+    def get_is_stale(self, obj: BookletRun) -> bool:
+        # Liste yolunda koşuların hepsi aynı oturumdandır: yerleşim anı oturum
+        # başına BİR kez sorulur (context kök serializer'da paylaşılır).
+        cache: dict[int, Any] = self.context.setdefault("_seating_changed_at", {})
+        if obj.session_id not in cache:
+            cache[obj.session_id] = selectors.seating_changed_at(obj.session_id)
+        return selectors.booklet_run_is_stale(obj, cache[obj.session_id])
 
 
 # --------------------------------------------------------------------------- #
@@ -546,6 +561,9 @@ class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]
 
     course_name = serializers.CharField(source="course.name", read_only=True)
     participant_label = serializers.SerializerMethodField()
+    # Yalnız CANLI oturum bağı görünür (A4): soft-silinmiş oturumun kimliği
+    # arayüzde "oturumlu" rozeti basıp girdiyi kilitli gösteriyordu.
+    session = serializers.SerializerMethodField()
     # Kapsam ders havuzundaki tanımdan farklıysa arayüz rozet basar (03.09.2026):
     # kaynak katalog, girdi ise kopyadır — fark bilinçli olmalı, sessiz kalmamalı.
     scope_differs_from_catalog = serializers.SerializerMethodField()
@@ -592,6 +610,13 @@ class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]
     def get_participant_label(self, obj: ExamCalendarEntry) -> str:
         return services_calendar.participant_scope_label(obj.participant_type, obj.section_ids)
 
+    def get_session(self, obj: ExamCalendarEntry) -> int | None:
+        # Liste yolunda canlı oturum kümesi context'ten gelir (tek sorgu).
+        live_ids = self.context.get("live_session_ids")
+        if live_ids is not None:
+            return obj.session_id if obj.session_id in live_ids else None
+        return obj.session_id if services_calendar.has_live_session(obj) else None
+
     def get_scope_differs_from_catalog(self, obj: ExamCalendarEntry) -> bool:
         # Liste yolunda küme context'ten gelir (tek sorgu); tekil yanıtlarda
         # (PATCH/place) girdi başına hesaplanır — bir satır için ucuz.
@@ -602,6 +627,13 @@ class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]
 
 
 class ExamTrackItemSerializer(serializers.ModelSerializer[ExamTrackItem]):
+    # DRF tek alanlı UniqueConstraint'ten ALAN düzeyinde UniqueValidator türetir;
+    # `Meta.validators = []` onu SİLMEZ (okul.SubjectDepartmentSerializer tuzağı).
+    # Validator kalınca servisin "Bu adla canlı bir kalem zaten var." reddi hiç
+    # çalışmıyor, arayüz snackbar'ında yalnız genel cümle görünüyordu. Alan elle
+    # tanımlanır; teklik ve boş ad denetimi servistedir.
+    name = serializers.CharField(max_length=160, validators=[])
+
     class Meta:
         model = ExamTrackItem
         fields = ("id", "name", "description", "order", "is_active")

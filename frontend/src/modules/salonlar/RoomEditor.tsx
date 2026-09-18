@@ -9,7 +9,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { ApiError } from "../../lib/api";
-import { saveBlob } from "../../lib/download";
+import { dosyaAdi, saveBlob } from "../../lib/download";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import Icon from "../../ui/Icon";
@@ -29,6 +29,7 @@ import {
   capacityOf,
   cellContent,
   deskRowCount,
+  deskRowNumber,
   resizeDeskArea,
 } from "./planEdit";
 
@@ -101,8 +102,10 @@ const PALETTE: PaletteItem[] = [
 /** Hücrenin ekran okuyucu etiketi — konum + içerik. */
 function cellLabel(plan: LayoutPlan, row: number, col: number): string {
   const { desk, furniture } = cellContent(plan, row, col);
-  // Ön cephe bandı (satır 0) ayrı adlandırılır; öğrenci sıraları 1'den sayılır.
-  const pos = row === 0 ? `Ön cephe, sütun ${col + 1}` : `Sıra ${row}, sütun ${col + 1}`;
+  // Ön cephe bandı ayrı adlandırılır; öğrenci sıraları 1'den sayılır. Sayım
+  // planEdit.deskRowNumber'dadır — kural ekranındaki koltuk konumuyla AYNI kaynak.
+  const sira = deskRowNumber(row);
+  const pos = sira === 0 ? `Ön cephe, sütun ${col + 1}` : `Sıra ${sira}, sütun ${col + 1}`;
   if (desk) {
     return `${pos} — ${DESK_LABELS[desk.type]}${desk.disabled ? " (kullanım dışı)" : ""}`;
   }
@@ -253,7 +256,8 @@ export default function RoomEditor({ room, sectionOptions, onSaved, onBack }: Ro
           onClick={() =>
             void examRoomApi
               .layoutPdfBlob(room.id)
-              .then((b) => saveBlob(b, `salon_yerlesim_plani_${room.id}.pdf`))
+              // Dosya adı salonun ADINI taşır (kimliğini değil) — docs/sozluk.md §3.
+              .then((b) => saveBlob(b, dosyaAdi(["Salon Yerleşim Planı", room.name], "pdf")))
               .catch(() => snackbar.error("Yerleşim planı indirilemedi."))
           }
         >
@@ -325,14 +329,16 @@ export default function RoomEditor({ room, sectionOptions, onSaved, onBack }: Ro
               ]}
               value={scheme}
               onChange={(e) => setScheme(e.target.value as NumberingSchemeCode)}
+              // Kural backend'dedir (layout.py 5. kural); burada yalnız anlatılır.
+              helperText="Numaralar sütun sütun ilerler. S düzeni: her sütunda yön değişir, numaralar kesintisiz bir yol izler. Düz: her sütun aynı yönde numaralanır. Sonucu “Koltuk numarası önizlemesi” ile görürsünüz."
             />
             <Select
-              label="Bağlı şube (derslik eşlemesi)"
+              label="Bağlı şube (şube dersliği)"
               options={sectionOptions}
-              placeholder="— Eşleme yok —"
+              placeholder="— yok —"
               value={linkedSectionId}
               onChange={(e) => setLinkedSectionId(e.target.value)}
-              helperText="Klasik (kendi dersliğinde) düzenin temelidir."
+              helperText="“Kendi dersliğinde” düzeninde bu şubenin öğrencileri bu salonda oturur."
             />
             <label className="flex min-h-9 cursor-pointer items-center gap-3 text-body-medium text-on-surface">
               <input
@@ -349,6 +355,8 @@ export default function RoomEditor({ room, sectionOptions, onSaved, onBack }: Ro
         {/* Sağ panel: grid + boyut + önizleme anahtarı */}
         <Card elevation={1} className="p-4">
           <div className="mb-3 flex flex-wrap items-end gap-3">
+            {/* İki alanın yardımcı metni aynıydı ("Öğrenci sırası") — hangisinin
+                derinlik, hangisinin genişlik olduğu anlaşılmıyordu. */}
             <TextField
               label="Sıra satırı"
               type="number"
@@ -356,8 +364,8 @@ export default function RoomEditor({ room, sectionOptions, onSaved, onBack }: Ro
               max={29}
               value={deskRowCount(plan)}
               onChange={(e) => handleResize(Number(e.target.value), plan.grid.cols)}
-              className="w-28"
-              helperText="Öğrenci sırası"
+              className="w-36"
+              helperText="Önden arkaya kaç sıra"
             />
             <TextField
               label="Sıra sütunu"
@@ -366,8 +374,8 @@ export default function RoomEditor({ room, sectionOptions, onSaved, onBack }: Ro
               max={30}
               value={plan.grid.cols}
               onChange={(e) => handleResize(deskRowCount(plan), Number(e.target.value))}
-              className="w-28"
-              helperText="Öğrenci sırası"
+              className="w-36"
+              helperText="Yan yana kaç sıra"
             />
             <Button
               variant="text"
@@ -398,7 +406,7 @@ export default function RoomEditor({ room, sectionOptions, onSaved, onBack }: Ro
           <p className="mb-2 text-body-small text-on-surface-variant">
             En üstteki şerit salonun <strong>ön cephesidir</strong> — öğretmen masası, tahta ve kapı
             oraya konur ve <strong>satır sayımına girmez</strong>. Numaralar öğretmen masasına en
-            yakın sıradan başlar; çizim kroki (R1) ile birebirdir.{" "}
+            yakın sıradan başlar; çizim, salon sınav evrakındaki krokiyle birebirdir.{" "}
             <strong>Varsayılan şablon</strong> masayı ön-sola koyar ve ızgarayı ikili sıralarla
             doldurur — mevcut planın yerine geçer.
           </p>

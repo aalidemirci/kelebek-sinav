@@ -34,7 +34,10 @@ kapi() {
   local etiket="$1" nobetci="$2" servis="$3" komut="$4"
   shift 4
   echo "== $etiket =="
-  docker compose run --rm "$@" "$servis" sh -c "$komut && echo KAPI_OK_$nobetci" | tee "$KAPI_LOG"
+  # `-T`: sözde-TTY ayrılmaz. Çıktı zaten tee'ye akıyor; TTY'siz ortamda (CI
+  # koşucusu, .github/workflows/kapilar.yml) `run` "input device is not a TTY"
+  # ile düşmesin. Yerelde davranış değişmez.
+  docker compose run --rm -T "$@" "$servis" sh -c "$komut && echo KAPI_OK_$nobetci" | tee "$KAPI_LOG"
   if ! grep -q "KAPI_OK_$nobetci" "$KAPI_LOG"; then
     echo "HATA: '$etiket' nöbetçi kanıtı üretmedi (çıkış kodu yutulmuş olabilir)" >&2
     exit 1
@@ -84,13 +87,31 @@ echo "== frontend: vitest =="
 # yargısını taşır (nöbetçi, vitest konteyner içinde yanlışlıkla 0 dönerse de
 # basılırdı; rapor bu durumu da yakalar). npm sarmalayıcısı zincirden çıkarıldı.
 # Rapor yoksa ya da success:true değilse kapı kırmızıdır (fail-closed).
+#
+# Kapsam eşiği (19.09.2026): eşikler `frontend/vitest.config.ts`te yaşar; vitest
+# eşik altında "does not meet" basıp 1 döner. JSON raporunun `success` alanı
+# yalnız TESTLERİ söyler, eşiği söylemez — bu yüzden kapsam için de iki yönlü
+# kanıt aranır: özet satırı ÜRETİLMİŞ olmalı (kapsam gerçekten ölçüldü) ve eşik
+# ihlali satırı OLMAMALI. Yalnız `text-summary` basılır: html/lcov dosyaları
+# kapı koşusunda çalışma ağacına yazılmaz. Çıkış kodu burada `|| true` ile
+# BİLEREK yutulur: hüküm aşağıdaki üç kanıttan verilir (hangisinin düştüğü
+# Türkçe söylensin diye), çıkış kodu zaten bu makinede güvenilir değil.
 rm -f frontend/vitest-sonuc.json
-docker compose run --rm frontend npx vitest run \
-  --reporter=default --reporter=json --outputFile=vitest-sonuc.json
+docker compose run --rm -T frontend npx vitest run \
+  --coverage --coverage.reporter=text-summary \
+  --reporter=default --reporter=json --outputFile=vitest-sonuc.json 2>&1 | tee "$KAPI_LOG" || true
 if ! grep -Eq '"success": ?true' frontend/vitest-sonuc.json; then
   echo "HATA: frontend test raporu başarı doğrulamadı (çıkış kodu yutulmuş olabilir)" >&2
   exit 1
 fi
 rm -f frontend/vitest-sonuc.json
+if ! grep -Eq '^Lines +: +[0-9.]+%' "$KAPI_LOG"; then
+  echo "HATA: frontend kapsam özeti üretilmedi (kapsam ölçülmeden geçilmez)" >&2
+  exit 1
+fi
+if grep -q "does not meet" "$KAPI_LOG"; then
+  echo "HATA: frontend kapsamı eşiğin altında (eşikler: frontend/vitest.config.ts)" >&2
+  exit 1
+fi
 
 echo "== Tüm kapılar yeşil =="

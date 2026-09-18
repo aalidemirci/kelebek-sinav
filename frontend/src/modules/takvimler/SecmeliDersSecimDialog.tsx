@@ -24,7 +24,11 @@ import { okulApi } from "../okul/api";
 import type { ParticipantTypeCode } from "../oturumlar/api";
 import type { BulkEntryItem } from "./api";
 import { examCalendarApi } from "./api";
-import SubeSecici, { KAPSAM_SECENEKLERI } from "../okul/SubeKapsamSecici";
+import SubeSecici, {
+  KAPSAM_SECENEKLERI,
+  KATILIMCILAR_ETIKETI,
+  SINIF_DUZEYININ_TAMAMI,
+} from "../okul/SubeKapsamSecici";
 
 /** Bir dersin seçimdeki kapsamı — anahtar `"<seviye>:<ders id>"`. */
 interface Kapsam {
@@ -238,8 +242,9 @@ export default function SecmeliDersSecimDialog({
     >
       <div className="flex flex-col gap-3">
         <p className="text-body-medium text-on-surface-variant">
-          Seçmeli dersler seviye seviye seçilir. Bir dersi işaretleyince katılımcı kapsamını da
-          belirleyebilirsiniz: seviyenin tamamı, bir şube kümesi ya da tek tek şubeler.
+          Seçmeli dersler sınıf düzeyi sekmelerinden seçilir. Bir dersi işaretleyince
+          katılımcılarını da belirleyebilirsiniz: sınıf düzeyinin tamamı, bir şube kümesi ya da tek
+          tek şubeler.
         </p>
 
         {optionsQuery.isPending ? (
@@ -254,7 +259,7 @@ export default function SecmeliDersSecimDialog({
         ) : levels.length === 0 ? (
           <p className="text-body-medium text-on-surface-variant">
             Seçilebilecek seçmeli ders yok. Ders havuzunda seçmeli derslerin “Sınav” alanı{" "}
-            <strong>Yazılı</strong> olmalı ve o seviyede öğrenci bulunmalı.
+            <strong>Yazılı</strong> olmalı ve o sınıf düzeyinde öğrenci bulunmalı.
           </p>
         ) : (
           <>
@@ -266,7 +271,7 @@ export default function SecmeliDersSecimDialog({
                 // Toplu panel seviyeye ait — sekme değişince şube seçimi sıfırlanır.
                 setTopluSections([]);
               }}
-              ariaLabel="Seviyeler"
+              ariaLabel="Sınıf düzeyleri"
               idBase="secmeli-seviye"
             />
             <div {...tabPanelProps("secmeli-seviye", activeLevel)} className="flex flex-col gap-3">
@@ -357,8 +362,8 @@ export default function SecmeliDersSecimDialog({
 
         {eksikDersAdlari.length > 0 ? (
           <p role="alert" className="text-body-medium text-error">
-            Şube seçilmemiş ders var: {eksikDersAdlari.join(", ")}. En az bir şube seçin ya da
-            kapsamı “Seviye geneli” yapın.
+            Şube seçilmemiş ders var: {eksikDersAdlari.join(", ")}.{" "}
+            {`En az bir şube seçin ya da “${SINIF_DUZEYININ_TAMAMI}” seçeneğine dönün.`}
           </p>
         ) : null}
       </div>
@@ -393,12 +398,12 @@ function TopluKapsamPaneli({
   return (
     <fieldset className="rounded-shape-md bg-surface-container p-3">
       <legend className="px-1 text-label-large text-on-surface-variant">
-        Seçili derslere topluca kapsam uygula
+        Seçili derslerin katılımcılarını topluca belirle
       </legend>
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-44">
           <Select
-            label="Kapsam"
+            label={KATILIMCILAR_ETIKETI}
             options={KAPSAM_SECENEKLERI}
             value={ptype}
             onChange={(e) => onPtypeChange(e.target.value as ParticipantTypeCode)}

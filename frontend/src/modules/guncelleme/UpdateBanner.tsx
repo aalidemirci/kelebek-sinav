@@ -62,6 +62,7 @@ export default function UpdateBanner() {
       <p className="min-w-48 flex-1 text-body-medium">
         <span className="font-medium">Kelebek Sınav {update.latest_version} hazır.</span> Çalışan
         sürüm: {update.current_version}.
+        {update.platform === "linux" && " Yeni paketi indirme sayfasından alıp kurun."}
       </p>
       <div className="flex flex-wrap gap-1">
         {update.can_download && (

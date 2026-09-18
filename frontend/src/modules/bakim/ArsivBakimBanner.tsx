@@ -99,7 +99,7 @@ export default function ArsivBakimBanner() {
             Anonimleştirme <span className="font-medium">GERİ DÖNÜŞSÜZDÜR</span>: öğrenci ve
             öğretmen adları ile okul numaraları silinir, yoklama notları temizlenir, kitapçık ve
             soru dosyaları kaldırılır. Salon/koltuk düzeni ve sayımlar istatistik arşivi olarak
-            kalır; evrak yeniden basımı çalışmaya devam eder (adlar "—" basılır).
+            kalır; evrak yeniden basımı çalışmaya devam eder (adlar “—” basılır).
           </p>
           <ul className="space-y-1">
             {adaylar.map((aday) => (

@@ -4,7 +4,7 @@
 // (test dosyaları birbirinden import ETMEZ — OYS Tur 232).
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -62,12 +62,20 @@ describe("OturumlarPage", () => {
           exam_date: "2026-01-05",
           layout_mode: "HOME_CLASSROOM",
         }),
+        makeSession({
+          id: 8,
+          name: "Geçen Yılın Sınavı",
+          status: "ARCHIVED",
+          exam_date: "2025-06-10",
+        }),
       ]),
     );
     renderPage();
 
     expect(await screen.findByText("2. Ortak Sınav")).toBeInTheDocument();
     expect(screen.getByText("1. Deneme Sınavı")).toBeInTheDocument();
+    // Durum adları aynı kipte: Taslak / Dağıtıldı / Onaylandı / Arşivlendi ("Arşiv" değil).
+    expect(screen.getByText("Arşivlendi")).toBeInTheDocument();
     // Tarih Türkçe biçimde (lib/format.ts::formatDate) + saat + düzen etiketi.
     expect(screen.getByText(/15\.06\.2026 · 09:00 · Kelebek/)).toBeInTheDocument();
     expect(screen.getByText(/05\.01\.2026 · 09:00 · Kendi dersliğinde/)).toBeInTheDocument();
@@ -78,11 +86,26 @@ describe("OturumlarPage", () => {
     expect(screen.queryByText("Gözetmenli")).not.toBeInTheDocument();
   });
 
-  it("boş listede yönlendirici boş durum metni gösterir", async () => {
+  it("boş listede EmptyState gösterir; içindeki düğme yeni oturum diyaloğunu açar", async () => {
+    const user = userEvent.setup();
     exam.list.mockResolvedValue(paginated([]));
     renderPage();
 
-    expect(await screen.findByText(/Henüz sınav oturumu yok/)).toBeInTheDocument();
+    const baslik = await screen.findByRole("heading", { name: "Henüz sınav oturumu yok" });
+    // Boş durumun kendi çıkışı vardır (sayfa başlığındaki düğmenin eşi).
+    const kart = baslik.parentElement as HTMLElement;
+    await user.click(within(kart).getByRole("button", { name: "Yeni sınav oturumu" }));
+    expect(await screen.findByRole("dialog", { name: "Yeni sınav oturumu" })).toBeInTheDocument();
+  });
+
+  it("yükleme sırasında iskelet, hata durumunda role=alert gösterir", async () => {
+    exam.list.mockRejectedValue(new Error("ağ koptu"));
+    renderPage();
+
+    // İlk çizimde sorgu beklemede → iskelet (düz "yükleniyor" metni değil).
+    expect(screen.getByRole("status")).toHaveTextContent("Yükleniyor…");
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Oturumlar yüklenemedi/);
+    expect(screen.queryByText("Henüz sınav oturumu yok")).not.toBeInTheDocument();
   });
 
   it("satıra tıklayınca oturum detayına gider", async () => {
@@ -96,7 +119,7 @@ describe("OturumlarPage", () => {
 
   it("yeni oturum: form doğru gövdeyle (term_id + proctors_enabled) gönderilir ve detaya gidilir", async () => {
     const user = userEvent.setup();
-    exam.list.mockResolvedValue(paginated([]));
+    exam.list.mockResolvedValue(paginated([makeSession()]));
     exam.create.mockResolvedValue(makeSession({ id: 7, name: "3. Ortak Sınav" }));
     renderPage();
 
@@ -111,8 +134,14 @@ describe("OturumlarPage", () => {
       screen.getByLabelText(/Dönem/),
       await screen.findByRole("option", { name: "2025-2026 Ders Yılı 1. Dönem" }),
     );
-    // Gözetmen anahtarı F7 ile diyaloğa geldi (U2 — varsayılan kapalı).
-    await user.click(screen.getByRole("checkbox", { name: /Gözetmen modülü açık/ }));
+    // Gözetmen anahtarı F7 ile diyaloğa geldi (U2 — varsayılan kapalı). Etiket evrak
+    // kodu (R6) taşımaz — docs/sozluk.md §2.
+    expect(screen.queryByText(/R6/)).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "Gözetmen görevlendirmesi yapılacak (görevlendirme yazısı basılır)",
+      }),
+    );
 
     await user.click(screen.getByRole("button", { name: "Oluştur" }));
 

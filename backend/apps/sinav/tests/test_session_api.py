@@ -9,6 +9,8 @@ typeahead testi dersler uygulamasının kendi testlerindedir.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -17,7 +19,14 @@ from rest_framework.test import APIClient
 from apps.dersler.models import Course
 from apps.okul.models import ImportRun, SchoolConfig, Student, StudentStatus
 from apps.sinav import selectors, services
-from apps.sinav.models import ExamSessionRoom, ExamSessionStatus, ParticipantType
+from apps.sinav.models import (
+    ExamSessionRoom,
+    ExamSessionStatus,
+    ParticipantType,
+    PlacementRule,
+    RuleScope,
+    RuleType,
+)
 from apps.sinav.tests.oturum_yardim import ders, donem, oturum, salon, sube
 
 pytestmark = pytest.mark.django_db
@@ -85,7 +94,7 @@ def test_add_session_course_validations() -> None:
         services.add_session_course(
             session, course_id=inactive.pk, participant_type=ParticipantType.LEVEL, level=9
         )
-    with pytest.raises(ValidationError, match="seviye seçin"):
+    with pytest.raises(ValidationError, match="sınıf düzeyini seçin"):
         services.add_session_course(
             session, course_id=course.pk, participant_type=ParticipantType.LEVEL
         )
@@ -153,9 +162,38 @@ def test_remove_exam_session_soft_deletes_children() -> None:
     room = salon("D-201")
     services.set_session_rooms(session, [{"room_id": room.pk}])
 
+    # A13: oturum kapsamlı kural ve muafiyet de kapanır; kalıcı olanlara dokunulmaz.
+    section = sube(9, "A", students=2, start_no=101)
+    del section
+    ogrenciler = list(Student.objects.order_by("student_number").values_list("pk", flat=True))
+    oturum_kurali = services.create_placement_rule(
+        student_id=ogrenciler[0],
+        rule_type=RuleType.FRONT_ROW,
+        scope=RuleScope.SESSION,
+        session=session,
+    )
+    kalici_kural = services.create_placement_rule(
+        student_id=ogrenciler[1], rule_type=RuleType.FRONT_ROW
+    )
+
     services.remove_exam_session(session)
     assert selectors.get_exam_session(session.pk) is None
     assert selectors.session_rooms(session.pk).count() == 0
+    assert not PlacementRule.objects.filter(pk=oturum_kurali.pk).exists()
+    assert PlacementRule.objects.filter(pk=kalici_kural.pk).exists()
+
+
+def test_section_ids_tip_denetimi_400_verir() -> None:
+    """A14: `section_ids` JSON alanıdır; sayı olmayan öğe 500 değil Türkçe 400'dür."""
+    session = oturum()
+    course = ders("Coğrafya", levels=[9])
+    resp = APIClient().post(
+        f"{URL}{session.pk}/courses/",
+        {"course_id": course.pk, "participant_type": "SECTIONS", "section_ids": ["abc"]},
+        format="json",
+    )
+    assert resp.status_code == 400
+    assert "şube" in resp.data["message"].lower()
 
 
 def test_pre_check_summary_counts() -> None:
@@ -266,6 +304,28 @@ def test_api_terms_endpoint() -> None:
     options = resp.data["terms"]
     assert any(opt["id"] == term.pk for opt in options)
     assert all(set(opt) == {"id", "label"} for opt in options)
+
+
+def test_api_list_sorgu_sayisi_oturum_sayisindan_bagimsiz(
+    django_assert_max_num_queries: Any,
+) -> None:
+    """Liste ucu iç içe ders/salon satırlarını ÖN-YÜKLER: oturum sayısı arttıkça sorgu
+    sayısı artmaz (eskiden oturum başına iki + satır başına birer sorgu atılıyordu)."""
+    course = ders("Coğrafya", levels=[9, 10])
+    room = salon("D-201")
+    for i in range(6):
+        session = oturum(name=f"Oturum {i}")
+        for level in (9, 10):
+            services.add_session_course(
+                session, course_id=course.pk, participant_type=ParticipantType.LEVEL, level=level
+            )
+        services.set_session_rooms(session, [{"room_id": room.pk}])
+
+    client = APIClient()
+    with django_assert_max_num_queries(8):
+        resp = client.get(URL)
+    assert resp.status_code == 200 and resp.data["count"] == 6
+    assert len(resp.data["results"][0]["courses"]) == 2
 
 
 def test_api_list_status_filter() -> None:

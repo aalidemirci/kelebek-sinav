@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
-from django.db.models import Q, QuerySet
+from django.db.models import Max, Prefetch, Q, QuerySet
 
 from apps.sinav.models import (
     BookletRun,
+    BookletRunStatus,
     ExamAttendanceRecord,
     ExamCalendar,
     ExamCalendarEntry,
@@ -95,8 +96,16 @@ def section_rooms_for_levels(levels: set[int]) -> list[ExamRoom]:
 # F3 — oturum akışı
 # ---------------------------------------------------------------------------
 def exam_sessions(*, status: str | None = None) -> QuerySet[ExamSession]:
-    """Oturum listesi (tarih azalan; dönem join'li)."""
-    qs = ExamSession.objects.select_related("semester", "semester__school_year")
+    """Oturum listesi (tarih azalan; dönem join'li, ders/salon satırları ÖN-YÜKLÜ).
+
+    `ExamSessionSerializer` iç içe `courses` ve `rooms` basar; ön-yükleme
+    olmadan liste ucu oturum başına iki + satır başına birer sorgu atıyordu.
+    Ön-yükleme canlı yöneticiyle yapılır — silinmiş satır listeye sızmaz.
+    """
+    qs = ExamSession.objects.select_related("semester", "semester__school_year").prefetch_related(
+        Prefetch("courses", queryset=ExamSessionCourse.objects.select_related("course")),
+        Prefetch("rooms", queryset=ExamSessionRoom.objects.select_related("room")),
+    )
     if status:
         qs = qs.filter(status=status)
     return qs.order_by("-exam_date", "start_time")
@@ -168,6 +177,32 @@ def booklet_runs(*, session_id: int | None = None) -> QuerySet[BookletRun]:
     if session_id is not None:
         qs = qs.filter(session_id=session_id)
     return qs.order_by("-created_at")
+
+
+def seating_changed_at(session_id: int) -> datetime | None:
+    """Oturumun CANLI yerleşimine son dokunulan an; yerleşim yoksa `None`.
+
+    Yeniden dağıtım yeni satır yazar, elle takas `updated_at`'i ilerletir — ikisi
+    de bu değeri büyütür. Kitapçık üretiminin bayatlığı buna karşı ölçülür
+    (`booklet_run_is_stale`).
+    """
+    latest: datetime | None = SeatAssignment.objects.filter(session_id=session_id).aggregate(
+        latest=Max("updated_at")
+    )["latest"]
+    return latest
+
+
+def booklet_run_is_stale(run: BookletRun, changed_at: datetime | None) -> bool:
+    """Üretim GÜNCEL yerleşimi yansıtmıyor mu?
+
+    Kitapçık her öğrencinin salonunu, koltuğunu ve adını taşır; üretimden sonra
+    oturum yeniden dağıtıldıysa, taslağa alındıysa ya da koltuk takası yapıldıysa
+    eski ZIP yanlış salona/koltuğa kitapçık demektir. Dosya silinmez (arşiv izi),
+    ama arayüz uyarmak ZORUNDADIR. Yalnız tamamlanmış üretim için anlamlıdır.
+    """
+    if run.status != BookletRunStatus.COMPLETED:
+        return False
+    return changed_at is None or changed_at > run.created_at
 
 
 # ---------------------------------------------------------------------------

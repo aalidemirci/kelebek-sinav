@@ -1,24 +1,34 @@
-// Sınav Takvimi — Yerleştirme paneli (F6) — OYS'den UYARLA. Izgara: satır =
-// (gün, ders saati), sütun = seviye. Boş hücre → o seviyenin havuz girdileri
+// Sınav Takvimi — Yerleştirme paneli (F6) — OYS'den UYARLA. Çizelge: satır =
+// (gün, ders saati), sütun = sınıf düzeyi. Boş hücre → o düzeyin havuz girdileri
 // dialog'da (tıkla-yerleştir, DnD yok); dolu hücre çipi + kaldır. Onaylı
-// takvimde satırda "Oturum Üret". Uyarı üç-kanalı: grid.errors bandı /
-// grid.warnings bandı / placeEntry warnings snackbar'ı — kural hesabı
-// backend'dedir, FE yalnız sunar. Okul dışı makam (Bakanlık/İl MEM/İlçe MEM)
-// sınavları çipte AYRI rozetle görünür — rozet ders adı span'ının DIŞINDADIR
-// (ders adının tam metin eşleşmesi bozulmasın). M3 token'ları.
+// takvimde satırda "Oturum üret". Uyarı üç-kanalı: grid.errors bandı /
+// grid.warnings bandı / placeEntry uyarıları KALICI uyarı bandı — kural hesabı
+// backend'dedir, FE yalnız sunar. (18.09.2026: yerleştirme uyarıları eskiden
+// kırmızı snackbar kuyruğunda akıp kayboluyordu; artık "Kapat" denene dek
+// ekranda birikir. Sert ret — 400 — snackbar'da kalır.)
+// Rozetler (Uygulama / Kendi dersliğinde / üst makam) ders adı span'ının
+// DIŞINDADIR (ders adının tam metin eşleşmesi bozulmasın). Kullanıcı metninde
+// "ızgara" denmez: "yerleştirme çizelgesi" (docs/sozluk.md). M3 token'ları.
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 
 import { ApiError } from "../../lib/api";
+import { formatDate } from "../../lib/format";
 import Button from "../../ui/Button";
 import Dialog from "../../ui/Dialog";
 import Icon from "../../ui/Icon";
 import { SkeletonList } from "../../ui/Skeleton";
 import { useSnackbar } from "../../ui/SnackbarProvider";
-import { formatDate } from "../oturumlar/oturumEtiket";
-import type { AutoPlaceMode, AutoPlaceResult, CalendarGrid, ExamCalendarStatusCode } from "./api";
+import UyariBandi from "../../ui/UyariBandi";
+import type {
+  AutoPlaceMode,
+  AutoPlaceResult,
+  CalendarGrid,
+  CalendarGridCell,
+  ExamCalendarStatusCode,
+} from "./api";
 import { EXAM_AUTHORITY_SHORT_TR, EXAM_AUTHORITY_TR, examCalendarApi } from "./api";
 
 interface SlotTarget {
@@ -28,10 +38,34 @@ interface SlotTarget {
 }
 
 const AUTO_MODE_ACIKLAMA: Record<AutoPlaceMode, string> = {
-  FILL: "Havuzda bekleyen sınavlar boş slotlara yerleştirilir; ızgaradakilere dokunulmaz.",
+  FILL: "Havuzda bekleyen sınavlar boş ders saatlerine yerleştirilir; çizelgedekilere dokunulmaz.",
   REDISTRIBUTE:
     "Sabitlenmemiş sınavlar havuza alınıp baştan dağıtılır; kilitli olanlar yerinde kalır.",
 };
+
+const ROZET_SINIFI = "rounded-full px-1.5 text-label-small";
+
+/**
+ * Sınavın türü ve düzeni — eskiden ders adına yapışık " [U]" / " (KD)"
+ * kısaltmalarıydı (açıklanmamış kısaltma — docs/sozluk.md §2). Yazılı + kelebek
+ * olağan durumdur ve rozetsizdir.
+ */
+function SinavRozetleri({ cell }: { cell: Pick<CalendarGridCell, "exam_kind" | "is_butterfly"> }) {
+  return (
+    <>
+      {cell.exam_kind === "PRACTICE" ? (
+        <span className={`${ROZET_SINIFI} bg-surface-container-highest text-on-surface`}>
+          Uygulama
+        </span>
+      ) : null}
+      {!cell.is_butterfly ? (
+        <span className={`${ROZET_SINIFI} bg-surface-container-highest text-on-surface`}>
+          Kendi dersliğinde
+        </span>
+      ) : null}
+    </>
+  );
+}
 
 export default function TakvimYerlestirmePaneli({
   calendarId,
@@ -48,6 +82,9 @@ export default function TakvimYerlestirmePaneli({
   const [pickSlot, setPickSlot] = useState<SlotTarget | null>(null);
   const [autoOpen, setAutoOpen] = useState(false);
   const [autoResult, setAutoResult] = useState<AutoPlaceResult | null>(null);
+  // Elle yerleştirmenin uyarıları: işlemi ENGELLEMEZ ama okunmalıdır — kalıcı
+  // bantta birikir (aynı cümle iki kez yazılmaz), "Kapat" ile boşalır.
+  const [placeWarnings, setPlaceWarnings] = useState<string[]>([]);
   const editable = status === "DRAFT";
   const approved = status === "APPROVED";
 
@@ -67,7 +104,11 @@ export default function TakvimYerlestirmePaneli({
       examCalendarApi.placeEntry(p.entryId, { date: p.date, period_no: p.periodNo }),
     onSuccess: (data) => {
       // Uyarıyla yerleşir — sert reddi backend 400 ile döndürür (onError).
-      data.warnings.forEach((w) => snackbar.error(w));
+      // Uyarı HATA değildir: kırmızı snackbar kuyruğuna değil kalıcı banda gider
+      // (emsal: otomatik yerleştirme raporu diyaloğu).
+      if (data.warnings.length > 0) {
+        setPlaceWarnings((prev) => [...new Set([...prev, ...data.warnings])]);
+      }
       setPickSlot(null);
       invalidate();
     },
@@ -114,14 +155,21 @@ export default function TakvimYerlestirmePaneli({
   const rows = useMemo(() => buildRows(grid), [grid]);
 
   if (gridQuery.isPending) return <SkeletonList rows={6} />;
-  if (!grid) return <p className="text-on-surface-variant">Izgara yüklenemedi.</p>;
+  if (!grid) {
+    return (
+      <p role="alert" className="text-body-medium text-error">
+        Yerleştirme çizelgesi yüklenemedi.
+        {gridQuery.error instanceof ApiError ? ` ${gridQuery.error.message}` : ""}
+      </p>
+    );
+  }
   // KS'de ders saati listesi boşsa varsayılan devreye girer (B6) — bu dal
   // yalnız yapılandırma bozulursa görünür.
   if (grid.periods.length === 0) {
     return (
       <p role="alert" className="text-body-medium text-on-surface-variant">
-        Ders saati listesi boş — yerleştirme ızgarası oluşturulamıyor. Kurum yapılandırmasındaki
-        ders saati listesini kontrol edin.
+        Ders saati listesi boş — yerleştirme çizelgesi oluşturulamıyor. Ayarlar → Okul
+        Bilgileri’ndeki günlük ders saati sayısını kontrol edin.
       </p>
     );
   }
@@ -150,9 +198,15 @@ export default function TakvimYerlestirmePaneli({
         </div>
       ) : null}
       {grid.errors.length > 0 ? (
-        <div className="mb-3 rounded-shape-sm bg-error-container p-3 text-body-small text-on-error-container">
+        <div
+          role="alert"
+          className="mb-3 rounded-shape-sm bg-error-container p-3 text-body-small text-on-error-container"
+        >
           {grid.errors.map((e, i) => (
-            <div key={i}>⚠ {e}</div>
+            <div key={i} className="flex items-start gap-2">
+              <Icon name="error" size="sm" className="mt-0.5 shrink-0" />
+              <span>{e}</span>
+            </div>
           ))}
         </div>
       ) : null}
@@ -163,10 +217,16 @@ export default function TakvimYerlestirmePaneli({
           ))}
         </div>
       ) : null}
+      <UyariBandi
+        className="mb-3"
+        title="Yerleştirme uyarıları"
+        messages={placeWarnings}
+        onClose={() => setPlaceWarnings([])}
+      />
 
       <div className="overflow-x-auto rounded-shape-lg bg-surface-container-low shadow-elevation-1">
         <table className="w-full border-collapse text-body-small">
-          <caption className="sr-only">Sınav takvimi yerleştirme ızgarası</caption>
+          <caption className="sr-only">Sınav takvimi yerleştirme çizelgesi</caption>
           <thead>
             <tr className="border-b border-outline-variant">
               <th className="sticky left-0 z-10 bg-surface-container-low px-3 py-2 text-left text-label-medium text-on-surface-variant">
@@ -213,11 +273,8 @@ export default function TakvimYerlestirmePaneli({
                           key={c.entry_id}
                           className="mb-1 inline-flex items-center gap-1 rounded-shape-sm bg-secondary-container px-2 py-1 text-label-small text-on-secondary-container"
                         >
-                          <span>
-                            {c.course_name}
-                            {c.exam_kind === "PRACTICE" ? " [U]" : ""}
-                            {!c.is_butterfly ? " (KD)" : ""}
-                          </span>
+                          <span>{c.course_name}</span>
+                          <SinavRozetleri cell={c} />
                           {c.authority !== "SCHOOL" ? (
                             <span
                               title={`${EXAM_AUTHORITY_TR[c.authority]} sınavı`}
@@ -299,7 +356,7 @@ export default function TakvimYerlestirmePaneli({
                           createSessionMutation.mutate({ date: row.date, periodNo: row.periodNo })
                         }
                       >
-                        Oturum Üret
+                        Oturum üret
                       </Button>
                     ) : null}
                   </td>
@@ -313,7 +370,8 @@ export default function TakvimYerlestirmePaneli({
       <p className="mt-2 text-body-small text-on-surface-variant">
         BAK / İL / İLÇE rozetli sınavlar Bakanlık ya da İl/İlçe Millî Eğitim Müdürlüğünce yapılır;
         tarih ve saatleri ilgili makamın kılavuzuna göredir ve o günlerde okul geneli ayrıca sınav
-        yapılmaz.
+        yapılmaz. “Uygulama” rozeti uygulamalı sınavı, “Kendi dersliğinde” rozeti kelebek dağıtıma
+        girmeyen (öğrencilerin kendi dersliğinde yapılan) sınavı gösterir.
       </p>
 
       {pickSlot ? (
@@ -330,7 +388,7 @@ export default function TakvimYerlestirmePaneli({
           <div className="flex flex-col gap-2">
             {unplacedByLevel(pickSlot.level).length === 0 ? (
               <p className="text-body-small text-on-surface-variant">
-                Bu seviyede havuzda yerleştirilecek ders yok.
+                Bu sınıf düzeyinde havuzda yerleştirilecek ders yok.
               </p>
             ) : (
               unplacedByLevel(pickSlot.level).map((c) => (
@@ -346,10 +404,14 @@ export default function TakvimYerlestirmePaneli({
                     })
                   }
                 >
-                  <span>
-                    {c.course_name}
-                    {c.exam_kind === "PRACTICE" ? " [Uygulama]" : ""}
-                    {c.authority !== "SCHOOL" ? ` — ${EXAM_AUTHORITY_TR[c.authority]}` : ""}
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <span>{c.course_name}</span>
+                    <SinavRozetleri cell={c} />
+                    {c.authority !== "SCHOOL" ? (
+                      <span className="text-body-small text-on-surface-variant">
+                        {EXAM_AUTHORITY_TR[c.authority]} sınavı
+                      </span>
+                    ) : null}
                   </span>
                   <Icon name="add_circle" />
                 </button>
@@ -373,8 +435,9 @@ export default function TakvimYerlestirmePaneli({
           <div className="flex flex-col gap-3">
             <p className="text-body-small text-on-surface-variant">
               Program, havuzdaki sınavları hafta içi günlere ve okulun sınav saatlerine dağıtır:
-              aynı öğrenciye günde ikiden fazla sınav düşürmez (OKY md. 45), kapsamı kesişen iki
-              sınavı aynı saate koymaz, üst makam sınavı olan güne okul sınavı yazmaz (Yönerge md.
+              aynı öğrenciye günde ikiden fazla sınav düşürmez (MEB Ölçme ve Değerlendirme
+              Yönetmeliği md. 5), katılımcıları kesişen iki sınavı aynı saate koymaz, üst makam
+              sınavı olan güne okul sınavı yazmaz (MEB Yazılı ve Uygulamalı Sınavlar Yönergesi md.
               5). Bakanlık/İl/İlçe sınavları elle yerleştirilir.
             </p>
             {(["FILL", "REDISTRIBUTE"] as AutoPlaceMode[]).map((mode) => (

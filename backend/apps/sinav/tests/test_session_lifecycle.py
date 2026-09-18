@@ -95,7 +95,7 @@ def test_approve_guards() -> None:
     with pytest.raises(ValidationError) as exc_info:
         services.approve_session(session)
     message = str(exc_info.value)
-    assert "sert kısıt ihlali" in message
+    assert "kural ihlali var" in message and "sert kısıt" not in message
     assert "AD0" not in message and "SOYAD" not in message  # kurucu ad kalıbı sızmadı
 
 
@@ -218,6 +218,14 @@ def test_swap_seats_guards() -> None:
         services.swap_seats(session, assignment_a_id=rows[0].pk, assignment_b_id=rows[0].pk)
     with pytest.raises(ValidationError, match="bulunamadı"):
         services.swap_seats(session, assignment_a_id=rows[0].pk, assignment_b_id=987654)
+
+    # A12: kuralla sabitlenmiş koltuk takasla sessizce bozulmaz (ret okul no ile, adsız).
+    SeatAssignment.objects.filter(pk=rows[0].pk).update(status=SeatStatus.PINNED)
+    with pytest.raises(ValidationError, match="yerleştirme kuralıyla sabitlenmiş") as excinfo:
+        services.swap_seats(session, assignment_a_id=rows[0].pk, assignment_b_id=rows[1].pk)
+    assert rows[0].student_number in str(excinfo.value)
+    assert rows[0].full_name not in str(excinfo.value)
+    SeatAssignment.objects.filter(pk=rows[0].pk).update(status=SeatStatus.NORMAL)
 
     services.approve_session(session)
     with pytest.raises(ValidationError, match="yalnız dağıtılmış"):

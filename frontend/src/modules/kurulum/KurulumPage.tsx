@@ -96,7 +96,7 @@ export default function KurulumPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // 1. adımın form değerleri sihirbaz kabuğunda tutulur: "Kaydet ve devam"
+  // 1. adımın form değerleri sihirbaz kabuğunda tutulur: "Kaydet ve devam et"
   // düğmesi gezinme satırında olduğundan değerlere burada erişilmesi gerekir.
   const [okulAdi, setOkulAdi] = useState("");
   const [il, setIl] = useState("");
@@ -244,7 +244,7 @@ export default function KurulumPage() {
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="ks-page-header">
         <div>
-          <h1 className="ks-page-title">Kurulum sihirbazı</h1>
+          <h1 className="ks-page-title">Kurulum Sihirbazı</h1>
           <p className="ks-page-description">
             Programı kullanmaya başlamadan önce üç adımı tamamlayın. Girdiğiniz her bilgiyi daha
             sonra Ayarlar ekranından değiştirebilirsiniz.
@@ -255,7 +255,7 @@ export default function KurulumPage() {
       {kapidanGelenYol !== null && (
         <BilgiBandi ikon="lock">
           Kurulum tamamlanmadan diğer ekranlar açılmaz; bu yüzden buraya getirildiniz. Aşağıdaki
-          adımları bitirip &quot;Kurulumu tamamla&quot; dediğinizde menüdeki tüm bölümler açılır.
+          adımları bitirip “Kurulumu tamamla” dediğinizde menüdeki tüm bölümler açılır.
         </BilgiBandi>
       )}
 
@@ -322,7 +322,7 @@ export default function KurulumPage() {
                     onClick={ileri}
                     disabled={busy || ileriKapisiKapali || (adim === 0 && !okulAdi.trim())}
                   >
-                    {adim === 0 ? (busy ? "Kaydediliyor…" : "Kaydet ve devam") : "İleri"}
+                    {adim === 0 ? (busy ? "Kaydediliyor…" : "Kaydet ve devam et") : "İleri"}
                   </Button>
                 ) : (
                   <Button icon="check_circle" onClick={kurulumuTamamla} disabled={busy}>
@@ -392,7 +392,7 @@ function OkulBilgileriAdimi({
       <p className="text-title-medium text-on-surface">1. Okul bilgileri</p>
       <p className="mt-1 text-body-medium text-on-surface-variant">
         Bu bilgiler salon evrakının antetinde kullanılır. Okul türü ve hazırlık sınıfı, ders
-        havuzunun hangi MEB çizelgesinden türetileceğini ve geçerli sınıf seviyelerini belirler.
+        havuzunun hangi MEB çizelgesinden türetileceğini ve geçerli sınıf düzeylerini belirler.
       </p>
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <TextField
@@ -440,7 +440,7 @@ function OkulBilgileriAdimi({
             { value: "0", label: "Yok" },
             { value: "1", label: "Var" },
           ]}
-          helperText="Varsa 'Hazırlık Sınıfı Bulunan …' çizelgesi uygulanır ve seviyelere Hazırlık eklenir."
+          helperText="Varsa “Hazırlık Sınıfı Bulunan …” çizelgesi uygulanır ve sınıf düzeylerine Hazırlık eklenir."
         />
         <Select
           label="Günlük ders saati sayısı"
@@ -699,7 +699,7 @@ function DersYiliAdimi({ onChanged }: { onChanged: () => Promise<void> }) {
           />
         </div>
         <p className="mt-2 text-label-small text-on-surface-variant">
-          Yarıyıl tatili iki tarih arasında kalır. Sınav takviminin mevzuat pencereleri (F6) dönem
+          Yarıyıl tatili iki tarih arasında kalır. Sınav takviminin mevzuat pencereleri dönem
           sınırlarına göre hesaplanır.
         </p>
         {error && (
@@ -766,7 +766,7 @@ function KisilerAdimi({ status }: { status: SetupStatus | null }) {
 
       <p className="mt-4 text-body-medium text-on-surface-variant">
         Sicil boş olsa da kuruluma son verebilirsiniz; kişileri istediğiniz zaman aktarabilirsiniz.
-        &quot;Kurulumu tamamla&quot; dedikten sonra program panelle açılır.
+        “Kurulumu tamamla” dedikten sonra program Genel Bakış sayfasıyla açılır.
       </p>
     </Card>
   );

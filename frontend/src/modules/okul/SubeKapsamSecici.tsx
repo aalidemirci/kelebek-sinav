@@ -7,11 +7,35 @@
 // Küme çipi şubeleri seçime EKLER, AYRI DURUM TUTMAZ ("gruptan gelen" ile "elle
 // seçilen" için ikinci kaynak-gerçek doğardı; emsal SinavSihirbazi.applyGroup).
 // Küme kimliği hiçbir takvim kaydına yazılmaz (CLAUDE.md §3).
+//
+// Sözcükler docs/sozluk.md'den: alan adı "Katılımcılar", seçenekler "Sınıf
+// düzeyinin tamamı" / "Seçili şubeler" — oturum sihirbazı ile takvim AYNI
+// sözcükleri kullanır ("Seviye geneli", "Şube seç", tek başına "Kapsam" YOK).
+// Takvim ve ders havuzu ekranları bu sabitleri buradan okur; metin ikinci bir
+// yere yazılmaz.
+
+/** Katılımcı kapsamı alanının etiketi. */
+export const KATILIMCILAR_ETIKETI = "Katılımcılar";
+
+/** `participant_type` = LEVEL: sınıf düzeyindeki bütün şubeler. */
+export const SINIF_DUZEYININ_TAMAMI = "Sınıf düzeyinin tamamı";
+
+/** `participant_type` = SECTIONS: yalnız işaretlenen şubeler. */
+export const SECILI_SUBELER = "Seçili şubeler";
 
 export const KAPSAM_SECENEKLERI = [
-  { value: "LEVEL", label: "Seviye geneli" },
-  { value: "SECTIONS", label: "Şube seç" },
+  { value: "LEVEL", label: SINIF_DUZEYININ_TAMAMI },
+  { value: "SECTIONS", label: SECILI_SUBELER },
 ];
+
+/**
+ * Bir girdinin katılımcı özeti — tablo hücresi ve rozetler için. Backend'in
+ * `participant_label` alanı da aynı sözcükleri taşır (19.09.2026'dan beri); arayüz
+ * yine de metni tip + şube sayısından KENDİSİ üretir — tek kaynak bu dosyadır.
+ */
+export function katilimciOzeti(participantType: string, sectionCount: number): string {
+  return participantType === "SECTIONS" ? `${sectionCount} şube` : SINIF_DUZEYININ_TAMAMI;
+}
 
 /**
  * Küme çipleri + şube onay kutuları. Çip `aria-pressed` TAŞIMAZ: durum tutmaz,
@@ -52,10 +76,12 @@ export default function SubeSecici({
       ) : null}
       {sections.length === 0 ? (
         <p className="text-body-small text-on-surface-variant">
-          Bu seviyede tanımlı şube yok — şube kataloğunu Ayarlar’dan doldurun.
+          Bu sınıf düzeyinde tanımlı şube yok — şube kataloğunu Ayarlar’dan doldurun.
         </p>
       ) : (
-        <div className="grid max-h-48 grid-cols-3 gap-1 overflow-y-auto">
+        // Dar diyalogda üç sütun şube etiketini ("11/AMP") sıkıştırıp satırı
+        // kırıyordu; ızgara dar ekranda iki, genişte üç sütundur.
+        <div className="grid max-h-48 grid-cols-2 gap-1 overflow-y-auto sm:grid-cols-3">
           {sections.map((s) => (
             <label
               key={s.id}

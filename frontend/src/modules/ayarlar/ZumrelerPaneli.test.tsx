@@ -113,9 +113,57 @@ describe("ZumrelerPaneli", () => {
     await user.click(
       await screen.findByRole("button", { name: "Sosyal Bilimler zümresini kaldır" }),
     );
-    const dialog = await screen.findByRole("dialog");
+    // Başlık soru, gövde sonuç; "personel" değil "öğretmen" (docs/sozluk.md).
+    const dialog = await screen.findByRole("dialog", { name: "Zümre kaldırılsın mı?" });
+    expect(within(dialog).getByText(/Öğretmen kayıtları etkilenmez/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Kaldır" }));
 
     await waitFor(() => expect(okulApiMock.deleteSubjectDepartment).toHaveBeenCalledWith(3));
+  });
+
+  it("satırdan başkan değişimi sessiz geçmez — kaydedildiği bildirilir", async () => {
+    const user = userEvent.setup();
+    okulApiMock.listSubjectDepartments.mockResolvedValue([
+      { id: 3, name: "Sosyal Bilimler", head: 8, head_name: "Ayşe ÇELİK", is_board_member: true },
+    ]);
+    okulApiMock.listPersonnel.mockResolvedValue(personelSayfasi());
+    okulApiMock.updateSubjectDepartment.mockResolvedValue({});
+    renderPanel();
+
+    const secici = await screen.findByRole("combobox", { name: "Sosyal Bilimler zümre başkanı" });
+    // Boş seçenek tek biçimdir ("— seçilmedi —" kalktı).
+    expect(within(secici).getByRole("option", { name: "— yok —" })).toBeDefined();
+    // Öğretmen listesi zümrelerden ayrı yüklenir — seçenek gelene dek beklenir.
+    await within(secici).findByRole("option", { name: "Bora ARSLAN — Matematik" });
+    await user.selectOptions(secici, "9");
+
+    await waitFor(() =>
+      expect(okulApiMock.updateSubjectDepartment).toHaveBeenCalledWith(3, { head: 9 }),
+    );
+    expect(
+      await screen.findByText("“Sosyal Bilimler” zümresinin başkanı güncellendi."),
+    ).toBeInTheDocument();
+  });
+
+  it("başkan “— yok —” yapılınca kaldırıldığı bildirilir", async () => {
+    const user = userEvent.setup();
+    okulApiMock.listSubjectDepartments.mockResolvedValue([
+      { id: 3, name: "Sosyal Bilimler", head: 8, head_name: "Ayşe ÇELİK", is_board_member: true },
+    ]);
+    okulApiMock.listPersonnel.mockResolvedValue(personelSayfasi());
+    okulApiMock.updateSubjectDepartment.mockResolvedValue({});
+    renderPanel();
+
+    await user.selectOptions(
+      await screen.findByRole("combobox", { name: "Sosyal Bilimler zümre başkanı" }),
+      "",
+    );
+
+    await waitFor(() =>
+      expect(okulApiMock.updateSubjectDepartment).toHaveBeenCalledWith(3, { head: null }),
+    );
+    expect(
+      await screen.findByText("“Sosyal Bilimler” zümresinin başkanı kaldırıldı."),
+    ).toBeInTheDocument();
   });
 });

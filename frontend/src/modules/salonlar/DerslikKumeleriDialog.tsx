@@ -1,5 +1,6 @@
-// Derslik kümeleri diyaloğu — "Sabah", "Öğle", "Zemin Kat" gibi kümeler
-// tanımlanır ve salonlar bu kümelere TOPLUCA atanır.
+// Salon kümeleri diyaloğu — "Sabah", "Öğle", "Zemin Kat" gibi kümeler
+// tanımlanır ve salonlar bu kümelere TOPLUCA atanır. (Dosya/bileşen adı tarihsel
+// olarak "Derslik"tir; kullanıcıya görünen ad docs/sozluk.md gereği "salon kümesi".)
 //
 // GEREKÇE (kullanıcı, 31.08.2026): ikili eğitim yapan okullarda "şube
 // dersliklerini oluştur" onlarca derslik üretir; sınav sihirbazında tek tek
@@ -83,8 +84,9 @@ export default function DerslikKumeleriDialog({
 
   const kaldir = (grup: ExamRoomGroup) => {
     void confirm({
-      title: "Kümeyi kaldır",
-      message: `'${grup.name}' kümesi kaldırılsın mı? Salonlar silinmez, yalnız kümesiz kalır.`,
+      // Başlık soru, gövde sonuç (docs/sozluk.md §3).
+      title: "Küme kaldırılsın mı?",
+      message: `“${grup.name}” kümesi kaldırılır. Salonlar silinmez, yalnız kümesiz kalır.`,
       confirmLabel: "Kaldır",
     }).then((ok) => ok && sil.mutate(grup.id));
   };
@@ -94,7 +96,8 @@ export default function DerslikKumeleriDialog({
 
   const liste = gruplar.data?.results ?? [];
   const secenekler = [
-    { value: "", label: "— kümesiz —" },
+    // Boş seçenek tek biçim: "— yok —" (docs/sozluk.md §3); seçilirse salon kümesiz kalır.
+    { value: "", label: "— yok —" },
     ...liste.map((g) => ({ value: String(g.id), label: g.name })),
   ];
 
@@ -103,7 +106,7 @@ export default function DerslikKumeleriDialog({
       open
       wide
       onClose={onClose}
-      title="Derslik kümeleri (Sabah / Öğle)"
+      title="Salon kümeleri (Sabah / Öğle)"
       actions={
         <Button variant="text" onClick={onClose}>
           Kapat
@@ -112,11 +115,11 @@ export default function DerslikKumeleriDialog({
     >
       <div className="space-y-5">
         <p className="text-body-medium text-on-surface-variant">
-          Salonları "Sabah", "Öğle" gibi kümelere ayırın; sınav sihirbazında tek tek işaretlemek
+          Salonları “Sabah”, “Öğle” gibi kümelere ayırın; sınav sihirbazında tek tek işaretlemek
           yerine küme düğmesiyle topluca seçersiniz. Küme yalnız seçim kolaylığıdır — salon evrakına
-          basılan bilgi "blok/kat" alanıdır, küme değil.
+          basılan bilgi “Blok / kat” alanıdır, küme değil.
           <br />
-          <strong>Bunlar DERSLİK kümeleridir.</strong> Şubeleri (Sayısal, Eşit Ağırlık, Dil…)
+          <strong>Bunlar salon kümeleridir.</strong> Şubeleri (Sayısal, Eşit Ağırlık, Dil…)
           kümelemek ayrı bir listedir: Ayarlar → Şube Kümeleri.
         </p>
 

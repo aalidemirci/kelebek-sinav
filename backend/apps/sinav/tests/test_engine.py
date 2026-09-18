@@ -103,6 +103,112 @@ def test_validator_detects_double_booking() -> None:
     assert any("çifte dolu" in v for v in report.hard_violations)
 
 
+def test_validator_etiketli_ihlal_idareci_diliyle_yazilir() -> None:
+    """Etiket verilince ihlal metni salon ADI, ders ADI, 1 tabanlı konum ve OKUL NO
+    taşır; ham kimlik, çakışma grubu anahtarı ve 0 tabanlı koordinat GEÇMEZ.
+
+    Etiketler denetime girmez: aynı girdi etiketsizken de aynı sayıda ihlal üretir
+    (yukarıdaki sözleşme testleri ham biçimi sabitler).
+    """
+    ortak = {
+        "room_label": "Salon 101",
+        "group_label": "Coğrafya — 9. Sınıf",
+    }
+    a = validator.PlacedStudent(
+        1,
+        "7:9",
+        3,
+        2,
+        0,
+        0,
+        -0.25,
+        2.0,
+        desk_label="2. sıra, 1. sütun",
+        student_number="101",
+        **ortak,
+    )
+    b = validator.PlacedStudent(
+        2,
+        "7:9",
+        3,
+        2,
+        0,
+        1,
+        0.25,
+        2.0,
+        desk_label="2. sıra, 1. sütun",
+        student_number="102",
+        **ortak,
+    )
+    c = validator.PlacedStudent(
+        3,
+        "7:9",
+        3,
+        2,
+        1,
+        0,
+        1.0,
+        2.0,
+        desk_label="2. sıra, 2. sütun",
+        student_number="103",
+        **ortak,
+    )
+    tekrar = validator.PlacedStudent(
+        1,
+        "8:9",
+        3,
+        3,
+        1,
+        0,
+        1.0,
+        3.0,
+        desk_label="3. sıra, 2. sütun",
+        student_number="101",
+        **ortak,
+    )
+
+    report = validator.validate_seating([a, b, c, tekrar], strict=True)
+    metin = " | ".join(report.hard_violations)
+
+    assert (
+        "Bitişik masa ihlali: “Coğrafya — 9. Sınıf” sınavına giren iki öğrenci aynı sırada "
+        "oturuyor (Salon 101, 2. sıra, 1. sütun)." in report.hard_violations
+    )
+    assert "Katı dağıtım ihlali" in metin and "2. sıra, 1. sütun ↔ 2. sıra, 2. sütun" in metin
+    assert "Öğrenci iki koltukta: okul no 101." in report.hard_violations
+    for ham in ("salon 3", "'7:9'", "id=", "(2,0)", "Katı mod"):
+        assert ham not in metin
+
+    etiketsiz = validator.validate_seating(
+        [
+            validator.PlacedStudent(
+                p.student_id, p.conflict_group, 3, p.desk_row, p.desk_col, p.slot, p.x, p.y
+            )
+            for p in (a, b, c, tekrar)
+        ],
+        strict=True,
+    )
+    assert len(etiketsiz.hard_violations) == len(report.hard_violations)
+
+
+def test_motor_uyarisi_salonu_adiyla_anar() -> None:
+    """`RoomSeats.label` verilince motor uyarısı salonu adıyla ve 1 tabanlı konumla anar."""
+    room = _grid_room(1, 2, 2, DeskType.DOUBLE)
+    adli = engine.RoomSeats(room_id=room.room_id, seats=room.seats, label="Fizik Laboratuvarı")
+    students = [_participant(i, "1:9") for i in range(1, 8)]
+
+    result = engine.distribute_butterfly(students, [adli], seed=3)
+    adsiz = engine.distribute_butterfly(students, [room], seed=3)
+
+    kacinilmaz = [w for w in result.warnings if "kaçınılmaz" in w]
+    assert kacinilmaz and all(w.startswith("Fizik Laboratuvarı, ") for w in kacinilmaz)
+    assert all(". sütun" in w and "sert kısıt" not in w for w in kacinilmaz)
+    # Ad yalnız METNE girer: yerleşim etiketli ve etiketsiz çağrıda birebir aynıdır.
+    assert [(p.participant.student_id, p.seat.seat_no) for p in result.placements] == [
+        (p.participant.student_id, p.seat.seat_no) for p in adsiz.placements
+    ]
+
+
 def test_validator_different_rooms_no_interaction() -> None:
     a = validator.PlacedStudent(1, "g", 1, 0, 0, 0, 0.0, 0.0)
     b = validator.PlacedStudent(2, "g", 2, 0, 0, 1, 0.25, 0.0)  # başka salon

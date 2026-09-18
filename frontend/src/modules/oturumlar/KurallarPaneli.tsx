@@ -9,9 +9,15 @@
 // KVKK md. 6: gerekçe YALNIZ kategoridir; serbest metin alanı BİLİNÇLE YOKTUR.
 // Koltuk koordinatı (satır, sütun, pozisyon) tutulur — `seat_no` DEĞİL:
 // numaralandırma düzeni değişince seat_no kayar, koordinat kaymaz.
+//
+// Koordinat kullanıcıya 1 tabanlı ve SÖZLE gösterilir (docs/sozluk.md §3):
+// "3. sıra, 1. sütun, sol koltuk (koltuk no 5)" — eskiden "sıra 2-0, koltuk 0"
+// (0 tabanlı, ön cephe bandı da sayılmış) basılıyordu. Koltuk no ve sıra tipi
+// salonun GÜNCEL numaralandırmasından (`/exam-rooms/{id}/seats/`) okunur; o uç
+// gelmezse konum yine yazılır, yalnız koltuk no düşer (kayıt koordinattır).
 
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "../../lib/api";
 import Autocomplete from "../../ui/Autocomplete";
@@ -26,9 +32,25 @@ import { SkeletonList } from "../../ui/Skeleton";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import type { Student } from "../okul/api";
 import { okulApi } from "../okul/api";
+import type { SeatPreview } from "../salonlar/api";
 import { examRoomApi } from "../salonlar/api";
+import { seatPositionLabel } from "../salonlar/planEdit";
 import type { PlacementRule, RuleReason, SeatPreference } from "./api";
 import { RULE_REASON_TR, RULE_TYPE_TR, SEAT_PREFERENCE_TR, placementRuleApi } from "./api";
+
+/** Salon koltuk ucunun sorgu anahtarı — liste ve koltuk seçici AYNI önbelleği paylaşır. */
+const roomSeatsKey = (roomId: number) => ["exam-room-seats", roomId] as const;
+
+/** Koltuk ucundaki satırdan sözlü konum ("3. sıra, 1. sütun, sol koltuk (koltuk no 5)"). */
+function seatLabel(seat: SeatPreview): string {
+  return seatPositionLabel({
+    deskRow: seat.desk_row,
+    deskCol: seat.desk_col,
+    slot: seat.slot,
+    deskType: seat.desk_type,
+    seatNo: seat.seat_no,
+  });
+}
 
 export default function KurallarPaneli({ sessionId }: { sessionId: number }) {
   const qc = useQueryClient();
@@ -52,11 +74,39 @@ export default function KurallarPaneli({ sessionId }: { sessionId: number }) {
 
   const satirlar = kurallar.data?.results ?? [];
 
+  // "Belirli koltuk" kurallarının salonları: koltuk no + sıra tipi oradan okunur.
+  // Böyle kural bir oturumda bir elin parmağını geçmez — salon başına tek istek.
+  const koltukluSalonlar = [
+    ...new Set(
+      satirlar
+        .filter((r) => r.rule_type === "FIXED_SEAT" && r.target_room_id !== null)
+        .map((r) => r.target_room_id as number),
+    ),
+  ];
+  const salonKoltuklari = useQueries({
+    queries: koltukluSalonlar.map((roomId) => ({
+      queryKey: roomSeatsKey(roomId),
+      queryFn: () => examRoomApi.seats(roomId),
+    })),
+  });
+
+  const koltukKonumu = (r: PlacementRule): string => {
+    const deskRow = r.target_desk_row ?? 0;
+    const deskCol = r.target_desk_col ?? 0;
+    const slot = r.target_slot ?? 0;
+    const index = r.target_room_id === null ? -1 : koltukluSalonlar.indexOf(r.target_room_id);
+    const seat = (index >= 0 ? salonKoltuklari[index]?.data?.seats : undefined)?.find(
+      (s) => s.desk_row === deskRow && s.desk_col === deskCol && s.slot === slot,
+    );
+    // Koltuk ucu yoksa (yükleniyor / koltuk plandan kalkmış) konum yine sözle yazılır.
+    return seat ? seatLabel(seat) : seatPositionLabel({ deskRow, deskCol, slot });
+  };
+
   const kuralOzeti = (r: PlacementRule): string => {
     const parcalar = [RULE_TYPE_TR[r.rule_type]];
     if (r.target_room_name) parcalar.push(r.target_room_name);
     if (r.rule_type === "FIXED_SEAT") {
-      parcalar.push(`sıra ${r.target_desk_row}-${r.target_desk_col}, koltuk ${r.target_slot}`);
+      parcalar.push(koltukKonumu(r));
     } else if (r.seat_preference !== "NONE") {
       parcalar.push(SEAT_PREFERENCE_TR[r.seat_preference]);
     }
@@ -69,8 +119,8 @@ export default function KurallarPaneli({ sessionId }: { sessionId: number }) {
       <div className="flex flex-wrap items-center gap-3">
         <p className="text-body-medium text-on-surface-variant">
           Engelli ya da özel durumu olan öğrencilerin yeri burada sabitlenir. Yer seçilmezse öğrenci
-          kendi dersliğinde, arka sırada ve tek başına oturur. Kural sahibi öğrenciyi kelebek motoru
-          taşıyamaz.
+          kendi dersliğinde, arka sırada ve tek başına oturur. Kuralı olan öğrencinin yeri dağıtımda
+          değiştirilmez; dağıtımdan sonra eklenen kural için “Yeniden dağıt” gerekir.
         </p>
         <span className="ml-auto" />
         <Button variant="tonal" icon="accessible" onClick={() => setAddOpen(true)}>
@@ -107,8 +157,11 @@ export default function KurallarPaneli({ sessionId }: { sessionId: number }) {
                   disabled={sil.isPending}
                   onClick={() =>
                     void confirm({
-                      title: "Kuralı kaldır",
-                      message: "Bu yerleştirme kuralı kaldırılsın mı?",
+                      // Başlık soru, gövde sonuç (docs/sozluk.md §3). Gövdede öğrenci
+                      // adı geçmez (CLAUDE.md §1.6) — satır zaten adı gösteriyor.
+                      title: "Kural kaldırılsın mı?",
+                      message:
+                        "Bu öğrencinin yerleştirme kuralı silinir; sonraki dağıtımda yeri diğer öğrenciler gibi belirlenir.",
                       confirmLabel: "Kaldır",
                     }).then((ok) => ok && sil.mutate(r.id))
                   }
@@ -158,7 +211,7 @@ function KuralEkleDialog({
     queryFn: () => examRoomApi.list(false),
   });
   const koltuklar = useQuery({
-    queryKey: ["exam-room-seats", salonId],
+    queryKey: roomSeatsKey(Number(salonId)),
     queryFn: () => examRoomApi.seats(Number(salonId)),
     enabled: yeriBenSecerim && salonId !== "",
   });
@@ -258,13 +311,13 @@ function KuralEkleDialog({
         {!yeriBenSecerim ? (
           <p className="rounded-shape-sm bg-tertiary-container px-3 py-2 text-body-small text-on-tertiary-container">
             Öğrenci <strong>kendi dersliğinde, arka sırada ve tek başına</strong> oturacak. Kendi
-            dersliği, salon kaydında "bağlı şube" alanıyla eşleşen dersliktir.
+            dersliği, Sınav Salonları ekranında “Bağlı şube” alanı öğrencinin şubesi olan salondur.
           </p>
         ) : (
           <>
             <Select
               label="Salon"
-              placeholder="— seçin —"
+              placeholder="Seçin"
               value={salonId}
               onChange={(e) => {
                 setSalonId(e.target.value);
@@ -281,9 +334,10 @@ function KuralEkleDialog({
               onChange={(e) => setKoltuk(e.target.value)}
               options={[
                 { value: "", label: "— salon içinde serbest —" },
+                // Değer koordinattır (kayıt öyle tutulur); etiket sözledir.
                 ...(koltuklar.data?.seats ?? []).map((s) => ({
                   value: `${s.desk_row}-${s.desk_col}-${s.slot}`,
-                  label: `Sıra ${s.desk_row}-${s.desk_col} · koltuk ${s.slot} (no ${s.seat_no})`,
+                  label: seatLabel(s),
                 })),
               ]}
               disabled={salonId === "" || koltuklar.isPending}

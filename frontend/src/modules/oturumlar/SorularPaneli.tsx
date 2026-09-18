@@ -10,14 +10,17 @@ import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "../../lib/api";
-import { saveBlob } from "../../lib/download";
+import { dosyaAdi, saveBlob } from "../../lib/download";
+import { formatDate, formatDateTime } from "../../lib/format";
 import Button from "../../ui/Button";
+import { useConfirm } from "../../ui/ConfirmProvider";
 import Dialog from "../../ui/Dialog";
+import Icon from "../../ui/Icon";
 import Select from "../../ui/Select";
 import TextField from "../../ui/TextField";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import type { ExamSession, ExamSessionCourseRow, ScoreModeCode } from "./api";
-import { examSessionApi } from "./api";
+import { BOOKLETS_ZIP_FILE_TITLE, examSessionApi } from "./api";
 
 /**
  * Soru dosyası satırı: olağan durumda bir oturum dersi satırı; "aynı kitapçık"
@@ -74,6 +77,7 @@ export function groupQuestionRows(courses: ExamSessionCourseRow[]): QuestionGrou
 
 function CourseQuestionRow({ group, locked }: { group: QuestionGroup; locked: boolean }) {
   const snackbar = useSnackbar();
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const [uploadOpen, setUploadOpen] = useState(false);
   const closeUpload = useCallback(() => setUploadOpen(false), []);
@@ -149,7 +153,7 @@ function CourseQuestionRow({ group, locked }: { group: QuestionGroup; locked: bo
       <span className="text-title-small text-on-surface">{group.label}</span>
       {group.shared && (
         <span className="text-body-small text-on-surface-variant">
-          tek dosya — bu seviyelerin tümü aynı kitapçığı alır
+          tek dosya — bu sınıf düzeylerinin tümü aynı kitapçığı alır
         </span>
       )}
       {meta ? (
@@ -172,7 +176,14 @@ function CourseQuestionRow({ group, locked }: { group: QuestionGroup; locked: bo
             <Button
               variant="text"
               icon="delete"
-              onClick={() => remove.mutate()}
+              // Yüklü dosya diskten de silinir (geri alınamaz) → onaydan geçer.
+              onClick={() => {
+                void confirm({
+                  title: "Soru dosyası kaldırılsın mı?",
+                  message: `${group.label} için yüklenen soru PDF'i silinir. Kitapçık üretebilmek için dosyayı yeniden yüklemeniz gerekir.`,
+                  confirmLabel: "Kaldır",
+                }).then((ok) => ok && remove.mutate());
+              }}
               disabled={remove.isPending}
             >
               Kaldır
@@ -212,9 +223,9 @@ function CourseQuestionRow({ group, locked }: { group: QuestionGroup; locked: bo
             />
           </label>
           <Select
-            label="Puan bölümü (K5)"
+            label="Puan bölümü"
             options={[
-              { value: "SINGLE_BOX", label: "Tek PUAN kutusu" },
+              { value: "SINGLE_BOX", label: "Tek puan kutusu" },
               { value: "QUESTION_TABLE", label: "Soru bazlı puan tablosu" },
             ]}
             value={scoreMode}
@@ -277,7 +288,8 @@ export default function SorularPaneli({ session }: { session: ExamSession }) {
     setTemplateDownloading(true);
     try {
       const blob = await examSessionApi.questionTemplateBlob();
-      saveBlob(blob, "soru_sablonu.docx");
+      // Şablon oturuma özgü değildir → adında oturum/tarih yok.
+      saveBlob(blob, dosyaAdi(["Soru Şablonu"], "docx"));
     } catch (e) {
       snackbar.error(e instanceof ApiError ? e.message : "Şablon indirilemedi.");
     } finally {
@@ -309,7 +321,12 @@ export default function SorularPaneli({ session }: { session: ExamSession }) {
   const downloadRun = async (runId: number) => {
     try {
       const blob = await examSessionApi.bookletRunZipBlob(runId);
-      saveBlob(blob, `kitapciklar_oturum_${session.id}.zip`);
+      // Belge adı + oturum adı + tarih (docs/sozluk.md §3) — eski
+      // `kitapciklar_oturum_12.zip` hangi sınava ait olduğunu söylemiyordu.
+      saveBlob(
+        blob,
+        dosyaAdi([BOOKLETS_ZIP_FILE_TITLE, session.name, formatDate(session.exam_date)], "zip"),
+      );
     } catch (e) {
       snackbar.error(e instanceof ApiError ? e.message : "İndirilemedi.");
     }
@@ -349,7 +366,7 @@ export default function SorularPaneli({ session }: { session: ExamSession }) {
             punto.
           </li>
           <li>Görseller ≥ 300 dpi ve salt siyah-beyaz — açık gri tonlar fotokopide kaybolur.</li>
-          <li>Sayfa numarası eklemeyin; "Sayfa x / y" basım sırasında sistemce basılır.</li>
+          <li>Sayfa numarası eklemeyin; “Sayfa x / y” basım sırasında sistemce basılır.</li>
           <li>Yalnız PDF yüklenir (≤ 20 MB, tüm sayfalar A4 dikey).</li>
           <li>Yazmaya başlamadan önce şablondaki yönerge paragraflarını silin.</li>
         </ol>
@@ -361,17 +378,15 @@ export default function SorularPaneli({ session }: { session: ExamSession }) {
       </ul>
 
       <div className="flex flex-wrap items-end gap-3 rounded-shape-md border border-outline-variant p-3">
-        <h3 className="w-full text-title-small text-on-surface">
-          Kişiselleştirilmiş kitapçıklar (R10)
-        </h3>
+        <h3 className="w-full text-title-small text-on-surface">Kişiselleştirilmiş kitapçıklar</h3>
         <TextField
-          label="İsimsiz yedek kopya / salon"
+          label="Her salon için isimsiz yedek kitapçık sayısı"
           type="number"
           min={0}
           max={10}
           value={backupCopies}
           onChange={(e) => setBackupCopies(e.target.value)}
-          className="w-48"
+          className="w-80 max-w-full"
         />
         <Button icon="print" onClick={() => start.mutate()} disabled={start.isPending}>
           {start.isPending ? "Üretiliyor…" : "Kitapçıkları üret"}
@@ -382,11 +397,20 @@ export default function SorularPaneli({ session }: { session: ExamSession }) {
               key={run.id}
               className="flex items-center gap-3 border-b border-outline-variant py-1"
             >
-              <span>Koşu #{run.id}</span>
+              {/* Kayıt kimliği (#41) idareciye bir şey söylemez; ne zaman üretildiği söyler. */}
+              <span>Üretim · {formatDateTime(run.created_at)}</span>
               <span className="text-body-small text-on-surface-variant">
                 {RUN_LABELS[run.status] ?? run.status}
                 {run.error_message && ` — ${run.error_message}`}
               </span>
+              {/* Kitapçık salon/koltuk/ad taşır: yerleşim sonradan değiştiyse bu ZIP
+                  basılırsa kitapçıklar yanlış koltuğa gider. */}
+              {run.is_stale && (
+                <span className="flex items-center gap-1 rounded-shape-sm bg-error-container px-2 py-0.5 text-body-small text-on-error-container">
+                  <Icon name="warning" size="sm" />
+                  Eski yerleşime göre — yeniden üretin
+                </span>
+              )}
               <span className="ml-auto" />
               {run.status === "COMPLETED" && (
                 <Button variant="text" icon="download" onClick={() => void downloadRun(run.id)}>

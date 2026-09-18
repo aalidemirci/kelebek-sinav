@@ -41,6 +41,10 @@ sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% en
   /* Başlık satırı TEK SATIR kalmalı: ikinci satır ~14 px yer götürür. */
   .att th { padding: 3pt 4pt; font-size: 7.5pt; line-height: 1.05; }
   .att .name { font-weight: bold; }
+  /* Ders kodu açıklaması (karışık salon) — en çok iki satır; yüksekliği
+     reports._ATT_LEGEND_PX ile bütçelidir. */
+  .course-legend { margin: 2pt 0 3pt; font-size: 7.5pt; line-height: 1.15;
+                   color: var(--pr-text); }
   /* Beşer beşer okumayı kolaylaştıran koyu ayraç (uzun listede göz kayması). */
   .att tr.mark5 td { border-bottom: var(--pr-border-outer) solid var(--pr-secondary); }
 
@@ -72,7 +76,7 @@ sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% en
 {% for sheet in sheets %}
 
 {# ------------------------------ YAPRAK 1 ------------------------------ #}
-<div class="sheet">
+<div class="sheet sheet-right">
   {% with scope_line="Salon: "|add:sheet.room_name scope_note="Yaprak 1/2 · Oturma planı ve gözetmen işlemleri" %}
     {% include "sinav/reports/_head.html" %}
   {% endwith %}
@@ -136,7 +140,7 @@ sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% en
       <td class="b"><span class="box"></span></td>
       <td>Sınav kuralları ve süresi duyuruldu.</td>
       <td class="b"><span class="box"></span></td>
-      <td>Evrak ve tutanaklar müdür yrd.na teslim edildi.</td>
+      <td>Evrak ve tutanaklar müdür yardımcısına teslim edildi.</td>
     </tr>
   </table>
 
@@ -146,22 +150,28 @@ sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% en
   <table class="rpt-table compact courses">
     <thead>
       <tr>
+        {% comment %}Ders sütunu GENİŞ tutulur (artık ~%44-50): uzun ders etiketi
+        ("Türk Dili ve Edebiyatı — 10. Sınıf") sararsa satır uzar ve yaprak 1 taşar.{% endcomment %}
+        {% if sheet.show_course %}<th class="num" style="width: 6%;">Kod</th>{% endif %}
         <th>Ders</th>
-        <th class="num" style="width: 16%;">Kayıtlı</th>
-        <th class="num" style="width: 22%;">Dağıtılan</th>
-        <th class="num" style="width: 22%;">Dönen</th>
+        <th class="num" style="width: 9%;">Süre</th>
+        <th class="num" style="width: 9%;">Kayıtlı</th>
+        <th class="num" style="width: 16%;">Dağıtılan</th>
+        <th class="num" style="width: 16%;">Dönen</th>
       </tr>
     </thead>
     <tbody>
       {% for course in sheet.courses %}
       <tr>
+        {% if sheet.show_course %}<td class="num"><b>{{ course.code }}</b></td>{% endif %}
         <td>{{ course.course_name }}</td>
+        <td class="num">{{ course.duration_label }}</td>
         <td class="num">{{ course.count }}</td>
         <td></td><td></td>
       </tr>
       {% endfor %}
       <tr>
-        <td class="total">TOPLAM</td>
+        <td class="total" colspan="{% if sheet.show_course %}3{% else %}2{% endif %}">TOPLAM</td>
         <td class="num total">{{ sheet.registered }}</td>
         <td></td><td></td>
       </tr>
@@ -217,17 +227,23 @@ sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% en
   <div class="sec">F. YOKLAMA VE İMZA LİSTESİ
     <span class="hint">Koltuk sırasında · &quot;Yok&quot; = sınava girmedi · imzalar SINAV BİTİMİNDE alınır.</span>
   </div>
+  {% if sheet.course_legend %}
+  {% comment %}Ders KODU açıklaması — yoklama "Ders" sütunu tek harf taşır (uzun
+  ders etiketi satırı sardırıp sayfa bütçesini bozuyordu). Yüksekliği
+  `reports._ATT_LEGEND_PX` ile bütçelenir: metni uzatırken yeniden ölçünüz.{% endcomment %}
+  <div class="course-legend"><b>DERS KODLARI:</b> {{ sheet.course_legend }}</div>
+  {% endif %}
   <table class="rpt-table att att{{ forloop.counter }}">
     <thead>
       <tr>
         <th class="num" style="width: 5%;">Sıra</th>
         <th class="num" style="width: 8%;">Koltuk</th>
         <th class="num" style="width: 9%;">No</th>
-        <th style="width: {% if sheet.show_course %}30{% else %}36{% endif %}%;">Adı Soyadı</th>
+        <th style="width: {% if sheet.show_course %}34{% else %}36{% endif %}%;">Adı Soyadı</th>
         <th class="num" style="width: 8%;">Şube</th>
-        {% if sheet.show_course %}<th style="width: 16%;">Ders</th>{% endif %}
+        {% if sheet.show_course %}<th class="num" style="width: 6%;">Ders</th>{% endif %}
         <th class="num" style="width: 7%;">Yok</th>
-        <th class="center" style="width: {% if sheet.show_course %}17{% else %}27{% endif %}%;">İmza</th>
+        <th class="center" style="width: {% if sheet.show_course %}23{% else %}27{% endif %}%;">İmza</th>
       </tr>
     </thead>
     <tbody>
@@ -238,7 +254,7 @@ sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% en
         <td class="num">{{ row.student_number }}</td>
         <td class="name">{{ row.full_name }}</td>
         <td class="num">{{ row.class_label }}</td>
-        {% if sheet.show_course %}<td>{{ row.course_name }}</td>{% endif %}
+        {% if sheet.show_course %}<td class="num"><b>{{ row.course_code }}</b></td>{% endif %}
         <td class="num"><span class="box"></span></td>
         <td></td>
       </tr>

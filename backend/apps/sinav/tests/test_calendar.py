@@ -31,6 +31,7 @@ from apps.okul.models import (
     SubjectDepartment,
 )
 from apps.okul.services import sections
+from apps.sinav import services as sinav_services
 from apps.sinav import services_calendar as takvim
 from apps.sinav.models import (
     ExamAuthority,
@@ -226,7 +227,7 @@ def test_fill_pool_round3_reddedilir() -> None:
 
 
 # ===========================================================================
-# Öğrenci-bazlı günlük limit (F6 kapısı) — OKY md. 45 esası
+# Öğrenci-bazlı günlük limit (F6 kapısı) — ÖDY md. 5/1-k, Yönerge md. 5/1-s esası
 # ===========================================================================
 
 
@@ -258,7 +259,8 @@ def test_gunluk_limit_uc_sinav_uyari_dort_sert_hata() -> None:
     assert r1.warnings == [] and r2.warnings == []
 
     r3 = takvim.place_entry(entries[2], on_date=gun, period_no=3)
-    assert any("3. sınav" in w and "OKY md. 45" in w for w in r3.warnings)
+    # Dayanak depoda metni bulunan düzenlemelerdir (kılavuzla aynı atıf).
+    assert any("3. sınav" in w and "Yönetmeliği md. 5" in w for w in r3.warnings)
     entries[2].refresh_from_db()
     assert entries[2].placed_date == gun  # uyarıyla YERLEŞİR, engellenmez
 
@@ -375,6 +377,36 @@ def test_create_session_from_slot() -> None:
         takvim.create_session_from_slot(calendar, on_date=gun, period_no=1)
 
 
+def test_silinen_oturumun_girdisi_kilitli_kalmaz() -> None:
+    """A4: slottan üretilen TASLAK oturum silinince girdi takvimde kilitlenmez.
+
+    `session` FK'sı SET_NULL'dır ama soft-delete onu tetiklemez: `session_id` ölü
+    oturumu göstermeye devam eder. Eskiden havuza alma ve silme yalnız
+    `session_id is not None` baktığı için ikisi de 400 veriyor, ızgara ve liste
+    ölü kimlikle "oturumlu" rozeti basıyordu.
+    """
+    calendar, gun = _onayli_yerlesik_takvim()
+    session = takvim.create_session_from_slot(calendar, on_date=gun, period_no=1)
+    sinav_services.remove_exam_session(session)
+    takvim.reopen_calendar(calendar)
+    entry = ExamCalendarEntry.objects.filter(calendar=calendar).order_by("pk").first()
+    assert entry is not None and entry.session_id == session.pk  # ölü bağ duruyor
+
+    # Izgara ve liste ölü bağı "oturumsuz" gösterir.
+    grid = takvim.calendar_grid(calendar)
+    cells = [cell for group in grid["cells"].values() for cell in group]
+    assert cells and all(cell["session_id"] is None for cell in cells)
+    listed = APIClient().get(f"/api/v1/exam-calendars/{calendar.pk}/entries/")
+    assert listed.status_code == 200
+    assert all(row["session"] is None for row in listed.data["results"])
+
+    # Havuza alma ölü bağı temizler; silme de artık mümkündür.
+    entry = takvim.unplace_entry(entry)
+    assert entry.session_id is None and entry.placed_date is None
+    takvim.remove_calendar_entry(entry)
+    assert not ExamCalendarEntry.objects.filter(pk=entry.pk).exists()
+
+
 def test_create_session_yalniz_onayli_takvimden() -> None:
     calendar = _havuzlu_takvim(course_count=1)
     entry = ExamCalendarEntry.objects.filter(calendar=calendar).first()
@@ -464,9 +496,15 @@ def test_takvim_pdf_yatay_taslak_filigrani_ve_tr_duman() -> None:
     assert "TASLAK" in text  # onaysız PDF filigranlı
     eksik = [h for h in TURKCE_DUMAN if h != " " and h not in text]
     assert not eksik, f"Takvim PDF'inde Türkçe glif kaybı: {eksik}"
-    assert "SANCAKTEPE KAYMAKAMLIĞI" not in text  # antet ilçeyi olduğu gibi basar
-    assert "Sancaktepe KAYMAKAMLIĞI" in text
+    # Antet resmî yazışma usulüyle: kurum satırı TÜRKÇE büyük harf (tr_upper —
+    # i→İ), birim satırı "<Okul Adı> Müdürlüğü" tek satır (18.09.2026).
+    assert "SANCAKTEPE KAYMAKAMLIĞI" in text
+    assert "Anadolu Lisesi Müdürlüğü" in text
     assert "Zümre Başkanı" in text  # boş imza çizgileri (B7)
+    assert "Okul Zümre Başkanı" not in text  # mevzuatta olmayan, hiç dolmayan slot kalktı
+    assert "Düzenleyen — Müdür Yardımcısı" in text
+    assert "· 08:30" in text  # ders saatinin başlangıcı satır başlığında
+    assert "…… / …… / 20……" in text  # onaysız takvimde boş tarih çizgisi
 
     takvim.submit_calendar(calendar)
     takvim.approve_calendar(calendar)
@@ -537,7 +575,7 @@ def test_api_takvim_akisi() -> None:
     )
     assert ekle.status_code == 201
     assert ekle.data["participant_type"] == "LEVEL"
-    assert ekle.data["participant_label"] == "Seviye geneli"
+    assert ekle.data["participant_label"] == "Sınıf düzeyinin tamamı"
     entry_id = ekle.data["id"]
     listesi = client.get(f"/api/v1/exam-calendars/{cal_id}/entries/")
     assert listesi.status_code == 200 and len(listesi.data["results"]) == 1
@@ -671,7 +709,7 @@ def test_pdf_makam_etiketi_ve_dipnotu_basiyor() -> None:
     metin = "\n".join(p.extract_text() or "" for p in reader.pages)
     assert "İL MEM SINAVI" in metin
     assert "DİPNOT" in metin and "Mazeret sınavları izleyen hafta yapılır." in metin
-    assert "2026-2027 EĞİTİM ÖĞRETİM YILI" in metin  # dönem üzerinden ders yılı
+    assert "2026-2027 EĞİTİM VE ÖĞRETİM YILI" in metin  # dönem üzerinden ders yılı
 
 
 def test_api_makam_dipnot_ve_imza_zumresi_sozlesmesi() -> None:
@@ -855,7 +893,7 @@ def test_sube_kapsami_kaydedilir_ve_baska_seviyenin_subesi_reddedilir() -> None:
 
     # Başka seviyenin şubesi: Türkçe hata, girdi yazılmaz.
     baska = ders("Seçmeli Fizik", levels=[9], course_type=CourseType.ELECTIVE)
-    with pytest.raises(ValidationError, match="seviyesinde değil"):
+    with pytest.raises(ValidationError, match="düzeyinde değil"):
         takvim.add_calendar_entry(
             calendar=calendar,
             course_id=baska.pk,
@@ -1170,7 +1208,7 @@ def test_api_toplu_ekleme_ve_secmeli_secenekleri() -> None:
     assert duzelt.status_code == 200
     assert duzelt.data["participant_type"] == "LEVEL"
     assert duzelt.data["section_ids"] == []
-    assert duzelt.data["participant_label"] == "Seviye geneli"
+    assert duzelt.data["participant_label"] == "Sınıf düzeyinin tamamı"
 
     # Boş liste ile SECTIONS reddi 400 (500 değil) — Türkçe mesaj servisten.
     hata = client.patch(
@@ -1293,7 +1331,7 @@ def test_sinav_saatleri_ayari_otomatigi_baglar_elle_yerlestirmeyi_uyarir() -> No
 
 
 def test_otomatik_yerlestirme_havuzu_dagitir_ve_gunluk_esasi_korur() -> None:
-    """FILL: havuz boşalır; hiçbir gün+seviyede ikiden fazla sınav olmaz (OKY md. 45)."""
+    """FILL: havuz boşalır; hiçbir gün+seviyede ikiden fazla sınav olmaz (ÖDY md. 5/1-k)."""
     SchoolConfig.objects.create(
         pk=SchoolConfig.SINGLETON_PK, daily_period_count=8, exam_period_nos=[1, 2]
     )

@@ -1,7 +1,7 @@
 // Kabuk + yönlendirme testi (DD App.test.tsx kalıbından).
 // Pinlenen davranışlar: (1) kurulum kapısı — `setup_completed=false` iken her rota
-// sihirbaza düşer, `true` iken panel açılır, durum okunamazsa kapı FAIL-OPEN;
-// (2) kabuk gezinmesi (Panel/Kişiler/Ders Havuzu/Ayarlar); (3) M3 token bütünlüğü —
+// sihirbaza düşer, `true` iken Genel Bakış açılır, durum okunamazsa kapı FAIL-OPEN;
+// (2) kabuk gezinmesi (Genel Bakış/Kişiler/Ders Havuzu/Ayarlar); (3) M3 token bütünlüğü —
 // kaynakta kullanılan şekil/opaklık sınıflarının Tailwind çıktısında gerçekten
 // üretildiği (DD F4-D5 bulgu 14/15 dersi).
 // Auth yok: rol/oturum senaryosu YOKTUR (tek kullanıcılı masaüstü).
@@ -9,7 +9,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import postcss from "postcss";
 import { MemoryRouter } from "react-router-dom";
@@ -72,6 +72,14 @@ function ekranaBas(yol = "/") {
   );
 }
 
+/**
+ * Kabuğun üst çubuğu. Testing Library her `<header>`i "banner" sayar (sayfa
+ * içi `<header>` için ARIA istisnasını uygulamaz); kabuğunki DOM'da İLKİDİR.
+ */
+function ustCubuk(): HTMLElement {
+  return screen.getAllByRole("banner")[0];
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   okulApiMock.getSetupStatus.mockResolvedValue(KURULU);
@@ -104,39 +112,39 @@ describe("App — kurulum kapısı", () => {
   it("kurulum tamamlanmadıysa kök rotadan sihirbaza yönlendirir", async () => {
     okulApiMock.getSetupStatus.mockResolvedValue(KURULMAMIS);
     ekranaBas("/");
-    expect(await screen.findByRole("heading", { name: "Kurulum sihirbazı" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Panel" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Kurulum Sihirbazı" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Genel Bakış" })).not.toBeInTheDocument();
   });
 
   it("kurulum tamamlanmadıysa iç rotalardan da sihirbaza yönlendirir", async () => {
     okulApiMock.getSetupStatus.mockResolvedValue(KURULMAMIS);
     ekranaBas("/kisiler");
-    expect(await screen.findByRole("heading", { name: "Kurulum sihirbazı" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Kurulum Sihirbazı" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Kişiler" })).not.toBeInTheDocument();
   });
 
-  it("kurulum tamamlandıysa kök rotada panel açılır", async () => {
+  it("kurulum tamamlandıysa kök rotada Genel Bakış açılır", async () => {
     ekranaBas("/");
-    expect(await screen.findByRole("heading", { name: "Panel" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Genel Bakış" })).toBeInTheDocument();
   });
 
   it("kurulum tamamlandıktan sonra sihirbaz elle açılabilir kalır", async () => {
     ekranaBas("/kurulum");
-    expect(await screen.findByRole("heading", { name: "Kurulum sihirbazı" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Kurulum Sihirbazı" })).toBeInTheDocument();
   });
 
   it("durum okunamazsa kapı açılır (fail-open) — program kilitlenmez", async () => {
     okulApiMock.getSetupStatus.mockRejectedValue(new Error("ağ yok"));
     ekranaBas("/");
-    expect(await screen.findByRole("heading", { name: "Panel" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Genel Bakış" })).toBeInTheDocument();
   });
 });
 
 describe("App — kabuk gezinmesi", () => {
   it("ana bölüm bağlantılarını gösterir", async () => {
     ekranaBas("/");
-    await screen.findByRole("heading", { name: "Panel" });
-    for (const ad of ["Panel", "Salonlar", "Kişiler", "Ders Havuzu", "Ayarlar", "Kılavuz"]) {
+    await screen.findByRole("heading", { name: "Genel Bakış" });
+    for (const ad of ["Genel Bakış", "Salonlar", "Kişiler", "Ders Havuzu", "Ayarlar", "Kılavuz"]) {
       expect(screen.getByRole("link", { name: ad })).toBeInTheDocument();
     }
     expect(screen.getByRole("link", { name: "Hakkında ve Lisans" })).toHaveAttribute(
@@ -170,9 +178,35 @@ describe("App — kabuk gezinmesi", () => {
     ).toBeInTheDocument();
   });
 
+  // docs/sozluk.md §4: üst çubuktaki başlık sayfanın h1'iyle AYNIDIR. Eskiden
+  // üst çubuk "Genel bakış", sayfa "Panel", gezinme "Panel" diyordu. (Takvim/
+  // oturum/salon/ders sayfaları react-query ister; onların eşliği kendi
+  // testlerinde h1 üzerinden korunur.)
+  it.each([
+    ["/", "Genel Bakış"],
+    ["/kisiler", "Kişiler"],
+    ["/ayarlar", "Ayarlar"],
+    ["/kilavuz", "Kullanım Kılavuzu"],
+    ["/hakkinda", "Hakkında ve Lisans"],
+    ["/kurulum", "Kurulum Sihirbazı"],
+  ])("üst çubuk başlığı sayfanın h1'iyle aynıdır: %s", async (yol, baslik) => {
+    ekranaBas(yol);
+    expect(await screen.findByRole("heading", { level: 1, name: baslik })).toBeInTheDocument();
+    expect(within(ustCubuk()).getByText(baslik)).toBeInTheDocument();
+  });
+
+  it("tema anahtarı tek yerdedir (kenar çubuğu) — üst çubukta ikinci kopya yok", async () => {
+    ekranaBas("/");
+    await screen.findByRole("heading", { name: "Genel Bakış" });
+    expect(screen.getAllByRole("button", { name: /temaya geç/ })).toHaveLength(1);
+    expect(
+      within(ustCubuk()).queryByRole("button", { name: /temaya geç/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("DD'den gelen iş bağlantıları iskelete sızmadı", async () => {
     ekranaBas("/");
-    await screen.findByRole("heading", { name: "Panel" });
+    await screen.findByRole("heading", { name: "Genel Bakış" });
     for (const ad of ["Disiplin", "Onur / Ödül", "Bilgi Notları"]) {
       expect(screen.queryByRole("link", { name: ad })).not.toBeInTheDocument();
     }

@@ -100,3 +100,40 @@ def test_api_zumre_crud_sozlesmesi() -> None:
 
     assert client.delete(f"/api/v1/subject-departments/{dept_id}/").status_code == 204
     assert SubjectDepartment.objects.filter(pk=dept_id).first() is None
+
+
+def test_api_zumre_yeniden_adlandirma_teklik_kendini_saymaz() -> None:
+    """PATCH'te teklik denetimi kaydın KENDİSİNİ dışlar; başka zümrenin adı yine reddedilir.
+
+    Kendini dışlamayan denetim, adı değişmeyen her düzenlemeyi (başkan atama dâhil)
+    "zaten kayıtlı" diye reddederdi.
+    """
+    baskan = Personnel.objects.create(first_name="DENEME", last_name="ÖĞRETMEN")
+    sosyal = SubjectDepartment.objects.create(name="Sosyal Bilimler")
+    SubjectDepartment.objects.create(name="Matematik")
+    client = APIClient()
+    url = f"/api/v1/subject-departments/{sosyal.pk}/"
+
+    ayni_ad = client.patch(url, {"name": "Sosyal Bilimler", "head": baskan.pk}, format="json")
+    assert ayni_ad.status_code == 200
+    assert ayni_ad.json()["head_name"] == "DENEME ÖĞRETMEN"
+
+    cakisan = client.patch(url, {"name": " Matematik  "}, format="json")
+    assert cakisan.status_code == 400
+    assert "zaten kayıtlı" in str(cakisan.json()["fields"]["name"])
+    sosyal.refresh_from_db()
+    assert sosyal.name == "Sosyal Bilimler"
+
+
+def test_api_zumre_baskani_sicilde_olmayan_personel_olamaz() -> None:
+    """Silinmiş (soft) personel başkan seçilemez — evrakta boş imza çizgisi doğardı."""
+    ayrilan = Personnel.objects.create(first_name="AYRILAN", last_name="ÖĞRETMEN")
+    ayrilan.delete()
+
+    yanit = APIClient().post(
+        "/api/v1/subject-departments/", {"name": "Coğrafya", "head": ayrilan.pk}, format="json"
+    )
+
+    assert yanit.status_code == 400
+    assert "head" in yanit.json()["fields"]
+    assert not SubjectDepartment.objects.exists()

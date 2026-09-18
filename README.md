@@ -21,7 +21,22 @@ raporlarından (xlsx/pano) içe aktarılır; ders havuzu MEB ders çizelgesinden
 okul türü ve kademeye göre tohumlanır. Opsiyonel uygulama parolası ile alan
 şifrelemesi ve şifreli yedek.
 
-**Durum:** Seçmeli dersin **hangi şubelerin aldığı artık ders havuzunda**
+**Durum:** Değerlendirme turu tamamlandı (19.09.2026): program mimari, doğruluk,
+evrak ve dil yönünden baştan sona gözden geçirildi
+([rapor ve plan](docs/degerlendirme/2026-09-18-degerlendirme-ve-gelistirme-plani.md)).
+Aynı dersin iki sınıf düzeyinde sınavı olan oturumlarda soru dosyası yükleme
+hatası giderildi; dağıtılmış oturum **taslağa alınabiliyor** ya da tek düğmeyle
+**yeniden dağıtılabiliyor**. Evrakta **sınav süresi** ve karma oturumlarda sınıf
+düzeyi basılıyor; karışık salonlarda ders adı yerine açıklamalı **ders kodu**
+kullanıldığı için 40 öğrencilik salon evrakı gerçek ders adlarıyla da iki yaprakta
+kalıyor. Hata ve uyarı metinleri iç kimlik yerine salon adı, ders adı ve okul
+numarasıyla konuşuyor; arayüz dili tek bir [sözlüğe](docs/sozluk.md) bağlandı.
+Yeniden dağıtımdan sonra eski kitapçık paketleri uyarıyla işaretleniyor; Pardus'ta
+güncelleme ekranı artık Windows kurulum dosyası önermiyor. Mevzuat atıflarının
+tamamı depodaki resmî metinlerden doğrulandı (`docs/mevzuat/`); kalite kapıları
+her değişiklikte GitHub'da da koşacak biçimde iş akışına bağlandı.
+
+Önceki durum: Seçmeli dersin **hangi şubelerin aldığı artık ders havuzunda**
 tanımlanıyor (03.09.2026): idareci bunu bir kez girer, dört sınav takvimi de
 kullanır — takvim havuzu şubesi tanımlı seçmelileri kapsamıyla birlikte
 kendiliğinden alır, seçmeli seçim penceresi kutuları dolu getirir. Takvim

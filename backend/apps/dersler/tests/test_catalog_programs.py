@@ -180,7 +180,7 @@ class TestGercekDosyalar:
     def test_spor_lisesi_2026_12_sinif_uyarisi_2027_de_kalkar(self) -> None:
         """Ortak dersler hazırlık-9-10'dan kademeli (TTK 2025/9): 2026-27'de 12 kapsanmaz."""
         uyarili = _plan(SchoolType.SPOR_LISESI, year=2026)
-        assert any("12. sınıf ortak" in w for w in uyarili.warnings)
+        assert any("12. sınıf zorunlu dersleri" in w for w in uyarili.warnings)
         assert not _plan(SchoolType.SPOR_LISESI, year=2027).warnings
 
     def test_cok_programli_al_uc_cizelgeyi_birlestirir(self) -> None:

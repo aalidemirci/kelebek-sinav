@@ -6,7 +6,10 @@ adsız ihlal listesi — doğrulayıcı kişisel veri üretmez), dağıtım para
 metrikleri ve salon doluluğu. İdare imza bloğu: oturum onayının dayanağıdır.
 
 Bu evrak salona GİTMEZ; idarede dosyalanır — o yüzden gözetmen dili yoktur,
-sayısal denetim dili vardır.{% endcomment %}
+sayısal denetim dili vardır. Dil yine de İDARECİ dilidir (18.09.2026): belgeyi
+okul müdürü imzalar; motorun iç terimleri ("1. halka", "Σ 1/d²", "satranç
+modu", "sert kısıt") sade karşılıklarıyla yazılır. Dağıtım numarası (seed)
+sözleşmesi değişmedi: sayı basılır, etiketi Türkçedir.{% endcomment %}
 {% block extra_style %}
 <style>
   .verdict { margin-top: 6pt; border: 1.6pt solid var(--pr-ink); padding: 9pt 10pt;
@@ -32,12 +35,13 @@ sayısal denetim dili vardır.{% endcomment %}
 
   {% if report.is_valid %}
   <div class="verdict">
-    <div class="head">SERT KISIT İHLALİ YOKTUR (İHLAL = 0)</div>
-    <div class="sub">Dağıtım, bağımsız doğrulayıcıdan geçmiştir; oturum onaya uygundur.</div>
+    <div class="head">KURAL İHLALİ YOKTUR</div>
+    <div class="sub">Aynı sınava giren iki öğrenci hiçbir sırada yan yana oturmamaktadır. Dağıtım
+      bağımsız doğrulamadan geçmiştir; oturum onaya uygundur.</div>
   </div>
   {% else %}
   <div class="verdict bad">
-    <div class="head">DİKKAT: {{ report.violation_count }} SERT KISIT İHLALİ TESPİT EDİLDİ</div>
+    <div class="head">DİKKAT: {{ report.violation_count }} KURAL İHLALİ TESPİT EDİLDİ</div>
     <div class="sub">İhlaller giderilmeden oturum onaylanmamalıdır.</div>
   </div>
   <ul class="violations">
@@ -45,33 +49,42 @@ sayısal denetim dili vardır.{% endcomment %}
   </ul>
   {% endif %}
 
-  <div class="sec">A. DAĞITIM PARAMETRELERİ
-    <span class="hint">Aynı tohum (seed) aynı dağıtımı üretir.</span>
+  <div class="sec">A. DAĞITIM BİLGİLERİ
+    {% if report.params.shuffled %}<span class="hint">Aynı dağıtım numarası aynı yerleşimi yeniden üretir.</span>{% endif %}
   </div>
   <table class="fields kv">
     <tr><td class="k">Dağıtım düzeni</td><td class="v">{{ report.params.layout_mode_label }}</td></tr>
-    <tr><td class="k">Rastgelelik tohumu (seed)</td><td class="v">{{ report.params.seed }}</td></tr>
-    <tr><td class="k">Katı mod (1. halka sert)</td>
+    {% if not report.params.shuffled %}
+    <tr><td class="k">Yerleşim kuralı</td>
+        <td class="v">Her şube kendi dersliğinde, okul numarası sırasıyla oturur (karıştırma yapılmaz).</td></tr>
+    {% else %}
+    {% comment %}`unlocalize`: numara kullanıcı tarafından yeniden GİRİLİR; binlik
+    ayraç açılırsa "987.654" basılır ve aynı dağıtım üretilemez.{% endcomment %}
+    <tr><td class="k">Dağıtım numarası (seed)</td><td class="v">{{ report.params.seed|unlocalize }}</td></tr>
+    <tr><td class="k">Katı dağıtım (yan, ön ve arka komşuluk da yasak)</td>
         <td class="v">{{ report.params.strict|yesno:"Açık,Kapalı" }}</td></tr>
-    <tr><td class="k">Satranç modu</td>
-        <td class="v">{{ report.params.checkerboard|yesno:"Açık,Kapalı" }}</td></tr>
-    <tr><td class="k">Yerleşen öğrenci / sabit kurallı</td>
+    <tr><td class="k">Dönüşümlü oturma (iki sınavlı salonda satranç düzeni)</td>
+        <td class="v">{{ report.params.checkerboard|yesno:"Uygulandı,Uygulanmadı" }}</td></tr>
+    {% endif %}
+    <tr><td class="k">Yerleşen öğrenci / yeri kuralla sabitlenen</td>
         <td class="v">{{ report.params.placed }} / {{ report.params.pinned }}</td></tr>
   </table>
 
-  <div class="sec">B. KISIT VE YAKINLIK METRİKLERİ</div>
+  <div class="sec">B. YAKINLIK ÖLÇÜLERİ
+    <span class="hint">Kural ihlali değildir; dağıtımın kalitesini gösterir.</span>
+  </div>
   <table class="fields kv">
-    <tr><td class="k">Birinci halkada aynı-grup çifti (komşu sıra)</td>
+    <tr><td class="k">Komşu sıralara düşen aynı sınav çifti (yan, ön, arka, çapraz)</td>
         <td class="v">{{ report.first_ring_pairs }}</td></tr>
     {% comment %}GROUPS-tipi açık uç — aynı şubeden farklı-grup komşuluğu
     (kopya riski düşük: farklı kitapçık).{% endcomment %}
-    <tr><td class="k">Aynı şubeden farklı-grup komşu çifti (1. halka)</td>
+    <tr><td class="k">Komşu sıralara düşen aynı şube çifti (sınavları farklı)</td>
         <td class="v">{{ report.cross_section_pairs }}</td></tr>
-    <tr><td class="k">Toplam yakınlık skoru (Σ 1/d² — düşük iyidir)</td>
+    <tr><td class="k">Toplam yakınlık puanı (düşük olması iyidir)</td>
         <td class="v">{{ report.proximity_score }}</td></tr>
     {% for metric in report.min_distances %}
-    <tr><td class="k">En yakın aynı-grup mesafesi — {{ metric.group_label }}</td>
-        <td class="v">{{ metric.distance }} birim</td></tr>
+    <tr><td class="k">Aynı sınava giren en yakın iki öğrenci — {{ metric.group_label }}</td>
+        <td class="v">{{ metric.distance }} sıra arayla</td></tr>
     {% endfor %}
   </table>
 
@@ -107,7 +120,7 @@ sayısal denetim dili vardır.{% endcomment %}
 
   {% if report.warnings %}
   <div class="sec">D. DAĞITIM UYARILARI
-    <span class="hint">Sert kısıt değildir; idarenin değerlendirmesine sunulur.</span>
+    <span class="hint">Kural ihlali değildir; idarenin değerlendirmesine sunulur.</span>
   </div>
   <ul class="violations">
     {% for warning in report.warnings %}<li>{{ warning }}</li>{% endfor %}
@@ -118,7 +131,10 @@ sayısal denetim dili vardır.{% endcomment %}
     <tr><td class="date">…… / …… / 20……</td><td class="date">…… / …… / 20……</td></tr>
     <tr><td class="space"></td><td class="space"></td></tr>
     <tr>
-      <td><div class="line"></div><span class="who">Sınav Komisyonu</span><br>
+      {% comment %}"Sınav Komisyonu" mevzuatta tanımlı bir organ değildir; okul geneli
+      sınavın iş ve işlemleri okul müdürlüğünündür (Yönerge md. 5) — belgeyi
+      düzenleyen müdür yardımcısı, onaylayan okul müdürüdür.{% endcomment %}
+      <td><div class="line"></div><span class="who">Düzenleyen — Müdür Yardımcısı</span><br>
           <span class="role">Ad Soyad / İmza</span></td>
       <td><div class="line"></div><span class="who">Okul Müdürü</span><br>
           <span class="role">Ad Soyad / İmza</span></td>

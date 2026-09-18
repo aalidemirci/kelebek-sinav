@@ -1,4 +1,6 @@
-// Panel (hub) — OYS SinavIslemleriHub'dan UYARLA (F3): modül kartları.
+// Genel Bakış (hub) — OYS SinavIslemleriHub'dan UYARLA (F3): modül kartları.
+// Sayfanın TEK adı "Genel Bakış"tır (gezinme + üst çubuk + h1 — docs/sozluk.md
+// §4); kart başlıkları gittikleri sayfanın h1'iyle aynıdır.
 
 import HubFeatureCard from "../../ui/HubFeatureCard";
 
@@ -6,29 +8,31 @@ export default function PanelPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <header>
-        <h1 className="text-headline-medium font-semibold tracking-tight text-on-surface">Panel</h1>
+        <h1 className="text-headline-medium font-semibold tracking-tight text-on-surface">
+          Genel Bakış
+        </h1>
         <p className="mt-2 text-body-medium text-on-surface-variant">
-          Ortak sınav planlama: takvimle, oturum kur, dağıt, onayla; evrakı ve kitapçıkları bas.
+          Ortak sınav planlama: takvimi kur, oturum aç, dağıt, onayla; evrakı ve kitapçıkları bas.
         </p>
       </header>
       <div className="grid gap-4 sm:grid-cols-2">
         <HubFeatureCard
           to="/takvimler"
           icon="calendar_month"
-          title="Sınav Takvimi"
-          description="Mevzuat pencereli dönem takvimleri; ders havuzu, yerleştirme ızgarası, süreç takibi ve resmî PDF."
+          title="Sınav Takvimleri"
+          description="Mevzuat pencereli dönem takvimleri; ders havuzu, yerleştirme çizelgesi, süreç takibi ve resmî PDF."
         />
         <HubFeatureCard
           to="/oturumlar"
           icon="event_seat"
           title="Sınav Oturumları"
-          description="5 adımlı sihirbaz: nakil beyanı, dersler, salonlar, karışık dağıtım ve onay; yoklama takibi."
+          description="Adım adım sihirbaz: dersler, salonlar, karışık dağıtım ve onay; evrak, kitapçık ve yoklama takibi."
         />
         <HubFeatureCard
           to="/salonlar"
           icon="meeting_room"
-          title="Salonlar"
-          description="Salon şablonları ve 2B yerleşim editörü; şube dersliklerini tek tıkla üret."
+          title="Sınav Salonları"
+          description="Salon planları ve oturma düzeni editörü; şube dersliklerini tek tıkla oluştur."
         />
         <HubFeatureCard
           to="/kisiler"
@@ -40,7 +44,7 @@ export default function PanelPage() {
           to="/dersler"
           icon="menu_book"
           title="Ders Havuzu"
-          description="MEB çizelgesinden tohumlanan ders havuzu; seviye ve alias yönetimi."
+          description="MEB haftalık ders çizelgesinden türetilen ders havuzu; sınıf düzeyi ve takma ad yönetimi."
         />
       </div>
     </div>

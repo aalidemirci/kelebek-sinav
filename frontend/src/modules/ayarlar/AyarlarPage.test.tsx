@@ -145,7 +145,7 @@ describe("AyarlarPage — ders yılları", () => {
     expect(screen.getByText("Aktif")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Aktifleştir/ }));
-    const onay = await screen.findByRole("dialog", { name: "Ders yılını aktifleştir" });
+    const onay = await screen.findByRole("dialog", { name: "Ders yılı aktifleştirilsin mi?" });
     await user.click(within(onay).getByRole("button", { name: "Aktifleştir" }));
 
     await waitFor(() => expect(oapi.activateSchoolYear).toHaveBeenCalledWith(4));
@@ -166,6 +166,12 @@ describe("AyarlarPage — şubeler", () => {
 
     await user.click(await screen.findByRole("tab", { name: /Şubeler/ }));
     expect(await screen.findByText("10/A")).toBeInTheDocument();
+    // Şube yoklama listesi (R2k) kaldırılmıştı; katalogdan beslenen belge şube
+    // sınav duyurusudur. "Derslik kümesi" de sözlükte "salon kümesi"dir.
+    expect(screen.getByText(/Şube sınav duyurusu bu katalogdan\s+beslenir/)).toBeInTheDocument();
+    expect(screen.queryByText(/yoklama listeleri/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Salon kümeleri \(Sabah\/Öğle\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/Derslik kümeleri/)).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Şube"), "B");
     await user.click(screen.getByRole("button", { name: "Şube ekle" }));
@@ -188,7 +194,7 @@ describe("AyarlarPage — şubeler", () => {
     await screen.findByText("10/A");
 
     await user.click(screen.getByRole("button", { name: "10/A şubesini kaldır" }));
-    const onay = await screen.findByRole("dialog", { name: "Şubeyi kaldır" });
+    const onay = await screen.findByRole("dialog", { name: "Şube katalogdan kaldırılsın mı?" });
     await user.click(within(onay).getByRole("button", { name: "Kaldır" }));
 
     await waitFor(() => expect(oapi.deleteClassSection).toHaveBeenCalledWith(11));

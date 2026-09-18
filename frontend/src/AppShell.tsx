@@ -13,8 +13,11 @@ interface NavItem {
   icon: string;
 }
 
+// Gezinme etiketi KISA addır; sıra bilinçlidir (değiştirme — kullanıcı kas
+// hafızası). Ana sayfanın tek adı "Genel Bakış"tır: eskiden gezinmede "Panel",
+// üst çubukta "Genel bakış", sayfada "Panel" yazıyordu (docs/sozluk.md §4).
 const NAV_ITEMS: NavItem[] = [
-  { to: "/", label: "Panel", icon: "space_dashboard" },
+  { to: "/", label: "Genel Bakış", icon: "space_dashboard" },
   { to: "/takvimler", label: "Takvimler", icon: "calendar_month" },
   { to: "/oturumlar", label: "Oturumlar", icon: "event_seat" },
   { to: "/salonlar", label: "Salonlar", icon: "meeting_room" },
@@ -24,17 +27,20 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/kilavuz", label: "Kılavuz", icon: "auto_stories" },
 ];
 
+// Üst çubuk başlığı sayfanın h1'iyle AYNIDIR (docs/sozluk.md §4) — Başlık
+// Düzeninde tam ad. Bir sayfanın h1'i değişirse burası da değişir; eşlik
+// `App.test.tsx` "üst çubuk başlığı" testiyle korunur.
 const PAGE_TITLES: Array<[prefix: string, title: string]> = [
-  ["/takvimler", "Sınav takvimleri"],
-  ["/oturumlar", "Sınav oturumları"],
-  ["/salonlar", "Sınav salonları"],
+  ["/takvimler", "Sınav Takvimleri"],
+  ["/oturumlar", "Sınav Oturumları"],
+  ["/salonlar", "Sınav Salonları"],
   ["/kisiler", "Kişiler"],
-  ["/dersler", "Ders havuzu"],
+  ["/dersler", "Ders Havuzu"],
   ["/ayarlar", "Ayarlar"],
   ["/kilavuz", "Kullanım Kılavuzu"],
   ["/hakkinda", "Hakkında ve Lisans"],
-  ["/kurulum", "Kurulum"],
-  ["/", "Genel bakış"],
+  ["/kurulum", "Kurulum Sihirbazı"],
+  ["/", "Genel Bakış"],
 ];
 
 const COLLAPSE_KEY = "kelebek-sinav-sidebar-collapsed";
@@ -52,8 +58,8 @@ function navLinkClass(isActive: boolean, collapsed: boolean): string {
     collapsed ? "justify-center px-2" : "gap-3 px-3"
   }`;
   return isActive
-    ? `${base} bg-sidebar-active text-white shadow-elevation-1`
-    : `${base} text-on-sidebar-muted hover:bg-white/8 hover:text-on-sidebar`;
+    ? `${base} bg-sidebar-active text-on-sidebar shadow-elevation-1`
+    : `${base} text-on-sidebar-muted hover:bg-on-sidebar/8 hover:text-on-sidebar`;
 }
 
 function SidebarContent({
@@ -66,11 +72,11 @@ function SidebarContent({
   return (
     <>
       <div
-        className={`flex h-20 shrink-0 items-center border-b border-white/10 ${
+        className={`flex h-20 shrink-0 items-center border-b border-on-sidebar/10 ${
           collapsed ? "justify-center px-2" : "gap-3 px-4"
         }`}
       >
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-shape-lg bg-white/95 shadow-elevation-2">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-shape-lg bg-on-sidebar/95 shadow-elevation-2">
           <img src="/app-logo.png" alt="" className="h-10 w-10 object-contain" />
         </span>
         {!collapsed && (
@@ -105,9 +111,9 @@ function SidebarContent({
         ))}
       </nav>
 
-      <div className="space-y-1 border-t border-white/10 p-3">
+      <div className="space-y-1 border-t border-on-sidebar/10 p-3">
         {!collapsed && (
-          <div className="mb-2 rounded-shape-md border border-white/10 bg-white/5 px-3 py-2.5">
+          <div className="mb-2 rounded-shape-md border border-on-sidebar/10 bg-on-sidebar/5 px-3 py-2.5">
             <p className="flex items-center gap-2 text-label-medium text-on-sidebar">
               <span className="h-2 w-2 rounded-full bg-success" />
               Yerel çalışma
@@ -128,14 +134,14 @@ function SidebarContent({
         </NavLink>
         <DensitySwitcher
           collapsed={collapsed}
-          className="text-on-sidebar-muted hover:bg-white/8 hover:text-on-sidebar"
+          className="text-on-sidebar-muted hover:bg-on-sidebar/8 hover:text-on-sidebar"
         />
         <div
           className={`flex min-h-10 items-center rounded-shape-md ${
             collapsed ? "justify-center" : "gap-1 px-1"
           }`}
         >
-          <ThemeSwitcher className="text-on-sidebar-muted hover:bg-white/8 hover:text-on-sidebar" />
+          <ThemeSwitcher className="text-on-sidebar-muted hover:bg-on-sidebar/8 hover:text-on-sidebar" />
           {!collapsed && <span className="text-label-large text-on-sidebar-muted">Tema</span>}
         </div>
       </div>
@@ -196,10 +202,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </p>
           </div>
 
-          {/* F0 notu: genel arama (öğrenci/oturum) F3'te, "Yeni Sınav" hızlı
-              eylemi sihirbazla birlikte F3'te gelir — DD kabuğundaki arama
-              formu ve birincil eylem düğmesi o fazda geri eklenecek. */}
-          <ThemeSwitcher className="ml-auto" />
+          {/* Tema anahtarı YALNIZ kenar çubuğundadır (görünüm ayarları bir arada:
+              yoğunluk + tema; dar ekranda menü çekmecesinden erişilir). Eskiden
+              burada ikinci bir kopyası vardı — aynı ayarın iki düğmesi hangisinin
+              "asıl" olduğu sorusunu doğuruyordu. */}
         </header>
 
         <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-5 lg:px-7 lg:py-6">

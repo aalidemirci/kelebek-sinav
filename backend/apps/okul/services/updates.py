@@ -82,7 +82,21 @@ def get_app_version() -> str:
         return "0.0.0"
 
 
-def version_key(value: str) -> tuple[tuple[int, ...], int, str]:
+def _pre_key(pre: str) -> tuple[tuple[int, int | str], ...]:
+    """Ön-sürüm ekinin DOĞAL sıralama anahtarı: "beta.10" > "beta.9".
+
+    Ek eskiden DİZGE olarak karşılaştırılıyordu ('beta.10' < 'beta.9'): onuncu
+    ön-sürümde beta.9 kullanıcısına güncelleme hiç önerilmez, sürüm listesinden
+    "en yeni" diye beta.9 seçilirdi. Rakam öbekleri sayı, gerisi metin olarak
+    karşılaştırılır; sayısal parça metinden küçüktür (semver önceliği). İki
+    `version_key` kopyası (`desktop/version.py` ve `okul/services/updates.py`)
+    AYNI kalmalıdır.
+    """
+    parts = re.findall(r"\d+|[^\d.]+", pre)
+    return tuple((0, int(part)) if part.isdigit() else (1, part.lower()) for part in parts)
+
+
+def version_key(value: str) -> tuple[tuple[int, ...], int, tuple[tuple[int, int | str], ...]]:
     """`desktop.version` ile aynı, ön sürümleri kararlı sürümden küçük sayan anahtar."""
     head, _, pre = value.strip().partition("-")
     numbers: list[int] = []
@@ -90,7 +104,7 @@ def version_key(value: str) -> tuple[tuple[int, ...], int, str]:
         match = re.match(r"^\d+", part.strip())
         numbers.append(int(match.group(0)) if match else 0)
     numbers += [0] * (4 - len(numbers))
-    return (tuple(numbers[:4]), 0 if pre else 1, pre)
+    return (tuple(numbers[:4]), 0 if pre else 1, _pre_key(pre))
 
 
 def update_directory() -> Path:
@@ -248,10 +262,21 @@ def latest_release(*, force: bool = False) -> ReleaseInfo:
     return release
 
 
+def installer_supported() -> bool:
+    """Uygulama içi indirme yalnız Windows kurulum dosyasını (setup.exe) bilir.
+
+    Pardus/Linux'ta aynı düğme Windows `setup.exe`'sini indirmeyi öneriyordu —
+    çalıştırılamayan bir dosya. O platformda güncelleme paket (.deb / .tar.gz)
+    olarak sürüm sayfasından alınır; arayüz `platform` alanına göre yönlendirir.
+    """
+    return sys.platform.startswith("win")
+
+
 def update_status(*, force: bool = False, current_version: str | None = None) -> dict[str, Any]:
     current = current_version or get_app_version()
     release = latest_release(force=force)
     available = version_key(release.version) > version_key(current)
+    downloadable = installer_supported() and release.installer is not None
     return {
         "current_version": current,
         "latest_version": release.version,
@@ -259,9 +284,10 @@ def update_status(*, force: bool = False, current_version: str | None = None) ->
         "release_name": release.name,
         "published_at": release.published_at,
         "release_url": release.html_url,
-        "can_download": available and release.installer is not None,
-        "installer_name": release.installer.name if release.installer else "",
-        "installer_size": release.installer.size if release.installer else 0,
+        "platform": "windows" if installer_supported() else "linux",
+        "can_download": available and downloadable,
+        "installer_name": release.installer.name if downloadable and release.installer else "",
+        "installer_size": release.installer.size if downloadable and release.installer else 0,
     }
 
 
@@ -289,6 +315,11 @@ def _expected_digest(release: ReleaseInfo) -> str:
 
 
 def download_latest_installer(*, force: bool = False) -> Path:
+    if not installer_supported():
+        raise UpdateError(
+            "Uygulama içi indirme yalnız Windows'ta çalışır. Pardus/Linux için yeni "
+            "paketi (.deb ya da .tar.gz) sürüm sayfasından indirip kurun."
+        )
     release = latest_release(force=force)
     current = get_app_version()
     if version_key(release.version) <= version_key(current):

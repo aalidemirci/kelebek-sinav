@@ -42,6 +42,12 @@ fazlası başlık yinelenerek akar (base.html taşma disiplini).{% endcomment %}
            padding: 3pt 8pt; font-size: 7.8pt; color: var(--pr-secondary);
            break-inside: avoid; page-break-inside: avoid; }
   .rules b { color: var(--pr-ink); }
+  .ann-sign { width: 100%; border-collapse: collapse; margin-top: 7pt; font-size: 8pt;
+              color: var(--pr-secondary); break-inside: avoid; page-break-inside: avoid; }
+  .ann-sign td { padding: 0; vertical-align: bottom; }
+  .ann-sign .who { text-align: right; white-space: nowrap; color: var(--pr-label); }
+  .ann-sign .blank { display: inline-block; min-width: 90pt;
+                     border-bottom: 0.7pt solid var(--pr-ink); }
   .rules div { margin: 1pt 0; }
 
   /* Şube başına hesaplanan satır ölçüsü — BAŞLIKTA basılmak ZORUNDA. */
@@ -70,11 +76,20 @@ fazlası başlık yinelenerek akar (base.html taşma disiplini).{% endcomment %}
   <table class="rpt-table ann ann{{ forloop.counter }}">
     <thead>
       <tr>
+        {% comment %}Karışık şubede ad/ders payı en uzun metinlere göre hesaplanır
+        (reports._announcement_columns) — ikisi de TEK SATIR kalsın diye.{% endcomment %}
+        {% if sheet.show_course %}
+        <th class="num" style="width: 9%;">Okul No</th>
+        <th style="width: {{ sheet.columns.name }}%;">Adı Soyadı</th>
+        <th style="width: {{ sheet.columns.course }}%;">Ders</th>
+        <th class="center" style="width: 18%;">Salon</th>
+        <th class="num" style="width: 10%;">Koltuk</th>
+        {% else %}
         <th class="num" style="width: 10%;">Okul No</th>
-        <th style="width: {% if sheet.show_course %}33{% else %}55{% endif %}%;">Adı Soyadı</th>
-        {% if sheet.show_course %}<th style="width: 22%;">Ders</th>{% endif %}
+        <th style="width: 55%;">Adı Soyadı</th>
         <th class="center" style="width: 22%;">Salon</th>
         <th class="num" style="width: 13%;">Koltuk</th>
+        {% endif %}
       </tr>
     </thead>
     <tbody>
@@ -82,7 +97,7 @@ fazlası başlık yinelenerek akar (base.html taşma disiplini).{% endcomment %}
       <tr{% if forloop.counter|divisibleby:5 and not forloop.last %} class="mark5"{% endif %}>
         <td class="num">{{ row.student_number }}</td>
         <td class="name">{{ row.full_name }}</td>
-        {% if sheet.show_course %}<td>{{ row.course_name }}</td>{% endif %}
+        {% if sheet.show_course %}<td>{{ row.course_label }}</td>{% endif %}
         <td class="center room">{{ row.room_name }}</td>
         <td class="num seat">{{ row.seat_no }}</td>
       </tr>
@@ -98,6 +113,12 @@ fazlası başlık yinelenerek akar (base.html taşma disiplini).{% endcomment %}
     <div>Sınava katılamayan öğrencinin mazereti <b>en geç 5 iş günü</b> içinde velisince
       okul müdürlüğüne yazılı olarak bildirilir.</div>
   </div>
+  {% comment %}Panoya asılan duyuru imzasız çıkıyordu. Tek satırlık düzenleyen alanı;
+  yüksekliği `reports._ANN_FIXED_PX` bütçesine dâhildir.{% endcomment %}
+  <table class="ann-sign"><tr>
+    <td class="basis"><b>DAYANAK:</b> MEB Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5.</td>
+    <td class="who">…… / …… / 20…… &nbsp;·&nbsp; <b>Müdür Yardımcısı</b> — İmza: <span class="blank"></span></td>
+  </tr></table>
 </div>
 {% endfor %}
 {% endblock %}

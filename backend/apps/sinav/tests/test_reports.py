@@ -18,7 +18,7 @@ import io
 import re
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from django.conf import settings
@@ -27,10 +27,18 @@ from openpyxl import load_workbook
 from pypdf import PdfReader
 from rest_framework.test import APIClient
 
-from apps.okul.models import SchoolConfig
+from apps.okul.models import ClassSection, SchoolConfig, Student
 from apps.sinav import layout, reports, services
-from apps.sinav.models import ExamSession, ExamSessionRoom
-from apps.sinav.tests.oturum_yardim import dagitilmis_oturum, oturum, salon
+from apps.sinav.models import (
+    ExamRoom,
+    ExamSession,
+    ExamSessionRoom,
+    LayoutMode,
+    ParticipantType,
+    RuleType,
+    SeatAssignment,
+)
+from apps.sinav.tests.oturum_yardim import dagitilmis_oturum, ders, oturum, salon, sube
 
 pytestmark = pytest.mark.django_db
 
@@ -65,6 +73,22 @@ def _evrak_oturumu(**kwargs: Any) -> ExamSession:
     """Okul yapılandırması + dağıtılmış oturum (evrak üretimine hazır)."""
     _okul()
     return dagitilmis_oturum(**kwargs)
+
+
+def _evrak_oturumu_taslak() -> ExamSession:
+    """Okul + TASLAK kelebek oturumu (9/A + 10/A üçer öğrenci, D-201) — dağıtımdan
+    ÖNCE kural eklenen senaryolar için."""
+    _okul()
+    sube(9, "A", students=3, start_no=101)
+    sube(10, "A", students=3, start_no=201)
+    course = ders("Coğrafya", levels=[9, 10])
+    session = oturum()
+    for level in (9, 10):
+        services.add_session_course(
+            session, course_id=course.pk, participant_type=ParticipantType.LEVEL, level=level
+        )
+    services.set_session_rooms(session, [{"room_id": salon("D-201").pk}])
+    return session
 
 
 # ===========================================================================
@@ -142,6 +166,56 @@ def test_karma_seviyeli_oturumda_ders_adi_seviyeli_basilir() -> None:
         text = " ".join(_pdf_text(services.render_session_report(session, code).content).split())
         assert "Coğrafya — 9. Sınıf" in text, f"{code}: 9. sınıf etiketi yok"
         assert "Coğrafya — 10. Sınıf" in text, f"{code}: 10. sınıf etiketi yok"
+
+
+def test_evrakta_sinav_suresi_basilir() -> None:
+    """Süre üst bantta ve salon evrakının sayım tablosunda basılır; ders bazlı süre
+    oturum süresini ezer (eskiden HİÇBİR evrakta süre yoktu)."""
+    session = _evrak_oturumu_taslak()  # oturum süresi 60 dk
+    sc9 = session.courses.get(level=9)
+    services.update_session_course(sc9, duration_minutes=40)
+    services.distribute_session(session, seed=3)
+
+    r1 = " ".join(_pdf_text(services.render_session_report(session, "r1").content).split())
+    assert "Süre: derse göre 40-60 dk" in r1
+    assert "40 dk" in r1 and "60 dk" in r1
+    # Öğrenciye dönük duyuru ve tutanak da süreyi üst bantta taşır.
+    for code in ("r4", "r7"):
+        text = " ".join(_pdf_text(services.render_session_report(session, code).content).split())
+        assert "Süre: derse göre 40-60 dk" in text, code
+
+
+def test_r1_plan_degisince_dusen_ogrenci_bildirilir() -> None:
+    """A11: salon planı dağıtımdan SONRA değişirse kroki düşen öğrenciyi sessizce
+    yutmaz — lejant satırı uyarıya döner (editörden tekil plan değişikliği
+    bilinçli olarak serbesttir; körlemesine engel yok, görünür uyarı var)."""
+    session = _evrak_oturumu()
+    room = ExamSessionRoom.objects.filter(session=session).select_related("room")[0].room
+    temiz = " ".join(_pdf_text(services.render_session_report(session, "r1").content).split())
+    assert "DİKKAT:" not in temiz
+    assert "Numaralar ön cephenin sol başındaki sıradan başlar" in temiz  # masasız plan
+
+    services.update_exam_room(
+        room,
+        layout_plan={
+            "grid": {"rows": 1, "cols": 1},
+            "desks": [{"row": 0, "col": 0, "type": "DOUBLE"}],
+            "furniture": [],
+        },
+    )
+    bozuk = " ".join(_pdf_text(services.render_session_report(session, "r1").content).split())
+    assert "DİKKAT: 4 öğrencinin koltuğu güncel salon planında yok" in bozuk
+
+
+def test_r8_idareci_diliyle_yazilir() -> None:
+    """R8'i okul müdürü imzalar: motor jargonu ve mevzuatta olmayan organ adı basılmaz."""
+    session = _evrak_oturumu(seed=987654)
+    text = " ".join(_pdf_text(services.render_session_report(session, "r8").content).split())
+    assert "KURAL İHLALİ YOKTUR" in text
+    assert "Dağıtım numarası (seed)" in text and "987654" in text
+    assert "Düzenleyen — Müdür Yardımcısı" in text
+    for jargon in ("SERT KISIT", "halka", "Σ", "Satranç modu", "Sınav Komisyonu", "tohum"):
+        assert jargon not in text, f"R8'de jargon kaldı: {jargon}"
 
 
 def test_r8_yorum_sizintisi_yok() -> None:
@@ -232,8 +306,65 @@ def test_salon_filtresi() -> None:
         services.render_session_report(session, "r4", room_id=ilk.pk)
     # R7 tutanağı da salon bazlıdır (salon zarfına konur).
     services.render_session_report(session, "r7", room_id=ilk.pk)
-    with pytest.raises(ValidationError, match="tanımlı değil"):
+    with pytest.raises(ValidationError, match="yerleşim yok"):
         services.render_session_report(session, "r1", room_id=999999)
+
+
+def test_r1_klasik_duzende_basilir() -> None:
+    """KRİTİK (A1): "kendi dersliğinde" düzeninde oturumun salon listesi BOŞTUR.
+
+    Sihirbaz klasikte salon adımını atlar; R1 yaprak kaynağı `ExamSessionRoom`
+    iken salon evrakı hiç üretilmiyordu. Kaynak artık yerleşimin kendisidir.
+    """
+    _okul()
+    for harf, ilk_no in (("A", 101), ("B", 201)):
+        section = sube(9, harf, students=3, start_no=ilk_no)
+        salon(f"9-{harf} Dersliği", linked_section_id=section.pk)
+    course = ders("Coğrafya", levels=[9])
+    session = oturum(layout_mode=LayoutMode.HOME_CLASSROOM)
+    services.add_session_course(
+        session, course_id=course.pk, participant_type=ParticipantType.LEVEL, level=9
+    )
+    session, _result, report = services.distribute_session(session, seed=1)
+    assert report.is_valid
+    assert not ExamSessionRoom.objects.filter(session=session).exists()
+
+    text = _pdf_text(services.render_session_report(session, "r1").content)
+    assert "9-A Dersliği" in text and "9-B Dersliği" in text
+
+    # Salon filtresi de yerleşimden denetlenir (eskiden "tanımlı değil" derdi).
+    a_dersligi = ExamRoom.objects.get(name="9-A Dersliği")
+    filtreli = _pdf_text(
+        services.render_session_report(session, "r1", room_id=a_dersligi.pk).content
+    )
+    assert "9-A Dersliği" in filtreli and "9-B Dersliği" not in filtreli
+
+    # R8: bu düzende karıştırma yoktur — motorun yazdığı "0" numarası, katı dağıtım
+    # ve dönüşümlü oturma satırları basılmaz; yerine yerleşim kuralı yazılır.
+    r8 = " ".join(_pdf_text(services.render_session_report(session, "r8").content).split())
+    assert "okul numarası sırasıyla oturur" in r8
+    for satir in ("Dağıtım numarası", "Katı dağıtım", "Dönüşümlü oturma"):
+        assert satir not in r8, f"klasik düzende R8'de anlamsız satır: {satir}"
+
+
+def test_r1_oturum_listesi_disina_pinlenen_salon_basilir() -> None:
+    """Kural pini öğrenciyi oturum salon listesinde OLMAYAN dersliğe koyabilir;
+    o salonun da krokisi ve yoklaması basılır (öğrenci hiçbir listede kaybolmaz)."""
+    session = _evrak_oturumu_taslak()
+    section = ClassSection.objects.get(class_level=9, class_section="A")
+    own_room = salon("9-A Dersliği", linked_section_id=section.pk)
+    student_id = int(
+        Student.objects.filter(class_level=9, class_section="A")
+        .order_by("student_number")
+        .values_list("pk", flat=True)[0]
+    )
+    services.create_placement_rule(student_id=student_id, rule_type=RuleType.HOME_CLASSROOM)
+    services.distribute_session(session, seed=42)
+    assert SeatAssignment.objects.filter(session=session, room_id=own_room.pk).count() == 1
+
+    text = _pdf_text(services.render_session_report(session, "r1").content)
+    assert "9-A Dersliği" in text, "pinli öğrencinin salonu evrakta yok"
+    assert "D-201" in text
 
 
 # ===========================================================================
@@ -304,6 +435,14 @@ _BASLIK = reports.ReportHeader(
 )
 
 
+#: Katalogdaki en uzun etiket sınıfı: çok seviyeli ders (seviye ekiyle) + uzun seçmeli.
+_GERCEK_DERSLER: tuple[str, ...] = (
+    "Türk Dili ve Edebiyatı — 9. Sınıf",
+    "Türk Dili ve Edebiyatı — 10. Sınıf",
+    "Seçmeli Peygamberimizin Hayatı",
+)
+
+
 def _plan(rows: int, cols: int) -> dict[str, Any]:
     """rows×cols ikili sıra ızgarası (demirbaşsız)."""
     return {
@@ -313,7 +452,10 @@ def _plan(rows: int, cols: int) -> dict[str, Any]:
     }
 
 
-def _satirlar(n: int, *, dersler: tuple[str, ...]) -> list[reports.SeatRow]:
+def _satirlar(n: int, *, dersler: tuple[str, ...], cols: int = 4) -> list[reports.SeatRow]:
+    """`cols` ikili sıralı plana SIRAYLA oturan n öğrenci — koordinatlar planla örtüşür
+    (örtüşmezse kroki "koltuğu planda yok" uyarısı basar)."""
+    per_row = cols * 2
     return [
         reports.SeatRow(
             full_name=_UZUN_ADLAR[i % len(_UZUN_ADLAR)],
@@ -321,8 +463,8 @@ def _satirlar(n: int, *, dersler: tuple[str, ...]) -> list[reports.SeatRow]:
             class_label=f"{9 + i % 4}/{'ABCÇ'[i % 4]}",
             room_name="D-201 Dersliği",
             seat_no=i + 1,
-            desk_row=i // 8,
-            desk_col=(i % 8) // 2,
+            desk_row=i // per_row,
+            desk_col=(i % per_row) // 2,
             slot=i % 2,
             course_name=dersler[i % len(dersler)],
             status="NORMAL",
@@ -341,7 +483,7 @@ def _r1_pdf(n: int, rows: int, cols: int, dersler: tuple[str, ...]) -> bytes:
         block="A Blok · 2. kat",
         plan=layout.validate_layout_plan(_plan(rows, cols)),
         numbering_scheme="S_PATTERN",
-        rows=tuple(_satirlar(n, dersler=dersler)),
+        rows=tuple(_satirlar(n, dersler=dersler, cols=cols)),
     )
     return reports.render_pdf(
         "sinav/reports/r1_salon_evraki.html",
@@ -372,11 +514,126 @@ def test_r1_salon_evraki_iki_yaprak(ogrenci: int, rows: int, cols: int, ders_say
     Kırılırsa bakılacak yer: `reports.KROKI_BOX_R1_PX`, `_ATT_FIXED_PX` ve
     yaprak 1'in sabit bölümleri (şablon yorumundaki sayfa bütçesi).
     """
-    dersler = tuple(f"Ders {i}" for i in range(ders_sayisi))
+    # GERÇEK uzunlukta ders etiketleri: bütçe eskiden "Ders 0" gibi kısa adlarla
+    # sınanıyordu ve uzun etiketin yoklama satırını SARDIRIP evrakı üçüncü
+    # sayfaya taşırdığını göremiyordu (18.09.2026, örnek PDF'te ölçüldü).
+    dersler = _GERCEK_DERSLER[:ders_sayisi]
     pdf = _r1_pdf(ogrenci, rows, cols, dersler)
     assert (
         _sayfa_sayisi(pdf) == 2
     ), f"{ogrenci} öğrenci / {rows}x{cols} salonda yaprak sayısı 2 değil — sayfa bütçesi bozuldu."
+
+
+def test_r1_karisik_salonda_ders_kodu_ve_aciklamasi() -> None:
+    """Karışık salonda yoklama "Ders" sütunu TEK HARF taşır, açıklaması üstte basılır;
+    sayım tablosu ve kroki hücresi aynı kodu gösterir. Tek dersli salonda kod yoktur."""
+    karisik = " ".join(_pdf_text(_r1_pdf(12, 3, 2, _GERCEK_DERSLER)).split())
+    assert "DERS KODLARI:" in karisik
+    # Kodlar ders adının DOĞAL sırasına göre verilir (9. Sınıf, 10. Sınıf'tan önce).
+    assert "A = Seçmeli Peygamberimizin Hayatı" in karisik
+    assert "B = Türk Dili ve Edebiyatı — 9. Sınıf" in karisik
+    assert "C = Türk Dili ve Edebiyatı — 10. Sınıf" in karisik
+    # Künye hücresi kod özetini taşır (uzun adlar yaprak 1'i taşırıyordu).
+    assert "A (4) · B (4) · C (4)" in karisik
+
+    tek = " ".join(_pdf_text(_r1_pdf(12, 3, 2, ("Coğrafya",))).split())
+    assert "DERS KODLARI:" not in tek
+
+
+def test_r4_ders_adi_seviyesiz_ve_tek_satir() -> None:
+    """Şube duyurusunda ders adı SEVİYESİZ basılır (şube tek seviyededir) —
+    `course_plain` doluysa o kullanılır; aynı yalın ada inen satırlar Ders sütunu açmaz."""
+    satirlar = [
+        reports.SeatRow(
+            **{
+                **vars(r),
+                "class_label": "9/A",
+                "course_name": "Coğrafya — 9. Sınıf",
+                "course_plain": "Coğrafya",
+            }
+        )
+        for r in _satirlar(10, dersler=("Coğrafya",))
+    ]
+    sheet = reports.build_announcements(satirlar)[0]
+    assert sheet["show_course"] is False
+    etiketler = {row["course_label"] for row in cast(list[dict[str, Any]], sheet["rows"])}
+    assert etiketler == {"Coğrafya"}
+
+
+def test_altbilgi_sinav_adi_css_kacisiyla_basilir() -> None:
+    """Sınav adında kesme/tırnak varsa altbilgi bozulmaz (`&#x27;` basılıyordu):
+    HTML kaçışı `<style>` içinde çözülmez, CSS kaçışı Python'da yapılır."""
+    from dataclasses import replace
+
+    baslik = replace(_BASLIK, exam_name='Atatürk\'ü "Anma" Sınavı')
+    assert baslik.css_exam_name == 'Atatürk\'ü \\"Anma\\" Sınavı'
+    pdf = reports.render_pdf(
+        "sinav/reports/r7_tutanak.html",
+        {
+            "header": baslik,
+            "title": reports.REPORT_TITLES["r7"][0],
+            "sheets": reports.build_tutanak_sheets(_satirlar(4, dersler=("Coğrafya",))),
+        },
+    )
+    metin = _pdf_text(pdf)
+    assert 'Atatürk\'ü "Anma" Sınavı' in metin
+    assert "&#x27;" not in metin and "&quot;" not in metin
+
+
+def test_r1_cift_yuzde_her_salon_sag_sayfadan_baslar() -> None:
+    """Çift yüz baskı: ilk salonun yoklaması üçüncü sayfaya taşsa da sonraki salonun
+    1. yaprağı SAĞ (tek numaralı) sayfadan başlar — araya boş sayfa girer."""
+    kalabalik = reports.RoomSheet(
+        room_name="D-201 Dersliği",
+        block="",
+        plan=layout.validate_layout_plan(_plan(12, 4)),
+        numbering_scheme="S_PATTERN",
+        rows=tuple(_satirlar(90, dersler=("Coğrafya",))),
+    )
+    kucuk = reports.RoomSheet(
+        room_name="D-202 Dersliği",
+        block="",
+        plan=layout.validate_layout_plan(_plan(3, 2)),
+        numbering_scheme="S_PATTERN",
+        rows=tuple(
+            reports.SeatRow(**{**vars(r), "room_name": "D-202 Dersliği"})
+            for r in _satirlar(8, dersler=("Coğrafya",), cols=2)
+        ),
+    )
+    pdf = reports.render_pdf(
+        "sinav/reports/r1_salon_evraki.html",
+        {
+            "header": _BASLIK,
+            "title": reports.REPORT_TITLES["r1"][0],
+            "sheets": reports.build_room_documents([kalabalik, kucuk]),
+        },
+    )
+    sayfalar = [p.extract_text() or "" for p in PdfReader(io.BytesIO(pdf)).pages]
+    ilk_yapraklar = [
+        no
+        for no, metin in enumerate(sayfalar, start=1)
+        if "Yaprak 1/2" in metin and "D-202" in metin
+    ]
+    assert ilk_yapraklar, "ikinci salonun 1. yaprağı bulunamadı"
+    assert ilk_yapraklar[0] % 2 == 1, f"ikinci salon {ilk_yapraklar[0]}. sayfada (arka yüz)"
+
+
+def test_r4_duyurusu_duzenleyen_satiri_tasir() -> None:
+    satirlar = [
+        reports.SeatRow(**{**vars(r), "class_label": "9/A"})
+        for r in _satirlar(40, dersler=("Coğrafya",))
+    ]
+    pdf = reports.render_pdf(
+        "sinav/reports/r4_announcement.html",
+        {
+            "header": _BASLIK,
+            "title": reports.REPORT_TITLES["r4"][0],
+            "sheets": reports.build_announcements(satirlar),
+        },
+    )
+    metin = " ".join(_pdf_text(pdf).split())
+    assert "Müdür Yardımcısı" in metin and "DAYANAK:" in metin
+    assert _sayfa_sayisi(pdf) == 1
 
 
 def test_r1_cok_kalabalik_salonda_satir_kaybi_yok() -> None:
@@ -390,7 +647,7 @@ def test_r1_cok_kalabalik_salonda_satir_kaybi_yok() -> None:
 
 def test_r4_sube_duyurusu_tek_yaprak() -> None:
     """Şube duyurusu 40 öğrencide tek sayfa — ders sütunu açıkken de."""
-    for dersler in (("Coğrafya",), ("Coğrafya", "Matematik")):
+    for dersler in (("Coğrafya",), ("Coğrafya", "Matematik"), _GERCEK_DERSLER):
         satirlar = [
             reports.SeatRow(**{**vars(r), "class_label": "9/A", "room_name": f"D-20{i % 3 + 1}"})
             for i, r in enumerate(_satirlar(40, dersler=dersler))

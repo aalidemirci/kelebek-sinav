@@ -37,10 +37,6 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
   Seçmeli ders grupları gerekirse önce `okul` tarafına grup modeli gelir,
   sonra `ParticipantType.GROUPS` + çözümleyici OYS'den taşınır
   (`participants._resolve_groups`, OYS satır 141-169).
-- **TB8 — Yerleştirme kuralları arayüzü yok (OYS paritesi):** PlacementRule
-  backend'i (CRUD + dağıtımda PINNED) F3'te tam; OYS'de de FE istemcisi yoktu.
-  KS `placementRuleApi` hazır — kural yönetim ekranı F4'te sicil/oturum
-  ekranına bağlanacak (kroki PINNED rozetleri şimdiden görünür).
 - **TB10 — Ders kayıt verisi yok; kapsam verisi günlük limite BAĞLANMADI
   (31.08.2026, K19):** takvim girdisi artık katılımcı kapsamı taşıyor
   (`participant_type` + `section_ids`), ama `services_calendar._daily_exam_load`
@@ -50,15 +46,38 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
   "bu öğrenci bu dersi alıyor mu" sorusu cevapsız kalır. Kural "kayıt verisi
   olmayan ders seviyenin tamamını kapsar" konservatif düşüşünde KALIR
   (Yönetmelik md. 5/1-k, Yönerge md. 5/1-s; ADR-0044 karar 13, tasarım
-  risk #4). Kapsam verisi şimdilik YALNIZ iki yerde kullanılır: (1) ızgara
-  dipnotundaki katılımcı önizlemesi, (2) slottan oturum üretilirken
-  `ExamSessionCourse`'a taşınan katılımcı tanımı. Gerçek ders kayıt verisi
-  (seçmeli ders grupları) gelirse sıra şudur: önce `okul` tarafına kayıt/grup
-  modeli girer (bkz. TB7), sonra limit hesabı ondan beslenir — tersi mevzuat
-  denetimini deler.
+  risk #4). Kapsam verisinin kullanıldığı yerler (18.09.2026 güncellemesi):
+  (1) ızgara dipnotundaki katılımcı önizlemesi, (2) slottan oturum üretilirken
+  `ExamSessionCourse`'a taşınan katılımcı tanımı, (3) aynı slotta kapsam
+  kesişimi SERT kısıtı (`_scope_overlaps`, 03.09.2026 — "aynı ANDA iki salonda
+  olamaz" sorusu kapsamla kesin cevaplanır), (4) seçmeli ders kapsamının ders
+  havuzundan ön-dolması (`CourseSectionOffering`). GÜNLÜK limit bunların
+  hiçbirinden beslenmez. Gerçek ders kayıt verisi (seçmeli ders grupları)
+  gelirse sıra şudur: önce `okul` tarafına kayıt/grup modeli girer (bkz. TB7),
+  sonra limit hesabı ondan beslenir — tersi mevzuat denetimini deler.
+- **TB11 — Yedek medya dosyalarını kapsamaz (K3 kararı, 18.09.2026):** `.ksbak`
+  yalnız veritabanıdır; soru PDF'leri ve üretilmiş kitapçık ZIP'leri yedeğe
+  GİRMEZ. Gerekçe: soru dosyası sınavdan sonra tarihsel değer taşımaz, yedeği
+  büyütür ve taşınan her kopya gizlilik yüküdür. Bedeli: geri yüklenen ya da
+  başka makineye taşınan kurulumda eski oturumların soru dosyası/kitapçık
+  indirmesi çalışmaz — indirme uçları bu durumda Türkçe `media_missing` 404
+  döner (500 değil) ve idareci dosyayı yeniden yükler. Evrak PDF'leri (R1-R8,
+  takvim) etkilenmez: her istekte veritabanından yeniden üretilir.
+- **TB12 — `sinav/services.py` tek dosya (≈2.800 satır, 18.09.2026
+  değerlendirmesi A10):** oturum yaşam döngüsü, soru dosyası, yoklama, gözetmen
+  ve evrak bağlamı aynı modülde. Bölme (services/ paketi, takvim emsali
+  `services_calendar.py`) davranış değiştirmeyen saf taşıma işidir; AYNEN
+  sınıfındaki imzalar korunarak ayrı bir oturumda yapılmalı — düzeltme
+  turlarıyla karıştırılırsa `git blame` izini ve incelemeyi zorlaştırır.
 
 ## Kapanan
 
+- **TB8 — Yerleştirme kuralları arayüzü (31.08.2026'da kapandı, kütüğe
+  18.09.2026'da işlendi):** oturum ayrıntısındaki "Kurallar" sekmesi
+  (`KurallarPaneli`) koltuk sabitleme, tek başına oturtma ve ayrı tutma
+  kurallarını yönetir; backend F3'ten beri tamdı. 18.09.2026'da iki boşluk
+  kapandı: sabitlenmiş koltuk elle takasla bozulamaz (`swap_seats` PINNED reddi),
+  oturum silinince oturuma özel kurallar ve gözetmen muafiyetleri de silinir.
 - **TB9 — Şifreli `.ksbak` geri yükleme aracı (30.08.2026):** `--geri-yukle`
   kipi (desktop/restore.py + okul/services/backup_restore.py + manage.py
   restore_backup) düz VE şifreli yedeği açar; Windows'ta Başlat menüsü

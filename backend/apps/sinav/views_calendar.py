@@ -168,10 +168,13 @@ class ExamCalendarViewSet(viewsets.ModelViewSet[ExamCalendar]):
             # Katalog farkı kümesi TEK sorguda çıkarılır ve serializer'a
             # context'le verilir (satır başına sorgu olmasın).
             diff_ids = services_calendar.entries_differing_from_catalog(self.get_object())
+            live_ids = services_calendar.live_session_ids(rows)
             return Response(
                 {
                     "results": ExamCalendarEntrySerializer(
-                        rows, many=True, context={"catalog_diff_ids": diff_ids}
+                        rows,
+                        many=True,
+                        context={"catalog_diff_ids": diff_ids, "live_session_ids": live_ids},
                     ).data
                 }
             )

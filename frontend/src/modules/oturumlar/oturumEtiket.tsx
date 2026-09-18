@@ -9,7 +9,7 @@ import { EXAM_SESSION_STATUS_TR } from "./api";
 
 export { formatDate } from "../../lib/format";
 
-/** Durum → Türkçe etiket (Taslak → Dağıtıldı → Onaylandı → Arşiv). */
+/** Durum → Türkçe etiket (Taslak → Dağıtıldı → Onaylandı → Arşivlendi). */
 export const STATUS_LABELS: Record<ExamSessionStatusCode, string> = EXAM_SESSION_STATUS_TR;
 
 // M3 token'ları — ham renk yok (KS tailwind.config.js'te tanımlı adlar).

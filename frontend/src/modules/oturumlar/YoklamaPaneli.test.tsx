@@ -3,7 +3,7 @@
 // confirm'li işaret kaldırma doğrulanır. Ortak kurucular testFixtures.ts'ten.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -81,8 +81,18 @@ describe("YoklamaPaneli", () => {
     expect(screen.getByText("Girmedi")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /Girmedi işaretle/ })).toHaveLength(1); // yalnız 102
 
+    // Mazeret durumu seçenekleri mevzuatın diliyle: Beklemede / Mazeretli / Mazeretsiz
+    // ("Özürlü/Özürsüz" engellilik çağrışımı taşıyordu — docs/sozluk.md §1).
+    const durum = screen.getByLabelText("Ayşe Yılmaz mazeret durumu");
+    expect(
+      within(durum)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["Beklemede", "Mazeretli", "Mazeretsiz"]);
+    expect(screen.queryByText(/Özür/)).not.toBeInTheDocument();
+
     // Mazeret durumu: seçim anında update çağırır (arşivde de açık).
-    await user.selectOptions(screen.getByLabelText("Ayşe Yılmaz mazeret durumu"), "EXCUSED");
+    await user.selectOptions(durum, "EXCUSED");
     await waitFor(() =>
       expect(attendance.update).toHaveBeenCalledWith(31, { excuse_status: "EXCUSED" }),
     );

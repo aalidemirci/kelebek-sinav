@@ -125,8 +125,11 @@
   <div class="letterhead">
     <div class="tc">{{ tc|default:'T.C.' }}</div>
     <div class="authority">{{ authority }}</div>
-    <div class="school">{{ school_name }}</div>
-    {% if unit %}<div class="unit">{{ unit }}</div>{% endif %}
+    {% comment %}Birim satırı "<Okul Adı> Müdürlüğü" tek satırdır (Resmî Yazışma
+    Usulü); eski bağlam (`unit_line` yok) için iki satırlı biçim yedek kalır.{% endcomment %}
+    {% if unit_line %}<div class="school">{{ unit_line }}</div>
+    {% else %}<div class="school">{{ school_name }}</div>
+    {% if unit %}<div class="unit">{{ unit }}</div>{% endif %}{% endif %}
   </div>
   <div class="rule"></div>
   <div class="rule-thin"></div>

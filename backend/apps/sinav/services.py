@@ -3,8 +3,9 @@
 OYS `sinav_islemleri/services.py`'den UYARLA (tasarım §11): `created_by`/User
 damgaları düşer (tek kullanıcı — ad-snapshot + zaman kalır), core köprüleri
 yerel `apps.okul`/`apps.dersler` selector'larına bağlanır (fonksiyon imzaları
-korunur — köprü uyarlaması risk #2). Gözetmen sıfırlama ve takvim çözme
-blokları alınmadı (F7/F6'da gelir); GROUPS katılımcı tipi alınmadı (TB7).
+korunur — köprü uyarlaması risk #2). Gözetmen ELLE atanır (F7; oto-atama
+alınmadı — TB4), takvim mantığı `services_calendar.py`'dedir (F6); GROUPS
+katılımcı tipi alınmadı (TB7).
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import copy
 import logging
 import math
 import random
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import timedelta
 from types import EllipsisType
@@ -288,9 +290,8 @@ def _level_labels() -> dict[int, str]:
     return {int(o["value"]): str(o["label"]) for o in okul_selectors.grade_levels()}
 
 
-@transaction.atomic
 # --------------------------------------------------------------------------- #
-# Derslik kümeleri (seçim kolaylığı — ikili eğitimde salon listesi kalabalıklaşır)
+# Salon kümeleri (seçim kolaylığı — ikili eğitimde salon listesi kalabalıklaşır)
 # --------------------------------------------------------------------------- #
 
 
@@ -442,6 +443,24 @@ def conflict_group_labels(keys: set[str] | frozenset[str]) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 # Sınav oturumu — yalnız TASLAK düzenlenebilir
 # ---------------------------------------------------------------------------
+def _ensure_no_attendance(session: ExamSession, action: str) -> None:
+    """Yoklaması alınmış oturumun yerleşimi değiştirilemez (A7, 18.09.2026).
+
+    Yoklama sınavdan SONRA alınır; o andan itibaren yerleşim sınavın yapıldığı
+    düzenin kaydıdır. Eskiden "onayı geri al → yeniden dağıt" yoklama kayıtlarını
+    eski salon/koltuk snapshot'ıyla canlı bırakıyor, aynı öğrenci yeni yerleşimde
+    "zaten işaretli" diye yeniden işaretlenemiyordu. Kayıtları sessizce silmek
+    yerine işlem reddedilir: idareci gerçekten istiyorsa önce kayıtları kaldırır.
+    """
+    count = ExamAttendanceRecord.objects.filter(session=session).count()
+    if count:
+        raise ValidationError(
+            f"Bu oturumda {count} yoklama kaydı var; yoklaması alınmış oturum {action}. "
+            "Yerleşim sınavın yapıldığı düzenin kaydıdır — gerçekten değiştirmek "
+            "gerekiyorsa önce Yoklama sekmesinden kayıtları kaldırın."
+        )
+
+
 def _ensure_draft(session: ExamSession) -> None:
     if not session.is_draft:
         raise ValidationError(
@@ -526,12 +545,22 @@ def update_exam_session(session: ExamSession, **fields: Any) -> ExamSession:
     return session
 
 
+@transaction.atomic
 def remove_exam_session(session: ExamSession) -> None:
-    """Taslak oturumu kaldırır (soft-delete) — ders/salon satırlarıyla birlikte."""
+    """Taslak oturumu kaldırır (soft-delete) — bağlı tanım satırlarıyla birlikte.
+
+    Ders/salon satırlarının yanında OTURUM KAPSAMLI yerleştirme kuralları ve
+    gözetmenlik muafiyetleri de kapatılır (A13): eskiden canlı kalıyor, kural ve
+    muafiyet listeleri silinmiş oturumun kimliğini gösteriyordu. Kalıcı
+    (PERMANENT) kayıtlara dokunulmaz. İşlem atomiktir — yarıda kesilirse satırların
+    bir kısmı silinmiş kalmaz.
+    """
     _ensure_draft(session)
     now = timezone.now()
     ExamSessionCourse.objects.filter(session=session).update(deleted_at=now)
     ExamSessionRoom.objects.filter(session=session).update(deleted_at=now)
+    PlacementRule.objects.filter(session=session).update(deleted_at=now)
+    ProctorExemption.objects.filter(session=session).update(deleted_at=now)
     session.delete()
 
 
@@ -607,16 +636,19 @@ def _validate_participant_refs(
     """
     if participant_type == ParticipantType.LEVEL:
         if level is None:
-            raise ValidationError("Seviye geneli atamada seviye seçin.")
+            raise ValidationError("Katılımcılar sınıf düzeyinin tamamıysa sınıf düzeyini seçin.")
         return ders_services.normalize_levels([level])[0], []
     if participant_type == ParticipantType.SECTIONS:
         if not section_ids:
             raise ValidationError("Şube bazlı atamada en az bir şube seçin.")
         seen_levels: set[int] = set()
         for sid in section_ids:
-            section = okul_selectors.get_class_section(int(sid))
+            # JSON alanı tip denetimsizdir: `["abc"]` ham `int()` ile 500 veriyordu (A14).
+            if isinstance(sid, bool) or not isinstance(sid, int):
+                raise ValidationError("Şube seçimi geçersiz; şubeleri listeden seçin.")
+            section = okul_selectors.get_class_section(sid)
             if section is None:
-                raise ValidationError(f"Şube bulunamadı (id={sid}).")
+                raise ValidationError("Seçilen şubelerden biri bulunamadı (silinmiş olabilir).")
             seen_levels.add(int(section.class_level))
         if len(seen_levels) > 1:
             raise ValidationError(
@@ -683,8 +715,8 @@ def add_session_course(
     )
     if lv not in course.levels:
         raise ValidationError(
-            f"'{course.name}' dersi {ders_services.level_label(lv)} seviyesinde "
-            "okutulmuyor (havuz tanımı)."
+            f"'{course.name}' dersi {ders_services.level_label(lv)} düzeyinde "
+            "okutulmuyor (Ders Havuzu tanımı)."
         )
     if ExamSessionCourse.objects.filter(session=session, course=course, level=lv).exists():
         raise ValidationError(
@@ -720,8 +752,8 @@ def update_session_course(sc: ExamSessionCourse, **fields: Any) -> ExamSessionCo
     )
     if lv not in sc.course.levels:
         raise ValidationError(
-            f"'{sc.course.name}' dersi {ders_services.level_label(lv)} seviyesinde "
-            "okutulmuyor (havuz tanımı)."
+            f"'{sc.course.name}' dersi {ders_services.level_label(lv)} düzeyinde "
+            "okutulmuyor (Ders Havuzu tanımı)."
         )
     duplicate = ExamSessionCourse.objects.filter(
         session=sc.session, course=sc.course, level=lv
@@ -770,12 +802,15 @@ def set_session_rooms(
         room_id = entry.get("room_id")
         if not isinstance(room_id, int):
             raise ValidationError("Her satırda sayısal room_id zorunludur.")
-        if room_id in seen:
-            raise ValidationError(f"Salon listede iki kez geçiyor (id={room_id}).")
-        seen.add(room_id)
         room = ExamRoom.objects.filter(pk=room_id, is_active=True).first()
+        if room_id in seen:
+            ad = f"'{room.name}' salonu" if room is not None else "Bir salon"
+            raise ValidationError(f"{ad} listede iki kez geçiyor.")
+        seen.add(room_id)
         if room is None:
-            raise ValidationError(f"Salon bulunamadı veya pasif (id={room_id}).")
+            raise ValidationError(
+                "Seçilen salonlardan biri bulunamadı ya da pasif; salon listesini yenileyin."
+            )
         resolved.append((room, entry.get("capacity_override")))
 
     ExamSessionRoom.objects.filter(session=session).exclude(
@@ -909,7 +944,7 @@ def _remap_sections(section_ids: list[int], *, school_year_id: int) -> tuple[lis
     for sid in section_ids:
         source_section = okul_selectors.get_class_section(int(sid))
         if source_section is None:
-            missing.append(f"id={sid}")
+            missing.append("silinmiş bir şube")
             continue
         if source_section.school_year_id == school_year_id:
             resolved.append(source_section.pk)
@@ -956,7 +991,10 @@ def _room_seats_for(
         seats = seats[:cap]
     ref_row, ref_col = layout.reference_cell(layout.validate_layout_plan(room.layout_plan))
     return engine.RoomSeats(
-        room_id=room.pk, seats=tuple(seats), focus=(float(ref_col), float(ref_row))
+        room_id=room.pk,
+        seats=tuple(seats),
+        focus=(float(ref_col), float(ref_row)),
+        label=room.name,
     )
 
 
@@ -969,8 +1007,19 @@ def _session_room_seats(session: ExamSession) -> list[engine.RoomSeats]:
     return [_room_seats_for(row.room, cap=row.capacity_override) for row in rows]
 
 
+def _room_names(room_ids: Iterable[int]) -> dict[int, str]:
+    """Salon kimliği → adı (silinmiş salon dahil — ihlal metni adla konuşur)."""
+    return dict(ExamRoom.all_objects.filter(pk__in=set(room_ids)).values_list("pk", "name"))
+
+
 def _placed_from(placements: list[engine.Placement]) -> list[validator.PlacedStudent]:
-    """Motor çıktısını bağımsız doğrulayıcı girdisine çevirir."""
+    """Motor çıktısını bağımsız doğrulayıcı girdisine çevirir.
+
+    Etiketler (salon adı, sıra konumu, ders adı, okul no) yalnız İHLAL METNİ
+    içindir — denetim kimlik ve koordinattan yapılır (`validator.PlacedStudent`).
+    """
+    room_names = _room_names(pl.room_id for pl in placements)
+    group_labels = conflict_group_labels({pl.participant.conflict_group for pl in placements})
     return [
         validator.PlacedStudent(
             student_id=pl.participant.student_id,
@@ -983,6 +1032,10 @@ def _placed_from(placements: list[engine.Placement]) -> list[validator.PlacedStu
             y=pl.seat.y,
             # K1: aynı-şube komşuluk metriği şube etiketiyle ölçülür.
             section_label=f"{pl.participant.class_level}/{pl.participant.class_section}",
+            room_label=room_names.get(pl.room_id, ""),
+            desk_label=layout.desk_position_label(pl.seat.desk_row, pl.seat.desk_col),
+            group_label=group_labels.get(pl.participant.conflict_group, ""),
+            student_number=pl.participant.student_number,
         )
         for pl in placements
     ]
@@ -1006,6 +1059,7 @@ def distribute_session(
         raise ValidationError(
             f"Oturum '{session.get_status_display()}' durumunda; yeniden dağıtılamaz."
         )
+    _ensure_no_attendance(session, "yeniden dağıtılamaz")
 
     resolution = participants.resolve_session(session)
     if resolution.has_blocking_conflicts:
@@ -1037,7 +1091,8 @@ def distribute_session(
         # Kurallar klasik düzende uygulanmaz — öğrenci zaten kendi dersliğinde.
         if _effective_rules(session, [p.student_id for p in pool]):
             result.warnings.append(
-                "Yerleştirme kuralları klasik düzende uygulanmaz (öğrenciler kendi " "dersliğinde)."
+                "Yerleştirme kuralları “Kendi dersliğinde” düzeninde uygulanmaz: her öğrenci "
+                "kendi şube dersliğinde oturur."
             )
     else:
         rooms = _session_room_seats(session)
@@ -1166,6 +1221,16 @@ def swap_seats(
     if len(rows) != 2:
         raise ValidationError("Takas satırı bulunamadı (bu oturumun canlı yerleşimi değil).")
     a, b = rows
+    # Kuralla sabitlenmiş koltuk (engel durumu, BEP, sağlık…) takasla SESSİZCE
+    # bozulmaz (A12): eskiden satır uyarısız MANUAL'a dönüyor, kural fiilen
+    # deliniyordu. Yer değişecekse önce kural değiştirilir ya da kaldırılır.
+    pinned = [row for row in (a, b) if row.status == SeatStatus.PINNED]
+    if pinned:
+        numbers = ", ".join(sorted(row.student_number for row in pinned))
+        raise ValidationError(
+            f"Okul No {numbers} yerleştirme kuralıyla sabitlenmiş; takas edilemez. "
+            "Yeri değiştirmek için Yerleştirme Kuralları sekmesinden kuralı düzenleyin."
+        )
     a_seat = (a.room_id, a.desk_row, a.desk_col, a.slot, a.seat_no)
     b_seat = (b.room_id, b.desk_row, b.desk_col, b.slot, b.seat_no)
     # Koltuk tekilliği (session, room, seat_no) kısmi unique'e takılmasın diye
@@ -1270,6 +1335,7 @@ def seating_report(session: ExamSession) -> validator.SeatingReport:
     Koordinatlar salon planlarından yeniden türetilir — DB'de tutulmaz.
     """
     assignments = list(SeatAssignment.objects.filter(session=session).select_related("room"))
+    group_labels = conflict_group_labels({a.conflict_group for a in assignments})
     seat_maps: dict[int, dict[tuple[int, int, int], Any]] = {}
     placed: list[validator.PlacedStudent] = []
     for a in assignments:
@@ -1280,7 +1346,7 @@ def seating_report(session: ExamSession) -> validator.SeatingReport:
             # Plan dağıtımdan sonra değişmiş — metrik üretilemez; ihlal olarak raporla.
             report = validator.SeatingReport()
             report.hard_violations.append(
-                f"Salon {a.room_id} planı dağıtımdan sonra değişmiş; yeniden dağıtın."
+                f"“{a.room.name}” salonunun planı dağıtımdan sonra değişmiş; yeniden dağıtın."
             )
             return report
         placed.append(
@@ -1294,6 +1360,10 @@ def seating_report(session: ExamSession) -> validator.SeatingReport:
                 x=seat.x,
                 y=seat.y,
                 section_label=a.class_label,  # K1: snapshot'taki "9/A" etiketi
+                room_label=a.room.name,
+                desk_label=layout.desk_position_label(a.desk_row, a.desk_col),
+                group_label=group_labels.get(a.conflict_group, ""),
+                student_number=a.student_number,
             )
         )
     strict = bool(session.distribution_params.get("strict", False))
@@ -1323,8 +1393,8 @@ def approve_session(session: ExamSession, *, approved_by_name: str = "") -> Exam
     report = seating_report(session)
     if not report.is_valid:
         raise ValidationError(
-            f"Onay reddedildi: yerleşimde {len(report.hard_violations)} sert kısıt ihlali var. "
-            "Önce yeniden dağıtın (doğrulama raporuna bakın)."
+            f"Onay reddedildi: yerleşimde {len(report.hard_violations)} kural ihlali var. "
+            "Önce yeniden dağıtın (ayrıntı Yerleşim sekmesinde ve Dağıtım Doğrulama Raporu'nda)."
         )
     session.status = ExamSessionStatus.APPROVED
     session.approved_by_name = " ".join((approved_by_name or "").split()) or _default_stamp_name()
@@ -1370,6 +1440,7 @@ def revert_session_to_draft(session: ExamSession) -> ExamSession:
             f"Oturum '{session.get_status_display()}' durumunda; yalnız dağıtılmış oturum "
             "taslağa alınabilir."
         )
+    _ensure_no_attendance(session, "taslağa alınamaz")
     now = timezone.now()
     SeatAssignment.objects.filter(session=session).update(deleted_at=now)
     ProctorAssignment.objects.filter(session=session).update(deleted_at=now)
@@ -1536,7 +1607,10 @@ def _resolve_rule_pins(
         if room_id not in rooms_cache:
             room = ExamRoom.objects.filter(pk=room_id, is_active=True).first()
             if room is None:
-                raise ValidationError(f"Kural hedef salonu bulunamadı (id={room_id}).")
+                raise ValidationError(
+                    "Bir yerleştirme kuralının hedef salonu bulunamadı ya da pasif; "
+                    "Yerleştirme Kuralları sekmesinden kuralı düzeltin."
+                )
             rooms_cache[room_id] = _room_seats_for(room)
         return rooms_cache[room_id]
 
@@ -1596,23 +1670,32 @@ def _resolve_rule_pins(
     def _take_exact_seat(rs: engine.RoomSeats, rule: PlacementRule, *, solo: bool) -> Any:
         """BELIRLI_KOLTUK: koordinat üçlüsüyle birebir koltuk (deterministik)."""
         keys = taken.setdefault(rs.room_id, set())
-        hedef = (rule.target_desk_row, rule.target_desk_col, rule.target_slot)
+        row, col, slot = rule.target_desk_row, rule.target_desk_col, rule.target_slot
+        if row is None or col is None or slot is None:
+            # Serializer üçlüyü zorunlu kılar; servisten doğrudan yazılmış eksik kural
+            # 500 yerine anlaşılır ret alır.
+            raise ValidationError(
+                "“Belirli koltuk” kuralında koltuk seçilmemiş; kuralı Kurallar "
+                "sekmesinden güncelleyin."
+            )
+        hedef = (row, col, slot)
         for seat in rs.seats:
             key = (seat.desk_row, seat.desk_col, seat.slot)
             if key != hedef:
                 continue
             if key in keys:
                 raise ValidationError(
-                    "Seçilen koltuk başka bir sabit kurala verilmiş "
-                    f"(salon id={rs.room_id}, sıra {hedef[0]}-{hedef[1]})."
+                    "Seçilen koltuk başka bir yerleştirme kuralına verilmiş "
+                    f"({_pin_room_text(rs)}, {layout.desk_position_label(hedef[0], hedef[1])})."
                 )
             keys.add(key)
             if solo:
                 _block_siblings(rs, seat, keys)
             return seat
         raise ValidationError(
-            f"Seçilen koltuk salonun planında yok (salon id={rs.room_id}, "
-            f"sıra {hedef[0]}-{hedef[1]}, koltuk {hedef[2]}). Plan değişmiş olabilir."
+            f"Seçilen koltuk salonun planında yok ({_pin_room_text(rs)}, "
+            f"{layout.desk_position_label(hedef[0], hedef[1])}, {hedef[2] + 1}. koltuk). "
+            "Salon planı kuraldan sonra değişmiş olabilir; kuralı Kurallar sekmesinden güncelleyin."
         )
 
     preplaced: list[engine.Placement] = []
@@ -1635,8 +1718,8 @@ def _resolve_rule_pins(
             )
             if room is None:
                 raise ValidationError(
-                    f"KENDI_DERSLIGINDE kuralı: {p.class_level}/{p.class_section} için "
-                    "bağlı derslik tanımlı değil (salon 'bağlı şube' alanı)."
+                    f"“Kendi dersliğinde” kuralı: {p.class_level}/{p.class_section} şubesinin "
+                    "dersliği tanımlı değil (Salonlar ekranında salonun “Bağlı şube” alanı)."
                 )
             rs = _room_seats_by_id(room.pk)
             seat = _take_seat(rs, preference=rule.seat_preference, solo=rule.solo_desk)
@@ -1658,12 +1741,12 @@ def _resolve_rule_pins(
                     break
             if seat is None:
                 raise ValidationError(
-                    "ON_SIRA kuralı için oturum salonlarında boş ön sıra koltuğu kalmadı."
+                    "“Ön sıra” kuralı için oturum salonlarında boş ön sıra koltuğu kalmadı."
                 )
         if seat is None:
             assert rs is not None
             raise ValidationError(
-                f"Sabit kural için salonda boş koltuk kalmadı (salon id={rs.room_id})."
+                f"Yerleştirme kuralı için salonda boş koltuk kalmadı ({_pin_room_text(rs)})."
             )
         assert rs is not None
         preplaced.append(engine.Placement(participant=p, room_id=rs.room_id, seat=seat))
@@ -1676,7 +1759,8 @@ def _resolve_rule_pins(
     removed = {r.room_id for r in session_rooms_list} & separate_room_ids
     for room_id in sorted(removed):
         warnings.append(
-            f"Salon {room_id} AYRI_SALON kuralına ayrıldı; kelebek dağıtımından çıkarıldı."
+            f"{_pin_room_text(rooms_cache[room_id])} “Ayrı salon” kuralıyla ayrıldı; "
+            "kelebek dağıtımına katılmadı."
         )
     bloke_sayisi = sum(len(v) for v in blocked.values())
     if bloke_sayisi:
@@ -1687,16 +1771,22 @@ def _resolve_rule_pins(
     return preplaced, butterfly_rooms, warnings
 
 
+def _pin_room_text(rs: engine.RoomSeats) -> str:
+    """Kural hata/uyarı metnindeki salon adı (kimlik DEĞİL — docs/sozluk.md)."""
+    return f"“{rs.label}”" if rs.label else "salon"
+
+
 def _without_blocked(
     rs: engine.RoomSeats, blocked_keys: set[tuple[int, int, int]]
 ) -> engine.RoomSeats:
-    """Bloke koltukları motor girdisinden düşer (focus KORUNUR)."""
+    """Bloke koltukları motor girdisinden düşer (focus ve ad KORUNUR)."""
     if not blocked_keys:
         return rs
     return engine.RoomSeats(
         room_id=rs.room_id,
         seats=tuple(s for s in rs.seats if (s.desk_row, s.desk_col, s.slot) not in blocked_keys),
         focus=rs.focus,
+        label=rs.label,
     )
 
 
@@ -1938,7 +2028,27 @@ def _report_header(session: ExamSession) -> reports.ReportHeader:
         exam_date=session.exam_date.strftime("%d.%m.%Y"),
         start_time=session.start_time.strftime("%H:%M"),
         generated_at=timezone.localtime().strftime("%d.%m.%Y %H:%M"),
+        duration_label=_session_duration_label(session),
     )
+
+
+def _group_durations(session: ExamSession) -> dict[str, int]:
+    """Çakışma grubu anahtarı → sınav süresi (dk): ders bazlı süre oturum süresini ezer."""
+    durations: dict[str, int] = {}
+    for sc in ExamSessionCourse.objects.filter(session=session):
+        if sc.level is None and not sc.shared_booklet:
+            continue  # bozuk satır; anahtarı üretilemez
+        key = _session_course_group_key(sc)
+        durations.setdefault(key, int(sc.duration_minutes or session.duration_minutes))
+    return durations
+
+
+def _session_duration_label(session: ExamSession) -> str:
+    """Üst bant süre künyesi: tek süre "40 dk"; dersler farklıysa "derse göre 40-60 dk"."""
+    values = set(_group_durations(session).values()) or {int(session.duration_minutes)}
+    if len(values) == 1:
+        return reports.duration_label(next(iter(values)))
+    return f"derse göre {min(values)}-{max(values)} dk"
 
 
 def render_room_layout_pdf(room: ExamRoom) -> ReportFile:
@@ -1989,6 +2099,10 @@ def _seat_rows(session: ExamSession, *, room_id: int | None = None) -> list[repo
         qs = qs.filter(room_id=room_id)
     assignments = list(qs)
     course_names = _seat_course_names({a.conflict_group for a in assignments})
+    plain_names: dict[int, str] = ders_selectors.course_names_by_ids(
+        {int(a.conflict_group.split(":", 1)[0]) for a in assignments}
+    )
+    durations = _group_durations(session)
     return [
         reports.SeatRow(
             full_name=a.full_name,
@@ -2001,6 +2115,8 @@ def _seat_rows(session: ExamSession, *, room_id: int | None = None) -> list[repo
             slot=a.slot,
             course_name=course_names.get(a.conflict_group, ""),
             status=a.status,
+            duration_minutes=durations.get(a.conflict_group),
+            course_plain=plain_names.get(int(a.conflict_group.split(":", 1)[0]), ""),
         )
         for a in assignments
     ]
@@ -2036,15 +2152,21 @@ def _seat_course_names(group_keys: set[str]) -> dict[str, str]:
 def _room_sheets(
     session: ExamSession, rows: list[reports.SeatRow], *, room_id: int | None = None
 ) -> list[reports.RoomSheet]:
-    """R1 kroki girdileri — yalnız yerleşim almış oturum salonları, ada göre."""
-    used_names = {r.room_name for r in rows}
+    """R1 kroki girdileri — YERLEŞİM ALMIŞ salonlar, ada göre.
+
+    Kaynak `ExamSessionRoom` DEĞİL `SeatAssignment`'tır (18.09.2026 bulgusu A1):
+    klasik düzende (kendi dersliğinde) oturumun salon listesi BOŞTUR ve kural
+    pini öğrenciyi oturum listesinde olmayan bir salona koyabilir — ikisinde de
+    salon evrakı basılmalıdır; eskiden o salonlar için kroki + yoklama hiç
+    üretilmiyordu. `room_occupancy` aynı kaynağı kullanır. Silinmiş salon da
+    girer: arşivden yeniden basım, salon sonradan kaldırılsa bile kırılmaz.
+    """
     sheets: list[reports.RoomSheet] = []
-    session_rooms = ExamSessionRoom.objects.filter(session=session).select_related("room")
-    for sr in sorted(session_rooms, key=lambda sr: reports.room_name_sort_key(sr.room.name)):
-        room = sr.room
+    for room in _seated_rooms(session, include_deleted=True):
         if room_id is not None and room.pk != room_id:
             continue
-        if room.name not in used_names:
+        room_rows = tuple(r for r in rows if r.room_name == room.name)
+        if not room_rows:
             continue
         sheets.append(
             reports.RoomSheet(
@@ -2052,7 +2174,7 @@ def _room_sheets(
                 block=room.block,
                 plan=layout.validate_layout_plan(room.layout_plan),
                 numbering_scheme=room.numbering_scheme,
-                rows=tuple(r for r in rows if r.room_name == room.name),
+                rows=room_rows,
             )
         )
     return sheets
@@ -2080,8 +2202,10 @@ def render_session_report(
             raise ValidationError(
                 "Salon filtresi yalnız salon bazlı evrakta (R1 salon evrakı / R7 tutanak) geçerli."
             )
-        if not ExamSessionRoom.objects.filter(session=session, room_id=room_id).exists():
-            raise ValidationError("Salon bu oturumda tanımlı değil.")
+        # Denetim yerleşimden: klasik düzende ve oturum listesi dışına pinlenen
+        # kuralda salon `ExamSessionRoom`'da yoktur ama evrakı basılmalıdır (A1).
+        if not SeatAssignment.objects.filter(session=session, room_id=room_id).exists():
+            raise ValidationError("Bu salonda bu oturuma ait yerleşim yok.")
 
     rows = _seat_rows(session, room_id=room_id)
     if not rows:
@@ -2140,7 +2264,7 @@ def _proctor_rows(session: ExamSession) -> list[reports.ProctorRow]:
 
 
 def _proctor_names_by_room(session: ExamSession) -> dict[str, str]:
-    """R9 basımı: salon adı → görevli ad(lar)ı.
+    """Salon adı → görevli ad(lar)ı — salon evrakı (R1) künyesi ve tutanak (R7) için.
 
     Salon başına tek gözetmen beklenir (Tur 235 sonrası); join mekanik olarak
     çok-adlı eski kayıtları da kaldırır. Gözetmen modülü kapalıysa boş döner —
@@ -2180,6 +2304,10 @@ def _validation_report_context(
         params={
             **params,
             "layout_mode_label": LayoutMode(session.layout_mode).label,
+            # "Kendi dersliğinde" düzeninde karıştırma yoktur: motor numarayı hep 0
+            # yazar, katı dağıtım ve dönüşümlü oturma da uygulanmaz. Şablon bu
+            # satırları yalnız kelebek düzeninde basar (anlamsız "0" basılmasın).
+            "shuffled": session.layout_mode == LayoutMode.BUTTERFLY,
             "seed": params.get("seed", "—"),
             "strict": bool(params.get("strict", False)),
             "checkerboard": bool(params.get("checkerboard", False)),
@@ -2316,7 +2444,7 @@ def upload_question_document(
         )
 
     with transaction.atomic():
-        QuestionDocument.objects.filter(session_course=sc).update(deleted_at=timezone.now())
+        _retire_question_documents(sc)
         doc = QuestionDocument(
             session_course=sc,
             page_count=page_count,
@@ -2327,6 +2455,47 @@ def upload_question_document(
         doc.file.save(f"soru_{sc.pk}.pdf", ContentFile(file_bytes), save=False)
         doc.save()
     return doc
+
+
+def _retire_question_documents(sc: ExamSessionCourse) -> int:
+    """Satırın canlı soru dosyalarını kapatır: satır soft-delete (iz kalır), DOSYA silinir.
+
+    Sınav öncesi gizlilik (A6, 18.09.2026): eskiden değiştirilen/kaldırılan her
+    soru PDF'i `MEDIA_ROOT`'ta kalıyordu — dosya yalnız arşiv anonimleştirmesinde
+    siliniyordu. İz (sayfa sayısı, sha256, zaman damgası) satırda durur; içerik
+    durmaz. Silme `transaction.on_commit`e ertelenir: işlem geri sarılırsa dosya
+    yerinde kalır (anonimleştirme deseni). Çağıran `transaction.atomic` içindedir.
+    """
+    docs = list(QuestionDocument.objects.filter(session_course=sc))
+    files: list[tuple[Storage, str]] = [
+        (doc.file.storage, doc.file.name) for doc in docs if doc.file and doc.file.name
+    ]
+    if not docs:
+        return 0
+    QuestionDocument.objects.filter(pk__in=[doc.pk for doc in docs]).update(
+        deleted_at=timezone.now(), file=""
+    )
+
+    def _delete_files() -> None:
+        for storage, name in files:
+            if storage.exists(name):
+                storage.delete(name)
+
+    transaction.on_commit(_delete_files)
+    return len(docs)
+
+
+@transaction.atomic
+def remove_question_document(sc: ExamSessionCourse) -> bool:
+    """Oturum dersinin soru dosyasını kaldırır — yükleme ile AYNI durum kapısı.
+
+    Eskiden view `doc.delete()`'i doğrudan çağırıyordu: onaylı/arşiv oturumda
+    yükleme reddedilirken silme serbestti ve silinen dosya kitapçık yeniden
+    basımını düşürüyordu (A6). Dosya yoksa False döner (idempotent DELETE).
+    """
+    if sc.session.status in (ExamSessionStatus.APPROVED, ExamSessionStatus.ARCHIVED):
+        raise ValidationError("Onaylı/arşiv oturumda soru dosyası değiştirilemez.")
+    return _retire_question_documents(sc) > 0
 
 
 def _session_info(session: ExamSession) -> booklet.SessionInfo:
@@ -2519,7 +2688,7 @@ def _resolve_active_personnel(teacher_id: int) -> Personnel:
     """Aktif personeli çözer (OYS core köprüsü yerine yerel tablo — B9)."""
     teacher: Personnel | None = Personnel.objects.filter(pk=teacher_id, is_active=True).first()
     if teacher is None:
-        raise ValidationError(f"Aktif personel bulunamadı (id={teacher_id}).")
+        raise ValidationError("Seçilen öğretmen bulunamadı ya da pasif; listeyi yenileyin.")
     return teacher
 
 
@@ -2600,13 +2769,18 @@ def _busy_teacher_ids(session: ExamSession) -> set[int]:
     return busy
 
 
-def _seated_rooms(session: ExamSession) -> list[ExamRoom]:
-    """Yerleşim almış salonlar (ada göre) — klasikte ExamSessionRoom satırı yoktur."""
+def _seated_rooms(session: ExamSession, *, include_deleted: bool = False) -> list[ExamRoom]:
+    """Yerleşim almış salonlar (ada göre) — klasikte ExamSessionRoom satırı yoktur.
+
+    `include_deleted`: evrak basımı silinmiş salonu da ister (arşivden yeniden
+    basım); gözetmen ataması gibi CANLI işlemler istemez.
+    """
     room_ids = (
         SeatAssignment.objects.filter(session=session).values_list("room_id", flat=True).distinct()
     )
+    manager = ExamRoom.all_objects if include_deleted else ExamRoom.objects
     return sorted(
-        ExamRoom.objects.filter(pk__in=list(room_ids)),
+        manager.filter(pk__in=list(room_ids)),
         key=lambda r: reports.room_name_sort_key(r.name),
     )
 

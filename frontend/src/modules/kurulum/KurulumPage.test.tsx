@@ -53,7 +53,7 @@ const CIZELGE_PLANI = {
   warnings: [],
   levels: [9, 10, 11, 12].map((level) => ({
     level,
-    label: `${level}. sınıf`,
+    label: `${level}. Sınıf`,
     explicit: false,
     programs: [
       {
@@ -169,9 +169,13 @@ describe("KurulumPage", () => {
     renderPage();
 
     expect(await screen.findByText("1. Okul bilgileri")).toBeInTheDocument();
+    // Sayfa başlığı Başlık Düzeninde ve üst çubuktaki adla aynı (docs/sozluk.md §4).
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Kurulum Sihirbazı" }),
+    ).toBeInTheDocument();
     await user.type(screen.getByLabelText(/Okul adı/), "Deneme Lisesi");
     await user.type(screen.getByLabelText("İl"), "Ankara");
-    await user.click(screen.getByRole("button", { name: /Kaydet ve devam/ }));
+    await user.click(screen.getByRole("button", { name: "Kaydet ve devam et" }));
 
     await waitFor(() =>
       expect(oapi.updateSchoolConfig).toHaveBeenCalledWith({
@@ -189,7 +193,7 @@ describe("KurulumPage", () => {
     expect(await screen.findByText("2. Ders yılı")).toBeInTheDocument();
   });
 
-  it("yürürlükteki çizelgeyi gösterir; seviye bazında özelleştirme atamayı gönderir", async () => {
+  it("yürürlükteki çizelgeyi gösterir; sınıf düzeyine göre özelleştirme atamayı gönderir", async () => {
     oapi.updateSchoolConfig.mockResolvedValue({ ...BOS_CONFIG, school_name: "Deneme Lisesi" });
     const user = userEvent.setup();
     renderPage();
@@ -204,24 +208,33 @@ describe("KurulumPage", () => {
     // Çizelge verisi olmayan tür seçenekte işaretlenir (bu planda hepsi var).
     expect(screen.getByRole("option", { name: "Fen Lisesi" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Seviye bazında özelleştir/ }));
+    await user.click(screen.getByRole("button", { name: "Sınıf düzeyine göre özelleştir" }));
+    // Matris onay kutuları diğer formlarla aynı ölçü/renkte (boyutsuz kutu
+    // tarayıcı varsayılanına düşüyordu — erişilebilirlik bulgusu).
+    const tumuKutusu = screen.getByRole("checkbox", {
+      name: "Diğer okul türlerinin çizelgelerini de göster",
+    });
+    expect(tumuKutusu).toHaveClass("h-5", "w-5", "accent-primary");
     // Kademeli dönüşüm: 9. sınıfa Fen çizelgesi eklenir, AL kaldırılır.
-    await user.click(
-      screen.getByRole("checkbox", { name: "Diğer okul türlerinin çizelgelerini de göster" }),
-    );
+    await user.click(tumuKutusu);
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Fen Lisesi Haftalık Ders Çizelgesi (TTK 09.05.2025/5) — 9. Sınıf",
+      }),
+    ).toHaveClass("h-5", "w-5", "accent-primary");
     await user.click(
       screen.getByRole("checkbox", {
-        name: "Fen Lisesi Haftalık Ders Çizelgesi (TTK 09.05.2025/5) — 9. sınıf",
+        name: "Fen Lisesi Haftalık Ders Çizelgesi (TTK 09.05.2025/5) — 9. Sınıf",
       }),
     );
     await user.click(
       screen.getByRole("checkbox", {
-        name: "Anadolu Lisesi Haftalık Ders Çizelgesi (TTK 09.05.2025/5) — 9. sınıf",
+        name: "Anadolu Lisesi Haftalık Ders Çizelgesi (TTK 09.05.2025/5) — 9. Sınıf",
       }),
     );
 
     await user.type(screen.getByLabelText(/Okul adı/), "Deneme Lisesi");
-    await user.click(screen.getByRole("button", { name: /Kaydet ve devam/ }));
+    await user.click(screen.getByRole("button", { name: "Kaydet ve devam et" }));
 
     await waitFor(() =>
       expect(oapi.updateSchoolConfig).toHaveBeenCalledWith(
@@ -237,10 +250,10 @@ describe("KurulumPage", () => {
     );
   });
 
-  it("okul adı boşken 'Kaydet ve devam' pasiftir", async () => {
+  it("okul adı boşken 'Kaydet ve devam et' pasiftir", async () => {
     renderPage();
     expect(await screen.findByText("1. Okul bilgileri")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Kaydet ve devam/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Kaydet ve devam et" })).toBeDisabled();
   });
 
   it("kayıt hatasında Türkçe hata bandı + alan hatası gösterilir", async () => {
@@ -252,7 +265,7 @@ describe("KurulumPage", () => {
 
     await screen.findByText("1. Okul bilgileri");
     await user.type(screen.getByLabelText(/Okul adı/), "X");
-    await user.click(screen.getByRole("button", { name: /Kaydet ve devam/ }));
+    await user.click(screen.getByRole("button", { name: "Kaydet ve devam et" }));
 
     expect(await screen.findByText("Okul adı çok uzun.")).toBeInTheDocument();
     // Alan hatası backend {fields} sözleşmesinden okunur.
@@ -285,6 +298,9 @@ describe("KurulumPage", () => {
     expect(await screen.findByText("2. Ders yılı")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /İleri/ })).toBeDisabled();
     expect(screen.getByText(/Devam etmek için bir ders yılını aktifleştirin/)).toBeInTheDocument();
+    // İç faz kodu kullanıcı metnine sızmaz (docs/sozluk.md §2 — eskiden "(F6)").
+    expect(screen.getByText(/mevzuat pencereleri dönem/)).toBeInTheDocument();
+    expect(screen.queryByText(/\(F6\)/)).not.toBeInTheDocument();
 
     await user.clear(screen.getByLabelText(/^Ad/));
     await user.type(screen.getByLabelText(/^Ad/), "2026-2027");

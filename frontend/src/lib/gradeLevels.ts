@@ -23,8 +23,10 @@ export interface GradeLevelsResponse {
 
 export const getGradeLevels = () => api.get<GradeLevelsResponse>("/grade-levels/");
 
-// Üye/kayıt gösterim etiketi: 0 → "Hazırlık", n → "n. sınıf", null/undefined → "—".
+// Sınıf düzeyi etiketi: 0 → "Hazırlık", n → "n. Sınıf", null/undefined → "—".
+// Backend `dersler.text.level_label` ile AYNI yazım (docs/sozluk.md): eskiden
+// burası "9. sınıf", backend "9. Sınıf" basıyor, aynı ekranda iki yazım çıkıyordu.
 export function gradeLevelLabel(level: number | null | undefined): string {
   if (level == null) return "—";
-  return level === 0 ? "Hazırlık" : `${level}. sınıf`;
+  return level === 0 ? "Hazırlık" : `${level}. Sınıf`;
 }

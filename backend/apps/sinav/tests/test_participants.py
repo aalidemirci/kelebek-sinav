@@ -198,7 +198,9 @@ def test_empty_course_and_missing_refs_warn() -> None:
 
     result = participants.resolve_session(session)
     assert result.total_count == 0
-    assert any("bulunamadı" in w for w in result.courses[0].warnings)
+    assert any("artık yok" in w for w in result.courses[0].warnings)
+    # KVKK/sözlük: uyarıda iç kimlik (id=…) geçmez.
+    assert not any("id=" in w for w in result.courses[0].warnings)
 
 
 # ===========================================================================

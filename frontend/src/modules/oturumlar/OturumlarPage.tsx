@@ -15,13 +15,14 @@ import { ApiError } from "../../lib/api";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import Dialog from "../../ui/Dialog";
+import EmptyState from "../../ui/EmptyState";
 import Icon from "../../ui/Icon";
 import Select from "../../ui/Select";
 import { SkeletonList } from "../../ui/Skeleton";
 import TextField from "../../ui/TextField";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import type { LayoutModeCode } from "./api";
-import { examSessionApi, LAYOUT_MODE_TR } from "./api";
+import { examSessionApi, LAYOUT_MODE_OPTIONS, LAYOUT_MODE_TR, PROCTORS_ENABLED_LABEL } from "./api";
 import { formatDate, StatusBadge } from "./oturumEtiket";
 
 export default function OturumlarPage() {
@@ -98,11 +99,16 @@ export default function OturumlarPage() {
         </Card>
       )}
       {sessions.isSuccess && list.length === 0 && (
-        <Card elevation={1} className="p-6">
-          <p className="text-body-medium text-on-surface-variant">
-            Henüz sınav oturumu yok. &quot;Yeni sınav oturumu&quot; ile sihirbazı başlatın.
-          </p>
-        </Card>
+        <EmptyState
+          icon="quiz"
+          title="Henüz sınav oturumu yok"
+          description="İlk oturumu oluşturun; sihirbaz sizi ön kontrolden dağıtıma kadar adım adım götürür."
+          action={
+            <Button icon="add" onClick={() => setCreateOpen(true)}>
+              Yeni sınav oturumu
+            </Button>
+          }
+        />
       )}
 
       <ul className="flex flex-col gap-2">
@@ -193,10 +199,7 @@ export default function OturumlarPage() {
           </div>
           <Select
             label="Düzen"
-            options={[
-              { value: "BUTTERFLY", label: "Kelebek (karışık dağıtım)" },
-              { value: "HOME_CLASSROOM", label: "Kendi dersliğinde (klasik)" },
-            ]}
+            options={LAYOUT_MODE_OPTIONS}
             value={form.layout_mode}
             onChange={(e) =>
               setForm((f) => ({ ...f, layout_mode: e.target.value as LayoutModeCode }))
@@ -209,7 +212,7 @@ export default function OturumlarPage() {
               checked={form.proctors_enabled}
               onChange={(e) => setForm((f) => ({ ...f, proctors_enabled: e.target.checked }))}
             />
-            Gözetmen modülü açık (görevlendirme + R6 belgesi)
+            {PROCTORS_ENABLED_LABEL}
           </label>
         </div>
       </Dialog>

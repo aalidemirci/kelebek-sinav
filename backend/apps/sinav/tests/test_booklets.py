@@ -355,6 +355,53 @@ def test_api_upload_download_and_booklet_flow() -> None:
     assert client.get(f"/api/v1/exam-session-courses/{sc.pk}/question/").status_code == 404
 
 
+def test_yerlesim_degisince_kitapcik_uretimi_bayat_isaretlenir() -> None:
+    """Kitapçık salon/koltuk/ad taşır: üretimden sonra yerleşim değişirse ZIP yanlış
+    koltuğa kitapçık demektir. Dosya silinmez ama API `is_stale` ile işaretler.
+
+    Üç tetikleyici: elle koltuk takası, yeniden dağıtım, taslağa alma.
+    """
+    session = _distributed_session(question_pages={"Coğrafya": 2, "Fizik": 2})
+    client = APIClient()
+    url = f"/api/v1/booklet-runs/?session={session.pk}"
+
+    def bayatlik() -> list[bool]:
+        return [row["is_stale"] for row in client.get(url).data["results"]]
+
+    services.request_booklet_run(session)
+    assert bayatlik() == [False]
+
+    # 1) Elle takas: iki öğrencinin koltuğu değişir.
+    a, b = list(SeatAssignment.objects.filter(session=session).order_by("id")[:2])
+    services.swap_seats(session, assignment_a_id=a.pk, assignment_b_id=b.pk)
+    assert bayatlik() == [True]
+
+    # Yeniden üretim günceldir; eskisi bayat kalır (liste en yeni önce).
+    services.request_booklet_run(session)
+    assert bayatlik() == [False, True]
+
+    # 2) Yeniden dağıtım: yeni yerleşim yazılır → iki üretim de bayat.
+    services.distribute_session(session, seed=99)
+    assert bayatlik() == [True, True]
+
+    # 3) Taslağa alma: yerleşim yok → hâlâ bayat (indirilirse eski düzeni taşır).
+    services.revert_session_to_draft(session)
+    assert bayatlik() == [True, True]
+
+
+def test_basarisiz_uretim_bayat_sayilmaz() -> None:
+    """`is_stale` yalnız indirilebilir (tamamlanmış) üretim için anlamlıdır."""
+    session = _distributed_session(question_pages={"Coğrafya": 2, "Fizik": 2})
+    for qd in QuestionDocument.objects.filter(session_course__session=session):
+        Path(qd.file.path).unlink()
+    failed = services.request_booklet_run(session)
+    assert failed.status == BookletRunStatus.FAILED
+    services.distribute_session(session, seed=7)
+
+    rows = APIClient().get(f"/api/v1/booklet-runs/?session={session.pk}").data["results"]
+    assert [row["is_stale"] for row in rows] == [False]
+
+
 # ===========================================================================
 # Ölçekleme yasağı + Word şablonu
 # ===========================================================================
@@ -507,6 +554,70 @@ def test_shared_booklet_single_file_rule() -> None:
     with pytest.raises(ValidationError, match="11. Sınıf satırında zaten yüklü") as excinfo:
         services.upload_question_document(rows[1], file_bytes=_question_pdf(1))
     assert "taslağa alıp" in str(excinfo.value)
+
+
+def test_eksik_medya_dosyasinda_indirme_turkce_404() -> None:
+    """A8: yedek yalnız veritabanını kapsar; yedekten dönünce satır durur, DOSYA yoktur.
+    İndirme uçları ham `FileNotFoundError` (500) yerine açıklayıcı 404 döner."""
+    session = _distributed_session(question_pages={"Coğrafya": 1, "Fizik": 1})
+    sc = session.courses.select_related("course").get(course__name="Coğrafya")
+    run = services.request_booklet_run(session)
+    doc = QuestionDocument.objects.get(session_course=sc)
+    doc.file.storage.delete(doc.file.name)  # "yedekten dönüş": kayıt var, dosya yok
+    run.file.storage.delete(run.file.name)
+
+    client = APIClient()
+    soru = client.get(f"/api/v1/exam-session-courses/{sc.pk}/question/download/")
+    paket = client.get(f"/api/v1/booklet-runs/{run.pk}/download/")
+    for yanit in (soru, paket):
+        assert yanit.status_code == 404
+        assert yanit.data["code"] == "media_missing"
+        assert "yedeği" in yanit.data["message"]
+
+
+def test_question_delete_locked_when_approved() -> None:
+    """A6: silme ucu yükleme ile AYNI durum kapısından geçer (onaylı/arşivde ret)."""
+    session = _distributed_session(question_pages={"Coğrafya": 1, "Fizik": 1})
+    sc = session.courses.select_related("course").get(course__name="Coğrafya")
+    services.approve_session(session)
+    sc.refresh_from_db()
+
+    with pytest.raises(ValidationError, match="değiştirilemez"):
+        services.remove_question_document(sc)
+    resp = APIClient().delete(f"/api/v1/exam-session-courses/{sc.pk}/question/")
+    assert resp.status_code == 400
+    assert QuestionDocument.objects.filter(session_course=sc).exists(), "dosya silinmemeli"
+    # Kitapçık yeniden basımı onaylı oturumda hâlâ çalışır.
+    assert services.request_booklet_run(session).status == BookletRunStatus.COMPLETED
+
+
+def test_replaced_and_removed_question_files_leave_disk(
+    django_capture_on_commit_callbacks: Any,
+) -> None:
+    """A6: değiştirilen ve kaldırılan soru PDF'i DİSKTEN de silinir (sınav gizliliği).
+
+    Satır iz olarak kalır (sha256/sayfa sayısı), içerik kalmaz. Silme commit
+    sonrasına ertelidir — geri sarılan işlemde dosya yerinde kalır.
+    """
+    session = _distributed_session()
+    sc = session.courses.select_related("course").get(course__name="Coğrafya")
+
+    first = services.upload_question_document(sc, file_bytes=_question_pdf(1, title="ILK"))
+    storage, first_name = first.file.storage, first.file.name
+    assert storage.exists(first_name)
+
+    with django_capture_on_commit_callbacks(execute=True):
+        second = services.upload_question_document(sc, file_bytes=_question_pdf(1, title="IKI"))
+    second_name = second.file.name
+    assert not storage.exists(first_name), "değiştirilen eski dosya diskte kaldı"
+    assert storage.exists(second_name)
+    old_row = QuestionDocument.all_objects.get(pk=first.pk)
+    assert old_row.deleted_at is not None and not old_row.file  # iz kalır, içerik kalmaz
+
+    with django_capture_on_commit_callbacks(execute=True):
+        assert services.remove_question_document(sc) is True
+    assert not storage.exists(second_name), "kaldırılan dosya diskte kaldı"
+    assert services.remove_question_document(sc) is False  # idempotent
 
 
 def test_tde_9_10_vakasi_uctan_uca() -> None:

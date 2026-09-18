@@ -3,7 +3,7 @@
 // backend numara önizlemesi ve kaydetme gövdesi doğrulanır.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -38,11 +38,23 @@ const sections = vi.hoisted(() => ({
   ),
 }));
 
+const groups = vi.hoisted(() => ({
+  list: vi.fn(() => Promise.resolve({ count: 0, next: null, previous: null, results: [] })),
+}));
+
 vi.mock("./api", async (importActual) => {
   const actual = await importActual<typeof import("./api")>();
-  return { ...actual, examRoomApi: exam };
+  return {
+    ...actual,
+    examRoomApi: exam,
+    examRoomGroupApi: { ...actual.examRoomGroupApi, ...groups },
+  };
 });
-vi.mock("../../lib/download", () => download);
+// Yalnız saveBlob sahtelenir; dosya adını kuran `dosyaAdi` GERÇEK kalır.
+vi.mock("../../lib/download", async (importActual) => {
+  const actual = await importActual<typeof import("../../lib/download")>();
+  return { ...actual, ...download };
+});
 vi.mock("../okul/api", async (importActual) => {
   const actual = await importActual<typeof import("../okul/api")>();
   return { ...actual, okulApi: { ...actual.okulApi, ...sections } };
@@ -120,6 +132,52 @@ describe("SalonlarPage", () => {
     expect(screen.getByText("Lab")).toBeInTheDocument();
     expect(screen.getByText("Pasif")).toBeInTheDocument();
     expect(screen.getByText("12 koltuk")).toBeInTheDocument();
+  });
+
+  it("sayfa metinleri sözlüğe uyar: evrak kodu yok, 'salon kümesi', 'klasik' yok", async () => {
+    exam.list.mockResolvedValue(paginated([makeRoom()]));
+    const { container } = renderPage();
+
+    await screen.findByText("D-204");
+    // "kroki (R1)" → belgenin adı; "Derslik Kümeleri" → "Salon kümeleri" (cümle düzeni).
+    expect(screen.getByText(/salon sınav evrakındaki krokinin/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Salon kümeleri" })).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/\bR1\b|Derslik Kümeleri|klasik/i);
+    // Sözlükte KALAN iki "derslik" kullanımı yerinde durur.
+    expect(screen.getByRole("button", { name: "Şube dersliklerini oluştur" })).toBeInTheDocument();
+    expect(screen.getByText(/“Kendi dersliğinde” düzenini/)).toBeInTheDocument();
+  });
+
+  it("'Salon kümeleri' diyaloğu salon diliyle açılır", async () => {
+    const user = userEvent.setup();
+    exam.list.mockResolvedValue(paginated([makeRoom()]));
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Salon kümeleri" }));
+    const dialog = await screen.findByRole("dialog", { name: "Salon kümeleri (Sabah / Öğle)" });
+    expect(within(dialog).getByText("Bunlar salon kümeleridir.")).toBeInTheDocument();
+    expect(dialog.textContent).not.toMatch(/derslik küme/i);
+    expect(await within(dialog).findByText("Henüz küme tanımlanmamış.")).toBeInTheDocument();
+  });
+
+  it("salon yokken EmptyState gösterir; çıkışı 'Şube dersliklerini oluştur'dur", async () => {
+    exam.list.mockResolvedValue(paginated([]));
+    renderPage();
+
+    const baslik = await screen.findByRole("heading", { name: "Henüz salon tanımlı değil" });
+    const kart = baslik.parentElement as HTMLElement;
+    expect(
+      within(kart).getByRole("button", { name: "Şube dersliklerini oluştur" }),
+    ).toBeInTheDocument();
+  });
+
+  it("yüklenirken iskelet, uç hatasında role=alert gösterir", async () => {
+    exam.list.mockRejectedValue(new Error("ağ koptu"));
+    renderPage();
+
+    expect(screen.getByRole("status")).toHaveTextContent("Yükleniyor…");
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Salonlar yüklenemedi/);
+    expect(screen.queryByText("Henüz salon tanımlı değil")).not.toBeInTheDocument();
   });
 
   it("yeni salon VARSAYILAN ŞABLONLA oluşturulur ve editör açılır", async () => {
@@ -257,7 +315,34 @@ describe("SalonlarPage", () => {
     await user.click(await screen.findByRole("button", { name: /Yerleşim planı \(PDF\)/ }));
 
     await waitFor(() => expect(exam.layoutPdfBlob).toHaveBeenCalledWith(1));
-    expect(download.saveBlob).toHaveBeenCalledWith(blob, "salon_yerlesim_plani_1.pdf");
+    // Dosya adı salonun kimliğini değil ADINI taşır (docs/sozluk.md §3).
+    await waitFor(() =>
+      expect(download.saveBlob).toHaveBeenCalledWith(blob, "Salon-Yerleşim-Planı_D-204.pdf"),
+    );
+  });
+
+  it("editör alanları: iki boyut alanının yardımcı metni ayrışır, numaralandırma açıklanır", async () => {
+    const user = userEvent.setup();
+    exam.list.mockResolvedValue(paginated([makeRoom()]));
+    exam.previewSeats.mockResolvedValue({ capacity: 0, seats: [] });
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: /D-204/ }));
+    // Eskiden ikisi de "Öğrenci sırası" diyordu.
+    expect(await screen.findByLabelText("Sıra satırı")).toHaveAccessibleDescription(
+      "Önden arkaya kaç sıra",
+    );
+    expect(screen.getByLabelText("Sıra sütunu")).toHaveAccessibleDescription("Yan yana kaç sıra");
+    expect(screen.queryByText("Öğrenci sırası")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Numaralandırma")).toHaveAccessibleDescription(
+      /S düzeni: her sütunda yön değişir.*Düz: her sütun aynı yönde numaralanır/,
+    );
+    // "kroki (R1)" yerine belgenin adı; boş seçenek tek biçim "— yok —".
+    expect(screen.getByText(/salon sınav evrakındaki krokiyle birebirdir/)).toBeInTheDocument();
+    expect(screen.queryByText(/\(R1\)/)).not.toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText(/Bağlı şube/)).getByRole("option", { name: "— yok —" }),
+    ).toBeInTheDocument();
   });
 
   it("önizleme kapatılınca sayaç yerel toplama düşer ve uç çağrılmaz", async () => {
@@ -305,7 +390,8 @@ describe("SalonlarPage", () => {
 
   it("'Şube dersliklerini oluştur' onaylanınca üretim ucunu çağırır (Tur 637)", async () => {
     const user = userEvent.setup();
-    exam.list.mockResolvedValue(paginated([]));
+    // Liste dolu: boş durumdaki eş düğme çıkmaz, başlıktaki tek düğme sınanır.
+    exam.list.mockResolvedValue(paginated([makeRoom()]));
     exam.generateSectionRooms.mockResolvedValue({
       created: ["9/A Dersliği", "9/B Dersliği"],
       skipped: [],
@@ -315,8 +401,9 @@ describe("SalonlarPage", () => {
     renderPage();
 
     await user.click(await screen.findByRole("button", { name: /Şube dersliklerini oluştur/ }));
-    // Onay dialogu → "Oluştur"
-    await user.click(await screen.findByRole("button", { name: "Oluştur" }));
+    // Onay dialogu: başlık soru, gövde sonuç → "Oluştur"
+    const dialog = await screen.findByRole("dialog", { name: "Şube derslikleri oluşturulsun mu?" });
+    await user.click(within(dialog).getByRole("button", { name: "Oluştur" }));
     await waitFor(() => expect(exam.generateSectionRooms).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/2 salon oluşturuldu/)).toBeInTheDocument();
   });

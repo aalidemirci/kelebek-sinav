@@ -177,8 +177,10 @@ class ParticipantType(models.TextChoices):
     sınav pratiğini karşılar; sapma teknik borç kütüğüne işlendi (TB7).
     """
 
-    LEVEL = "LEVEL", "Seviye geneli"
-    SECTIONS = "SECTIONS", "Şube şube"
+    # Etiketler docs/sozluk.md "Katılımcılar" kararıdır; FE `PARTICIPANT_TYPE_TR`
+    # ile AYNI sözcükler (evrak ve API `participant_label` buradan beslenir).
+    LEVEL = "LEVEL", "Sınıf düzeyinin tamamı"
+    SECTIONS = "SECTIONS", "Seçili şubeler"
 
 
 class ExamSession(BaseModel):
@@ -436,8 +438,10 @@ class SeatAssignment(BaseModel):
 
 class ExcuseStatus(models.TextChoices):
     PENDING = "PENDING", "Beklemede"
-    EXCUSED = "EXCUSED", "Özürlü"
-    UNEXCUSED = "UNEXCUSED", "Özürsüz"
+    # Mevzuat "mazeret" der (Yönerge md. 5/1-y); "özürlü" engellilik çağrışımı
+    # taşıdığından kullanılmaz (docs/sozluk.md).
+    EXCUSED = "EXCUSED", "Mazeretli"
+    UNEXCUSED = "UNEXCUSED", "Mazeretsiz"
 
 
 class ExamAttendanceRecord(BaseModel):

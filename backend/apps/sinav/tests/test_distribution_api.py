@@ -155,7 +155,10 @@ def test_distribute_strict_escalates_first_ring() -> None:
     _, _, report = services.distribute_session(session, seed=5, strict=True)
     assert session.distribution_params["strict"] is True
     assert not report.is_valid
-    assert any("Katı mod ihlali" in v for v in report.hard_violations)
+    ihlal = next(v for v in report.hard_violations if "Katı dağıtım ihlali" in v)
+    # İdareci dili: salon ADI + ders ADI + 1 tabanlı konum; ham kimlik/anahtar yok.
+    assert "D-201" in ihlal and "Sınıf” sınavına giren" in ihlal and ". sütun" in ihlal
+    assert "grubu" not in ihlal and "id=" not in ihlal and "(0," not in ihlal
 
     _, _, gevsek = services.distribute_session(session, seed=5)
     assert gevsek.is_valid

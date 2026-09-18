@@ -2,7 +2,26 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { saveBlob } from "./download";
+import { dosyaAdi, saveBlob } from "./download";
+
+describe("dosyaAdi", () => {
+  it("belge + oturum adı + tarihten okunur dosya adı kurar (Türkçe harf korunur)", () => {
+    expect(dosyaAdi(["Salon Sınav Evrakı", "1. Ortak Sınav", "16.11.2026"], "pdf")).toBe(
+      "Salon-Sınav-Evrakı_1-Ortak-Sınav_16.11.2026.pdf",
+    );
+  });
+
+  it("dosya sisteminin yasakladığı karakterleri atar, boş parçayı düşürür", () => {
+    expect(dosyaAdi(['9/A: "Deneme" <1>', "", null, "Takvim?"], ".zip")).toBe(
+      "9A-Deneme-1_Takvim.zip",
+    );
+    expect(dosyaAdi([], "pdf")).toBe("belge.pdf");
+    // Ters bölü Windows'ta yol ayracıdır; salon adında geçerse dosya adını böler.
+    expect(dosyaAdi(["Salon Sınav Evrakı", "B\\Blok 101"], "pdf")).toBe(
+      "Salon-Sınav-Evrakı_BBlok-101.pdf",
+    );
+  });
+});
 
 describe("saveBlob", () => {
   afterEach(() => {

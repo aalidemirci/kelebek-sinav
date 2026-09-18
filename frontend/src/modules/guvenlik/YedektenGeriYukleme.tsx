@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError } from "../../lib/api";
-import { formatDateTime } from "../../lib/format";
+import { formatDateTime, formatNumber } from "../../lib/format";
 import { yenidenBaslatGerekliYayinla } from "../../lib/restart";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
@@ -23,9 +23,12 @@ import TextField from "../../ui/TextField";
 import { guvenlikApi } from "./api";
 import type { YedekListesi } from "./api";
 
+/** Dosya boyutu — Türkçe sayı biçimiyle (ondalık virgül): "2,5 MB". */
 function boyutMetni(bayt: number): string {
-  if (bayt >= 1024 * 1024) return `${(bayt / (1024 * 1024)).toFixed(1)} MB`;
-  return `${Math.max(1, Math.round(bayt / 1024))} KB`;
+  if (bayt >= 1024 * 1024) {
+    return `${formatNumber(Math.round((bayt / (1024 * 1024)) * 10) / 10)} MB`;
+  }
+  return `${formatNumber(Math.max(1, Math.round(bayt / 1024)))} KB`;
 }
 
 export default function YedektenGeriYukleme() {
@@ -79,12 +82,13 @@ export default function YedektenGeriYukleme() {
       setHata("Bu yedek şifreli; uygulama parolasını ya da kurtarma anahtarını girin.");
       return;
     }
+    // Başlık soru, gövde sonuç (docs/sozluk.md §3) — soru gövdede yinelenmez.
     const onay = await confirm({
-      title: "Yedekten geri yükle",
+      title: "Yedekten geri yüklensin mi?",
       message:
-        `'${kaynakAdi}' yedeği mevcut veritabanının yerine konacak. Mevcut veritabanı ` +
-        "silinmez; veri klasöründe 'db-onceki-…' adıyla saklanır. İşlem sonrası program " +
-        "kapatılıp yeniden açılmalıdır. Devam edilsin mi?",
+        `“${kaynakAdi}” yedeği mevcut veritabanının yerine konur; o yedekten sonra ` +
+        "girdiğiniz kayıtlar ekrandan kalkar. Mevcut veritabanı silinmez; veri klasöründe " +
+        "“db-onceki-…” adıyla saklanır. İşlem sonrası program kapatılıp yeniden açılmalıdır.",
       confirmLabel: "Geri yükle",
     });
     if (!onay) return;
@@ -121,8 +125,10 @@ export default function YedektenGeriYukleme() {
             açılmalıdır.
           </p>
           <p className="mt-2 text-body-small text-on-surface-variant">
-            Program hiç açılmıyorsa (bozuk veritabanı) bu ekrana ulaşamazsınız; o durumda Başlat
-            menüsündeki &quot;Yedekten Geri Yükle&quot; kısayolunu kullanın.
+            Program hiç açılmıyorsa (bozuk veritabanı) bu ekrana ulaşamazsınız; o durumda Windows’ta
+            Başlat menüsündeki “Kelebek Sınav — Yedekten Geri Yükle” kısayolunu, Pardus/Linux’ta
+            uçbirimden <span className="font-mono">kelebek-sinav --geri-yukle</span> komutunu
+            kullanın.
           </p>
 
           {liste === null && listeHata === null ? (
@@ -133,8 +139,8 @@ export default function YedektenGeriYukleme() {
             </p>
           ) : liste !== null && liste.backups.length === 0 ? (
             <p className="mt-4 text-body-medium text-on-surface-variant">
-              Yedek klasöründe geri yüklenebilir dosya yok. Program her açılışta günlük yedek alır;
-              elinizde bir yedek varsa aşağıdan dosya olarak yükleyebilirsiniz.
+              Yedek klasöründe geri yüklenebilir dosya yok. Program her gün ilk açılışta günlük
+              yedek alır; elinizde bir yedek varsa aşağıdan dosya olarak yükleyebilirsiniz.
             </p>
           ) : (
             liste !== null && (
@@ -159,7 +165,7 @@ export default function YedektenGeriYukleme() {
                           </span>
                           <span className="block text-label-small text-on-surface-variant">
                             {formatDateTime(yedek.modified_at)} · {boyutMetni(yedek.size)} ·{" "}
-                            {yedek.encrypted ? "şifreli" : "düz"}
+                            {yedek.encrypted ? "şifreli" : "şifresiz"}
                           </span>
                         </span>
                       </label>

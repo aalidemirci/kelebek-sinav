@@ -82,7 +82,10 @@ varsayımlar: `packaging/windows/NOTLAR.md`.
 ## Sürüm
 
 Tek doğruluk kaynağı depo kökündeki **`VERSION`** dosyasıdır (CalVer:
-`YYYY.M.N`, ön-sürümde `-dev`). Buradan türetilenler:
+`YYYY.M.N`; ön-sürümde `-beta.N` / `-rc.N` / `-dev` eki). Ön-sürüm ekleri
+DOĞAL sıralanır (`beta.10` > `beta.9`) — `desktop/version.py` ile
+`backend/apps/okul/services/updates.py` içindeki iki `version_key` kopyası
+aynı kalmalıdır. Buradan türetilenler:
 
 * paketlenmiş uygulamanın sürüm damgası (`desktop/version.py`),
 * `.deb` sürümü — `-` yerine `~` konur (`2026.7.0-dev` → `2026.7.0~dev`), çünkü

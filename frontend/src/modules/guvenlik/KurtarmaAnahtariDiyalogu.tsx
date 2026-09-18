@@ -11,6 +11,7 @@
 import { useState } from "react";
 
 import { saveBlob } from "../../lib/download";
+import { formatDate, todayIso } from "../../lib/format";
 import Button from "../../ui/Button";
 import Dialog from "../../ui/Dialog";
 import { KURTARMA_UYARISI } from "./metinler";
@@ -40,7 +41,8 @@ interface KurtarmaAnahtariDiyaloguProps {
 }
 
 function metinCiktisi(anahtar: string, okulAdi: string): string {
-  const tarih = new Date().toLocaleDateString("tr-TR");
+  // Tarih yalnız lib/format ile (docs/sozluk.md §3): gg.aa.yyyy, yerel gün.
+  const tarih = formatDate(todayIso());
   return [
     "KELEBEK SINAV — KURTARMA ANAHTARI",
     okulAdi ? `Kurum: ${okulAdi}` : "",

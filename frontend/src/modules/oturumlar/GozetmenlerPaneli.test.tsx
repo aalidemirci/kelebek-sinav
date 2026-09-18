@@ -93,12 +93,31 @@ function mockVarsayilanlar(
 afterEach(() => vi.clearAllMocks());
 
 describe("GozetmenlerPaneli", () => {
-  it("modül kapalıyken bilgi mesajı basar; hiçbir uç çağrılmaz gerekmez", async () => {
+  it("modül kapalıyken bilgi mesajı basar: iç kod yok, açma yolu tarif edilir", async () => {
     sessionApi.proctors.mockResolvedValue({ proctors_enabled: false, assignments: [] });
     renderPanel(makeSession({ status: "DISTRIBUTED", proctors_enabled: false }));
 
-    expect(await screen.findByText(/Gözetmen modülü bu oturumda kapalı/)).toBeInTheDocument();
+    const mesaj = await screen.findByText(/Gözetmen modülü bu oturumda kapalı/);
+    expect(mesaj).toHaveTextContent(
+      "Görevlendirme yazısı basılmaz; salon evrakındaki görevli adı elle yazılır.",
+    );
+    expect(mesaj).toHaveTextContent(
+      "Açmak için oturumu taslağa alıp Oturum Bilgileri adımındaki kutuyu işaretleyin.",
+    );
+    // Karar/evrak kodları (K2, R6, kaldırılmış R9) kullanıcı metninde geçmez.
+    expect(mesaj.textContent).not.toMatch(/\bK2\b|\bR6\b|\bR9\b/);
     expect(screen.queryByRole("button", { name: /Otomatik/ })).not.toBeInTheDocument();
+  });
+
+  it("kapalı modül mesajı onaylı oturumda önce 'Yeniden aç'ı, arşivde hiçbir yolu önermez", async () => {
+    sessionApi.proctors.mockResolvedValue({ proctors_enabled: false, assignments: [] });
+    const { unmount } = renderPanel(makeSession({ status: "APPROVED", proctors_enabled: false }));
+    expect(await screen.findByText(/önce “Yeniden aç”, sonra “Taslağa al”/)).toBeInTheDocument();
+    unmount();
+
+    renderPanel(makeSession({ status: "ARCHIVED", proctors_enabled: false }));
+    expect(await screen.findByText(/Gözetmen modülü bu oturumda kapalı/)).toBeInTheDocument();
+    expect(screen.queryByText(/Açmak için/)).not.toBeInTheDocument();
   });
 
   it("salon satırından aday seçilince atama yapılır; oto-öneri düğmesi YOK", async () => {
@@ -138,7 +157,7 @@ describe("GozetmenlerPaneli", () => {
     expect(sessionApi.assignProctor).not.toHaveBeenCalled();
   });
 
-  it("tebellüğ chip'ten işlenir; onaylı oturumda liste salt-okunur ama tebellüğ açık", async () => {
+  it("tebellüğ ONAYDAN geçer (geri alma ucu yok); onaylı oturumda liste salt-okunur ama tebellüğ açık", async () => {
     const user = userEvent.setup();
     sessionApi.proctors.mockResolvedValue({
       proctors_enabled: true,
@@ -153,8 +172,43 @@ describe("GozetmenlerPaneli", () => {
     expect(await screen.findByText("Ayşe ÖĞRETMEN")).toBeInTheDocument();
     expect(screen.getByText(/görevlendirme kilitli/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Tebellüğ işle" }));
+
+    // Tek tık yetmez: başlık soru, gövde sonuç (docs/sozluk.md §3).
+    expect(sessionApi.acknowledgeProctor).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog", { name: "Tebellüğ işlensin mi?" });
+    expect(within(dialog).getByText(/Ayşe ÖĞRETMEN.*Bu kayıt geri alınamaz\./)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Tebellüğ işle" }));
+
     await waitFor(() => expect(sessionApi.acknowledgeProctor).toHaveBeenCalledWith(61));
     expect(await screen.findByText("Tebellüğ işlendi.")).toBeInTheDocument();
+  });
+
+  it("tebellüğ onayında 'Vazgeç' denirse uç çağrılmaz (DAĞITILDI — chip düğmesi)", async () => {
+    const user = userEvent.setup();
+    mockVarsayilanlar([makeAssignmentRow()]);
+    renderPanel(dagitilmisGozetmenli());
+
+    await user.click(await screen.findByRole("button", { name: "Ayşe ÖĞRETMEN tebellüğ işle" }));
+    const dialog = await screen.findByRole("dialog", { name: "Tebellüğ işlensin mi?" });
+    await user.click(within(dialog).getByRole("button", { name: "Vazgeç" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(sessionApi.acknowledgeProctor).not.toHaveBeenCalled();
+  });
+
+  it("tebellüğ edilmiş görevlendirme rozetle gösterilir — ham '✓' karakteri yok", async () => {
+    sessionApi.proctors.mockResolvedValue({
+      proctors_enabled: true,
+      assignments: [
+        makeAssignmentRow({ acknowledged: true, acknowledged_at: "2026-06-15T10:00:00+03:00" }),
+      ],
+    });
+    sessionApi.seating.mockResolvedValue(makeSeating());
+    renderPanel(dagitilmisGozetmenli({ status: "APPROVED" }));
+
+    expect(await screen.findByText("Tebellüğ edildi")).toBeInTheDocument();
+    expect(screen.queryByText(/✓/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tebellüğ işle" })).not.toBeInTheDocument();
   });
 
   it("muafiyet bölümü: kalıcı muafiyet eklenir", async () => {
@@ -170,8 +224,10 @@ describe("GozetmenlerPaneli", () => {
     });
     renderPanel(dagitilmisGozetmenli());
 
-    const bolum = (await screen.findByText("Muaf personel")).closest("section");
+    // Sözlük: arayüzde "personel" değil "öğretmen".
+    const bolum = (await screen.findByText("Muaf öğretmenler")).closest("section");
     expect(bolum).not.toBeNull();
+    expect(screen.queryByText(/personel/i)).not.toBeInTheDocument();
     await user.selectOptions(within(bolum as HTMLElement).getByLabelText("Gerekçe"), "DUTY");
     await user.type(within(bolum as HTMLElement).getByLabelText("Öğretmen"), "Ay");
     await user.click(await screen.findByRole("option", { name: /ÖĞRETMEN/ }, { timeout: 3000 }));

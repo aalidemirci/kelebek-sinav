@@ -62,11 +62,12 @@ export default function SablonUygulaDialog({
 
   const onayla = () => {
     void confirm({
-      title: "Varsayılan şablonu uygula",
+      // Başlık soru, gövde sonuç — ikisi aynı cümle olmaz (docs/sozluk.md §3).
+      title: "Varsayılan şablon uygulansın mı?",
       message:
-        `${secili.length} salonun planı varsayılan şablonla DEĞİŞTİRİLECEK; ` +
+        `${secili.length} salonun planı varsayılan şablonla değiştirilir; ` +
         "o salonlarda elle yapılmış düzenlemeler kaybolur. Her salon kendi satır/sütun " +
-        "ölçüsünde kalır, kapasite değişmez. Devam edilsin mi?",
+        "ölçüsünde kalır, kapasite değişmez.",
       confirmLabel: "Uygula",
     }).then((ok) => ok && uygula.mutate());
   };
