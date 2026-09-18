@@ -218,6 +218,26 @@ def test_r8_idareci_diliyle_yazilir() -> None:
         assert jargon not in text, f"R8'de jargon kaldı: {jargon}"
 
 
+def test_r8_baglami_karistirma_bilgisini_varsayilanla_tasir() -> None:
+    """`shuffled` göndermeyen çağıran kelebek sayılır: Django şablonunda eksik
+    anahtar sessizce "yanlış"tır ve dağıtım numarası satırı kaybolurdu (örnek
+    evrakta görüldü, 19.09.2026). Açıkça verilen değer korunur."""
+    ortak: dict[str, Any] = {
+        "is_valid": True,
+        "hard_violations": [],
+        "first_ring_pairs": 0,
+        "min_distances": {},
+        "proximity_score": 0.0,
+        "group_labels": {},
+        "warnings": [],
+    }
+    varsayilan = reports.build_validation_context(params={"seed": 7}, **ortak)
+    klasik = reports.build_validation_context(params={"seed": 0, "shuffled": False}, **ortak)
+
+    assert cast(dict[str, Any], varsayilan["params"])["shuffled"] is True
+    assert cast(dict[str, Any], klasik["params"])["shuffled"] is False
+
+
 def test_r8_yorum_sizintisi_yok() -> None:
     """Şablon yorumu çıktıya basılmaz — çok satırlı `{# #}` Django'da metin olur
     (örnek PDF'te görüldü, 18.09.2026); `{% comment %}` bloğu kullanılır."""

@@ -239,7 +239,7 @@ class Command(BaseCommand):
             min_distances={"7:9": 2.0, "7:10": 2.24},
             proximity_score=1.2345,
             params={
-                "layout_mode_label": "Kelebek (satranç)",
+                "layout_mode_label": "Kelebek",
                 "seed": 987654,
                 "strict": True,
                 "checkerboard": True,

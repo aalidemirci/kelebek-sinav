@@ -754,11 +754,18 @@ def build_validation_context(
 ) -> dict[str, object]:
     """R8 şablon bağlamı — metrik anahtarları ders adına çözülmüş halde.
 
-    İhlal metinleri doğrulayıcıdan adsız gelir (okul no bile yok, yalnız
-    id/koordinat); burada da kişisel veri eklenmez. K1 (Tur 645):
-    `cross_section_pairs` (aynı şube, farklı grup, 1. halka) +
+    İhlal metinleri doğrulayıcıdan ADSIZ gelir: salon adı, ders adı, sıra konumu
+    ve okul numarası taşır, öğrenci adı taşımaz; burada da kişisel veri eklenmez.
+    K1 (Tur 645): `cross_section_pairs` (aynı şube, farklı grup, 1. halka) +
     `occupancy` (salon doluluk tablosu — salon adı + sayı, PII yok).
+
+    `params["shuffled"]`: karıştırma yapılan düzen mi (kelebek). Şablon dağıtım
+    numarası / katı dağıtım / dönüşümlü oturma satırlarını yalnız o zaman basar.
+    Varsayılan BURADA verilir ve kelebektir: anahtarı göndermeyen çağıran (örnek
+    evrak üreticisi, eski test) satırları kaybetmesin — Django şablonunda eksik
+    anahtar sessizce "yanlış" sayılırdı.
     """
+    params = {"shuffled": True, **params}
     return {
         "is_valid": is_valid,
         "hard_violations": hard_violations,
