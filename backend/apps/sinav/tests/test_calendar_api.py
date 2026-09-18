@@ -24,6 +24,7 @@ from rest_framework.test import APIClient
 
 from apps.dersler.models import CourseType
 from apps.okul.models import SchoolConfig, SchoolTerm, SubjectDepartment
+from apps.sinav import services
 from apps.sinav import services_calendar as takvim
 from apps.sinav.models import (
     ExamCalendar,
@@ -760,6 +761,25 @@ def test_oturumu_uretilmis_girdi_tasinamaz_ve_silinemez(client: APIClient) -> No
     entry.refresh_from_db()
     assert (entry.placed_date, entry.period_no) == (GUN, 1)
     assert entry.session_id is not None
+
+
+def test_oturumu_silinen_girdi_yeniden_serbesttir(client: APIClient) -> None:
+    """Kilit CANLI oturuma bağlıdır (A4): slottan üretilen taslak oturum silinince girdi
+    havuza alınabilir ve silinebilir. Silme soft olduğundan `session_id` ölü oturumu
+    göstermeye devam eder — yalnız kimliğe bakan denetim girdiyi takvimde kilitlerdi."""
+    _calendar, entry = _oturumlu_taslak_takvim()
+    services.remove_exam_session(ExamSession.objects.get(pk=entry.session_id))
+    kok = f"{GIRDI_URL}{entry.pk}/"
+
+    havuz = client.post(f"{kok}unplace/")
+    assert havuz.status_code == 200
+    # Havuza dönen girdi ölü oturum kimliğini de bırakır (yeniden oturum üretecektir).
+    assert (havuz.json()["placed_date"], havuz.json()["session"]) == (None, None)
+    entry.refresh_from_db()
+    assert entry.session_id is None
+
+    assert client.delete(kok).status_code == 204
+    assert not ExamCalendarEntry.objects.filter(pk=entry.pk).exists()
 
 
 # ===========================================================================
