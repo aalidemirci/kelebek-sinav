@@ -303,6 +303,12 @@ export interface BookletRun {
   error_message: string;
   created_at: string;
   completed_at: string | null;
+  /**
+   * Üretimden sonra yerleşim değişti (yeniden dağıtım, taslağa alma, koltuk
+   * takası): ZIP eski salon ve koltuklara göredir. Dosya yine indirilebilir
+   * (arşiv izi) ama satır uyarı taşır. Eski backend alanı göndermez.
+   */
+  is_stale?: boolean;
 }
 
 /**

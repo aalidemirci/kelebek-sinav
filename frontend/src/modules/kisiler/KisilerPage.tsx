@@ -394,7 +394,7 @@ function OgrenciFormDialog({
     // ne olduğu söylenir; ad yalnız bu onay penceresinde görünür (hata metni değil).
     const ok = await confirm({
       title: "Öğrenci sicilden silinsin mi?",
-      message: `“${student.full_name}” listelerden ve yeni sınav oturumlarından kalkar. Kayıt silinmez, gizlenir; gerekirse geri alınabilir.`,
+      message: `“${student.full_name}” listelerden ve yeni sınav oturumlarından kalkar. Kayıt silinmez, gizlenir: geçmiş oturumların evrakı değişmez. Yanlışlıkla silerseniz öğrenciyi yeniden ekleyebilir ya da e-Okul listesini yeniden içe aktarabilirsiniz.`,
       confirmLabel: "Sil",
     });
     if (!ok) return;
@@ -669,7 +669,7 @@ function PersonelFormDialog({
     if (!personnel) return;
     const ok = await confirm({
       title: "Öğretmen sicilden silinsin mi?",
-      message: `“${personnel.full_name}” listelerden ve gözetmen aday havuzundan kalkar. Kayıt silinmez, gizlenir; gerekirse geri alınabilir.`,
+      message: `“${personnel.full_name}” listelerden ve gözetmen aday havuzundan kalkar. Kayıt silinmez, gizlenir: geçmiş görevlendirme yazıları değişmez. Yanlışlıkla silerseniz öğretmeni yeniden ekleyebilir ya da personel listesini yeniden içe aktarabilirsiniz.`,
       confirmLabel: "Sil",
     });
     if (!ok) return;

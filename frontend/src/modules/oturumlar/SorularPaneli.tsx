@@ -15,6 +15,7 @@ import { formatDate, formatDateTime } from "../../lib/format";
 import Button from "../../ui/Button";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import Dialog from "../../ui/Dialog";
+import Icon from "../../ui/Icon";
 import Select from "../../ui/Select";
 import TextField from "../../ui/TextField";
 import { useSnackbar } from "../../ui/SnackbarProvider";
@@ -402,6 +403,14 @@ export default function SorularPaneli({ session }: { session: ExamSession }) {
                 {RUN_LABELS[run.status] ?? run.status}
                 {run.error_message && ` — ${run.error_message}`}
               </span>
+              {/* Kitapçık salon/koltuk/ad taşır: yerleşim sonradan değiştiyse bu ZIP
+                  basılırsa kitapçıklar yanlış koltuğa gider. */}
+              {run.is_stale && (
+                <span className="flex items-center gap-1 rounded-shape-sm bg-error-container px-2 py-0.5 text-body-small text-on-error-container">
+                  <Icon name="warning" size="sm" />
+                  Eski yerleşime göre — yeniden üretin
+                </span>
+              )}
               <span className="ml-auto" />
               {run.status === "COMPLETED" && (
                 <Button variant="text" icon="download" onClick={() => void downloadRun(run.id)}>

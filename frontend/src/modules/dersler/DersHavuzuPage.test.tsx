@@ -45,7 +45,7 @@ const dersler = vi.hoisted(() => ({
       custom: false,
       synced: true,
       data_available: true,
-      warnings: ["12. sınıf ortak dersleri için önceki çizelge bu sürümde yok."],
+      warnings: ["12. sınıf zorunlu dersleri için önceki çizelge bu sürümde yok."],
       levels: [
         {
           level: 9,

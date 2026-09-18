@@ -288,7 +288,9 @@ describe("KisilerPage — öğrenci ekleme/düzenleme/silme", () => {
       name: "Öğrenci sicilden silinsin mi?",
     });
     expect(
-      within(confirmDialog).getByText(/Kayıt silinmez, gizlenir; gerekirse geri alınabilir\./),
+      within(confirmDialog).getByText(
+        /Kayıt silinmez, gizlenir: geçmiş oturumların evrakı değişmez\./,
+      ),
     ).toBeInTheDocument();
     expect(within(confirmDialog).queryByText(/soft delete/i)).not.toBeInTheDocument();
     await user.click(within(confirmDialog).getByRole("button", { name: "Sil" }));

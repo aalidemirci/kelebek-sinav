@@ -25,7 +25,8 @@ export function dosyaAdi(parts: (string | null | undefined)[], ext: string): str
   const temiz = parts
     .map((part) =>
       (part ?? "")
-        .replace(/[/:*?"<>|]/g, "")
+        // Windows'un yasakladığı dokuz karakter; ters bölü de dahil (yol ayracıdır).
+        .replace(/[\\/:*?"<>|]/g, "")
         .replace(/[.\s]+$/g, "")
         .trim()
         .replace(/\s+/g, "-")

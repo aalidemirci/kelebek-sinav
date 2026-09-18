@@ -893,7 +893,7 @@ def test_sube_kapsami_kaydedilir_ve_baska_seviyenin_subesi_reddedilir() -> None:
 
     # Başka seviyenin şubesi: Türkçe hata, girdi yazılmaz.
     baska = ders("Seçmeli Fizik", levels=[9], course_type=CourseType.ELECTIVE)
-    with pytest.raises(ValidationError, match="seviyesinde değil"):
+    with pytest.raises(ValidationError, match="düzeyinde değil"):
         takvim.add_calendar_entry(
             calendar=calendar,
             course_id=baska.pk,

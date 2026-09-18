@@ -411,7 +411,7 @@ def _validate_entry_participants(
             raise ValidationError(
                 {
                     "section_ids": f"'{section.class_label}' şubesi {level_label(level)} "
-                    "seviyesinde değil; her seviye için ayrı girdi ekleyin."
+                    "düzeyinde değil; her sınıf düzeyi için ayrı girdi ekleyin."
                 }
             )
     return (ParticipantType.SECTIONS, list(dict.fromkeys(clean)))
@@ -453,8 +453,8 @@ def add_calendar_entry(
     if level not in course.levels:
         raise ValidationError(
             {
-                "level": f"'{course.name}' dersi {level_label(level)} seviyesinde "
-                "okutulmuyor (havuz tanımı)."
+                "level": f"'{course.name}' dersi {level_label(level)} düzeyinde "
+                "okutulmuyor (Ders Havuzu tanımı)."
             }
         )
     # Kapsam doğrulaması ders+seviye uyumundan SONRA: "şube seviyede değil"
@@ -1032,7 +1032,7 @@ def place_entry(
     # okul müdürlüğünün) — üç kanallı uyarı desenine uyar.
     if _external_authority_clash(entry, on_date):
         warnings.append(
-            "Bu gün ve seviyede Bakanlık/İl MEM/İlçe MEM sınavı var — üst makam "
+            "Bu gün ve sınıf düzeyinde Bakanlık/İl MEM/İlçe MEM sınavı var — üst makam "
             "sınavlarının yapılacağı tarihlerde okul geneli ayrıca sınav yapılmaz "
             "(Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5)."
         )

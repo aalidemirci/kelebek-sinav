@@ -32,7 +32,7 @@ kavramları (faz/karar/evrak kodları, motor ölçütleri) yüzeye çıkmaz.
 | takvim yerleştirme ızgarası | **yerleştirme çizelgesi** | ızgara | |
 | mükerrer ders birleştirme hedefi | **asıl kayıt** | kanonik kayıt | |
 | ders takma adı | **takma ad** | alias | |
-| kayıt pasifleştirme | "silinmez, gizlenir; gerekirse geri alınabilir" | soft delete | |
+| kayıt silme (kişi, salon, ders) | "silinmez, gizlenir: geçmiş evrak değişmez" | soft delete | Geri alma ucu YOKTUR; "geri alınabilir" denmez. Yanlış silinen kişi yeniden eklenir ya da içe aktarılır |
 | yedek şifrelemesi | "güçlü şifrelemeyle korunur" | X25519, AES-256-GCM, NAS | Teknik adlar yalnız Hakkında sayfasında |
 | sürüm kaynağı | "yayımlanan son sürüm", "kurulum dosyası" | GitHub sürümü, Release, kurucu | |
 

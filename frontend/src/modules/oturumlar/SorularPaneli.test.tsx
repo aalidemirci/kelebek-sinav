@@ -225,6 +225,25 @@ describe("SorularPaneli", () => {
     await waitFor(() => expect(download.saveBlob).toHaveBeenCalledWith(blob, "Soru-Şablonu.docx"));
   });
 
+  it("yerleşimden ESKİ kitapçık üretimi uyarıyla işaretlenir; güncel üretim işaretlenmez", async () => {
+    sessionApi.question.mockRejectedValue(
+      new ApiError(404, "not_found", "Soru dosyası yüklenmemiş."),
+    );
+    sessionApi.bookletRuns.mockResolvedValue(
+      paginated([
+        makeBookletRun({ id: 42, created_at: "2026-06-02T10:00:00+03:00", is_stale: false }),
+        makeBookletRun({ id: 41, is_stale: true }),
+      ]),
+    );
+    renderPanel(dagitilmisOturum());
+
+    // Yalnız eski üretimin satırında uyarı var; ZIP yine indirilebilir (arşiv izi).
+    const uyari = await screen.findByText("Eski yerleşime göre — yeniden üretin");
+    expect(screen.getAllByText("Eski yerleşime göre — yeniden üretin")).toHaveLength(1);
+    expect(uyari.closest("li")).toHaveTextContent(/Üretim · 01\.06\.2026/);
+    expect(screen.getAllByRole("button", { name: "ZIP indir" })).toHaveLength(2);
+  });
+
   it("kitapçık üretimi SENKRON: başarıda 'üretildi' + liste tazelenir, ZIP indirilebilir", async () => {
     const user = userEvent.setup();
     sessionApi.question.mockRejectedValue(

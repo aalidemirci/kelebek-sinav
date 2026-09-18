@@ -16,6 +16,10 @@ describe("dosyaAdi", () => {
       "9A-Deneme-1_Takvim.zip",
     );
     expect(dosyaAdi([], "pdf")).toBe("belge.pdf");
+    // Ters bölü Windows'ta yol ayracıdır; salon adında geçerse dosya adını böler.
+    expect(dosyaAdi(["Salon Sınav Evrakı", "B\\Blok 101"], "pdf")).toBe(
+      "Salon-Sınav-Evrakı_BBlok-101.pdf",
+    );
   });
 });
 

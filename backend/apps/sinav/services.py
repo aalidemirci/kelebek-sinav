@@ -715,8 +715,8 @@ def add_session_course(
     )
     if lv not in course.levels:
         raise ValidationError(
-            f"'{course.name}' dersi {ders_services.level_label(lv)} seviyesinde "
-            "okutulmuyor (havuz tanımı)."
+            f"'{course.name}' dersi {ders_services.level_label(lv)} düzeyinde "
+            "okutulmuyor (Ders Havuzu tanımı)."
         )
     if ExamSessionCourse.objects.filter(session=session, course=course, level=lv).exists():
         raise ValidationError(
@@ -752,8 +752,8 @@ def update_session_course(sc: ExamSessionCourse, **fields: Any) -> ExamSessionCo
     )
     if lv not in sc.course.levels:
         raise ValidationError(
-            f"'{sc.course.name}' dersi {ders_services.level_label(lv)} seviyesinde "
-            "okutulmuyor (havuz tanımı)."
+            f"'{sc.course.name}' dersi {ders_services.level_label(lv)} düzeyinde "
+            "okutulmuyor (Ders Havuzu tanımı)."
         )
     duplicate = ExamSessionCourse.objects.filter(
         session=sc.session, course=sc.course, level=lv
