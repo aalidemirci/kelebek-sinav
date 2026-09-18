@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "../../lib/api";
+import { gradeLevelLabel } from "../../lib/gradeLevels";
 import Button from "../../ui/Button";
 import Dialog from "../../ui/Dialog";
 import { SkeletonList } from "../../ui/Skeleton";
@@ -126,13 +127,13 @@ export default function DersSubeKapsamiDialog({
             return (
               <section key={level}>
                 <p className="mb-1 text-label-large text-on-surface">
-                  {level === 0 ? "Hazırlık" : `${level}. Sınıf`}
+                  {gradeLevelLabel(level)}
                   <span className="ml-2 text-body-small text-on-surface-variant">
                     {secili.length > 0 ? `${secili.length} şube` : "kapsam girilmedi"}
                   </span>
                 </p>
                 <SubeSecici
-                  adPreki={`${course.name} ${level === 0 ? "Hazırlık" : `${level}. sınıf`}`}
+                  adPreki={`${course.name} ${gradeLevelLabel(level)}`}
                   sectionIds={secili}
                   sections={seviyeSubeleri.map((s) => ({ id: s.id, class_label: s.class_label }))}
                   groups={(sectionGroups.data ?? []).map((g) => ({ id: g.id, name: g.name }))}

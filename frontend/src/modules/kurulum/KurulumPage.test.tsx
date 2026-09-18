@@ -53,7 +53,7 @@ const CIZELGE_PLANI = {
   warnings: [],
   levels: [9, 10, 11, 12].map((level) => ({
     level,
-    label: `${level}. sınıf`,
+    label: `${level}. Sınıf`,
     explicit: false,
     programs: [
       {
@@ -211,12 +211,12 @@ describe("KurulumPage", () => {
     );
     await user.click(
       screen.getByRole("checkbox", {
-        name: "Fen Lisesi Haftalık Ders Çizelgesi (TTK 09.05.2025/5) — 9. sınıf",
+        name: "Fen Lisesi Haftalık Ders Çizelgesi (TTK 09.05.2025/5) — 9. Sınıf",
       }),
     );
     await user.click(
       screen.getByRole("checkbox", {
-        name: "Anadolu Lisesi Haftalık Ders Çizelgesi (TTK 09.05.2025/5) — 9. sınıf",
+        name: "Anadolu Lisesi Haftalık Ders Çizelgesi (TTK 09.05.2025/5) — 9. Sınıf",
       }),
     );
 

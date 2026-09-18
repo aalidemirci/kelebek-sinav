@@ -25,7 +25,6 @@ from django.utils import timezone
 
 from apps.dersler import text
 from apps.dersler.models import (
-    PREP_COURSE_LEVEL,
     VALID_COURSE_LEVELS,
     Course,
     CourseAlias,
@@ -89,9 +88,9 @@ def normalize_levels(levels: object) -> list[int]:
     return sorted(normalized)
 
 
-def level_label(level: int) -> str:
-    """Seviye görünüm etiketi: 0 → 'Hazırlık', diğerleri → '9. Sınıf'."""
-    return "Hazırlık" if level == PREP_COURSE_LEVEL else f"{level}. Sınıf"
+#: Sınıf düzeyi etiketi — tanım `text.level_label`'dadır; bu ad içe aktaranlar
+#: (`ders_services.level_label`) kırılmasın diye burada da dışa açıktır.
+level_label = text.level_label
 
 
 @transaction.atomic
@@ -391,7 +390,7 @@ def catalog_status(
         levels_out.append(
             {
                 "level": level,
-                "label": catalog_mod.level_label(level),
+                "label": level_label(level),
                 "explicit": lp.explicit,
                 "programs": [
                     {

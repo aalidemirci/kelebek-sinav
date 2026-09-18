@@ -48,7 +48,7 @@ const dersler = vi.hoisted(() => ({
       levels: [
         {
           level: 9,
-          label: "9. sınıf",
+          label: "9. Sınıf",
           explicit: false,
           programs: [
             {
@@ -300,7 +300,7 @@ describe("DersHavuzuPage", () => {
     );
 
     const dialog = await screen.findByRole("dialog", { name: "Almanca — şubeler" });
-    await user.click(await within(dialog).findByLabelText("Almanca 9. sınıf: 9/A"));
+    await user.click(await within(dialog).findByLabelText("Almanca 9. Sınıf: 9/A"));
     await user.click(within(dialog).getByRole("button", { name: "Kaydet" }));
 
     await waitFor(() =>
@@ -328,7 +328,7 @@ describe("DersHavuzuPage", () => {
     );
 
     const dialog = await screen.findByRole("dialog", { name: "Almanca — şubeler" });
-    expect(await within(dialog).findByLabelText("Almanca 9. sınıf: 9/B")).toBeChecked();
-    expect(within(dialog).getByLabelText("Almanca 9. sınıf: 9/A")).not.toBeChecked();
+    expect(await within(dialog).findByLabelText("Almanca 9. Sınıf: 9/B")).toBeChecked();
+    expect(within(dialog).getByLabelText("Almanca 9. Sınıf: 9/A")).not.toBeChecked();
   });
 });

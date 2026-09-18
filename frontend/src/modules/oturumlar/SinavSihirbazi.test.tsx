@@ -217,7 +217,7 @@ describe("SinavSihirbazi — adım geçişleri", () => {
 
     await user.click(await screen.findByRole("button", { name: "Kaydet ve devam et" }));
     const kutu = await screen.findByRole("checkbox", {
-      name: /Coğrafya: 9\. sınıf, 10\. sınıf aynı soru kitapçığını çözecek/,
+      name: /Coğrafya: 9. Sınıf, 10. Sınıf aynı soru kitapçığını çözecek/,
     });
     expect(kutu).not.toBeChecked();
     await user.click(kutu);

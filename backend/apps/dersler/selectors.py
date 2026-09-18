@@ -330,11 +330,9 @@ def course_level_coverage(
 
     del course_id, school_year_id, on_date
     counts = okul_selectors.active_student_counts_by_level()
-    label = level_label(level)
-    display = f"{label}. sınıf" if label.isdigit() else label
     return [
         CoverageGroup(
-            label=f"{display} — seviyenin tamamı",
+            label=f"{level_label(level)} — sınıf düzeyinin tamamı",
             student_count=counts.get(level, 0),
             whole_sections=True,
         )

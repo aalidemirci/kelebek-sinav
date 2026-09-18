@@ -10,6 +10,19 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError
 
+from apps.dersler.models import PREP_COURSE_LEVEL
+
+
+def level_label(level: int) -> str:
+    """Sınıf düzeyi ETİKETİ — tek doğruluk kaynağı: 0 → "Hazırlık", n → "9. Sınıf".
+
+    Eskiden iki kopya vardı (`services.level_label` "9. Sınıf", `catalog.level_label`
+    "9. sınıf") ve aynı ekranda iki yazım çıkıyordu. Etiket/değer olarak büyük
+    "S" kullanılır (docs/sozluk.md); cümle içinde küçük yazım ayrı yazılır.
+    """
+    return "Hazırlık" if level == PREP_COURSE_LEVEL else f"{level}. Sınıf"
+
+
 _MATCH_TABLE = str.maketrans(
     {
         "İ": "i",
