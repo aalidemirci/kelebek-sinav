@@ -64,6 +64,20 @@ cd kelebek-sinav-<sürüm>
 `kur.sh` programı `~/.local/opt` altına kopyalar, menü kaydını ve
 `~/.local/bin/kelebek-sinav` bağlantısını ekler. Kaldırmak için `./kaldir.sh`.
 
+### 3.3 Yeni sürüme geçiş (Windows ve Pardus)
+
+Program yeni sürümü Ayarlar → Güncelleme ekranında ve açılıştaki bantta haber
+verir. Verileriniz kurulum klasörünün dışında durduğu için güncelleme onlara
+dokunmaz; yine de program her sürüm geçişinden önce kendiliğinden bir yedek alır.
+
+- **Windows:** "Doğrula ve indir" kurulum dosyasını bütünlüğünü doğrulayarak
+  indirir. Programı kapatın, indirilen dosyayı çalıştırın; eski sürümün üzerine
+  kurulur.
+- **Pardus / Linux:** Uygulama içi indirme yoktur (o düğme Windows kurulum
+  dosyasına özgüdür). Yeni `.deb` dosyasını indirip §3.1'deki komutla kurmanız
+  yeterlidir — `apt` eski sürümü kendisi yükseltir. Taşınabilir arşivde yeni
+  arşivi açıp `./kur.sh` çalıştırın.
+
 ## 4. İlk açılış
 
 1. Program yerel bir pencere açar (tarayıcı gerekmez; hiçbir port dışarıya
