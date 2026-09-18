@@ -11,7 +11,7 @@ from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
-from rest_framework.exceptions import NotFound, ValidationError
+from rest_framework.exceptions import ErrorDetail, NotFound, ValidationError
 
 from shared.exceptions import ks_exception_handler
 
@@ -21,12 +21,33 @@ def _ctx() -> dict[str, Any]:
 
 
 def test_dogrulama_hatasi_validation_error_koduna_cevrilir() -> None:
-    yanit = ks_exception_handler(ValidationError({"name": ["Bu alan zorunlu."]}), _ctx())
+    # DRF zorunlu alan hatasını `required` koduyla üretir; alan adı olmadan
+    # anlamsız olduğundan `message`'a taşınmaz, genel cümle kalır.
+    zorunlu = ErrorDetail("Bu alan zorunlu.", code="required")
+    yanit = ks_exception_handler(ValidationError({"name": [zorunlu]}), _ctx())
 
     assert yanit is not None
     assert yanit.data["code"] == "validation_error"
     assert yanit.data["fields"] == {"name": ["Bu alan zorunlu."]}
     assert yanit.data["message"] == "Gönderilen veride hatalar var."
+
+
+def test_serializer_reddi_mesajda_gorunur() -> None:
+    """Serializer'ın kendi Türkçe reddi snackbar'a çıkar; bağlamsız varsayılan çıkmaz."""
+    hata = ValidationError(
+        {
+            "name": ["Bu küme zaten kayıtlı."],
+            "capacity": [ErrorDetail("Bu alan zorunlu.", code="required")],
+            "rows": [{"end_date": ["Bitiş tarihi başlangıçtan sonra olmalıdır."]}],
+        }
+    )
+    yanit = ks_exception_handler(hata, _ctx())
+
+    assert yanit is not None and yanit.status_code == 400
+    assert yanit.data["message"] == (
+        "Bu küme zaten kayıtlı. Bitiş tarihi başlangıçtan sonra olmalıdır."
+    )
+    assert set(yanit.data["fields"]) == {"name", "capacity", "rows"}
 
 
 def test_http404_turkce_generic_mesaja_cevrilir() -> None:
