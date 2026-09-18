@@ -1,8 +1,8 @@
 // Ayarlar → Şube Kümeleri testleri (Ö2).
 // Sabitlenen: küme ekleme ve TOPLU atama (asıl seçim maliyetini düşüren yol);
-// "— kümesiz —" seçimi group=null gönderir.
+// "— yok —" (kümesiz) seçimi group=null gönderir.
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -92,7 +92,7 @@ describe("SubeKumeleriPaneli", () => {
     );
   });
 
-  it("'— kümesiz —' seçilince group null gönderilir", async () => {
+  it("küme olarak “— yok —” seçiliyken group null gönderilir", async () => {
     const user = userEvent.setup();
     okulApiMock.listClassSectionGroups.mockResolvedValue([
       { id: 3, name: "Sayısal", order: 0, section_count: 1 },
@@ -102,6 +102,10 @@ describe("SubeKumeleriPaneli", () => {
     renderPanel();
 
     await user.click(await screen.findByRole("checkbox", { name: /11\/A/ }));
+    // Boş seçenek tek biçimdir: "— yok —" (docs/sozluk.md §3).
+    const kume = screen.getByRole("combobox", { name: "Küme" });
+    expect(kume).toHaveValue("");
+    expect(within(kume).getByRole("option", { name: "— yok —" })).toBeDefined();
     await user.click(screen.getByRole("button", { name: /^Ata \(/ }));
 
     await waitFor(() =>

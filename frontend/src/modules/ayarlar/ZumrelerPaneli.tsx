@@ -13,6 +13,7 @@ import { ApiError } from "../../lib/api";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import { useConfirm } from "../../ui/ConfirmProvider";
+import EmptyState from "../../ui/EmptyState";
 import Icon from "../../ui/Icon";
 import Select from "../../ui/Select";
 import { SkeletonList } from "../../ui/Skeleton";
@@ -84,9 +85,17 @@ export default function ZumrelerPaneli() {
     }
   };
 
+  // Seçim anında kaydedilir ("Kaydet" düğmesi yok) — sessiz geçmesin diye her
+  // iki satır içi değişiklik de kendi cümlesiyle bildirilir: seçici değişti ama
+  // KAYDEDİLDİ Mİ sorusu ekranda yanıtsız kalıyordu.
   const baskanDegistir = async (row: SubjectDepartment, value: string) => {
     try {
       await okulApi.updateSubjectDepartment(row.id, { head: value === "" ? null : Number(value) });
+      snackbar.success(
+        value === ""
+          ? `“${row.name}” zümresinin başkanı kaldırıldı.`
+          : `“${row.name}” zümresinin başkanı güncellendi.`,
+      );
       load();
     } catch (e) {
       snackbar.error(e instanceof ApiError ? e.message : "Zümre başkanı değiştirilemedi.");
@@ -96,6 +105,9 @@ export default function ZumrelerPaneli() {
   const kurulDegistir = async (row: SubjectDepartment, value: boolean) => {
     try {
       await okulApi.updateSubjectDepartment(row.id, { is_board_member: value });
+      snackbar.success(
+        value ? `“${row.name}” kurula eklendi.` : `“${row.name}” kuruldan çıkarıldı.`,
+      );
       load();
     } catch (e) {
       snackbar.error(e instanceof ApiError ? e.message : "Kurul üyeliği değiştirilemedi.");
@@ -104,22 +116,23 @@ export default function ZumrelerPaneli() {
 
   const sil = async (row: SubjectDepartment) => {
     const ok = await confirm({
-      title: "Zümreyi kaldır",
-      message: `'${row.name}' zümresi kaldırılsın mı? Personel kayıtları etkilenmez; bu zümre daha önce seçildiği takvimlerin imza bloğundan da düşer.`,
+      title: "Zümre kaldırılsın mı?",
+      message: `“${row.name}” zümresi listeden kalkar ve daha önce seçildiği takvimlerin imza bloğundan da düşer. Öğretmen kayıtları etkilenmez.`,
       confirmLabel: "Kaldır",
     });
     if (!ok) return;
     try {
       await okulApi.deleteSubjectDepartment(row.id);
-      snackbar.success(`'${row.name}' kaldırıldı.`);
+      snackbar.success(`“${row.name}” kaldırıldı.`);
       load();
     } catch (e) {
       snackbar.error(e instanceof ApiError ? e.message : "Zümre kaldırılamadı.");
     }
   };
 
+  // Boş seçenek tek biçim: "— yok —" (docs/sozluk.md §3).
   const personnelOptions = [
-    { value: "", label: "— seçilmedi —" },
+    { value: "", label: "— yok —" },
     ...personnel.map((p) => ({ value: String(p.id), label: personnelLabel(p) })),
   ];
 
@@ -154,15 +167,19 @@ export default function ZumrelerPaneli() {
         <p className="mt-1 text-body-medium text-on-surface-variant">
           Okulunuzda kurulan sınıf/alan zümrelerini ve başkanlarını buraya girin. Sınav takvimi
           PDF'inin imza bölümünde hangi zümrelerin yer alacağını, takvimin Önizleme sekmesinde bu
-          listeden seçersiniz. Zümre başkanı adayları personel sicilindeki aktif kayıtlardır.
+          listeden seçersiniz. Zümre başkanı adayları öğretmen sicilindeki aktif kayıtlardır.
         </p>
 
         {loading ? (
           <SkeletonList rows={3} className="mt-4" />
         ) : rows.length === 0 ? (
-          <p className="mt-4 text-body-medium text-on-surface-variant">
-            Henüz zümre tanımlanmamış. Aşağıdan ekleyin (örn. "Sosyal Bilimler", "Matematik").
-          </p>
+          <div className="mt-2">
+            <EmptyState
+              compact
+              icon="groups"
+              title="Henüz zümre tanımlanmamış. Aşağıdan ekleyin (örn. “Sosyal Bilimler”, “Matematik”)."
+            />
+          </div>
         ) : (
           <ul className="mt-4 space-y-2">
             {rows.map((row) => (
@@ -213,7 +230,7 @@ export default function ZumrelerPaneli() {
             onChange={(e) => setHead(e.target.value)}
             options={personnelOptions}
             helperText={
-              personnel.length === 0 ? "Personel sicili boş — Kişiler ekranından ekleyin." : ""
+              personnel.length === 0 ? "Öğretmen sicili boş — Kişiler ekranından ekleyin." : ""
             }
           />
           <Button icon="add" onClick={() => void ekle()} disabled={busy || !name.trim()}>

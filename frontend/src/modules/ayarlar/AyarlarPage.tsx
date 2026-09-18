@@ -1,9 +1,10 @@
 // Ayarlar sayfası (DD kalıbından KS'ye) — yedi sekme: ders yılları (dönemlerle),
-// şube kataloğu (salon-şube eşlemesi ve R2k bu katalogdan okur), şube kümeleri
-// (SAY/EA/DİL — sihirbazda toplu şube seçimi), zümreler (okul
-// zümre başkanları kurulu — sınav takvimi imza bloğunun kaynağı), okul bilgileri
-// (evrak antedi + okul türü, U4), güvenlik (uygulama parolası) ve güncelleme
-// (F8 — GitHub sürüm denetimi). DD'deki tatil sekmesi YOK (iş günü hesabı alınmadı).
+// şube kataloğu (salon-şube eşlemesi ve şube sınav duyurusu bu katalogdan okur;
+// R2k şube yoklama listesi kaldırılmıştı), şube kümeleri (SAY/EA/DİL —
+// sihirbazda toplu şube seçimi), zümreler (okul zümre başkanları kurulu — sınav
+// takvimi imza bloğunun kaynağı), okul bilgileri (evrak antedi + okul türü, U4),
+// güvenlik (uygulama parolası) ve güncelleme (F8 — GitHub sürüm denetimi).
+// DD'deki tatil sekmesi YOK (iş günü hesabı alınmadı).
 
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -12,9 +13,11 @@ import { useTabParam } from "../../hooks/useTabParam";
 import { ApiError } from "../../lib/api";
 import { formatDate } from "../../lib/format";
 import { parseApiFieldErrors } from "../../lib/formErrors";
+import { gradeLevelLabel } from "../../lib/gradeLevels";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import { useConfirm } from "../../ui/ConfirmProvider";
+import EmptyState from "../../ui/EmptyState";
 import HubFeatureCard from "../../ui/HubFeatureCard";
 import Icon from "../../ui/Icon";
 import Select from "../../ui/Select";
@@ -142,8 +145,7 @@ export default function AyarlarPage() {
             Ders yılı, şube kataloğu, şube kümeleri, zümreler, okul künyesi ve uygulama parolası
             burada yönetilir. Okul künyesi salon evrakının antedinde kullanılır; şube kataloğu
             salon-şube eşlemesini, şube kümeleri sihirbazdaki toplu şube seçimini, zümre listesi de
-            sınav takviminin imza bloğunu besler. Derslik kümeleri (Sabah/Öğle) Salonlar
-            ekranındadır.
+            sınav takviminin imza bloğunu besler. Salon kümeleri (Sabah/Öğle) Salonlar ekranındadır.
           </p>
         </div>
       </div>
@@ -179,15 +181,15 @@ export default function AyarlarPage() {
           <HubFeatureCard
             to="/dersler"
             icon="menu_book"
-            title="Ders havuzu"
-            description="MEB çizelgesinden tohumlanan katalog: elle ders ekleyin, pasifleştirin, mükerrerleri birleştirin."
+            title="Ders Havuzu"
+            description="MEB haftalık ders çizelgesinden türetilen ders listesi: elle ders ekleyin, pasifleştirin, mükerrerleri birleştirin."
           />
           {/* Kurulum tamamlandıktan sonra sihirbaza gezinilebilir tek yol burasıdır
               (menüde yer almaz); adımları gözden geçirmek isteyen kullanıcı sıkışmasın. */}
           <HubFeatureCard
             to="/kurulum"
             icon="checklist"
-            title="Kurulum sihirbazı"
+            title="Kurulum Sihirbazı"
             description="Okul bilgileri, ders yılı ve kişi aktarma adımlarını yeniden gözden geçirin."
           />
         </div>
@@ -225,9 +227,13 @@ function DersYillariPanel({
         {loading ? (
           <SkeletonList rows={3} className="mt-4" />
         ) : years.length === 0 ? (
-          <p className="mt-4 text-body-medium text-on-surface-variant">
-            Henüz ders yılı tanımlanmadı. Aşağıdaki formdan ilk yılı oluşturun.
-          </p>
+          <div className="mt-2">
+            <EmptyState
+              compact
+              icon="calendar_month"
+              title="Henüz ders yılı tanımlanmadı. Aşağıdaki formdan ilk yılı oluşturun."
+            />
+          </div>
         ) : (
           <ul className="mt-4 divide-y divide-outline-variant/50">
             {years.map((y) => (
@@ -251,8 +257,8 @@ function SchoolYearRow({ year, onChanged }: { year: SchoolYear; onChanged: () =>
 
   const activate = async () => {
     const ok = await confirm({
-      title: "Ders yılını aktifleştir",
-      message: `'${year.name}' aktif ders yılı yapılsın mı? Aynı anda yalnız bir yıl aktif olabilir; diğer yıllar pasife çekilir.`,
+      title: "Ders yılı aktifleştirilsin mi?",
+      message: `“${year.name}” aktif ders yılı olur; aynı anda yalnız bir yıl aktif olabildiğinden diğer yıllar pasife çekilir. Yeni sınav takvimleri ve oturumlar bu yıla açılır, ders havuzu bu yılın çizelgesine göre güncellenir.`,
       confirmLabel: "Aktifleştir",
     });
     if (!ok) return;
@@ -260,7 +266,7 @@ function SchoolYearRow({ year, onChanged }: { year: SchoolYear; onChanged: () =>
     setErr(null);
     try {
       await okulApi.activateSchoolYear(year.id);
-      snackbar.success(`'${year.name}' aktif ders yılı oldu.`);
+      snackbar.success(`“${year.name}” aktif ders yılı oldu.`);
       onChanged();
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Ders yılı aktifleştirilemedi.");
@@ -379,7 +385,11 @@ function SchoolTermEditor({ year }: { year: SchoolYear }) {
           {formatDate(terms[1].start_date)} – {formatDate(terms[1].end_date)}
         </p>
       )}
-      {error && <p className="mt-2 text-label-small text-error">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-2 text-label-small text-error">
+          {error}
+        </p>
+      )}
       <div className="mt-3 flex justify-end">
         <Button variant="tonal" onClick={() => void save()} disabled={busy}>
           {busy ? "Kaydediliyor…" : "Dönemleri kaydet"}
@@ -506,7 +516,7 @@ function SchoolYearCreateCard({ onCreated }: { onCreated: () => void }) {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Şubeler (şube kataloğu — salon-şube eşlemesi ve R2k bu katalogdan okur)
+// 2. Şubeler (şube kataloğu — salon-şube eşlemesi ve şube sınav duyurusu okur)
 // ---------------------------------------------------------------------------
 
 function SubelerPanel({ years, yearsLoading }: { years: SchoolYear[]; yearsLoading: boolean }) {
@@ -578,8 +588,8 @@ function SubelerPanel({ years, yearsLoading }: { years: SchoolYear[]; yearsLoadi
 
   const sil = async (row: ClassSection) => {
     const ok = await confirm({
-      title: "Şubeyi kaldır",
-      message: `${row.class_label} şubesi katalogdan kaldırılsın mı? Öğrenci kayıtları etkilenmez; içe aktarma yeniden görürse şube tekrar eklenir.`,
+      title: "Şube katalogdan kaldırılsın mı?",
+      message: `${row.class_label} şubesi seçim listelerinden kalkar. Öğrenci kayıtları etkilenmez; içe aktarma bu şubeyi yeniden görürse şube tekrar eklenir.`,
       confirmLabel: "Kaldır",
     });
     if (!ok) return;
@@ -600,7 +610,8 @@ function SubelerPanel({ years, yearsLoading }: { years: SchoolYear[]; yearsLoadi
         <p className="text-title-medium text-on-surface">Şube kataloğu</p>
         <p className="mt-1 text-body-medium text-on-surface-variant">
           Öğrenci aktarımında görülen şubeler buraya kendiliğinden eklenir. Salon-şube eşlemesi
-          (klasik düzen) ve şube yoklama listeleri bu katalogdan beslenir.
+          (“Kendi dersliğinde” düzeni) bu katalogdan kurulur. Şube sınav duyurusu bu katalogdan
+          beslenir.
         </p>
 
         <div className="mt-4 max-w-sm">
@@ -618,10 +629,13 @@ function SubelerPanel({ years, yearsLoading }: { years: SchoolYear[]; yearsLoadi
         {yearsLoading || loading ? (
           <SkeletonList rows={3} className="mt-4" />
         ) : rows.length === 0 ? (
-          <p className="mt-4 text-body-medium text-on-surface-variant">
-            Bu ders yılında kayıtlı şube yok. Öğrenci listesi aktarınca şubeler otomatik gelir;
-            aşağıdan elle de ekleyebilirsiniz.
-          </p>
+          <div className="mt-2">
+            <EmptyState
+              compact
+              icon="meeting_room"
+              title="Bu ders yılında kayıtlı şube yok. Öğrenci listesi aktarınca şubeler kendiliğinden gelir; aşağıdan elle de ekleyebilirsiniz."
+            />
+          </div>
         ) : (
           <ul className="mt-4 flex flex-wrap gap-2">
             {rows.map((row) => (
@@ -645,10 +659,13 @@ function SubelerPanel({ years, yearsLoading }: { years: SchoolYear[]; yearsLoadi
 
         <div className="mt-5 grid grid-cols-1 items-end gap-3 sm:grid-cols-[10rem_8rem_auto]">
           <Select
-            label="Sınıf"
+            label="Sınıf düzeyi"
             value={level}
             onChange={(e) => setLevel(e.target.value)}
-            options={levels.map((l) => ({ value: String(l.value), label: l.label }))}
+            options={levels.map((l) => ({
+              value: String(l.value),
+              label: gradeLevelLabel(l.value),
+            }))}
           />
           <TextField
             label="Şube"
@@ -761,9 +778,9 @@ function OkulBilgileriPanel() {
     <Card elevation={1} className="p-6">
       <p className="text-title-medium text-on-surface">Okul bilgileri</p>
       <p className="mt-1 text-body-medium text-on-surface-variant">
-        Salon evrakının antedi bu bilgilerden üretilir. Okul türü, hazırlık sınıfı ve seviye bazlı
-        çizelge ataması, ders havuzunun hangi MEB çizelgesinden türetileceğini ve geçerli sınıf
-        seviyelerini belirler; kaydedince ders havuzu çizelgeye göre yeniden senkronlanır.
+        Salon evrakının antedi bu bilgilerden üretilir. Okul türü, hazırlık sınıfı ve sınıf düzeyine
+        göre çizelge ataması, ders havuzunun hangi MEB çizelgesinden türetileceğini ve geçerli sınıf
+        düzeylerini belirler; kaydedince ders havuzu çizelgeye göre yeniden güncellenir.
       </p>
       {error && (
         <div className="mt-4">

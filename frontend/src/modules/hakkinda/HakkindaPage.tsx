@@ -10,7 +10,7 @@ export default function HakkindaPage() {
           Hakkında ve Lisans
         </h1>
         <p className="mt-2 text-body-medium text-on-surface-variant">
-          Programın geliştirici, iletişim ve kullanım koşulları.
+          Programın geliştiricisi, iletişim bilgileri ve kullanım koşulları.
         </p>
       </header>
 
@@ -71,6 +71,35 @@ export default function HakkindaPage() {
               Lisansın resmî metni
               <Icon name="open_in_new" size="sm" />
             </a>
+          </div>
+        </div>
+      </Card>
+
+      {/* Şifreleme yöntemlerinin ADI yalnız burada geçer (docs/sozluk.md §1):
+          ayar ekranları "güçlü şifrelemeyle korunur" der, merak eden ya da
+          bilişim sorumlusuna bilgi verecek olan ayrıntıyı bu kartta bulur. */}
+      <Card className="p-5 sm:p-6">
+        <div className="flex items-start gap-4">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-shape-md bg-surface-container-high text-on-surface-variant">
+            <Icon name="shield_lock" size="xl" />
+          </span>
+          <div>
+            <h2 className="text-title-large font-semibold text-on-surface">Teknik bilgiler</h2>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-body-medium text-on-surface-variant">
+              <li>
+                Program çevrimdışı çalışır; veriler yalnız bu bilgisayarda tutulur. Tek dış istek,
+                yayımlanan son sürümü soran anonim güncelleme denetimidir.
+              </li>
+              <li>
+                Uygulama parolası kurulduğunda öğrenci ve öğretmen ad-soyadları Fernet (AES-128-CBC
+                + HMAC-SHA256) ile şifrelenir; şifreleme anahtarı, parolanızdan Argon2id ile
+                türetilen anahtarla korunur.
+              </li>
+              <li>
+                Şifreli yedekler (<span className="font-mono">.ksbak</span>) X25519 ve AES-256-GCM
+                ile şifrelenir; yedek, uygulama parolası ya da kurtarma anahtarıyla açılır.
+              </li>
+            </ul>
           </div>
         </div>
       </Card>

@@ -10,6 +10,7 @@ import { useFormErrors } from "../../hooks/useFormErrors";
 import { ApiError } from "../../lib/api";
 import { saveBlob } from "../../lib/download";
 import { formatNumber } from "../../lib/format";
+import { gradeLevelLabel } from "../../lib/gradeLevels";
 import type { Paginated } from "../../lib/pagination";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
@@ -263,14 +264,14 @@ function OgrencilerSekmesi() {
         />
         <Select
           className="min-w-40"
-          label="Sınıf"
+          label="Sınıf düzeyi"
           placeholder="Tümü"
           value={level}
           onChange={(e) => {
             setLevel(e.target.value);
             setOffset(0);
           }}
-          options={levels.map((l) => ({ value: String(l.value), label: l.label }))}
+          options={levels.map((l) => ({ value: String(l.value), label: gradeLevelLabel(l.value) }))}
         />
         <TextField
           className="w-32"
@@ -389,8 +390,11 @@ function OgrenciFormDialog({
 
   const remove = async () => {
     if (!student) return;
+    // Başlık soru, gövde sonuç (docs/sozluk.md §3). "soft delete" jargonu yerine
+    // ne olduğu söylenir; ad yalnız bu onay penceresinde görünür (hata metni değil).
     const ok = await confirm({
-      message: `'${student.full_name}' sicilden silinsin mi? Kayıt geri alınabilir biçimde (soft delete) saklanır.`,
+      title: "Öğrenci sicilden silinsin mi?",
+      message: `“${student.full_name}” listelerden ve yeni sınav oturumlarından kalkar. Kayıt silinmez, gizlenir; gerekirse geri alınabilir.`,
       confirmLabel: "Sil",
     });
     if (!ok) return;
@@ -454,11 +458,14 @@ function OgrenciFormDialog({
             helperText="İçe aktarma bu numarayla eşleştirir; aktif kayıtlar arasında tekildir."
           />
           <Select
-            label="Sınıf"
-            placeholder="Sınıfsız"
+            label="Sınıf düzeyi"
+            placeholder="— yok —"
             value={level}
             onChange={(e) => setLevel(e.target.value)}
-            options={levels.map((l) => ({ value: String(l.value), label: l.label }))}
+            options={levels.map((l) => ({
+              value: String(l.value),
+              label: gradeLevelLabel(l.value),
+            }))}
             error={errors.class_level}
           />
           <TextField
@@ -519,7 +526,7 @@ function PersonelSekmesi() {
       })
       .catch((e: unknown) => {
         if (cancelled) return;
-        setError(e instanceof ApiError ? e.message : "Personel listesi yüklenemedi.");
+        setError(e instanceof ApiError ? e.message : "Öğretmen listesi yüklenemedi.");
       })
       .finally(() => {
         if (!cancelled && !geriDusuluyor) setLoading(false);
@@ -649,11 +656,11 @@ function PersonelFormDialog({
     try {
       if (personnel) await okulApi.updatePersonnel(personnel.id, body);
       else await okulApi.createPersonnel(body);
-      snackbar.success(personnel ? "Personel güncellendi." : "Personel eklendi.");
+      snackbar.success(personnel ? "Öğretmen güncellendi." : "Öğretmen eklendi.");
       onSaved();
     } catch (e) {
       applyApiError(e);
-      setError(e instanceof ApiError ? e.message : "Personel kaydedilemedi.");
+      setError(e instanceof ApiError ? e.message : "Öğretmen kaydedilemedi.");
       setBusy(false);
     }
   };
@@ -661,7 +668,8 @@ function PersonelFormDialog({
   const remove = async () => {
     if (!personnel) return;
     const ok = await confirm({
-      message: `'${personnel.full_name}' sicilden silinsin mi? Kayıt geri alınabilir biçimde (soft delete) saklanır.`,
+      title: "Öğretmen sicilden silinsin mi?",
+      message: `“${personnel.full_name}” listelerden ve gözetmen aday havuzundan kalkar. Kayıt silinmez, gizlenir; gerekirse geri alınabilir.`,
       confirmLabel: "Sil",
     });
     if (!ok) return;
@@ -669,10 +677,10 @@ function PersonelFormDialog({
     setError(null);
     try {
       await okulApi.deletePersonnel(personnel.id);
-      snackbar.success("Personel silindi.");
+      snackbar.success("Öğretmen silindi.");
       onSaved();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Personel silinemedi.");
+      setError(e instanceof ApiError ? e.message : "Öğretmen silinemedi.");
       setBusy(false);
     }
   };
@@ -681,7 +689,7 @@ function PersonelFormDialog({
     <Dialog
       open
       onClose={onClose}
-      title={personnel ? "Personeli düzenle" : "Yeni personel"}
+      title={personnel ? "Öğretmeni düzenle" : "Yeni öğretmen"}
       actions={
         <>
           {personnel && (

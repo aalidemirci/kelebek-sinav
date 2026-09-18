@@ -16,6 +16,7 @@ import { ApiError } from "../../lib/api";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import { useConfirm } from "../../ui/ConfirmProvider";
+import EmptyState from "../../ui/EmptyState";
 import Icon from "../../ui/Icon";
 import Select from "../../ui/Select";
 import { SkeletonList } from "../../ui/Skeleton";
@@ -68,14 +69,14 @@ export default function SubeKumeleriPaneli() {
 
   const sil = async (grup: ClassSectionGroup) => {
     const ok = await confirm({
-      title: "Kümeyi kaldır",
-      message: `'${grup.name}' kümesi kaldırılsın mı? Şubeler silinmez, yalnız kümesiz kalır.`,
+      title: "Küme kaldırılsın mı?",
+      message: `“${grup.name}” kümesi listeden kalkar. Şubeler silinmez, yalnız kümesiz kalır; daha önce kurulmuş oturum ve takvimler etkilenmez.`,
       confirmLabel: "Kaldır",
     });
     if (!ok) return;
     try {
       await okulApi.deleteClassSectionGroup(grup.id);
-      snackbar.success(`'${grup.name}' kaldırıldı.`);
+      snackbar.success(`“${grup.name}” kaldırıldı.`);
       load();
     } catch (e) {
       snackbar.error(e instanceof ApiError ? e.message : "Küme kaldırılamadı.");
@@ -104,7 +105,7 @@ export default function SubeKumeleriPaneli() {
     setSecili((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   const grupSecenekleri = [
-    { value: "", label: "— kümesiz —" },
+    { value: "", label: "— yok —" },
     ...gruplar.map((g) => ({ value: String(g.id), label: g.name })),
   ];
 
@@ -123,7 +124,7 @@ export default function SubeKumeleriPaneli() {
       <Card elevation={1} className="p-6">
         <p className="text-title-medium text-on-surface">Şube kümeleri</p>
         <p className="mt-1 text-body-medium text-on-surface-variant">
-          Şubeleri "Sayısal", "Eşit Ağırlık", "Dil" gibi kümelere ayırın; sınav sihirbazında
+          Şubeleri “Sayısal”, “Eşit Ağırlık”, “Dil” gibi kümelere ayırın; sınav sihirbazında
           katılacak şubeleri tek tek işaretlemek yerine küme çipiyle topluca seçersiniz. Bir şube en
           çok bir kümede olur. Küme yalnız seçim kolaylığıdır — oturum kaydına küme değil, seçilen
           şubeler yazılır.
@@ -132,9 +133,13 @@ export default function SubeKumeleriPaneli() {
         {loading ? (
           <SkeletonList rows={3} className="mt-4" />
         ) : gruplar.length === 0 ? (
-          <p className="mt-4 text-body-medium text-on-surface-variant">
-            Henüz küme tanımlanmamış. Aşağıdan ekleyin.
-          </p>
+          <div className="mt-2">
+            <EmptyState
+              compact
+              icon="category"
+              title="Henüz küme tanımlanmamış. Aşağıdan ekleyin."
+            />
+          </div>
         ) : (
           <ul className="mt-4 flex flex-wrap gap-2">
             {gruplar.map((g) => (
@@ -174,16 +179,20 @@ export default function SubeKumeleriPaneli() {
       <Card elevation={1} className="p-6">
         <p className="text-title-medium text-on-surface">Şubeleri kümeye ata</p>
         <p className="mt-1 text-body-medium text-on-surface-variant">
-          Şubeleri işaretleyip aşağıdan kümeyi seçin. Tek tek düzenlemek yerine topluca atanır; "—
-          kümesiz —" seçerek kümeden çıkarabilirsiniz.
+          Şubeleri işaretleyip aşağıdan kümeyi seçin. Tek tek düzenlemek yerine topluca atanır; küme
+          olarak “— yok —” seçerek şubeleri kümeden çıkarabilirsiniz.
         </p>
 
         {loading ? (
           <SkeletonList rows={4} className="mt-4" />
         ) : subeler.length === 0 ? (
-          <p className="mt-4 text-body-medium text-on-surface-variant">
-            Aktif ders yılında şube yok. Öğrenci listesi aktarınca şubeler kendiliğinden gelir.
-          </p>
+          <div className="mt-2">
+            <EmptyState
+              compact
+              icon="meeting_room"
+              title="Aktif ders yılında şube yok. Öğrenci listesi aktarınca şubeler kendiliğinden gelir."
+            />
+          </div>
         ) : (
           <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1">
             {subeler.map((s) => (

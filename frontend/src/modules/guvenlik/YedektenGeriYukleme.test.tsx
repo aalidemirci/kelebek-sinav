@@ -55,7 +55,7 @@ function ekranaBas() {
 
 /** Onay diyaloğundaki "Geri yükle" düğmesine basar (karttaki eş adlıdan ayrışır). */
 async function onayla(kullanici: ReturnType<typeof userEvent.setup>) {
-  const diyalog = await screen.findByRole("dialog", { name: "Yedekten geri yükle" });
+  const diyalog = await screen.findByRole("dialog", { name: "Yedekten geri yüklensin mi?" });
   await kullanici.click(within(diyalog).getByRole("button", { name: "Geri yükle" }));
 }
 
@@ -70,13 +70,31 @@ describe("YedektenGeriYukleme", () => {
 
     expect(await screen.findByText("gunluk-2026-09-01.ksbak")).toBeInTheDocument();
     expect(screen.getByText(/şifreli/)).toBeInTheDocument();
-    expect(screen.getByText(/düz/)).toBeInTheDocument();
+    expect(screen.getByText(/şifresiz/)).toBeInTheDocument();
     expect(screen.getByText("C:\\KelebekSinav\\backups")).toBeInTheDocument();
     // Kaynak seçilmeden geri yükleme düğmesi kapalıdır.
     expect(screen.getByRole("button", { name: "Geri yükle" })).toBeDisabled();
   });
 
-  it("düz yedeği onayla geri yükler ve yeniden başlat olayını yayınlar", async () => {
+  it("program açılmıyorsa iki platformun da kurtarma yolunu söyler", async () => {
+    ekranaBas();
+    await screen.findByText("gunluk-2026-09-01.ksbak");
+
+    // docs/kurulum.md §5.1 ile aynı: Windows kısayolu + Pardus/Linux komutu.
+    expect(
+      screen.getByText(/“Kelebek Sınav — Yedekten Geri Yükle” kısayolunu/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("kelebek-sinav --geri-yukle")).toBeInTheDocument();
+  });
+
+  it("yedek yokken günlük yedeğin “her gün ilk açılışta” alındığını söyler", async () => {
+    guvenlik.yedekler.mockResolvedValue({ ...LISTE, backups: [] });
+    ekranaBas();
+
+    expect(await screen.findByText(/her gün ilk açılışta günlük\s+yedek alır/)).toBeInTheDocument();
+  });
+
+  it("şifresiz yedeği onayla geri yükler ve yeniden başlat olayını yayınlar", async () => {
     const kullanici = userEvent.setup();
     guvenlik.geriYukle.mockResolvedValue(SONUC);
     const dinleyici = vi.fn();
@@ -87,8 +105,11 @@ describe("YedektenGeriYukleme", () => {
       await kullanici.click(await screen.findByRole("radio", { name: /gunluk-2026-08-31/ }));
       await kullanici.click(screen.getByRole("button", { name: "Geri yükle" }));
       // Onay metni kenara alma davranışını açıkça söyler.
-      const diyalog = await screen.findByRole("dialog", { name: "Yedekten geri yükle" });
+      const diyalog = await screen.findByRole("dialog", { name: "Yedekten geri yüklensin mi?" });
       expect(diyalog).toHaveTextContent("db-onceki-");
+      // Gövde SONUCU söyler; başlıktaki soruyu yinelemez (docs/sozluk.md §3).
+      expect(diyalog).toHaveTextContent("o yedekten sonra girdiğiniz kayıtlar ekrandan kalkar");
+      expect(diyalog).not.toHaveTextContent("Devam edilsin mi?");
       await kullanici.click(within(diyalog).getByRole("button", { name: "Geri yükle" }));
 
       await waitFor(() => expect(guvenlik.geriYukle).toHaveBeenCalledTimes(1));
@@ -152,7 +173,7 @@ describe("YedektenGeriYukleme", () => {
 
     await kullanici.click(await screen.findByRole("radio", { name: /gunluk-2026-08-31/ }));
     await kullanici.click(screen.getByRole("button", { name: "Geri yükle" }));
-    const diyalog = await screen.findByRole("dialog", { name: "Yedekten geri yükle" });
+    const diyalog = await screen.findByRole("dialog", { name: "Yedekten geri yüklensin mi?" });
     await kullanici.click(within(diyalog).getByRole("button", { name: "Vazgeç" }));
 
     expect(guvenlik.geriYukle).not.toHaveBeenCalled();
