@@ -25,7 +25,7 @@ export function dosyaAdi(parts: (string | null | undefined)[], ext: string): str
   const temiz = parts
     .map((part) =>
       (part ?? "")
-        .replace(/[\/:*?"<>|]/g, "")
+        .replace(/[/:*?"<>|]/g, "")
         .replace(/[.\s]+$/g, "")
         .trim()
         .replace(/\s+/g, "-")

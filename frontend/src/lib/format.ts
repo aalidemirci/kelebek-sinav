@@ -24,9 +24,16 @@ export function formatPercent(value: number | null | undefined): string {
   return `${sign}${nf.format(value)}%`;
 }
 
+// Alanlar AÇIKÇA iki haneli istenir: `dateStyle: "short"` tr-TR'de günü sıfırsız
+// basıyordu ("1.06.2026 09:05") — `formatDate` ise "01.06.2026" der; aynı ekranda
+// iki yazım çıkıyordu. Biçim ICU'nun yerel kalıbına bırakılmaz, parçalardan kurulur.
 const dtf = new Intl.DateTimeFormat("tr-TR", {
-  dateStyle: "short",
-  timeStyle: "short",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
   timeZone: "Europe/Istanbul",
 });
 
@@ -35,7 +42,9 @@ export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return dtf.format(d);
+  const parts: Partial<Record<Intl.DateTimeFormatPartTypes, string>> = {};
+  for (const part of dtf.formatToParts(d)) parts[part.type] = part.value;
+  return `${parts.day}.${parts.month}.${parts.year} ${parts.hour}:${parts.minute}`;
 }
 
 /** Bugünü ISO yyyy-mm-dd olarak (yerel saat) — tarih input varsayılanı için. */

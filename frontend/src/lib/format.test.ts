@@ -72,11 +72,23 @@ describe("formatDateTime", () => {
     expect(formatDateTime(null)).toBe("—");
   });
 
-  // Saat dilimi testi içinde belirli string beklemek yerine içerik kontrolü;
-  // CI'da TZ tutarsızlığını önler.
   it("geçerli ISO için Türkçe tarih-saat üretir", () => {
     const result = formatDateTime("2026-05-28T10:30:00Z");
     expect(result).toMatch(/28\.05\.2026/);
+  });
+
+  // Biçimleyici saat dilimini SABİTLER (Europe/Istanbul, UTC+3, yaz saati yok) →
+  // çıktı makinenin TZ'sinden bağımsızdır, birebir beklenebilir.
+  it("gün ve ay İKİ hanelidir: gg.aa.yyyy SS:dd (formatDate ile aynı yazım)", () => {
+    // `dateStyle: "short"` günü sıfırsız ("1.06.2026") basıyordu.
+    expect(formatDateTime("2026-06-01T09:05:00+03:00")).toBe("01.06.2026 09:05");
+    expect(formatDateTime("2026-11-16T09:05:00+03:00")).toBe("16.11.2026 09:05");
+  });
+
+  it("UTC girdiyi İstanbul saatine çevirir — gün sınırını da taşır", () => {
+    expect(formatDateTime("2026-05-31T22:30:00Z")).toBe("01.06.2026 01:30");
+    // Gece yarısı "24:00" değil "00:00"dır.
+    expect(formatDateTime("2026-05-31T21:00:00Z")).toBe("01.06.2026 00:00");
   });
 });
 
