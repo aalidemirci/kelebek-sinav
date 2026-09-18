@@ -57,13 +57,13 @@ DEFAULT_CALENDAR_DESCRIPTION = (
     "3. Bir sınıfta bir günde yapılacak yazılı ve uygulamalı sınav sayısının ikiyi "
     "geçmemesi esastır; zorunlu hâllerde bir sınav daha yapılabilir (Ölçme ve "
     "Değerlendirme Yönetmeliği md. 5).\n"
-    "4. Sınava katılamayan öğrencilerin özür belgeleri, sınav tarihinden itibaren en geç "
-    "5 iş günü içinde velisi tarafından okul yönetimine yazılı olarak bildirilir "
-    "(Ortaöğretim Kurumları Yönetmeliği md. 48). Özrü uygun görülen öğrenciler, ders "
-    "zümresince belirlenen ve önceden duyurulan tarihte bir defaya mahsus mazeret "
-    "sınavına alınır.\n"
-    "5. Geçerli özrü olmadan sınava katılmayan öğrencinin durumu puanla değerlendirilmez; "
-    "e-Okul'a 'G' olarak işlenir ve dönem puanı ortalaması hesabına katılır (OKY md. 48).\n"
+    "4. Geçerli mazereti bulunan öğrencinin sınava katılmama gerekçesi, sınav tarihinden "
+    "itibaren en geç 5 iş günü içinde velisi tarafından okul müdürlüğüne yazılı olarak "
+    "bildirilir (Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5). Mazereti kabul edilen "
+    "öğrenciler, okul müdürlüğünce duyurulan tarihte mazeret sınavına alınır.\n"
+    "5. Geçerli mazereti olmadan sınava ve mazeret sınavına katılmayan öğrencinin durumu "
+    "puanla değerlendirilmez; puan hanesine 'G' yazılır ve bu hane aritmetik ortalamaya "
+    "dâhil edilir (Yazılı ve Uygulamalı Sınavlar Yönergesi md. 6).\n"
     "6. Sınav tarihinde raporlu veya izinli olan öğrenci sınava alınmaz (OKY md. 48).\n"
     "7. Sınav sonuçları, sınav tarihinden itibaren en geç 10 iş günü içinde öğrencilere "
     "duyurulur ve e-Okul sistemine işlenir (OKY md. 49).\n"
@@ -1029,7 +1029,7 @@ def place_entry(
         )
 
     # Günlük sınav yükü ÖĞRENCİ bazlı (OYS Tur 648, ADR-0044 karar 13): kural
-    # öğrencinin gireceği sınav sayısıdır (OKY md. 45 "bir sınıfta bir günde
+    # öğrencinin gireceği sınav sayısıdır (ÖDY md. 5/1-k "bir sınıfta bir günde
     # ikiyi geçmemesi" esası).
     same_day_courses = list(
         ExamCalendarEntry.objects.filter(
@@ -1044,14 +1044,16 @@ def place_entry(
     if max_load == 3:
         detail = f" ({affected} öğrenci üç sınava giriyor)" if affected else ""
         warnings.append(
-            f"Bu seviyede aynı gün 3. sınav{detail} — OKY md. 45: günde ikiyi "
-            "geçmemesi esastır (zorunlu hâl gerekçesi okul müdürlüğünündür)."
+            f"Bu sınıf düzeyinde aynı gün 3. sınav{detail} — günde ikiyi geçmemesi "
+            "esastır; zorunlu hâl takdiri okul müdürlüğünündür (MEB Ölçme ve "
+            "Değerlendirme Yönetmeliği md. 5, Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5)."
         )
     elif max_load >= 4:
         raise ValidationError(
             {
                 "on_date": "Yerleştirilemez: en az bir öğrenci aynı gün 4 sınava "
-                "girmiş olurdu (OKY md. 45)."
+                "girmiş olurdu; zorunlu hâlde de günde en çok üç sınav yapılabilir (MEB "
+                "Ölçme ve Değerlendirme Yönetmeliği md. 5)."
             }
         )
 
@@ -1275,7 +1277,7 @@ def auto_place_entries(calendar: ExamCalendar, *, mode: str = AUTO_MODE_FILL) ->
                 continue
             gunluk = gun_seviye_yuk.get(seviye_gun, 0)
             if gunluk >= 3:
-                continue  # 4. sınav sert sınırı (OKY md. 45) — place_entry de reddeder
+                continue  # 4. sınav sert sınırı (ÖDY md. 5/1-k) — place_entry de reddeder
             asim = int(kapasite > 0 and slot_mevcut.get((gun, saat), 0) + aday_mevcut > kapasite)
             # Leksikografik ceza demeti (motor `_pair_penalty` deseni): önce
             # mevzuat esası (günde 2), sonra salon gerçekliği, sonra yayma,

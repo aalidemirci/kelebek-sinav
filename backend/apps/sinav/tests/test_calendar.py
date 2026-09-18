@@ -227,7 +227,7 @@ def test_fill_pool_round3_reddedilir() -> None:
 
 
 # ===========================================================================
-# Öğrenci-bazlı günlük limit (F6 kapısı) — OKY md. 45 esası
+# Öğrenci-bazlı günlük limit (F6 kapısı) — ÖDY md. 5/1-k, Yönerge md. 5/1-s esası
 # ===========================================================================
 
 
@@ -259,7 +259,8 @@ def test_gunluk_limit_uc_sinav_uyari_dort_sert_hata() -> None:
     assert r1.warnings == [] and r2.warnings == []
 
     r3 = takvim.place_entry(entries[2], on_date=gun, period_no=3)
-    assert any("3. sınav" in w and "OKY md. 45" in w for w in r3.warnings)
+    # Dayanak depoda metni bulunan düzenlemelerdir (kılavuzla aynı atıf).
+    assert any("3. sınav" in w and "Yönetmeliği md. 5" in w for w in r3.warnings)
     entries[2].refresh_from_db()
     assert entries[2].placed_date == gun  # uyarıyla YERLEŞİR, engellenmez
 
@@ -1324,7 +1325,7 @@ def test_sinav_saatleri_ayari_otomatigi_baglar_elle_yerlestirmeyi_uyarir() -> No
 
 
 def test_otomatik_yerlestirme_havuzu_dagitir_ve_gunluk_esasi_korur() -> None:
-    """FILL: havuz boşalır; hiçbir gün+seviyede ikiden fazla sınav olmaz (OKY md. 45)."""
+    """FILL: havuz boşalır; hiçbir gün+seviyede ikiden fazla sınav olmaz (ÖDY md. 5/1-k)."""
     SchoolConfig.objects.create(
         pk=SchoolConfig.SINGLETON_PK, daily_period_count=8, exam_period_nos=[1, 2]
     )
