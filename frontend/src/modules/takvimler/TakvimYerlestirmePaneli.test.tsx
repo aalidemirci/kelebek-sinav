@@ -1,8 +1,11 @@
-// Yerleştirme ızgarası testleri (F6): tıkla-yerleştir akışı + uyarı snackbar'ı
-// (uyarıyla yerleşir, sert reddi backend verir), hücre anahtarı sözleşmesi,
-// boş hafta sonunun gizlenmesi, onaylı takvimde "Oturum Üret".
+// Yerleştirme çizelgesi testleri (F6): tıkla-yerleştir akışı + KALICI uyarı
+// bandı (uyarıyla yerleşir; sert reddi backend verir ve snackbar'da kalır),
+// hücre anahtarı sözleşmesi, boş hafta sonunun gizlenmesi, onaylı takvimde
+// "Oturum üret".
 // F6 eki-2 (03.09.2026): otomatik yerleştirme kip seçimi + rapor diyaloğu,
 // çipteki sabitleme kilidi, sınav saati olmayan satırın işaretlenmesi.
+// 18.09.2026: uyarı bandı, "Uygulama"/"Kendi dersliğinde" rozetleri ve dayanak
+// metni (OKY md. 45 → MEB Ölçme ve Değerlendirme Yönetmeliği md. 5).
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -10,6 +13,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "../../lib/api";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
 import { makeCell, makeEntry, makeGrid } from "./testFixtures";
 
@@ -29,6 +33,11 @@ vi.mock("./api", async (importActual) => {
 
 import TakvimYerlestirmePaneli from "./TakvimYerlestirmePaneli";
 
+/** Backend'in günlük sınav yükü uyarısı — dayanak ÖDY md. 5 (docs/mevzuat). */
+const UCUNCU_SINAV_UYARISI =
+  "9. Sınıf düzeyinde 27.10.2026 günü 3. sınav — bir günde en çok iki sınav esastır " +
+  "(MEB Ölçme ve Değerlendirme Yönetmeliği md. 5).";
+
 function renderPanel(status: "DRAFT" | "SUBMITTED" | "APPROVED" = "DRAFT") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -45,7 +54,7 @@ function renderPanel(status: "DRAFT" | "SUBMITTED" | "APPROVED" = "DRAFT") {
 afterEach(() => vi.clearAllMocks());
 
 describe("TakvimYerlestirmePaneli", () => {
-  it("ızgara başlıkları seviye + öğrenci sayısı; boş hafta sonu satırı gizli", async () => {
+  it("çizelge başlıkları sınıf düzeyi + öğrenci sayısı; boş hafta sonu satırı gizli", async () => {
     calApi.grid.mockResolvedValue(makeGrid());
     renderPanel();
 
@@ -55,12 +64,12 @@ describe("TakvimYerlestirmePaneli", () => {
     expect(screen.queryByText(/31\.10\.2026/)).not.toBeInTheDocument();
   });
 
-  it("tıkla-yerleştir: dialog'dan girdi seçilir; backend uyarısı snackbar'da", async () => {
+  it("tıkla-yerleştir: dialog'dan girdi seçilir; backend uyarısı KALICI bantta birikir", async () => {
     const user = userEvent.setup();
     calApi.grid.mockResolvedValue(makeGrid());
     calApi.placeEntry.mockResolvedValue({
       entry: makeEntry({ placed_date: "2026-10-27", period_no: 1 }),
-      warnings: ["Bu seviyede aynı gün 3. sınav — OKY md. 45."],
+      warnings: [UCUNCU_SINAV_UYARISI],
     });
     renderPanel();
 
@@ -75,11 +84,46 @@ describe("TakvimYerlestirmePaneli", () => {
     await waitFor(() =>
       expect(calApi.placeEntry).toHaveBeenCalledWith(41, { date: "2026-10-27", period_no: 1 }),
     );
-    // Uyarı yerleşimi ENGELLEMEZ — snackbar'da gösterilir.
-    expect(await screen.findByText(/OKY md\. 45/)).toBeInTheDocument();
+    // Uyarı yerleşimi ENGELLEMEZ ve HATA değildir: kırmızı snackbar (role=alert)
+    // kuyruğunda akıp kaybolmaz, kibar canlı bölgedeki bantta kalır.
+    const bant = await screen.findByRole("status", { name: "Yerleştirme uyarıları" });
+    expect(within(bant).getByText(UCUNCU_SINAV_UYARISI)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    // Aynı uyarı ikinci yerleştirmede yinelenmez; "Kapat" bandı boşaltır.
+    await user.click(
+      screen.getByRole("button", { name: "27.10.2026 2. Ders 9. Sınıf sınav yerleştir" }),
+    );
+    const dialog2 = await screen.findByRole("dialog", { name: "Sınav yerleştir" });
+    await user.click(within(dialog2).getByRole("button", { name: /Coğrafya/ }));
+    await waitFor(() => expect(calApi.placeEntry).toHaveBeenCalledTimes(2));
+    expect(within(bant).getAllByText(UCUNCU_SINAV_UYARISI)).toHaveLength(1);
+
+    await user.click(within(bant).getByRole("button", { name: "Kapat" }));
+    expect(screen.queryByRole("status", { name: "Yerleştirme uyarıları" })).not.toBeInTheDocument();
   });
 
-  it("onaylı takvimde oturumsuz kelebek satırında 'Oturum Üret' görünür ve çağrılır", async () => {
+  it("sert ret (400) uyarı bandına değil hata snackbar'ına düşer", async () => {
+    const user = userEvent.setup();
+    calApi.grid.mockResolvedValue(makeGrid());
+    calApi.placeEntry.mockRejectedValue(
+      new ApiError(400, "validation_error", "Aynı gün 4. sınav yerleştirilemez."),
+    );
+    renderPanel();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "27.10.2026 1. Ders 9. Sınıf sınav yerleştir",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Sınav yerleştir" });
+    await user.click(within(dialog).getByRole("button", { name: /Coğrafya/ }));
+
+    expect(await screen.findByText("Aynı gün 4. sınav yerleştirilemez.")).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Yerleştirme uyarıları" })).not.toBeInTheDocument();
+  });
+
+  it("onaylı takvimde oturumsuz kelebek satırında “Oturum üret” görünür ve çağrılır", async () => {
     const user = userEvent.setup();
     calApi.grid.mockResolvedValue(
       makeGrid({
@@ -91,7 +135,7 @@ describe("TakvimYerlestirmePaneli", () => {
     calApi.createSession.mockResolvedValue({ session_id: 12, name: "Takvim — 1. Ders" });
     renderPanel("APPROVED");
 
-    await user.click(await screen.findByRole("button", { name: "Oturum Üret" }));
+    await user.click(await screen.findByRole("button", { name: "Oturum üret" }));
     await waitFor(() =>
       expect(calApi.createSession).toHaveBeenCalledWith(7, {
         date: "2026-10-27",
@@ -141,7 +185,7 @@ describe("TakvimYerlestirmePaneli", () => {
     expect(screen.queryByRole("button", { name: /yerleşimini kaldır/ })).not.toBeInTheDocument();
     // Oturumlu hücrede oturuma gitme bağlantısı var; hepsi oturumluysa üretim yok.
     expect(screen.getByRole("button", { name: "Üretilen oturuma git" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Oturum Üret" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Oturum üret" })).not.toBeInTheDocument();
   });
   it("otomatik yerleştirme: kip seçilir, rapor atlananları gerekçesiyle gösterir", async () => {
     const user = userEvent.setup();
@@ -158,7 +202,7 @@ describe("TakvimYerlestirmePaneli", () => {
           reason: "Üst makam sınavı — tarih ve saati ilgili makamın kılavuzunda ilan edilir.",
         },
       ],
-      warnings: ["Bu seviyede aynı gün 3. sınav — OKY md. 45."],
+      warnings: [UCUNCU_SINAV_UYARISI],
       cleared: 0,
     });
     renderPanel();
@@ -172,7 +216,7 @@ describe("TakvimYerlestirmePaneli", () => {
     const rapor = await screen.findByRole("dialog", { name: "Otomatik yerleştirme sonucu" });
     expect(within(rapor).getByText(/1 sınav yerleştirildi/)).toBeInTheDocument();
     expect(within(rapor).getByText(/Matematik — Üst makam sınavı/)).toBeInTheDocument();
-    expect(within(rapor).getByText(/OKY md\. 45/)).toBeInTheDocument();
+    expect(within(rapor).getByText(UCUNCU_SINAV_UYARISI)).toBeInTheDocument();
   });
 
   it("yeniden dağıtım kipi REDISTRIBUTE gönderir", async () => {
@@ -217,5 +261,56 @@ describe("TakvimYerlestirmePaneli", () => {
 
     expect(await screen.findByText("1. Ders")).toBeInTheDocument();
     expect(screen.getAllByText(/2\. Ders · sınav saati değil/).length).toBeGreaterThan(0);
+  });
+
+  it("uygulama sınavı ve kelebek olmayan sınav kısaltmayla değil açık rozetle görünür", async () => {
+    calApi.grid.mockResolvedValue(
+      makeGrid({
+        cells: {
+          "2026-10-27|1|9": [makeCell({ exam_kind: "PRACTICE", is_butterfly: false })],
+        },
+        unplaced: [],
+      }),
+    );
+    renderPanel();
+
+    // Ders adı yalın kalır; eski " [U]" / " (KD)" ekleri yok (docs/sozluk.md §2).
+    expect(await screen.findByText("Coğrafya")).toBeInTheDocument();
+    expect(screen.getByText("Uygulama")).toBeInTheDocument();
+    expect(screen.getByText("Kendi dersliğinde")).toBeInTheDocument();
+    expect(screen.queryByText(/\[U\]|\(KD\)/)).not.toBeInTheDocument();
+  });
+
+  it("yazılı kelebek sınavı (olağan durum) rozetsizdir", async () => {
+    calApi.grid.mockResolvedValue(
+      makeGrid({ cells: { "2026-10-27|1|9": [makeCell()] }, unplaced: [] }),
+    );
+    renderPanel();
+
+    expect(await screen.findByText("Coğrafya")).toBeInTheDocument();
+    expect(screen.queryByText("Uygulama")).not.toBeInTheDocument();
+    expect(screen.queryByText("Kendi dersliğinde")).not.toBeInTheDocument();
+  });
+
+  it("otomatik yerleştirme açıklaması dayanağı depodaki mevzuat adıyla verir", async () => {
+    const user = userEvent.setup();
+    calApi.grid.mockResolvedValue(makeGrid());
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: /Otomatik yerleştir/ }));
+    const secim = await screen.findByRole("dialog", { name: "Otomatik yerleştir" });
+    // Günlük sınav sınırının dayanağı ÖDY md. 5'tir; "OKY md. 45" depoda yok.
+    expect(
+      within(secim).getByText(/MEB Ölçme ve Değerlendirme\s+Yönetmeliği md\. 5/),
+    ).toBeInTheDocument();
+    expect(within(secim).queryByText(/OKY/)).not.toBeInTheDocument();
+  });
+
+  it("çizelge yüklenemezse hata canlı bölgede ve gerçek mesajla gösterilir", async () => {
+    calApi.grid.mockRejectedValue(new ApiError(500, "server_error", "Veritabanı kilitli."));
+    renderPanel();
+
+    const uyari = await screen.findByRole("alert");
+    expect(uyari).toHaveTextContent("Yerleştirme çizelgesi yüklenemedi. Veritabanı kilitli.");
   });
 });
