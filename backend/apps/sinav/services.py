@@ -442,6 +442,24 @@ def conflict_group_labels(keys: set[str] | frozenset[str]) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 # Sınav oturumu — yalnız TASLAK düzenlenebilir
 # ---------------------------------------------------------------------------
+def _ensure_no_attendance(session: ExamSession, action: str) -> None:
+    """Yoklaması alınmış oturumun yerleşimi değiştirilemez (A7, 18.09.2026).
+
+    Yoklama sınavdan SONRA alınır; o andan itibaren yerleşim sınavın yapıldığı
+    düzenin kaydıdır. Eskiden "onayı geri al → yeniden dağıt" yoklama kayıtlarını
+    eski salon/koltuk snapshot'ıyla canlı bırakıyor, aynı öğrenci yeni yerleşimde
+    "zaten işaretli" diye yeniden işaretlenemiyordu. Kayıtları sessizce silmek
+    yerine işlem reddedilir: idareci gerçekten istiyorsa önce kayıtları kaldırır.
+    """
+    count = ExamAttendanceRecord.objects.filter(session=session).count()
+    if count:
+        raise ValidationError(
+            f"Bu oturumda {count} yoklama kaydı var; yoklaması alınmış oturum {action}. "
+            "Yerleşim sınavın yapıldığı düzenin kaydıdır — gerçekten değiştirmek "
+            "gerekiyorsa önce Yoklama sekmesinden kayıtları kaldırın."
+        )
+
+
 def _ensure_draft(session: ExamSession) -> None:
     if not session.is_draft:
         raise ValidationError(
@@ -1006,6 +1024,7 @@ def distribute_session(
         raise ValidationError(
             f"Oturum '{session.get_status_display()}' durumunda; yeniden dağıtılamaz."
         )
+    _ensure_no_attendance(session, "yeniden dağıtılamaz")
 
     resolution = participants.resolve_session(session)
     if resolution.has_blocking_conflicts:
@@ -1370,6 +1389,7 @@ def revert_session_to_draft(session: ExamSession) -> ExamSession:
             f"Oturum '{session.get_status_display()}' durumunda; yalnız dağıtılmış oturum "
             "taslağa alınabilir."
         )
+    _ensure_no_attendance(session, "taslağa alınamaz")
     now = timezone.now()
     SeatAssignment.objects.filter(session=session).update(deleted_at=now)
     ProctorAssignment.objects.filter(session=session).update(deleted_at=now)

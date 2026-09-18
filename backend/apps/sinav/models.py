@@ -436,8 +436,10 @@ class SeatAssignment(BaseModel):
 
 class ExcuseStatus(models.TextChoices):
     PENDING = "PENDING", "Beklemede"
-    EXCUSED = "EXCUSED", "Özürlü"
-    UNEXCUSED = "UNEXCUSED", "Özürsüz"
+    # Mevzuat "mazeret" der (Yönerge md. 5/1-y); "özürlü" engellilik çağrışımı
+    # taşıdığından kullanılmaz (docs/sozluk.md).
+    EXCUSED = "EXCUSED", "Mazeretli"
+    UNEXCUSED = "UNEXCUSED", "Mazeretsiz"
 
 
 class ExamAttendanceRecord(BaseModel):

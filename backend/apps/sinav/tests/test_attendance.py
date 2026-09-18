@@ -103,6 +103,30 @@ def test_excuse_update_open_in_archive() -> None:
     assert updated.note == "Rapor no 123, 10.06.2026"
 
 
+def test_yoklamasi_alinmis_oturum_yeniden_dagitilamaz() -> None:
+    """A7: yoklama kaydı varken yerleşim değişmez (yeniden dağıtım / taslağa alma reddi).
+
+    Eskiden onayı geri al → yeniden dağıt, kayıtları eski salon/koltuk
+    snapshot'ıyla canlı bırakıyordu. Kayıtlar kaldırılınca işlem serbesttir.
+    """
+    session = _onayli_oturum()
+    assignment = SeatAssignment.objects.filter(session=session).order_by("seat_no").first()
+    assert assignment is not None
+    record = services.mark_absent(session, seat_assignment_id=assignment.pk)
+    session = services.reopen_session(session)
+
+    with pytest.raises(ValidationError, match="1 yoklama kaydı var"):
+        services.distribute_session(session, seed=7)
+    with pytest.raises(ValidationError, match="taslağa alınamaz"):
+        services.revert_session_to_draft(session)
+    # Ret hiçbir şeye dokunmaz: yerleşim ve kayıt yerinde.
+    assert SeatAssignment.objects.filter(pk=assignment.pk).exists()
+
+    record.delete()
+    session, _result, report = services.distribute_session(session, seed=7)
+    assert report.is_valid
+
+
 def test_mark_absent_foreign_assignment_rejected() -> None:
     """Başka oturumun/olmayan yerleşim kaydı reddedilir."""
     session = _onayli_oturum()
