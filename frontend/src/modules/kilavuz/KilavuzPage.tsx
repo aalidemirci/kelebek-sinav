@@ -659,8 +659,8 @@ export default function KilavuzPage() {
           <li>
             <strong>Koltuk, numarasıyla değil koordinatıyla saklanır.</strong> Numaralandırma yönünü
             değiştirmek kuralı bozmaz; ama salon planını değiştirip o koltuğu kaldırırsanız kural
-            “koltuk planda yok” hatası verir. Aynı koltuk iki kurala verilemez ve hedef salonda boş
-            koltuk kalmazsa dağıtım durur.
+            “Seçilen koltuk salonun planında yok” hatası verir. Aynı koltuk iki kurala verilemez ve
+            hedef salonda boş koltuk kalmazsa dağıtım durur.
           </li>
         </ul>
         <p>
@@ -725,7 +725,10 @@ export default function KilavuzPage() {
           başlığındaki <strong>“Yeniden dağıt”</strong> düğmesi ders, şube ve salon seçimine
           dokunmadan yerleşimi baştan kurar (dağıtım numarasını boş bırakırsanız yeni bir
           numarayla). Elle yaptığınız koltuk takasları ve gözetmen görevlendirmeleri sıfırlanır;
-          daha önce bastığınız evrakı ve ürettiğiniz kitapçıkları yeniden üretmeniz gerekir.
+          daha önce bastığınız evrakı ve ürettiğiniz kitapçıkları yeniden üretmeniz gerekir. Eski
+          kitapçık paketleri Sorular ve Kitapçıklar sekmesinde{" "}
+          <strong>“Eski yerleşime göre — yeniden üretin”</strong> uyarısıyla işaretlenir; koltuk
+          takasından sonra da aynı uyarı çıkar.
         </p>
         <p>
           Yanlış sınıf düzeyi, eksik şube ya da yanlış işaretlenmiş kitapçık kutusu gibi{" "}

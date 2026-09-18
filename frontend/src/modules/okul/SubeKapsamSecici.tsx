@@ -30,8 +30,8 @@ export const KAPSAM_SECENEKLERI = [
 
 /**
  * Bir girdinin katılımcı özeti — tablo hücresi ve rozetler için. Backend'in
- * `participant_label` alanı model seçenek etiketini ("Seviye geneli") taşır;
- * arayüz sözlüğe uyan metni tip + şube sayısından KENDİSİ üretir.
+ * `participant_label` alanı da aynı sözcükleri taşır (19.09.2026'dan beri); arayüz
+ * yine de metni tip + şube sayısından KENDİSİ üretir — tek kaynak bu dosyadır.
  */
 export function katilimciOzeti(participantType: string, sectionCount: number): string {
   return participantType === "SECTIONS" ? `${sectionCount} şube` : SINIF_DUZEYININ_TAMAMI;

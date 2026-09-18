@@ -92,9 +92,9 @@ export interface ExamCalendarEntryRow {
   /** SECTIONS kapsamında somut şube pk'leri — küme kimliği ASLA yazılmaz. */
   section_ids: number[];
   /**
-   * Backend'in kapsam etiketi — model seçenek adını taşır ("Seviye geneli").
-   * Arayüz bunu BASMAZ: sözlüğe uyan metni `okul/SubeKapsamSecici.katilimciOzeti`
-   * tip + şube sayısından üretir (backend etiketi sözlüğe çekilene dek).
+   * Backend'in kapsam etiketi ("Sınıf düzeyinin tamamı" / "3 şube"). Arayüz bunu
+   * BASMAZ: metni `okul/SubeKapsamSecici.katilimciOzeti` tip + şube sayısından
+   * üretir (tek kaynak); alan takvim PDF'i ve dış tüketiciler içindir.
    */
   participant_label: string;
   /** Kapsam ders havuzundaki tanımdan farklı mı (bilinçli istisna rozeti). */

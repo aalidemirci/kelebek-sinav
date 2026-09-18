@@ -334,7 +334,7 @@ export default function TakvimHavuzPaneli({
               // eskiden ancak girdiyi silip yeniden ekleyerek düzeliyordu.
               header: KATILIMCILAR_ETIKETI,
               cell: (e: ExamCalendarEntryRow) => {
-                // Metin tipten ÜRETİLİR (backend etiketi "Seviye geneli" der).
+                // Metin tipten ÜRETİLİR (tek kaynak: okul/SubeKapsamSecici).
                 const etiket = katilimciOzeti(e.participant_type, e.section_ids.length);
                 // Kapsamın KAYNAĞI ders havuzudur; buradaki değişiklik o
                 // takvime mahsus bir istisnadır ve rozetle görünür kalır
