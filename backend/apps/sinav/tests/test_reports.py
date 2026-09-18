@@ -168,6 +168,28 @@ def test_karma_seviyeli_oturumda_ders_adi_seviyeli_basilir() -> None:
         assert "Coğrafya — 10. Sınıf" in text, f"{code}: 10. sınıf etiketi yok"
 
 
+def test_r1_plan_degisince_dusen_ogrenci_bildirilir() -> None:
+    """A11: salon planı dağıtımdan SONRA değişirse kroki düşen öğrenciyi sessizce
+    yutmaz — lejant satırı uyarıya döner (editörden tekil plan değişikliği
+    bilinçli olarak serbesttir; körlemesine engel yok, görünür uyarı var)."""
+    session = _evrak_oturumu()
+    room = ExamSessionRoom.objects.filter(session=session).select_related("room")[0].room
+    temiz = " ".join(_pdf_text(services.render_session_report(session, "r1").content).split())
+    assert "DİKKAT:" not in temiz
+    assert "Numaralar ön cephenin sol başındaki sıradan başlar" in temiz  # masasız plan
+
+    services.update_exam_room(
+        room,
+        layout_plan={
+            "grid": {"rows": 1, "cols": 1},
+            "desks": [{"row": 0, "col": 0, "type": "DOUBLE"}],
+            "furniture": [],
+        },
+    )
+    bozuk = " ".join(_pdf_text(services.render_session_report(session, "r1").content).split())
+    assert "DİKKAT: 4 öğrencinin koltuğu güncel salon planında yok" in bozuk
+
+
 def test_r8_idareci_diliyle_yazilir() -> None:
     """R8'i okul müdürü imzalar: motor jargonu ve mevzuatta olmayan organ adı basılmaz."""
     session = _evrak_oturumu(seed=987654)

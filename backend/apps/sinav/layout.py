@@ -284,6 +284,19 @@ def reference_cell(plan: LayoutPlan) -> tuple[int, int]:
     return (0, 0)
 
 
+def reference_kind(plan: LayoutPlan) -> str | None:
+    """Odak hücresini VEREN mobilya türü; hiçbiri yoksa None (odak (0, 0)'a düşer).
+
+    Basılı krokinin "numaralar … başlar" lejandı bunu okur: salonda öğretmen
+    masası çizilmemişse "öğretmen masasına en yakın sıradan başlar" demek resmî
+    evrakta yanlış bilgi olurdu (`reference_cell` ile AYNI öncelik sırası).
+    """
+    for kind in _REFERENCE_PRIORITY:
+        if any(f.kind == kind for f in plan.furniture):
+            return kind
+    return None
+
+
 def _start_desk(plan: LayoutPlan, ref: tuple[int, int]) -> Desk:
     """Referansa en yakın aktif sıra (kural 2)."""
     return min(

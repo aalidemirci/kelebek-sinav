@@ -56,4 +56,11 @@ Değerler Python'da METİN olarak biçimlenir (TR locale ondalığı virgülle b
   </tr>
   {% endfor %}
 </table>
-<div class="kroki-legend">Salonun arka duvarı · Numaralar öğretmen masasına en yakın sıradan başlar</div>
+{% if room.unplaced_count %}
+{% comment %}Plan dağıtımdan sonra değişmiş: öğrenci sessizce düşmesin. Satır
+lejantın YERİNE basılır — yükseklik değişmez, sayfa bütçesi korunur.{% endcomment %}
+<div class="kroki-legend"><b>DİKKAT:</b> {{ room.unplaced_count }} öğrencinin koltuğu güncel salon
+  planında yok (plan dağıtımdan sonra değiştirilmiş) — yoklama listesi esastır; oturumu yeniden dağıtın.</div>
+{% else %}
+<div class="kroki-legend">Salonun arka duvarı · {{ room.numbering_legend }}</div>
+{% endif %}

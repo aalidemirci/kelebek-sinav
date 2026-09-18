@@ -241,6 +241,16 @@ def kroki_metrics(
     }
 
 
+#: Krokinin numaralandırma lejandı — odak mobilyasına göre (`layout.reference_kind`).
+#: Masa çizilmemiş salonda "öğretmen masasına en yakın" demek yanlış bilgi olurdu.
+_NUMBERING_LEGENDS: dict[str | None, str] = {
+    FurnitureKind.TEACHER_DESK: "Numaralar öğretmen masasına en yakın sıradan başlar",
+    FurnitureKind.BLACKBOARD: "Numaralar tahtaya en yakın sıradan başlar",
+    FurnitureKind.SMART_BOARD: "Numaralar akıllı tahtaya en yakın sıradan başlar",
+    None: "Numaralar ön cephenin sol başındaki sıradan başlar",
+}
+
+
 def build_room_kroki(
     sheet: RoomSheet,
     *,
@@ -263,6 +273,11 @@ def build_room_kroki(
     }
     desk_by_cell = {(d.row, d.col): d for d in plan.desks}
     furniture_by_cell = {(f.row, f.col): f for f in plan.furniture}
+    # Salon planı dağıtımdan SONRA değiştirilmişse (editörden tekil değişiklik
+    # bilinçli olarak serbesttir) bazı yerleşim koordinatları güncel planda
+    # karşılık bulamaz. Eskiden o öğrenciler krokiden SESSİZCE düşüyordu; artık
+    # sayılır ve lejant satırında açıkça bildirilir (A11, 18.09.2026).
+    unplaced_count = sum(1 for key in by_seat_key if key not in seat_no_by_key)
 
     grid: list[list[dict[str, object]]] = []
     for row in range(plan.rows):
@@ -300,6 +315,8 @@ def build_room_kroki(
         "col_width_pct": round(100.0 / plan.cols, 4),
         "student_count": len(sheet.rows),
         "capacity": plan.capacity,
+        "unplaced_count": unplaced_count,
+        "numbering_legend": _NUMBERING_LEGENDS[layout.reference_kind(plan)],
         "metrics": kroki_metrics(
             plan.rows,
             plan.cols,
