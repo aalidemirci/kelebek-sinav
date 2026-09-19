@@ -221,7 +221,13 @@
 - **`version_key` iki kopyadır** (`desktop/version.py`, `okul/services/updates.py`)
   ve AYNI kalmalıdır; ön-sürüm eki doğal sıralanır (`beta.10 > beta.9`).
 - **Mevzuat atfı depodaki metinden doğrulanır:** `docs/mevzuat/` (ÖDY, Yönerge,
-  OKY seçilmiş maddeler + atıf haritası). Yeni atıf eklerken önce metni ekleyin.
+  OKY seçilmiş maddeler + atıf haritası, KVKK 6698 seçilmiş maddeler + atıf
+  haritası). Yeni atıf eklerken önce metni ekleyin. Öğrenci fotoğrafı biyometrik
+  İŞLENMEDİĞİ için KVKK md. 5 kapsamındadır ve evrak dipnotlarındaki md. 5/2-ç
+  dayanağı buna bağlıdır: programa yüz tanıma, otomatik fotoğraf eşleştirme ya
+  da fotoğraftan özellik çıkarımı EKLENMEZ — eklenirse veri md. 6'ya girer ve
+  md. 5/2 şartlarının hiçbiri yetmez (gerekçe `docs/mevzuat/kvkk-6698.md`
+  "Değerlendirme notları").
 - **SQLite:** `levels__contains` yok (Python süzme); yedek daima
   `Connection.backup()` (dosya kopyalama WAL'de yasak).
 - **Kimlik sabitleri:** `KS_*` env, `ks_oturum`, `X-KS-Token`, `.ksbak`,
