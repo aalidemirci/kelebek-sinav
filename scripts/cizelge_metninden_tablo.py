@@ -59,8 +59,10 @@ _ETIKETLER = {
     "DİN, AHLAK VE DEĞER",
     "DEĞER",
     "KÜLTÜR, SANAT",
+    "KÜLTÜR, SANAT VE",
     "KÜLTÜR, SANAT VE SPOR",
     "VE SPOR",
+    "SPOR",
     "TEMEL İSLAM BİLİMLERİ",
     "ALAN DERSLERİ",
     "DAL DERSLERİ",
@@ -230,17 +232,31 @@ def tablolari_cikar(metin: str) -> list[Tablo]:
             ad, grup = _ad_ve_grup(ad_bolgesi)
             hucreler: dict[int, str] = {}
             uyari = ""
-            for m in CELL_RE.finditer(deger_bolgesi):
+            eslesmeler = list(CELL_RE.finditer(deger_bolgesi))
+            for m in eslesmeler:
                 merkez = int(sinir) + (m.start() + m.end()) / 2
                 seviye = min(sutunlar, key=lambda lv: abs(sutunlar[lv] - merkez))
                 if seviye in hucreler:
                     uyari = "aynı seviyeye iki hücre"
                 hucreler[seviye] = m.group(0)
+            if uyari and len(eslesmeler) == len(sutunlar):
+                # DYS dizgisi (TTK 2026/102-104): hücreler ayrı metin işlemleriyle çizilince
+                # düzen kipi onları SOLA sıkıştırıyor, konum eşlemesi çakışıyor. Her hücre
+                # yazılmışsa (boş = '-') SIRA kesin bilgidir; yine de not düşülür, teyit edilir.
+                sirali = sorted(sutunlar, key=lambda lv: sutunlar[lv])
+                hucreler = {lv: m.group(0) for lv, m in zip(sirali, eslesmeler, strict=True)}
+                uyari = "konum kaydı; hücreler sırayla eşlendi"
             if not ad:
-                if hucreler:
-                    uyari = "adsız satır (değer taşması?)"
-                else:
+                if not hucreler:
                     continue
+                onceki = tablo.satirlar[-1] if tablo.satirlar else None
+                if onceki is not None and onceki.ad and not onceki.hucreler:
+                    # Sol grup etiketi satırı bölmüş: ad üstte, değerleri bu satırda.
+                    onceki.hucreler = hucreler
+                    notlar = [onceki.uyari, uyari, "değerler alt satırdan alındı"]
+                    onceki.uyari = "; ".join(n for n in notlar if n)
+                    continue
+                uyari = "adsız satır (değer taşması?)"
             if grup and tr_upper(grup) not in _ETIKETLER:
                 uyari = (uyari + "; " if uyari else "") + f"bilinmeyen sol etiket: {grup!r}"
             tablo.satirlar.append(Satir(sayfa_no, grup, ad, hucreler, bolum, uyari))

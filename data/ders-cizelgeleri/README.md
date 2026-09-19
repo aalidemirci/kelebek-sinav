@@ -138,9 +138,12 @@ Program Uygulayan Fen/SBL (2025/24-25; ÖP SBL nüshası "TASLAK" ibareli).
 
 ## Yeni çizelge nasıl eklenir
 
-1. Kaynak PDF'i `data/raw/` altına koy (git dışı), metnini çıkar:
-   `docker compose run --rm backend python -c "…pypdf extract_text(extraction_mode='layout')…"`
-   (döndürülmüş tablo — MTAL ÇÖP'leri — için `extract_text(orientations=(0,90,180,270))`).
+1. Kaynak PDF'i `data/raw/` altına koy (git dışı; ad kalıbı
+   `ttkb-<yıl>-<karar sayısı>-<konu>.pdf`), metnini çıkar:
+   `docker compose run --rm backend python /repo/scripts/cizelge_pdf_metni.py /repo/data/raw/<dosya>.pdf`
+   (`<dosya>.txt` yanına yazılır; döndürülmüş tablo — MTAL ÇÖP'leri — için
+   `--dondurulmus`). `data/raw/` git dışı olduğundan worktree'de YOKTUR: ana
+   deponun dizini `-v <ana depo>/data/raw:/repo/data/raw` ile bağlanır.
 2. `docker compose run --rm backend python /repo/scripts/cizelge_metninden_tablo.py <txt> --md`
    taslağını al; satırları kaynakla karşılaştır, adları kanonik yaz, sınav
    sütununu kürasyon notlarıyla doldur, meta bloğunu ve dayanağı ekle.
@@ -150,3 +153,28 @@ Program Uygulayan Fen/SBL (2025/24-25; ÖP SBL nüshası "TASLAK" ibareli).
 
 `ders-adi-takma-adlari.md` katalog değildir: e-Okul yazımlarını kanonik ada
 bağlayan seed takma adlarıdır (`ensure_course_aliases`).
+
+## Aktarım tuzakları (19.09.2026, TTK 2026/102-104'te yaşandı)
+
+- **Yeni karar = yeni dosya.** Var olan bir çizelgenin yeni kararı "Program
+  dosyaları" bölümündeki kurala göre YENİ dosyadır; gerçek dosya testi
+  (`test_catalog_programs.py`) yeni yürürlüğe göre güncellenir.
+- **"Metin yok" göründü diye taranmış sanmayın.** 09.2026'dan itibaren TTKB
+  PDF'leri DYS çıktısıdır: özgün sayfa tek bir Form XObject'e sarılı, sayfanın
+  kendi akışında yalnız çapraz indirme filigranı (rakam dizisi) var. pypdf'in
+  düzen kipi forma inmez ve yalnız filigranı döker. `cizelge_pdf_metni.py` bunu
+  kendisi çözer ("DYS sarmalı" satırını basar); gerçekten taranmış PDF'te
+  "harf çıkmadı" uyarısı verir.
+- **Bağlantı değişti ≠ yeniden dizgi.** TTKB listesinde bir çizelgenin adresi
+  değiştiyse önce karar sayfasına (s. 1: Sayı, Tarih, "Önceki Kararın Tarih ve
+  Sayısı", yürürlük cümlesi) bakın; 2026'da Spor bağlantıları yeni KARARA
+  (2026/102-103) çıktı, eski adresler de yayında kaldı.
+- **Taslak betiği yardımcıdır, hakem değil.** DYS dizgisinde düzen kipi bazı
+  satırların hücrelerini sola sıkıştırır; betik çakışmayı görünce ve satırda
+  sütun sayısı kadar hücre varsa hücreleri SIRAYLA eşler ("konum kaydı" notu),
+  sol grup etiketinin böldüğü satırı birleştirir ("değerler alt satırdan
+  alındı" notu). Notlu her satır kaynakla tek tek karşılaştırılır. Sağlama:
+  ORTAK bloktaki hücrelerin sütun toplamı çizelgenin kendi "Ortak Ders Saati
+  Toplamı" satırını vermelidir (2026/102-103'te 37-37-35-31) — tutmuyorsa bir
+  ortak ders satırı kaçmış ya da kaymıştır. Seçmelilerde toplam yoktur; orada
+  güvence her satırın sütun sayısı kadar hücre taşımasıdır (boş hücre "-").
