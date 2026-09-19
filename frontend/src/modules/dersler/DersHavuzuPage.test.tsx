@@ -13,7 +13,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../lib/api";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
-import type { Course, CourseSectionOffering, CourseSectionOfferingRow } from "./api";
+import type {
+  Course,
+  CourseEnrollmentSection,
+  CourseSectionOffering,
+  CourseSectionOfferingRow,
+  EnrollmentCountRow,
+} from "./api";
 
 const dersler = vi.hoisted(() => ({
   listCourses: vi.fn(),
@@ -68,6 +74,16 @@ const dersler = vi.hoisted(() => ({
     }),
   ),
   resyncCatalog: vi.fn(),
+  // Seçmeli ders öğrenci listeleri (19.09.2026): varsayılan "hiç liste yok".
+  enrollmentCounts: vi.fn((): Promise<{ school_year: number; results: EnrollmentCountRow[] }> =>
+    Promise.resolve({ school_year: 1, results: [] }),
+  ),
+  courseEnrollments: vi.fn(
+    (): Promise<{ school_year: number; sections: CourseEnrollmentSection[] }> =>
+      Promise.resolve({ school_year: 1, sections: [] }),
+  ),
+  previewEnrollmentImport: vi.fn(),
+  commitEnrollmentImport: vi.fn(),
 }));
 
 const okul = vi.hoisted(() => ({
@@ -87,6 +103,27 @@ const okul = vi.hoisted(() => ({
     ]),
   ),
   listClassSectionGroups: vi.fn(() => Promise.resolve([])),
+  // Öğrenci listesi diyaloğu şubenin aktif öğrencilerini sorar (uydurma kişiler).
+  listStudents: vi.fn(() =>
+    Promise.resolve({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [
+        {
+          id: 41,
+          first_name: "Deniz",
+          last_name: "Deneme",
+          full_name: "Deniz Deneme",
+          student_number: "501",
+          class_level: 9,
+          class_section: "A",
+          class_label: "9/A",
+          status: "ACTIVE",
+        },
+      ],
+    }),
+  ),
 }));
 
 vi.mock("./api", async (importActual) => {
@@ -413,5 +450,90 @@ describe("DersHavuzuPage", () => {
     const dialog = await screen.findByRole("dialog", { name: "Almanca — şubeler" });
     expect(await within(dialog).findByLabelText("Almanca 9. Sınıf: 9/B")).toBeChecked();
     expect(within(dialog).getByLabelText("Almanca 9. Sınıf: 9/A")).not.toBeChecked();
+  });
+
+  it("Şubeler sütunu öğrenci listeli şubeyi sayısıyla yazar (“9: A (14), B”)", async () => {
+    dersler.listCourses.mockResolvedValue([
+      ders({ id: 2, name: "Kur'an-ı Kerim", course_type: "ELECTIVE" }),
+    ]);
+    dersler.sectionOfferings.mockResolvedValue({
+      school_year: 1,
+      results: [{ course: 2, level: 9, section_ids: [1, 2] }],
+    });
+    dersler.enrollmentCounts.mockResolvedValue({
+      school_year: 1,
+      results: [{ course: 2, section: 1, count: 14 }],
+    });
+
+    renderPage();
+
+    const dugme = await screen.findByRole("button", {
+      name: "Kur'an-ı Kerim dersinin şubelerini düzenle",
+    });
+    await waitFor(() => expect(dugme).toHaveTextContent("9: A (14), B"));
+  });
+
+  it("şube penceresi listeli şubeyi ayırır; “Öğrenciler” seçiciyi pencerenin YERİNE açar", async () => {
+    const user = userEvent.setup();
+    const kuran = ders({ id: 2, name: "Kur'an-ı Kerim", course_type: "ELECTIVE", levels: [9] });
+    dersler.listCourses.mockResolvedValue([kuran]);
+    dersler.sectionOfferings.mockResolvedValue({
+      school_year: 1,
+      results: [{ course: 2, level: 9, section_ids: [1, 2] }],
+    });
+    dersler.courseSections.mockResolvedValue({
+      school_year: 1,
+      offerings: [{ level: 9, section_ids: [1, 2] }],
+    });
+    dersler.courseEnrollments.mockResolvedValue({
+      school_year: 1,
+      sections: [{ section_id: 1, student_ids: [41] }],
+    });
+
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: "Kur'an-ı Kerim dersinin şubelerini düzenle" }),
+    );
+
+    const kapsam = await screen.findByRole("dialog", { name: "Kur'an-ı Kerim — şubeler" });
+    const liste = within(
+      await within(kapsam).findByRole("list", { name: "9. Sınıf şubelerinde öğrenciler" }),
+    );
+    expect(await liste.findByText("1 öğrenci (şubenin bir kısmı)")).toBeInTheDocument();
+    expect(liste.getByText("şubenin tamamı")).toBeInTheDocument();
+
+    await user.click(liste.getByRole("button", { name: "9/A şubesinde bu dersi alan öğrenciler" }));
+    // İç içe diyalog YOK: Esc ve odak tuzağı çakışırdı — şube penceresi kapanır.
+    const secici = await screen.findByRole("dialog", { name: "Kur'an-ı Kerim — 9/A öğrencileri" });
+    expect(
+      screen.queryByRole("dialog", { name: "Kur'an-ı Kerim — şubeler" }),
+    ).not.toBeInTheDocument();
+    expect(await within(secici).findByRole("checkbox", { name: "501 Deniz Deneme" })).toBeChecked();
+
+    await user.click(within(secici).getByRole("button", { name: "Vazgeç" }));
+    // Geri dönünce şube penceresi kaydedilmemiş seçimiyle yeniden görünür.
+    const geri = await screen.findByRole("dialog", { name: "Kur'an-ı Kerim — şubeler" });
+    expect(within(geri).getByLabelText("Kur'an-ı Kerim 9. Sınıf: 9/B")).toBeChecked();
+  });
+
+  it("“e-Okul'dan seçmeli öğrencileri aktar” aktarım penceresini açar", async () => {
+    const user = userEvent.setup();
+    dersler.listCourses.mockResolvedValue([ders()]);
+
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: "e-Okul'dan seçmeli öğrencileri aktar" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "e-Okul'dan seçmeli ders öğrencilerini aktar",
+    });
+    expect(within(dialog).getByText("OOK10002R010 - Seçmeli Ders Öğrencileri")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Vazgeç" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "e-Okul'dan seçmeli ders öğrencilerini aktar" }),
+      ).not.toBeInTheDocument(),
+    );
   });
 });

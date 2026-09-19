@@ -22,7 +22,7 @@ import calendar as _calmod
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -43,6 +43,9 @@ from apps.sinav.models import (
     ExamTrackMarkStatus,
     ParticipantType,
 )
+
+if TYPE_CHECKING:
+    from apps.dersler.selectors import EnrollmentIndex
 
 # Varsayılan açıklama metni (PDF bunu basar; create sırasında kopyalanır).
 # "AÇIKLAMALAR" başlığı metnin İÇİNDE DEĞİL: şablon bölüm başlığını kendisi basar
@@ -894,13 +897,29 @@ def _external_authority_clash(entry: ExamCalendarEntry, on_date: date) -> bool:
     return same_day.filter(authority=ExamAuthority.SCHOOL).exists()
 
 
-def _scope_overlaps(a: ExamCalendarEntry, b: ExamCalendarEntry) -> bool:
+def _calendar_enrollment_index(calendar: ExamCalendar) -> EnrollmentIndex:
+    """Takvimin ders yılındaki seçmeli ders öğrenci listeleri (tek sorgu)."""
+    from apps.dersler import selectors as ders_selectors
+
+    return ders_selectors.enrollment_index(calendar.semester.school_year_id)
+
+
+def _scope_overlaps(
+    a: ExamCalendarEntry, b: ExamCalendarEntry, index: EnrollmentIndex | None = None
+) -> bool:
     """İki girdinin ÖĞRENCİ kapsamı kesişiyor mu?
 
     Seviye farklıysa kesişmez (şube seviyeye aittir). En az biri seviye geneli
     (LEVEL) ise kesişir. İkisi de şube kapsamlıysa şube pk kümeleri kesişimine
     bakılır — 9/A'nın Almancası ile 9/B'nin Fransızcası AYNI SAATE konabilir,
     ikisi de 9/A'yı içeriyorsa konamaz.
+
+    Seçmeli ders öğrenci listesi (19.09.2026, `dersler.CourseEnrollment`)
+    ortak şubede soruyu ÖĞRENCİYE indirir: 9/A'nın bir grubu Kur'an-ı Kerim,
+    kalanı Peygamberimizin Hayatı alıyorsa iki sınav AYNI SAATE konabilir —
+    iki liste ayrık olduğu sürece. Listesiz şube "şubenin tamamı"dır ve
+    öbür dersin o şubedeki her öğrencisini kapsar (kesişir). `index` verilmezse
+    eski davranış (şube kesişimi yeter).
 
     Bu, `_daily_exam_load`un GEVŞETİLMESİ DEĞİLDİR (ADR-0044 karar 13, risk #4):
     orada soru "öğrenci o gün kaç sınava girer" ve ders kaydı bilinmediği için
@@ -915,11 +934,43 @@ def _scope_overlaps(a: ExamCalendarEntry, b: ExamCalendarEntry) -> bool:
         or b.participant_type != ParticipantType.SECTIONS
     ):
         return True
-    return bool({int(x) for x in a.section_ids or []} & {int(x) for x in b.section_ids or []})
+    ortak = {int(x) for x in a.section_ids or []} & {int(x) for x in b.section_ids or []}
+    if not ortak or index is None:
+        return bool(ortak)
+    for sid in ortak:
+        liste_a = index.members(a.course_id, sid)
+        liste_b = index.members(b.course_id, sid)
+        if liste_a is None or liste_b is None:
+            return True  # en az biri şubenin tamamı → öbürünün listesini kapsar
+        if liste_a & liste_b:
+            return True
+    return False
+
+
+def _shared_student_count(
+    a: ExamCalendarEntry, b: ExamCalendarEntry, index: EnrollmentIndex
+) -> int | None:
+    """İki şube kapsamlı girdinin listelerle BİLİNEN ortak öğrenci sayısı (yoksa None)."""
+    if (
+        a.participant_type != ParticipantType.SECTIONS
+        or b.participant_type != ParticipantType.SECTIONS
+    ):
+        return None
+    toplam = 0
+    for sid in {int(x) for x in a.section_ids or []} & {int(x) for x in b.section_ids or []}:
+        liste_a = index.members(a.course_id, sid)
+        liste_b = index.members(b.course_id, sid)
+        if liste_a is None or liste_b is None:
+            return None
+        toplam += len(liste_a & liste_b)
+    return toplam or None
 
 
 def _slot_clash(
-    entry: ExamCalendarEntry, on_date: date, period_no: int
+    entry: ExamCalendarEntry,
+    on_date: date,
+    period_no: int,
+    index: EnrollmentIndex | None = None,
 ) -> ExamCalendarEntry | None:
     """Aynı gün + saatte kapsamı kesişen başka girdi (varsa ilki)."""
     rakipler: QuerySet[ExamCalendarEntry] = (
@@ -930,19 +981,24 @@ def _slot_clash(
         .select_related("course")
     )
     for rakip in rakipler:
-        if _scope_overlaps(entry, rakip):
+        if _scope_overlaps(entry, rakip, index):
             return rakip
     return None
 
 
-def _entry_student_count(entry: ExamCalendarEntry, roster_counts: dict[int, int]) -> int:
+def _entry_student_count(
+    entry: ExamCalendarEntry,
+    roster_counts: dict[int, int],
+    index: EnrollmentIndex | None = None,
+) -> int:
     """Girdinin sınava girecek öğrenci sayısı — kapsam bazlı, yalnız SAYIM.
 
     Şube kapsamlı girdide şube sayımları toplanır; seviye genelinde seviyenin
-    aktif mevcudu. Ders kayıt verisi olmadığından seçmeli dersin kapsamı
-    "o şubelerin tamamı" sayılır (salon planlamasında ihtiyatlı taraf).
+    aktif mevcudu. Seçmeli dersin şubesinde öğrenci listesi varsa o şube
+    listedeki (hâlâ şubede olan) öğrenci kadar sayılır; listesiz şube tamamıyla
+    (salon planlamasında ihtiyatlı taraf).
     """
-    sections = _section_scope_groups(entry)
+    sections = _section_scope_groups(entry, index)
     if sections is not None:
         return sum(n for _, n in sections)
     return int(roster_counts.get(int(entry.level), 0))
@@ -963,6 +1019,7 @@ def _slot_student_total(
     *,
     roster_counts: dict[int, int],
     extra: ExamCalendarEntry | None = None,
+    index: EnrollmentIndex | None = None,
 ) -> int:
     """Bir slotta aynı anda sınava girecek toplam öğrenci (tüm seviyeler)."""
     yerlesik = ExamCalendarEntry.objects.filter(
@@ -970,9 +1027,9 @@ def _slot_student_total(
     )
     if extra is not None:
         yerlesik = yerlesik.exclude(pk=extra.pk)
-    toplam = sum(_entry_student_count(other, roster_counts) for other in yerlesik)
+    toplam = sum(_entry_student_count(other, roster_counts, index) for other in yerlesik)
     if extra is not None:
-        toplam += _entry_student_count(extra, roster_counts)
+        toplam += _entry_student_count(extra, roster_counts, index)
     return toplam
 
 
@@ -1000,13 +1057,18 @@ def place_entry(
 
     # Aynı anda iki salonda bulunulamaz: kapsamı kesişen iki sınav aynı gün +
     # saate KONAMAZ. Bu, üç kanallı uyarı deseninin istisnasıdır — "zorunlu hâl
-    # takdiri" diye bir yorumu yok, fiziksel imkânsızlık.
-    clash = _slot_clash(entry, on_date, period_no)
+    # takdiri" diye bir yorumu yok, fiziksel imkânsızlık. Seçmeli ders öğrenci
+    # listeleri ortak şubede soruyu öğrenciye indirir (`_scope_overlaps`).
+    kayit_index = _calendar_enrollment_index(entry.calendar)
+    clash = _slot_clash(entry, on_date, period_no, kayit_index)
     if clash is not None:
+        # "Ortak" MEB'de okul geneli sınavdır (docs/sozluk.md) — burada kullanılmaz.
+        iki_dersli = _shared_student_count(entry, clash, kayit_index)
+        neden = f"{iki_dersli} öğrenci iki dersi de alıyor" if iki_dersli else "kapsamlar kesişiyor"
         raise ValidationError(
             {
                 "period_no": f"Bu gün ve saatte {_level_display(entry.level)} için "
-                f"{clash.course.name} sınavı var; kapsamlar kesişiyor — aynı "
+                f"{clash.course.name} sınavı var; {neden} — aynı "
                 "öğrenci iki sınava aynı anda giremez."
             }
         )
@@ -1077,6 +1139,7 @@ def place_entry(
             period_no,
             roster_counts=okul_selectors.active_student_counts_by_level(),
             extra=entry,
+            index=kayit_index,
         )
         if mevcut > kapasite:
             warnings.append(
@@ -1228,11 +1291,14 @@ def auto_place_entries(calendar: ExamCalendar, *, mode: str = AUTO_MODE_FILL) ->
     # --- Bellek içi durum (skorlama için; doğrulama yine place_entry'de) ---
     roster_counts = okul_selectors.active_student_counts_by_level()
     kapasite = _total_room_capacity()
+    # Seçmeli ders öğrenci listeleri BİR KEZ yüklenir (her aday × slot denemesi
+    # `_scope_overlaps` çağırır); `place_entry` kendi dizinini ayrıca kurar.
+    kayit_index = _calendar_enrollment_index(calendar)
     mevcut_onbellek: dict[int, int] = {}
 
     def mevcut_of(entry: ExamCalendarEntry) -> int:
         if entry.pk not in mevcut_onbellek:
-            mevcut_onbellek[entry.pk] = _entry_student_count(entry, roster_counts)
+            mevcut_onbellek[entry.pk] = _entry_student_count(entry, roster_counts, kayit_index)
         return mevcut_onbellek[entry.pk]
 
     slot_girdileri: dict[tuple[date, int], list[ExamCalendarEntry]] = {}
@@ -1279,7 +1345,10 @@ def auto_place_entries(calendar: ExamCalendar, *, mode: str = AUTO_MODE_FILL) ->
         for slot_sira, (gun, saat) in enumerate(slotlar):
             seviye_gun = (gun, int(aday.level))
             # SERT ELEME — kapsamı kesişen sınav aynı saatte olamaz.
-            if any(_scope_overlaps(aday, other) for other in slot_girdileri.get((gun, saat), ())):
+            if any(
+                _scope_overlaps(aday, other, kayit_index)
+                for other in slot_girdileri.get((gun, saat), ())
+            ):
                 continue
             # SERT ELEME — üst makam sınavı olan gün+seviye (Yönerge md. 5).
             if seviye_gun in ust_makam_gunleri:
@@ -1513,22 +1582,33 @@ def calendar_validation(calendar: ExamCalendar) -> dict[str, list[str]]:
 
     # Aynı anda iki sınav: `place_entry` bunu artık reddeder, ama denetim BURADA
     # da durur — kural konmadan önce kurulmuş takvimlerde (ve şube kapsamı
-    # sonradan genişletilen girdilerde) çakışma sessiz kalmasın.
+    # sonradan genişletilen girdilerde) çakışma sessiz kalmasın. Öğrenci listesi
+    # yerleştirmeden SONRA değişirse (e-Okul yeniden aktarıldı) iki seçmeli
+    # artık kesişebilir — bu denetim onu da yakalar.
+    kayit_index = _calendar_enrollment_index(calendar)
     for (gun, saat), slot_girdileri in sorted(per_slot.items()):
         for i, birinci in enumerate(slot_girdileri):
             for ikinci in slot_girdileri[i + 1 :]:
-                if _scope_overlaps(birinci, ikinci):
+                if _scope_overlaps(birinci, ikinci, kayit_index):
+                    iki_dersli = _shared_student_count(birinci, ikinci, kayit_index)
+                    neden = (
+                        f"{iki_dersli} öğrenci iki dersi de alıyor"
+                        if iki_dersli
+                        else "kapsamları kesişiyor"
+                    )
                     errors.append(
                         f"{_level_display(birinci.level)} {gun} {saat}. ders: "
                         f"{birinci.course.name} ile {ikinci.course.name} aynı saatte "
-                        "ve kapsamları kesişiyor — aynı öğrenci iki sınava giremez."
+                        f"ve {neden} — aynı öğrenci iki sınava giremez."
                     )
 
     kapasite = _total_room_capacity()
     if kapasite > 0:
         roster_counts = okul_selectors.active_student_counts_by_level()
         for (gun, saat), slot_girdileri in sorted(per_slot.items()):
-            mevcut = sum(_entry_student_count(e, roster_counts) for e in slot_girdileri)
+            mevcut = sum(
+                _entry_student_count(e, roster_counts, kayit_index) for e in slot_girdileri
+            )
             if mevcut > kapasite:
                 warnings.append(
                     f"{gun} {saat}. ders: aynı saatte {mevcut} öğrenci sınava giriyor, "
@@ -1581,17 +1661,18 @@ def _daily_exam_load(
 
     Dönüş (max_yuk, etkilenen): etkilenen = en yüksek yüke ulaşan öğrenci sayısı.
     KAYIT VERİSİ OLMAYAN ders seviyenin TAMAMINI kapsar sayılır (konservatif —
-    ADR-0044 karar 13; risk #4: GEVŞETİLEMEZ). KS v1'de ders kayıt verisi hiç
-    olmadığından `course_level_student_ids` hep boş döner → yük fiilen o günkü
-    ders sayısıdır; algoritma OYS ile birebir korunur (veri gelirse dolar).
+    ADR-0044 karar 13; risk #4: GEVŞETİLEMEZ). Kayıt verisi 19.09.2026'dan beri
+    seçmeli ders öğrenci listesidir: `course_level_student_ids` yalnız dersin
+    bütün kapsam şubelerinde liste varken küme döner, aksi hâlde boş (bilinmiyor)
+    → o ders herkesin yüküne eklenir; algoritma OYS ile birebir korunur.
 
     DEĞİŞMEZ — takvim girdisine ŞUBE KAPSAMI (`section_ids`) gelmesi bu hesabı
     GEVŞETMEZ: kapsam verisi "hangi şubeler sınava girer"i söyler, "hangi
     ÖĞRENCİ o derse kayıtlı"yı değil. Seçmeli dersin kapsamı 9/A ile 9/B olsa
     bile o şubelerdeki her öğrencinin dersi seçtiği bilinmez; yükü şube
     kesişimine indirmek, aynı gün üç sınava giren öğrenciyi görünmez kılardı.
-    Ders kayıt verisi geldiğinde dolacak yer `course_level_student_ids`'tir —
-    burası değil (ADR-0044 karar 13, risk #4).
+    Ders kayıt verisinin girdiği yer `course_level_student_ids`'tir (tam liste
+    kuralı orada) — burası değil (ADR-0044 karar 13, risk #4).
     """
     from apps.dersler import selectors as ders_selectors
 
@@ -1632,13 +1713,30 @@ def _section_student_count(class_level: int, class_section: str) -> int:
     return rows.count() if isinstance(rows, QuerySet) else len(rows)
 
 
-def _section_scope_groups(entry: ExamCalendarEntry) -> list[tuple[str, int]] | None:
+def _listed_student_count(members: frozenset[int], class_level: int, class_section: str) -> int:
+    """Listedeki öğrencilerden HÂLÂ o şubede ve aktif olanların SAYISI (yalnız COUNT)."""
+    from apps.okul.models import Student, StudentStatus
+
+    return int(
+        Student.objects.filter(
+            pk__in=members,
+            status=StudentStatus.ACTIVE,
+            class_level=class_level,
+            class_section=class_section,
+        ).count()
+    )
+
+
+def _section_scope_groups(
+    entry: ExamCalendarEntry, index: EnrollmentIndex | None = None
+) -> list[tuple[str, int]] | None:
     """ŞUBE kapsamlı girdinin (etiket, sayı) kırılımı; kapsam yoksa None.
 
-    Ders kayıt verisi HÂLÂ YOK (`course_level_student_ids` boş döner), ama
-    kapsam artık girdinin KENDİ şube listesinde duruyor — önizleme onu sayar.
-    Silinmiş/bulunamayan şube atlanır: `get_class_section` soft-delete
-    süzgeçlidir ve önizlemenin uyarı kanalı yoktur (dipnot sayıyı gösterir).
+    Kapsam girdinin KENDİ şube listesinde durur — önizleme onu sayar. Şubede
+    seçmeli dersin öğrenci listesi varsa (`index`) o şube listedeki, hâlâ
+    şubede olan öğrenci kadar sayılır; listesiz şube tamamıyla. Silinmiş/
+    bulunamayan şube atlanır: `get_class_section` soft-delete süzgeçlidir ve
+    önizlemenin uyarı kanalı yoktur (dipnot sayıyı gösterir).
     """
     if entry.participant_type != ParticipantType.SECTIONS or not entry.section_ids:
         return None
@@ -1647,12 +1745,13 @@ def _section_scope_groups(entry: ExamCalendarEntry) -> list[tuple[str, int]] | N
         section = okul_selectors.get_class_section(int(sid))
         if section is None:
             continue
-        groups.append(
-            (
-                section.class_label,
-                _section_student_count(section.class_level, section.class_section),
-            )
+        uyeler = index.members(entry.course_id, int(section.pk)) if index is not None else None
+        sayi = (
+            _listed_student_count(uyeler, section.class_level, section.class_section)
+            if uyeler is not None
+            else _section_student_count(section.class_level, section.class_section)
         )
+        groups.append((section.class_label, sayi))
     return groups
 
 
@@ -1661,9 +1760,10 @@ def entry_participant_preview(calendar: ExamCalendar) -> dict[int, dict[str, Any
     from apps.dersler import selectors as ders_selectors
 
     on_date = calendar.start_date
+    kayit_index = _calendar_enrollment_index(calendar)
     result: dict[int, dict[str, Any]] = {}
     for entry in ExamCalendarEntry.objects.filter(calendar=calendar).select_related("course"):
-        sections = _section_scope_groups(entry)
+        sections = _section_scope_groups(entry, kayit_index)
         if sections is not None:
             # ŞUBE kapsamı: sayım girdinin şube listesinden gelir; `whole`
             # False'tur — "seviyenin tamamı" DEĞİL, seçilen şubelerdir.

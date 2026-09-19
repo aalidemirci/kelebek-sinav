@@ -244,6 +244,47 @@ export default function KilavuzPage() {
           işaretiyle görünür. Bu tanım ders yılına özeldir: yeni ders yılında yeniden girilir
           (şubeler her yıl yeniden kurulduğu için eski seçim taşınmaz).
         </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Seçmeli dersi şubenin bir kısmı alıyorsa: öğrenci listesi
+        </h3>
+        <p>
+          Bir şubedeki öğrencilerin hepsi aynı seçmeliyi almayabilir; örneğin 9/A ve 9/B'de bir grup
+          Kur'an-ı Kerim, bir grup Peygamberimizin Hayatı dersini alır. Böyle bir derste şubeyi
+          işaretlemek yetmez: program şubenin tamamını o dersin öğrencisi sayar, iki dersi aynı
+          oturuma koyduğunuzda her öğrenci iki derse düşer ve dağıtım durur. Dersi{" "}
+          <strong>alan öğrencileri</strong> girdiğinizde sınav oturumu her öğrenciyi yalnız kendi
+          dersine alır, kitapçığını kendi dersinin sorularıyla basar ve salon evrakındaki ders
+          sayıları doğru çıkar. Öğrencileri ayrık iki seçmeli takvimde aynı ders saatine de
+          konabilir.
+        </p>
+        <p>
+          En kısa yol e-Okul'dur: e-Okul'da <strong>Öğrenci Seçmeli Derslerini Belirle</strong>{" "}
+          ekranının <strong>Raporlar</strong> menüsünden{" "}
+          <strong>OOK10002R010 - Seçmeli Ders Öğrencileri</strong> raporunu <strong>PDF</strong>{" "}
+          olarak kaydedin (aynı raporun Excel çıktısında ders adları bulunmaz). Sonra{" "}
+          <Ekran to="/dersler">Ders Havuzu</Ekran> ekranının üstündeki{" "}
+          <strong>“e-Okul'dan seçmeli öğrencileri aktar”</strong> düğmesiyle dosyayı seçin, önce{" "}
+          <strong>Önizle</strong> — hangi e-Okul dersinin havuzdaki hangi derse eşleştiğini ve kaç
+          öğrencinin geleceğini görürsünüz — sonra <strong>Aktar</strong>. Raporun kapsadığı
+          şubelerde her dersin bu yılki öğrenci listesi ve şubeleri yenilenir; raporda olmayan
+          derslere ve şubelere dokunulmaz, yani raporu tek bir sınıf düzeyi için de alabilirsiniz.
+          Öğrenciler okul numarasıyla eşleştiği için önce öğrenci listesini (3. adım) güncelleyin;
+          nakil gelen öğrenci de e-Okul'da seçmelisi girilip rapor yeniden aktarılınca listeye
+          girer.
+        </p>
+        <p>
+          Elle düzeltmek için dersin <strong>“Şubeler”</strong> penceresinde şubenin yanındaki{" "}
+          <strong>Öğrenciler</strong> düğmesine basın: <em>Şubenin tamamı bu dersi alıyor</em> ya da{" "}
+          <em>Yalnız işaretlenen öğrenciler alıyor</em>. İşaretlemediğiniz öğrencileri aynı adımda
+          başka bir seçmeliye (örneğin Peygamberimizin Hayatı) yazabilirsiniz. Listesi girilmiş
+          şubeler “Şubeler” sütununda öğrenci sayısıyla görünür (“9: A (14), B”).
+        </p>
+        <Ipucu>
+          Liste dağıtımdan sonra değişirse (e-Okul'u yeniden aktardınız ya da bir öğrencinin dersi
+          değişti) yerleşim ve kitapçıklar eski listeye göre kalır. Oturum sayfası bunu bir uyarı
+          bandıyla söyler; oturumu yeniden dağıtın.
+        </Ipucu>
         <Ipucu>
           <strong>Önce havuzu okulunuza göre sadeleştirin.</strong> Okulunuzda okutulmayan dersleri
           havuzda <strong>pasif</strong> yapın (satırın sağındaki “Pasifleştir”); pasif ders takvim
@@ -452,10 +493,17 @@ export default function KilavuzPage() {
           <strong>katılımcıları kesişen</strong> iki sınav koymanızı kabul etmez. Katılımcılar
           kesişmiyorsa — örneğin 9/A'nın Almanca, 9/B'nin Fransızca sınavı — aynı saatte yan yana
           yapılabilir. Sınıf düzeyinin tamamına yapılan bir sınav o düzeydeki her şubeyle kesişir.
+          Aynı şubede iki seçmeli de aynı saate konabilir: iki dersin öğrenci listesi girilmişse ve
+          iki dersi birden alan öğrenci yoksa (9/A'nın bir grubu Kur'an-ı Kerim, kalanı
+          Peygamberimizin Hayatı). Böyle öğrenci varsa program kaç öğrenci olduğunu söyleyerek
+          reddeder; listesi girilmemiş şube “şubenin tamamı” sayılır.
         </p>
         <p>
-          Bu, günlük sınav sayısı hesabını <em>gevşetmez</em>: bir şubenin seçmeli dersi aldığını
-          bilmek, o şubedeki her öğrencinin aldığını göstermez. Günlük yük sayımı ihtiyatlı kalır.
+          Günlük sınav sayısı hesabı ise yalnız <em>tam</em> listeye güvenir: bir seçmelinin o sınıf
+          düzeyindeki bütün şubelerinde öğrenci listesi varsa sayım listedeki öğrencilere göre
+          yapılır; tek bir şubesi listesizse ders o düzeydeki herkesin yüküne eklenir. Bir şubenin
+          seçmeliyi aldığını bilmek, o şubedeki her öğrencinin aldığını göstermez — sayım bu yüzden
+          ihtiyatlı kalır.
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">Salon kapasitesi</h3>

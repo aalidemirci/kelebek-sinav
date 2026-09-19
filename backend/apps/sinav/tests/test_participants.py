@@ -13,10 +13,12 @@ from datetime import time
 import pytest
 from rest_framework.test import APIClient
 
+from apps.dersler import services as ders_services
+from apps.dersler.models import CourseType
 from apps.okul.models import Student, StudentStatus
 from apps.sinav import participants, services
-from apps.sinav.models import ParticipantType
-from apps.sinav.tests.oturum_yardim import ders, oturum, sube
+from apps.sinav.models import ExamSession, ParticipantType
+from apps.sinav.tests.oturum_yardim import aktif_yil, ders, oturum, salon, sube
 
 pytestmark = pytest.mark.django_db
 
@@ -279,3 +281,123 @@ def test_api_participants_endpoint() -> None:
     assert len(resp.data["courses"]) == 2
     numbers = {p["student_number"] for c in resp.data["courses"] for p in c["participants"]}
     assert numbers == {"101"}
+
+
+# ===========================================================================
+# Seçmeli ders öğrenci listesi (19.09.2026) — "şubenin bir kısmı dersi alıyor"
+# ===========================================================================
+
+
+def _din_secmelileri(ogrenci: int = 4) -> tuple[int, list[int], int, int]:
+    """9/A'da n öğrenci; ilk yarısı Kur'an-ı Kerim, kalanı Peygamberimizin Hayatı."""
+    a = sube(9, "A", students=ogrenci, start_no=101)
+    kk = ders("Kur'an-ı Kerim", levels=[9], course_type=CourseType.ELECTIVE)
+    ph = ders("Peygamberimizin Hayatı", levels=[9], course_type=CourseType.ELECTIVE)
+    ogr = list(
+        Student.objects.filter(class_level=9, class_section="A")
+        .order_by("student_number")
+        .values_list("pk", flat=True)
+    )
+    ders_services.set_section_enrollment(
+        course_id=kk.pk,
+        school_year_id=aktif_yil().pk,
+        section_id=a.pk,
+        student_ids=ogr[: ogrenci // 2],
+        complement_course_id=ph.pk,
+    )
+    return a.pk, ogr, kk.pk, ph.pk
+
+
+def _iki_ders_oturumu(a_pk: int, kk: int, ph: int) -> ExamSession:
+    session = oturum()
+    for course_pk in (kk, ph):
+        services.add_session_course(
+            session,
+            course_id=course_pk,
+            participant_type=ParticipantType.SECTIONS,
+            section_ids=[a_pk],
+        )
+    return session
+
+
+def test_ayni_subede_iki_secmeli_ayni_oturumda_cakismaz() -> None:
+    """Liste yokken iki satır da şubenin tamamını alır ve dağıtım DURURDU."""
+    a_pk, ogr, kk, ph = _din_secmelileri()
+    session = _iki_ders_oturumu(a_pk, kk, ph)
+
+    result = participants.resolve_session(session)
+
+    assert not result.has_blocking_conflicts
+    by_course = {c.course_id: c for c in result.courses}
+    assert {p.student_id for p in by_course[kk].participants} == set(ogr[:2])
+    assert {p.student_id for p in by_course[ph].participants} == set(ogr[2:])
+    assert by_course[kk].listed_sections == ["9/A"]
+    # Her öğrenci kendi dersinin kitapçık grubundadır.
+    assert {p.conflict_group for p in by_course[kk].participants} == {f"{kk}:9"}
+
+
+def test_listesiz_sube_dersi_tamamen_alir() -> None:
+    """Geriye uyum: liste girilmemiş okulda hiçbir şey değişmez."""
+    b = sube(9, "B", students=3, start_no=201)
+    course = ders("Astronomi ve Uzay Bilimleri", levels=[9], course_type=CourseType.ELECTIVE)
+    session = oturum()
+    services.add_session_course(
+        session, course_id=course.pk, participant_type=ParticipantType.SECTIONS, section_ids=[b.pk]
+    )
+
+    result = participants.resolve_session(session)
+
+    assert result.total_count == 3
+    assert result.courses[0].listed_sections == []
+
+
+def test_sube_degistiren_liste_ogrencisi_sayiyla_uyarilir() -> None:
+    a_pk, ogr, kk, ph = _din_secmelileri()
+    sube(9, "B")
+    Student.objects.filter(pk=ogr[0]).update(class_section="B")
+    session = _iki_ders_oturumu(a_pk, kk, ph)
+
+    result = participants.resolve_session(session)
+
+    kk_cozum = next(c for c in result.courses if c.course_id == kk)
+    assert kk_cozum.count == 1
+    assert any("1 öğrenci artık bu şubede değil" in w for w in kk_cozum.warnings)
+    assert not any("AD0" in w for w in kk_cozum.warnings)  # ad yazılmaz
+
+
+def test_sinif_duzeyinin_tamami_listeyi_uygulamaz_ama_uyarir() -> None:
+    _a_pk, _ogr, kk, _ph = _din_secmelileri()
+    session = oturum()
+    services.add_session_course(
+        session, course_id=kk, participant_type=ParticipantType.LEVEL, level=9
+    )
+
+    result = participants.resolve_session(session)
+
+    assert result.total_count == 4  # açık idari seçim: düzeyin tamamı
+    assert any("öğrenci listesi var" in w for w in result.courses[0].warnings)
+
+
+def test_dagitimdan_sonra_liste_degisirse_sapma_bildirilir() -> None:
+    a_pk, ogr, kk, ph = _din_secmelileri()
+    session = _iki_ders_oturumu(a_pk, kk, ph)
+    services.set_session_rooms(session, [{"room_id": salon("D-101").pk}])
+    session, _sonuc, rapor = services.distribute_session(session, seed=7)
+    assert rapor.is_valid, rapor.hard_violations
+    client = APIClient()
+    url = f"/api/v1/exam-sessions/{session.pk}/participants/"
+    assert client.get(url).data["placement_outdated"] is False
+
+    # Bir öğrenci Kur'an-ı Kerim'den Peygamberimizin Hayatı'na geçti.
+    ders_services.set_section_enrollment(
+        course_id=kk,
+        school_year_id=aktif_yil().pk,
+        section_id=a_pk,
+        student_ids=ogr[:1],
+        complement_course_id=ph,
+    )
+
+    veri = client.get(url).data
+    assert veri["placement_outdated"] is True
+    assert "1 öğrencinin dersi değişti" in veri["warnings"][0]
+    assert veri["courses"][0]["listed_sections"] == ["9/A"]

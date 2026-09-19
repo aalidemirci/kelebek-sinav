@@ -11,7 +11,13 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
   belgeli. Pratik etkisi 30.08.2026'da küçüldü: OOG01001R020 (Sınıf/Şube
   Öğrenci Listesi) ve OOK01001R1 (Personel Listesi) Excel ihraçları artık
   **değiştirilmeden** yükleniyor (bkz. `apps/okul/eokul.py`), yani PDF yolu
-  yalnız Excel düğmesi olmayan raporlar için gerekir. v2 adayı.
+  yalnız Excel düğmesi olmayan raporlar için gerekir. v2 adayı. **Tek istisna
+  (19.09.2026):** OOK10002R010 Seçmeli Ders Öğrencileri PDF'ten okunur
+  (`apps/dersler/enrollment_import.py`) — Excel ihracı ders adı bantlarını
+  düşürdüğü için başka yol yok. Satırdan yalnız okul no + sınıf/şube alınır (ad
+  ayrıştırılmaz); gerçek raporda 25 ders / 8.385 satır Excel ihracıyla birebir
+  ölçüldü (tasarım §6). Yeni bir e-Okul sürümü başlık biçimini değiştirirse
+  belirti "hiç ders başlığı bulunamadı" reddidir, sessiz eksik aktarım değil.
 - **TB2 — Çizelge verisi boşlukları (U4, 03.09.2026'da daraldı):** sekiz
   ortaöğretim türünün TTK çizelgeleri gömülü (tasarım §7.2). Kalanlar:
   (a) GSL 2025 çizelgeleri ortak dersleri kademeli uygular; 2026-2027'de
@@ -42,30 +48,6 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
 - **TB6 — Logo v1 geometrik yer tutucu:** `logo_uret.py` koltuk-karesi
   kelebeği üretiyor; markalaşmış bir çizim istenirse `kelebek-sinav-logo.png`
   değiştirilip `ikon_uret.py` yeniden koşulur (sözleşme hazır).
-- **TB7 — GROUPS katılımcı tipi alınmadı (F3 kesim kararı):** OYS'de şube-içi
-  grup (SectionGroup) kavramı ve GROUPS katılımcı tipi vardı; KS'de şube grubu
-  modeli olmadığından oturum dersi yalnız LEVEL/SECTIONS ile tanımlanır.
-  Seçmeli ders grupları gerekirse önce `okul` tarafına grup modeli gelir,
-  sonra `ParticipantType.GROUPS` + çözümleyici OYS'den taşınır
-  (`participants._resolve_groups`, OYS satır 141-169).
-- **TB10 — Ders kayıt verisi yok; kapsam verisi günlük limite BAĞLANMADI
-  (31.08.2026, K19):** takvim girdisi artık katılımcı kapsamı taşıyor
-  (`participant_type` + `section_ids`), ama `services_calendar._daily_exam_load`
-  bu listeye **bakmaz** ve bakmayacak. Gerekçe: kapsam idarecinin beyanıdır,
-  öğrenci-ders eşleşmesi değil — `dersler.selectors.course_level_student_ids`
-  KS'de hep boş küme döner (B8 sapması), yani şubelerin öğrencisi sayılsa bile
-  "bu öğrenci bu dersi alıyor mu" sorusu cevapsız kalır. Kural "kayıt verisi
-  olmayan ders seviyenin tamamını kapsar" konservatif düşüşünde KALIR
-  (Yönetmelik md. 5/1-k, Yönerge md. 5/1-s; ADR-0044 karar 13, tasarım
-  risk #4). Kapsam verisinin kullanıldığı yerler (18.09.2026 güncellemesi):
-  (1) ızgara dipnotundaki katılımcı önizlemesi, (2) slottan oturum üretilirken
-  `ExamSessionCourse`'a taşınan katılımcı tanımı, (3) aynı slotta kapsam
-  kesişimi SERT kısıtı (`_scope_overlaps`, 03.09.2026 — "aynı ANDA iki salonda
-  olamaz" sorusu kapsamla kesin cevaplanır), (4) seçmeli ders kapsamının ders
-  havuzundan ön-dolması (`CourseSectionOffering`). GÜNLÜK limit bunların
-  hiçbirinden beslenmez. Gerçek ders kayıt verisi (seçmeli ders grupları)
-  gelirse sıra şudur: önce `okul` tarafına kayıt/grup modeli girer (bkz. TB7),
-  sonra limit hesabı ondan beslenir — tersi mevzuat denetimini deler.
 - **TB11 — Yedek medya dosyalarını kapsamaz (K3 kararı, 18.09.2026):** `.ksbak`
   yalnız veritabanıdır; soru PDF'leri ve üretilmiş kitapçık ZIP'leri yedeğe
   GİRMEZ. Gerekçe: soru dosyası sınavdan sonra tarihsel değer taşımaz, yedeği
@@ -94,6 +76,25 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
 
 ## Kapanan
 
+- **TB7 — GROUPS katılımcı tipi (19.09.2026'da kapandı — başka yoldan):**
+  OYS'nin şube-içi grup modeli + `ParticipantType.GROUPS`'u TAŞINMADI. Şubenin
+  bir kısmının aldığı seçmeli için (ders, yıl, şube) öğrenci listesi geldi
+  (`dersler.CourseEnrollment`, tasarım §7.3): listesiz şube dersi tamamen alır,
+  listeli şubede yalnız listedekiler. Katılımcı tipi LEVEL/SECTIONS ikilisinde
+  kalır (takvimdeki "üçüncü tip yok" kuralıyla uyumlu); liste SECTIONS
+  çözümünde uygulanır. Grup ara modeli reddedildi: e-Okul veriyi zaten
+  (ders → öğrenci) verir, grup eşlemeyi iki kez yaptırırdı.
+- **TB10 — Ders kayıt verisi (19.09.2026'da kapandı):** kayıt verisi artık
+  seçmeli ders öğrenci listesidir (TB7 kapanışı). `course_level_student_ids`
+  dersin o seviyedeki BÜTÜN kapsam şubelerinde liste varken öğrenci kümesini
+  döner ve `_daily_exam_load` onu kullanır; tek şube listesizse boş küme
+  (bilinmiyor) → "kayıt verisi olmayan ders seviyenin tamamını kapsar" düşüşü
+  AYNEN işler (Yönetmelik md. 5/1-k, Yönerge md. 5/1-s; ADR-0044 karar 13,
+  tasarım risk #4). Değişmeyen: takvim girdisinin şube KAPSAMI (`section_ids`)
+  günlük limite hâlâ GİRMEZ — kapsam beyandır, kayıt değil. Kapsamın
+  kullanıldığı yerler: ızgara katılımcı önizlemesi, slottan oturum üretimi,
+  aynı slot kesişimi sert kısıtı (`_scope_overlaps` — listeli şubede öğrenci
+  düzeyinde), seçmeli kapsamın ders havuzundan ön-dolması.
 - **TB8 — Yerleştirme kuralları arayüzü (31.08.2026'da kapandı, kütüğe
   18.09.2026'da işlendi):** oturum ayrıntısındaki "Kurallar" sekmesi
   (`KurallarPaneli`) koltuk sabitleme, tek başına oturtma ve ayrı tutma

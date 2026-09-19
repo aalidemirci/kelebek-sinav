@@ -502,6 +502,8 @@ class ImportSourceType(models.TextChoices):
 
     STUDENTS = "STUDENTS", "Öğrenci"
     PERSONNEL = "PERSONNEL", "Personel"
+    # e-Okul "Seçmeli Ders Öğrencileri" (OOK10002R010) PDF'i — `dersler.enrollment_import`.
+    ELECTIVES = "ELECTIVES", "Seçmeli ders öğrencileri"
 
 
 class ImportStatus(models.TextChoices):

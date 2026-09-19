@@ -249,3 +249,107 @@ class CourseSectionsView(APIView):
                 ],
             }
         )
+
+
+# --------------------------------------------------------------------------- #
+# Seçmeli ders öğrenci listesi (19.09.2026) — `CourseEnrollment`
+# --------------------------------------------------------------------------- #
+
+
+class CourseEnrollmentCountsView(APIView):
+    """`GET /api/v1/courses/enrollment-counts/` — (ders, şube) → listedeki öğrenci sayısı.
+
+    Ders havuzu tablosu "Şubeler" etiketini "9/A (14)" diye basar; listesiz şube
+    satırda yoktur (= şubenin tamamı). Yalnız sayı döner, kişisel veri yok.
+    """
+
+    def get(self, request: Request) -> Response:
+        year_id = _cozulen_yil_id(request)
+        sayim = selectors.course_enrollment_counts(year_id)
+        return Response(
+            {
+                "school_year": year_id,
+                "results": [
+                    {"course": course_id, "section": section_id, "count": count}
+                    for (course_id, section_id), count in sorted(sayim.items())
+                ],
+            }
+        )
+
+
+class CourseEnrollmentsView(APIView):
+    """`GET/PUT /api/v1/courses/<pk>/enrollments/` — dersin şube bazında öğrenci listesi.
+
+    GET → `{"school_year", "sections": [{"section_id", "student_ids"}]}` (yalnız
+    listeli şubeler). PUT TEK ŞUBEYİ tamamen değiştirir: `{"section_id",
+    "student_ids", "complement_course_id"?}`; boş liste = şubenin tamamı.
+    """
+
+    def get(self, request: Request, pk: int) -> Response:
+        year_id = _cozulen_yil_id(request)
+        get_object_or_404(Course.objects.all(), pk=pk)
+        listeler = services.course_enrollments(course_id=pk, school_year_id=year_id)
+        return Response(
+            {
+                "school_year": year_id,
+                "sections": [
+                    {"section_id": section_id, "student_ids": ids}
+                    for section_id, ids in listeler.items()
+                ],
+            }
+        )
+
+    def put(self, request: Request, pk: int) -> Response:
+        year_id = _cozulen_yil_id(request)
+        section_id = request.data.get("section_id")
+        student_ids = request.data.get("student_ids")
+        complement = request.data.get("complement_course_id")
+        if isinstance(section_id, bool) or not isinstance(section_id, int):
+            raise serializers.ValidationError({"section_id": "Şube seçimi gerekli."})
+        if not isinstance(student_ids, list):
+            raise serializers.ValidationError({"student_ids": "Öğrenci listesi gerekli."})
+        if complement is not None and (
+            isinstance(complement, bool) or not isinstance(complement, int)
+        ):
+            raise serializers.ValidationError({"complement_course_id": "Ders seçimi geçersiz."})
+        sonuc = _servis(
+            services.set_section_enrollment,
+            course_id=pk,
+            school_year_id=year_id,
+            section_id=section_id,
+            student_ids=student_ids,
+            complement_course_id=complement,
+        )
+        return Response({"school_year": year_id, **sonuc})
+
+
+class _EnrollmentImportView(APIView):
+    """e-Okul OOK10002R010 PDF'i — yalnız dosya (pano yolu yok: PDF'ten okunur)."""
+
+    handler_name: str = ""
+
+    def post(self, request: Request) -> Response:
+        from apps.dersler import enrollment_import
+        from apps.okul.excel_ogrenci import ParserError
+
+        uploaded = request.FILES.get("file")
+        if uploaded is None:
+            raise serializers.ValidationError({"file": "e-Okul raporunun PDF dosyasını seçin."})
+        handler = getattr(enrollment_import, self.handler_name)
+        try:
+            report = handler(file_bytes=uploaded.read(), file_name=uploaded.name or "")
+        except ParserError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+        return Response(report.to_dict())
+
+
+class EnrollmentImportPreviewView(_EnrollmentImportView):
+    """`POST /api/v1/courses/enrollments/import/preview/` — yazmadan önizleme."""
+
+    handler_name = "preview_elective_report"
+
+
+class EnrollmentImportCommitView(_EnrollmentImportView):
+    """`POST /api/v1/courses/enrollments/import/commit/` — listeleri yazar."""
+
+    handler_name = "commit_elective_report"

@@ -232,3 +232,81 @@ class CourseSectionOffering(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.course} / {self.level} → {len(self.section_ids or [])} şube"
+
+
+class CourseEnrollment(BaseModel):
+    """Seçmeli dersi alan öğrenci — (ders, ders yılı, şube, öğrenci) (19.09.2026).
+
+    Şube kapsamının (`CourseSectionOffering`) ÖĞRENCİ düzeyindeki inceltmesidir;
+    TB7/TB10'un kapattığı boşluk: "9/A'da bir grup Kur'an-ı Kerim, bir grup
+    Peygamberimizin Hayatı alıyor". Kural ŞUBE BAZINDADIR:
+
+    - Bir (ders, yıl, şube) için hiç satır yoksa dersi ŞUBENİN TAMAMI alır —
+      bugünkü davranış; listesi girilmemiş okulda hiçbir şey değişmez.
+    - Satır varsa dersi YALNIZ o öğrenciler alır ("şubenin bir kısmı").
+
+    Tüketiciler: oturum katılımcı çözümü (`sinav.participants`), takvimde aynı
+    saat kuralı (`services_calendar._scope_overlaps` — iki seçmelinin öğrencileri
+    ayrıksa aynı saate konabilir) ve salon kapasitesi sayımı. Kaynak iki yoldur:
+    e-Okul "Seçmeli Ders Öğrencileri" (OOK10002R010) PDF içe aktarması
+    (`enrollment_import`) ve Ders Havuzu'ndaki elle seçim.
+
+    Liste GEÇMİŞ değil GÜNCEL DURUMDUR: değiştirme satırları KALICI siler
+    (`hard_delete`) — her e-Okul aktarımında binlerce kişisel veri artığı
+    birikmesin (KVKK veri en aza indirme). Arşiv evrakının sabitliği zaten
+    yerleşim SNAPSHOT'ındadır (`SeatAssignment.conflict_group`). Öğrenci şube
+    değiştirir ya da ayrılırsa satır okuma anında düşer (katılımcı çözümü şube
+    mevcuduyla kesiştirir) ve uyarıya sayıyla yazılır — ad yazılmaz.
+
+    Neden `Course` ya da `Student` üzerinde alan DEĞİL: katalog yıldan bağımsızdır
+    ve `sync_catalog` alanlarını ezer; öğrencinin seçmelisi ise yıla bağlıdır
+    (`CourseSectionOffering` ile aynı gerekçe).
+    """
+
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name="enrollments",
+        verbose_name="ders",
+    )
+    school_year = models.ForeignKey(
+        "okul.SchoolYear",
+        on_delete=models.CASCADE,
+        related_name="course_enrollments",
+        verbose_name="ders yılı",
+    )
+    section = models.ForeignKey(
+        "okul.ClassSection",
+        on_delete=models.CASCADE,
+        related_name="course_enrollments",
+        verbose_name="şube",
+        help_text="Öğrencinin listeye girdiği andaki şubesi; şube değişirse satır düşer.",
+    )
+    student = models.ForeignKey(
+        "okul.Student",
+        on_delete=models.CASCADE,
+        related_name="course_enrollments",
+        verbose_name="öğrenci",
+    )
+
+    class Meta:
+        verbose_name = "ders öğrencisi"
+        verbose_name_plural = "ders öğrencileri"
+        ordering = ["course", "section", "student"]
+        constraints = [
+            # Bir öğrenci bir dersi bir yılda BİR kez alır (şubesi tek).
+            models.UniqueConstraint(
+                fields=["course", "school_year", "student"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_course_enrollment_alive",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["school_year", "course", "section"],
+                name="dersler_enroll_lookup_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.course_id} / şube {self.section_id} ← öğrenci {self.student_id}"

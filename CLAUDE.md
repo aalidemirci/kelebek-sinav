@@ -167,7 +167,8 @@
 - **"Ortak" sözcüğü üç anlam taşımaz:** MEB'de "ortak sınav/ortak yazılı" okul
   geneli sınavdır. Kullanıcı metninde ders türü için "zorunlu", seviyeler arası
   tek kitapçık için "tüm seviyeler aynı kitapçık" kullanılır; "ortak" yalnız
-  MEB anlamında geçer.
+  MEB anlamında geçer ("ortak öğrenci" de yazılmaz: "iki dersi birden alan
+  öğrenci").
 - **Kullanıcı metninin sözlüğü `docs/sozluk.md`'dir (bağlayıcı):** salon/derslik,
   öğretmen/personel, sınıf düzeyi, katılımcı kapsamı, "dağıtım numarası" (seed),
   "kural ihlali"; iç kodlar (K5, R10, F6…) ve iç kimlikler (`id=…`) kullanıcı
@@ -309,6 +310,25 @@
   yazılabilir. `set_course_sections` TAM DEĞİŞTİRMEDİR (gönderilmeyen seviye
   silinir); okuma (`course_section_map`) silinmiş şubeyi süzer. Yıl geçişinde
   kopyalama YOKTUR — her yıl yeniden girilir (bilinçli karar).
+- **Seçmeli ders öğrenci listesi ŞUBE BAZINDADIR** (`dersler.CourseEnrollment`,
+  19.09.2026, tasarım §7.3 — TB7/TB10'u kapattı): (ders, yıl, şube) satırı varsa
+  o şubeden YALNIZ listedekiler dersi alır, yoksa şubenin TAMAMI — veri girmeyen
+  okulda hiçbir şey değişmez. Uygulandığı üç yer: SECTIONS katılımcı çözümü
+  (`_resolve_sections`; LEVEL satırı listeyi UYGULAMAZ, varlığını uyarır),
+  takvim slot kesişimi (`_scope_overlaps` + `EnrollmentIndex`) ve
+  `course_level_student_ids` — sonuncusu dersin o seviyedeki BÜTÜN kapsam
+  şubeleri listeliyse küme döner, tek şube listesizse boş (günlük limit
+  düşüşü). Satırlar KATI silinir (tam değiştirme, tarih tutulmaz;
+  `all_objects...hard_delete()`); `set_course_sections` kapsamdan çıkan şubenin
+  listesini düşürür; yıl geçişinde kopyalanmaz. Kaynak e-Okul OOK10002R010
+  **PDF**'idir (TB1'in tek istisnası — Excel ihracında ders adı yok;
+  `enrollment_import.py` satırdan yalnız okul no + sınıf/şube okur, ad
+  AYRIŞTIRILMAZ) ya da şube penceresindeki seçici. Aktarım yalnız raporun
+  KAPSADIĞI şubelerde (raporda satırı geçen) yeniler: rapor tek düzey/şube için
+  alınmış olabilir, kapsam dışı şubenin listesi ve kapsamı SİLİNMEZ; raporda
+  olmayan derse hiç dokunulmaz. Liste dağıtımdan SONRA
+  değişirse yerleşim DEĞİŞMEZ: `participants.placement_drift` snapshot'ı güncel
+  çözümle karşılaştırır, oturum sayfası "yeniden dağıtın" bandı gösterir.
 - **Takvim girdisi kapsamın KOPYASINI tutar** (snapshot): katalog sonradan
   değişince onaylanmış takvimin kapsamı geriye dönük kaymaz — küme kuralının
   aynı gerekçesi. `add_calendar_entries_bulk` kapsam GÖNDERİLMEMİŞSE katalogdan
@@ -325,12 +345,15 @@
   aynı gün+saat+seviyede kapsamı kesişen ikinci sınavı REDDEDER — üç kanallı
   uyarı deseninin tek istisnası, çünkü "zorunlu hâl" yorumu yok (öğrenci aynı
   anda iki salonda olamaz). Kesişim `_scope_overlaps`: seviye farklıysa yok, en
-  az biri LEVEL ise var, ikisi de SECTIONS ise `section_ids` kesişimi. Bu kural
-  `_daily_exam_load`u GEVŞETMEZ (ADR-0044 karar 13, risk #4): oradaki soru
-  "öğrenci o GÜN kaç sınava girer" ve ders kaydı bilinmediğinden kapsam
-  ihtiyatlı okunur; burada soru "aynı ANDA olabilir mi" ve kesişim kesin cevap
-  verir. Denetim `calendar_validation`da da durur (kural öncesi kurulmuş
-  takvimler + yerleştirmeden sonra genişletilen kapsam).
+  az biri LEVEL ise var, ikisi de SECTIONS ise ortak şubeler; ortak şubede iki
+  dersin de öğrenci listesi varsa soru ÖĞRENCİYE iner (liste kesişimi), biri
+  listesizse şube kesişir (19.09.2026 — ret metni iki dersi birden alan öğrenci
+  SAYISINI söyler). Bu kural `_daily_exam_load`u GEVŞETMEZ (ADR-0044 karar 13,
+  risk #4): oradaki soru "öğrenci o GÜN kaç sınava girer" ve ders kaydı yalnız
+  TAM listede bilinir (aşağıda); eksikse kapsam ihtiyatlı okunur; burada soru
+  "aynı ANDA olabilir mi" ve kesişim kesin cevap verir. Denetim
+  `calendar_validation`da da durur (kural öncesi kurulmuş takvimler +
+  yerleştirmeden sonra genişletilen kapsam ya da değişen liste).
 - **Otomatik yerleştirme KURAL MOTORU TUTMAZ** (`auto_place_entries`, F6 eki-2):
   yalnız SIRA ve TERCİH üretir, her yerleştirmeyi `place_entry`ye yaptırır ve
   reddedilen slotu atlar (`place_entry` kendi savepoint'inde koşar — `_seed_pool`

@@ -28,6 +28,7 @@ import { SINIF_DUZEYININ_TAMAMI } from "../okul/SubeKapsamSecici";
 import { COURSE_EXAM_MODE_TR, COURSE_SOURCE_TR, COURSE_TYPE_TR, derslerApi } from "./api";
 import type { CatalogStatus, Course, CourseExamMode, CourseType, DuplicateCluster } from "./api";
 import DersSubeKapsamiDialog from "./DersSubeKapsamiDialog";
+import SecmeliOgrenciAktarDialog from "./SecmeliOgrenciAktarDialog";
 
 export default function DersHavuzuPage() {
   const [rows, setRows] = useState<Course[]>([]);
@@ -45,6 +46,8 @@ export default function DersHavuzuPage() {
   const [editing, setEditing] = useState<Course | null>(null);
   // Şube kapsamı düzenlenen ders (seçmeli) — kapsamın KAYNAĞI bu ekrandır.
   const [sectionsFor, setSectionsFor] = useState<Course | null>(null);
+  // e-Okul OOK10002R010 (Seçmeli Ders Öğrencileri) PDF aktarımı.
+  const [importing, setImporting] = useState(false);
   const [duplicates, setDuplicates] = useState<DuplicateCluster[]>([]);
 
   const offeringsQuery = useQuery({
@@ -58,24 +61,38 @@ export default function DersHavuzuPage() {
     queryFn: () => okulApi.listClassSections(),
     retry: false,
   });
+  // Listeli şubelerin öğrenci sayısı ("9: A (14), B") — yalnız sayı, ad yok.
+  const enrollmentCounts = useQuery({
+    queryKey: ["course-enrollment-counts"],
+    queryFn: () => derslerApi.enrollmentCounts(),
+    retry: false,
+  });
 
-  /** course_id → sınıf düzeyi bazlı şube etiketleri ("9: A, B"). */
+  /** course_id → sınıf düzeyi bazlı şube etiketleri ("9: A (14), B"). */
   const kapsamOzetleri = useMemo(() => {
     const etiket = new Map((sectionCatalog.data ?? []).map((s) => [s.id, s.class_label] as const));
+    const sayi = new Map(
+      (enrollmentCounts.data?.results ?? []).map((r) => [`${r.course}:${r.section}`, r.count]),
+    );
     const ozet = new Map<number, string[]>();
     for (const row of offeringsQuery.data?.results ?? []) {
       const adlar = row.section_ids
-        .map((id) => etiket.get(id))
+        .map((id) => {
+          const ad = etiket.get(id);
+          if (!ad) return null;
+          const harf = ad.split("/")[1] ?? ad;
+          // Listeli şube: dersi şubenin bir kısmı alıyor — kaç öğrenci olduğu yazılır.
+          const n = sayi.get(`${row.course}:${id}`);
+          return n === undefined ? harf : `${harf} (${n})`;
+        })
         .filter((x): x is string => Boolean(x));
       if (adlar.length === 0) continue;
       // "Hz" açıklanmamış kısaltmaydı (docs/sozluk.md §2) → "Hazırlık".
-      const parca = `${row.level === 0 ? "Hazırlık" : row.level}: ${adlar
-        .map((a) => a.split("/")[1] ?? a)
-        .join(", ")}`;
+      const parca = `${row.level === 0 ? "Hazırlık" : row.level}: ${adlar.join(", ")}`;
       ozet.set(row.course, [...(ozet.get(row.course) ?? []), parca]);
     }
     return ozet;
-  }, [offeringsQuery.data, sectionCatalog.data]);
+  }, [offeringsQuery.data, sectionCatalog.data, enrollmentCounts.data]);
 
   useEffect(() => {
     okulApi
@@ -125,12 +142,19 @@ export default function DersHavuzuPage() {
             (okul türünüze göre) kendiliğinden dolar; listede olmayan dersi elle ekleyebilirsiniz.
             Ders silinmez — pasifleştirilir. <strong>Sınav</strong> sütunu dersin yazılı mı,
             uygulama mı olduğunu (ya da hiç sınavı olmadığını) söyler; takvim havuzuna zorunlu
-            dersler eklenirken yalnız <em>Yazılı</em> dersler çekilir.
+            dersler eklenirken yalnız <em>Yazılı</em> dersler çekilir. Seçmeli dersi şubenin yalnız
+            bir kısmı alıyorsa <strong>Şubeler</strong> sütunundan öğrencileri seçin ya da listeleri
+            e-Okul'dan aktarın.
           </p>
         </div>
-        <Button icon="add" onClick={() => setAdding(true)}>
-          Ders ekle
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="tonal" icon="upload_file" onClick={() => setImporting(true)}>
+            e-Okul'dan seçmeli öğrencileri aktar
+          </Button>
+          <Button icon="add" onClick={() => setAdding(true)}>
+            Ders ekle
+          </Button>
+        </div>
       </div>
 
       {error && <ErrorBanner message={error} />}
@@ -234,6 +258,10 @@ export default function DersHavuzuPage() {
           onClose={() => setSectionsFor(null)}
           onSaved={() => setSectionsFor(null)}
         />
+      )}
+
+      {importing && (
+        <SecmeliOgrenciAktarDialog onClose={() => setImporting(false)} onImported={load} />
       )}
 
       {(adding || editing) && (

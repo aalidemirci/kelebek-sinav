@@ -509,3 +509,13 @@ def _record_failed(source_type: str, source_hash: str, file_name: str, error: Ex
         finished_at=timezone.now(),
         report={"error": str(error)},
     )
+
+
+# Başka uygulamaların içe aktarmaları (`dersler.enrollment_import` — e-Okul seçmeli
+# ders öğrencileri) AYNI koşu yaşam döngüsünü kullanır: idempotency uyarısı,
+# PREVIEWED/FAILED izleri ve koşullu teklik aynı kurallarla işlesin diye ikinci
+# kopya yazılmaz.
+open_import_run = _open_run
+close_import_run = _close_run
+record_import_preview = _record_preview
+record_import_failure = _record_failed

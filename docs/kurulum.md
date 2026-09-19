@@ -105,6 +105,15 @@ dokunmaz; yine de program her sürüm geçişinden önce kendiliğinden bir yede
    eğitim merkezi, fen ve sosyal bilimler) kendi program çizelgesini aynı yerden,
    "Sınıf düzeyine göre özelleştir" ile ana çizelgenin yanına işaretler;
    işaretlenmeyen programın dersleri havuza girmez.
+
+   Seçmeli dersi şubenin yalnız bir kısmı alıyorsa (9/A'da bir grup Kur'an-ı
+   Kerim, bir grup Peygamberimizin Hayatı) öğrenci listesini e-Okul'dan alın:
+   *Öğrenci Seçmeli Derslerini Belirle ekranı → Raporlar → OOK10002R010 -
+   Seçmeli Ders Öğrencileri* raporunu **PDF** olarak kaydedip Ders Havuzu'ndaki
+   "e-Okul'dan seçmeli öğrencileri aktar" düğmesiyle yükleyin (Excel çıktısında
+   ders adları yoktur). Öğrenciler okul numarasıyla eşleştiği için bunu öğrenci
+   listesinden sonra yapın. Aktarım yalnız raporda geçen şubeleri yeniler; raporu
+   tek bir sınıf düzeyi için almak öbür düzeylerin listesini silmez.
 5. İsterseniz Ayarlar → Güvenlik'ten **uygulama parolası** kurarsınız: ad-soyad
    alanları şifrelenir, size TEK SEFERLİK bir kurtarma anahtarı verilir —
    yazdırıp güvenli bir yerde saklayın.

@@ -46,9 +46,10 @@ describe("KilavuzPage", () => {
     expect(basliklar).toContain("Evrak, gözetmenler ve yoklama");
     expect(basliklar).toContain("Bakım: yedek, parola ve güncelleme");
 
-    // Sayfa adı her yerde "Ders Havuzu"dur (4. adım + 7. adım ipucu).
+    // Sayfa adı her yerde "Ders Havuzu"dur (4. adım + seçmeli öğrenci listesi
+    // + 7. adım ipucu).
     const dersHavuzu = screen.getAllByRole("link", { name: "Ders Havuzu" });
-    expect(dersHavuzu.length).toBe(2);
+    expect(dersHavuzu.length).toBe(3);
     for (const link of dersHavuzu) expect(link).toHaveAttribute("href", "/dersler");
     expect(screen.getByRole("link", { name: "Ayarlar → Zümreler" })).toHaveAttribute(
       "href",
@@ -72,6 +73,21 @@ describe("KilavuzPage", () => {
     expect(
       screen.getByText(/takvime kümenin adı değil, seçilen şubeler yazılır/),
     ).toBeInTheDocument();
+  });
+
+  it("seçmeliyi şubenin bir kısmı alıyorsa öğrenci listesini ve e-Okul raporunu anlatır", () => {
+    renderPage();
+    expect(
+      screen.getByRole("heading", { level: 3, name: /Seçmeli dersi şubenin bir kısmı alıyorsa/ }),
+    ).toBeInTheDocument();
+    // e-Okul yolu ekrandaki adlarla birebir: ekran → Raporlar → rapor kodu ve adı.
+    expect(screen.getByText("Öğrenci Seçmeli Derslerini Belirle")).toBeInTheDocument();
+    expect(screen.getByText("OOK10002R010 - Seçmeli Ders Öğrencileri")).toBeInTheDocument();
+    // Excel ihracı ders adlarını düşürür — yalnız PDF okunur.
+    expect(screen.getByText(/Excel çıktısında ders adları bulunmaz/)).toBeInTheDocument();
+    expect(screen.getByText(/iki dersi birden alan öğrenci yoksa/)).toBeInTheDocument();
+    // "Ortak" yalnız MEB anlamında (okul geneli sınav) geçer — docs/sozluk.md.
+    expect(screen.queryByText(/ortak öğrenci/i)).not.toBeInTheDocument();
   });
 
   it("günlük sınav sayısı sınırını mevzuat dayanağıyla verir", () => {

@@ -19,6 +19,7 @@ kavramları (faz/karar/evrak kodları, motor ölçütleri) yüzeye çıkmaz.
 | `level` etiketi | **sınıf düzeyi** | seviye | Değer biçimi: **"9. Sınıf"**, "Hazırlık" (tek kaynak: `gradeLevelLabel` / `level_label`) |
 | Katılımcı kapsamı (`participant_type`) | alan adı **"Katılımcılar"**; seçenekler **"Sınıf düzeyinin tamamı"** / **"Seçili şubeler"** | "Katılımcı tipi", "Seviye geneli", "Şube şube", tek başına "Kapsam" | Oturum sihirbazı ve takvim aynı sözcükleri kullanır |
 | `CourseType.COMMON` | **Zorunlu** (ders) | Ortak (ders) | |
+| `CourseEnrollment` (seçmelinin şube listesi) | **öğrenci listesi**; şube durumu **"şubenin tamamı"** / **"N öğrenci (şubenin bir kısmı)"**; iki listenin kesişimi **"iki dersi birden alan öğrenci"** | ders grubu, grup listesi, ortak öğrenci | e-Okul raporu adıyla anılır: "OOK10002R010 - Seçmeli Ders Öğrencileri" |
 | ortak sınav / ortak yazılı | yalnız MEB anlamında: okul (ya da il/ilçe/ülke) geneli sınav | başka hiçbir anlamda "ortak" | |
 | `shared_booklet` | **"tüm seviyeler aynı kitapçık"**, kısa: "aynı kitapçık" | ortak kitapçık | |
 | `seed` | **dağıtım numarası** | seed, tohum, çekirdek sayı | İlk geçtiği yardım metninde bir kez "(seed)" parantezi olabilir; R8'de "Dağıtım numarası (seed)" |

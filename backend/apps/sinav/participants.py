@@ -6,6 +6,10 @@ ve doğrulayıcı yalnız bunları görür.
 
 Çözümleyici (`resolve_session`) OYS'den UYARLA: seviye/şube katılımcı çözümü,
 mükerrer tespiti ve örtüşen oturum uyarıları; GROUPS tipi alınmadı (TB7).
+Yerine seçmeli ders öğrenci listesi (19.09.2026, `dersler.CourseEnrollment`):
+SECTIONS satırında listeli şubeden yalnız listedekiler, listesiz şubeden
+şubenin tamamı gelir; LEVEL satırı listeyi uygulamaz ama varlığını uyarır.
+Dağıtılmış oturumda yerleşim güncel çözümle `placement_drift` ile karşılaştırılır.
 Öğrenci verisi okul köprüsünden okunur; burada hiçbir şey YAZILMAZ ve kişisel
 veri SAKLANMAZ — liste anlık türetilir.
 
@@ -21,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from apps.dersler.selectors import EnrollmentIndex
     from apps.okul.models import Student
     from apps.sinav.models import ExamSession, ExamSessionCourse
 
@@ -51,6 +56,8 @@ class CourseResolution:
     course_name: str
     participants: list[Participant] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    #: Öğrenci listesiyle (şubenin bir kısmı) çözülen şubelerin etiketleri ('9/A').
+    listed_sections: list[str] = field(default_factory=list)
 
     @property
     def count(self) -> int:
@@ -134,7 +141,9 @@ def _append_students(
         )
 
 
-def _resolve_level(sc: ExamSessionCourse, resolution: CourseResolution) -> None:
+def _resolve_level(
+    sc: ExamSessionCourse, resolution: CourseResolution, index: EnrollmentIndex
+) -> None:
     # OYS Tur 241: satır TEK seviyeli — `level` alanı servis katmanında zorunlu.
     if sc.level is None:
         resolution.warnings.append(
@@ -145,10 +154,37 @@ def _resolve_level(sc: ExamSessionCourse, resolution: CourseResolution) -> None:
     students = _roster(level)
     if not students:
         resolution.warnings.append(f"{level}. seviyede kayıtlı aktif öğrenci yok.")
+    if _has_list_at_level(index, sc.course_id, level):
+        # "Sınıf düzeyinin tamamı" açık bir idari seçimdir; liste SESSİZCE
+        # uygulanmaz (katılımcı tipinin anlamı değişmesin) ama unutulmasın diye
+        # söylenir — doğru yol şube kapsamıdır.
+        resolution.warnings.append(
+            f"'{sc.course.name}' dersinin bu sınıf düzeyinde öğrenci listesi var, ama katılımcı "
+            "'Sınıf düzeyinin tamamı' seçildiği için liste kullanılmadı. Dersi yalnız alan "
+            "öğrenciler girecekse 'Seçili şubeler'i seçin."
+        )
     _append_students(resolution, sc, students, class_level=level)
 
 
-def _resolve_sections(sc: ExamSessionCourse, resolution: CourseResolution) -> None:
+def _has_list_at_level(index: EnrollmentIndex, course_id: int, level: int) -> bool:
+    """Dersin bu sınıf düzeyindeki şubelerinden birinde öğrenci listesi var mı?"""
+    from apps.okul.models import ClassSection
+
+    listeli = [sid for (cid, sid) in index.lists if cid == course_id]
+    if not listeli:
+        return False
+    return ClassSection.objects.filter(pk__in=listeli, class_level=level).exists()
+
+
+def _resolve_sections(
+    sc: ExamSessionCourse, resolution: CourseResolution, index: EnrollmentIndex
+) -> None:
+    """Şube kapsamı — şubede dersin öğrenci listesi varsa YALNIZ listedekiler.
+
+    Kural şube bazındadır (`dersler.CourseEnrollment`): listesiz şubeyi dersi
+    tamamen alır (bugünkü davranış). Listedeki öğrenci artık o şubede değilse
+    (şube değiştirmiş, ayrılmış) atlanır ve SAYIYLA uyarılır — ad yazılmaz.
+    """
     from apps.okul import selectors as okul_selectors
 
     for section_id in sc.section_ids:
@@ -161,6 +197,22 @@ def _resolve_sections(sc: ExamSessionCourse, resolution: CourseResolution) -> No
         students = _roster(section.class_level, section.class_section)
         if not students:
             resolution.warnings.append(f"{section.class_label} şubesinde kayıtlı öğrenci yok.")
+        uyeler = index.members(sc.course_id, int(section.pk))
+        if uyeler is not None:
+            resolution.listed_sections.append(section.class_label)
+            mevcut = {int(s.pk) for s in students}
+            students = [s for s in students if int(s.pk) in uyeler]
+            gitmis = len(uyeler - mevcut)
+            if gitmis:
+                resolution.warnings.append(
+                    f"{section.class_label} şubesinde '{sc.course.name}' listesindeki {gitmis} "
+                    "öğrenci artık bu şubede değil (şube değiştirmiş ya da ayrılmış); atlandı."
+                )
+            if not students:
+                resolution.warnings.append(
+                    f"{section.class_label} şubesinde '{sc.course.name}' listesinden bu şubede "
+                    "kalan öğrenci yok."
+                )
         _append_students(resolution, sc, students, class_level=section.class_level)
 
 
@@ -182,6 +234,7 @@ def resolve_session(session: ExamSession) -> SessionResolution:
     Sert çakışma (öğrenci iki derste) `duplicate_students`'a yazılır —
     dağıtım `has_blocking_conflicts` doluyken başlatılamaz.
     """
+    from apps.dersler import selectors as ders_selectors
     from apps.sinav.models import ParticipantType
 
     resolvers = {
@@ -191,12 +244,17 @@ def resolve_session(session: ExamSession) -> SessionResolution:
     result = SessionResolution()
     student_courses: dict[int, list[str]] = {}
     student_numbers: dict[int, str] = {}
+    satirlar = list(session.courses.select_related("course").all())
+    # Öğrenci listeleri oturumun DÖNEMİNİN ders yılından okunur (tek sorgu).
+    index = ders_selectors.enrollment_index(
+        session.semester.school_year_id, course_ids=[sc.course_id for sc in satirlar]
+    )
 
-    for sc in session.courses.select_related("course").all():
+    for sc in satirlar:
         resolution = CourseResolution(
             session_course_id=sc.pk, course_id=sc.course_id, course_name=sc.course.name
         )
-        resolvers[ParticipantType(sc.participant_type)](sc, resolution)
+        resolvers[ParticipantType(sc.participant_type)](sc, resolution, index)
         _dedupe_within_course(resolution)
         result.courses.append(resolution)
         for p in resolution.participants:
@@ -216,6 +274,65 @@ def resolve_session(session: ExamSession) -> SessionResolution:
     if not result.courses:
         result.warnings.append("Oturumda ders tanımlı değil.")
     return result
+
+
+@dataclass(frozen=True)
+class PlacementDrift:
+    """Dağıtımdan sonra katılımcı kümesinin yerleşim kaydından sapması (yalnız SAYI)."""
+
+    added: int  # yerleşimde olmayan yeni katılımcı
+    removed: int  # yerleşimde olup artık katılımcı olmayan
+    changed: int  # hâlâ katılımcı ama dersi/kitapçık grubu değişmiş
+
+    @property
+    def outdated(self) -> bool:
+        return bool(self.added or self.removed or self.changed)
+
+    def message(self) -> str:
+        parcalar = []
+        if self.added:
+            parcalar.append(f"{self.added} öğrenci eklendi")
+        if self.removed:
+            parcalar.append(f"{self.removed} öğrenci çıktı")
+        if self.changed:
+            parcalar.append(f"{self.changed} öğrencinin dersi değişti")
+        return (
+            "Dağıtımdan sonra katılımcılar değişti (" + ", ".join(parcalar) + "). Yerleşim ve "
+            "kitapçıklar eski listeye göre — oturumu yeniden dağıtın (onaylı oturumda önce "
+            "“Yeniden aç”)."
+        )
+
+
+def placement_drift(session: ExamSession, resolution: SessionResolution) -> PlacementDrift | None:
+    """Yerleşim SNAPSHOT'ı ile güncel katılımcı çözümünü karşılaştırır (dağıtılmış oturumda).
+
+    Seçmeli ders listesi, öğrenci aktarımı ya da nakil dağıtımdan SONRA
+    değişirse yerleşim ve kitapçık eski kümeye göre kalır; bu sessizce
+    geçmesin. Yerleşim yoksa (taslak) ya da oturum arşivdeyse (anonimleşmiş
+    kayıtlar, geçmişin kaydı) None döner. Karşılaştırma kimlikledir, ad yok.
+    """
+    from apps.sinav.models import ExamSessionStatus, SeatAssignment
+
+    if session.status not in (ExamSessionStatus.DISTRIBUTED, ExamSessionStatus.APPROVED):
+        return None
+    yerlesim = {
+        (int(sid), grup)
+        for sid, grup in SeatAssignment.objects.filter(session=session)
+        .exclude(student=None)
+        .values_list("student_id", "conflict_group")
+    }
+    if not yerlesim:
+        return None
+    guncel = {(p.student_id, p.conflict_group) for p in resolution.participants}
+    yer_ogr = {sid for sid, _ in yerlesim}
+    gun_ogr = {sid for sid, _ in guncel}
+    return PlacementDrift(
+        added=len(gun_ogr - yer_ogr),
+        removed=len(yer_ogr - gun_ogr),
+        changed=len(
+            {sid for sid, grup in guncel if sid in yer_ogr and (sid, grup) not in yerlesim}
+        ),
+    )
 
 
 def overlapping_session_conflicts(session: ExamSession) -> list[str]:

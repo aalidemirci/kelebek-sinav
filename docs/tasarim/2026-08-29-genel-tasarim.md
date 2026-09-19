@@ -125,6 +125,9 @@ sütunundan gelir, varsayılan YAZILI) ·
 `CurriculumFramework` + girdileri (program_key, version — idempotent upsert) ·
 `CourseAlias` (SEED + OPERATOR; OPERATOR SEED'i ezer, tersi asla).
 `VALID_COURSE_LEVELS` **SchoolConfig'den türetilir** (v1: 0=Hazırlık, 9-12).
+`CourseSectionOffering` (seçmelinin (ders, yıl, seviye) şube kapsamı — 03.09.2026) ·
+`CourseEnrollment` (seçmelinin (ders, yıl, şube) öğrenci listesi — 19.09.2026,
+§7.3; listesiz şube dersi tamamen alır).
 
 **Sınav çekirdeği (OYS sinav_islemleri'nden):** `ExamRoom` (plan JSON: grid ≤
 30×30, SINGLE/DOUBLE/TRIPLE sıralar, kapı/tahta/öğretmen masası; kapasite
@@ -231,6 +234,15 @@ DD'nin kanıtlı katmanı taşınır: `shared/crypto.py` (Fernet + Argon2id) +
   olur (salon-şube eşleme ve R2k için).
 - e-Okul PDF parser'ları (OOG01001R070, OOK01001R1) v1'de **alınmaz**; teknik
   borca yazılır (pypdf glif/bitişme riskleri OYS kodunda belgeli).
+- **Tek istisna — OOK10002R010 Seçmeli Ders Öğrencileri (19.09.2026, §7.3):**
+  *Öğrenci Seçmeli Derslerini Belirle → Raporlar* altındaki bu raporun Excel
+  ihracı ders adı bantlarını DÜŞÜRÜR (Crystal "yalnız veri" çıktısı: satırlar
+  gelir, hangi derse ait oldukları gelmez), yani Excel yolu yoktur. PDF okunur
+  (`apps/dersler/enrollment_import.py`): ders başlığı + satırdan YALNIZ okul no
+  ve sınıf/şube alınır, ad hiç ayrıştırılmaz. Glif riski gerçek raporla
+  ölçüldü: 25 ders grubu, 8.385 satır aynı raporun Excel ihracıyla birebir.
+  Desen öğrenci aktarımıyla aynıdır (önizle → rapor → aktar, `ImportRun`
+  `ELECTIVES`, sha256 uyarısı); sorunlar sayfa/satır + okul no ile raporlanır.
 
 ## 7. MEB ders havuzu planı
 
@@ -415,6 +427,74 @@ girmiştir (çizelge kürasyon notu, Tur 362) → `NONE`.
 - Günlük sınav yükü hesabı **gevşetilmez**: kapsam verisi geldi diye
   `_daily_exam_load`'un "kayıt verisi olmayan ders seviyenin tamamını kapsar"
   konservatif düşüşü kaldırılmaz (risk #4, TB10).
+
+### 7.3 Seçmeli ders öğrenci listesi — "şubenin bir kısmı" (19.09.2026)
+
+**Bağlam.** Şube kapsamı (`CourseSectionOffering`) "bu seçmeliyi hangi şubeler
+alıyor"u söyler, "şubedeki hangi öğrenciler"i söylemez. Din öğretimi
+seçmelilerinde tipik durum: 9/A ve 9/B'de bir grup Kur'an-ı Kerim, kalanı
+Peygamberimizin Hayatı. İki ders de iki şubeyi kapsam gösterince katılımcı
+çözümü her öğrenciyi iki derse yazıyor, oturum çakışmayla kilitleniyor, soru
+kitapçığı yanlış derse basılıyor ve takvim iki sınavı aynı saate koymayı
+reddediyordu.
+
+**Karar.** Kural ŞUBE BAZINDADIR: (ders, ders yılı, şube) için
+`dersler.CourseEnrollment` satırı varsa o şubeden YALNIZ listedeki öğrenciler
+dersi alır; satır yoksa şubenin tamamı alır (bugünkü davranış — veri girmeyen
+okulda hiçbir şey değişmez). Liste kaynağı e-Okul OOK10002R010 PDF'idir (§6)
+ya da şube penceresindeki elle seçici; seçicinin "işaretlenmeyenleri şu derse
+yaz" seçeneği tamamlayıcı dersin listesini aynı işlemde yazar.
+
+- **Katılımcı çözümü** (`participants._resolve_sections`) SECTIONS
+  satırında şube kadrosunu listeyle süzer; listedeki ama şubeden ayrılmış
+  öğrenci SAYIyla uyarılır (ad yok). LEVEL satırı listeyi UYGULAMAZ ama
+  listenin varlığını uyarır — "Sınıf düzeyinin tamamı" açık bir seçimdir.
+- **Takvim sert kısıtı** (`_scope_overlaps`) ortak şubede soruyu öğrenciye
+  indirir: iki ders de o şubede listeliyse kesişim liste kesişimidir; biri
+  listesizse şube "tamamı" sayılır ve kesişir. Ret metni kaç öğrencinin iki
+  dersi birden aldığını söyler.
+- **Günlük sınav yükü** (TB10) listeye yalnız TAM olduğunda güvenir:
+  `course_level_student_ids` dersin o seviyedeki BÜTÜN kapsam şubelerinde liste
+  varken küme döner; tek şube listesizse boş (bilinmiyor) → ders seviyenin
+  tamamının yüküne eklenir. Risk #4 korunur.
+- **Yerleşim sapması:** dağıtılmış/onaylı oturumda yerleşim snapshot'ı
+  (`SeatAssignment.student_id` + `conflict_group`) güncel çözümle karşılaştırılır
+  (`participants.placement_drift`); fark varsa oturum sayfası "yeniden dağıtın"
+  bandı gösterir. Yerleşim sessizce değiştirilmez (snapshot deseni).
+
+**Alternatifler ve neden reddedildi.**
+
+- *(a) OYS'nin `ParticipantType.GROUPS` + şube-içi grup modeli (TB7).* Grup
+  bir ara kavramdır: idareci önce grup kurar, sonra öğrenci atar, sonra oturumda
+  grubu seçer. e-Okul veriyi zaten (ders → öğrenci) biçiminde verir; ara model
+  eşlemeyi iki kez yaptırırdı. Takvim girdisi için "ÜÇÜNCÜ TİP YOK" kuralı da
+  yeni bir katılımcı tipini dışlar. Reddedildi.
+- *(b) Listeyi oturum dersine (`ExamSessionCourse`) yazmak.* Her sınavda
+  yeniden girilirdi; dört takvim ve her oturum aynı bilgiyi ister. Kaynak ders
+  havuzudur — kapsam kararının (03.09.2026) aynı gerekçesi. Reddedildi.
+- *(c) Listeyi `Course` üzerinde alan olarak tutmak.* Katalog yıldan
+  bağımsızdır ve `sync_catalog` alanlarını ezer; öğrenci yıla bağlıdır.
+  Reddedildi (anahtar yıl + şube içerir).
+
+**Sonuçlar.**
+
+- Liste satırları KATI silinir (soft-delete değil): yeniden aktarım ve elle
+  düzeltme listeyi TAMAMEN değiştirir, eski satırlar tarih taşımaz; öğrenci-ders
+  eşleşmesi amacı için gerekenden uzun saklanmaz (KVKK saklama ilkesi — veri
+  minimizasyonu, CLAUDE.md §1.6).
+- Şube kapsamdan çıkarılırsa (`set_course_sections`) o şubenin listesi de
+  düşer — kapsam dışı şubede "bir kısmı" listesi anlamsızdır.
+- e-Okul aktarımı yalnız raporun KAPSADIĞI şubelerde yeniler (raporda herhangi
+  bir derste satırı geçen şubeler): rapor tek düzey ya da tek şube için
+  alınabildiğinden, "rapordaki dersin bütün listesini sil" kuralı öbür
+  düzeylerin listesini sessizce silerdi. Önizleme kapsamı ("9. Sınıf düzeyinden
+  12 şube") söyler. Bedeli: hiçbir seçmeliyi almayan şube kapsanmaz, eski
+  listesi varsa elle temizlenir.
+- Yıl geçişinde liste KOPYALANMAZ (şube pk'leri yıla bağlı; kapsam kararıyla
+  aynı).
+- Motor ve evrak DEĞİŞMEDİ: çakışma anahtarı hâlâ `"<course_id>:<level>"`;
+  katılımcı doğru çözüldüğünde kitapçık, R1/R4/R5/R7 ve R8 kendiliğinden doğru
+  olur.
 
 ---
 
@@ -693,7 +773,10 @@ app'i, guardian_* alanları.
    takvim girdisine şube kapsamı gelmesi bu kuralı DEĞİŞTİRMEZ — kapsam
    katılımcı önizlemesinde, slottan oturum üretiminde ve (03.09.2026'dan beri)
    aynı SLOT kesişimi sert kısıtında kullanılır; `_daily_exam_load` şube
-   listesine bakmaz (TB10).
+   listesine bakmaz (TB10). **19.09.2026 eki:** seçmeli ders öğrenci listesi
+   (§7.3) gerçek kayıt verisidir ve günlük limite girer — ama yalnız dersin o
+   seviyedeki BÜTÜN kapsam şubelerinde liste varken; eksik listede düşüş aynen
+   işler.
 5. **Fontconfig/DejaVu:** fonts.conf'ta DOCTYPE kalırsa sessiz ret → bozuk
    Türkçe evrak; build.ps1 ezme adımı atlanmamalı.
 6. **Kimlik çakışması:** Inno AppId GUID yenilenmez veya `DD_*` kalıntısı
@@ -710,7 +793,9 @@ app'i, guardian_* alanları.
 
 ## 14. Açık işler / teknik borç başlangıcı
 
-- e-Okul PDF parser'ları (şube listesi, personel) → v2 adayı.
+- e-Okul PDF parser'ları (şube listesi, personel) → v2 adayı. (Seçmeli Ders
+  Öğrencileri raporu 19.09.2026'dan beri PDF'ten okunur — Excel ihracında ders
+  adı yok, §6.)
 - Okul türü çizelgeleri: sekiz tür gömülü (§7.2, 03.09.2026). Kalan
   küratörlük: GSL önceki nesil çizelgeleri (2023/41, 2024/46; Spor'unki
   19.09.2026'da TTK 2026/102-103 ile gereksizleşti), MTAL

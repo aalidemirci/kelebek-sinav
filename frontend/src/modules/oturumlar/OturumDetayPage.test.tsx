@@ -14,7 +14,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../lib/api";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
-import type { ExamSession } from "./api";
+import type { ExamSession, ParticipantsResponse } from "./api";
 import { makeReport, makeSession } from "./testFixtures";
 
 const exam = vi.hoisted(() => ({
@@ -25,6 +25,16 @@ const exam = vi.hoisted(() => ({
   revertToDraft: vi.fn(),
   remove: vi.fn(),
   distribute: vi.fn(),
+  // Yerleşim sapma bandı dağıtılmış/onaylı oturumda katılımcıları sorar.
+  participants: vi.fn((): Promise<ParticipantsResponse> =>
+    Promise.resolve({
+      total_count: 0,
+      has_blocking_conflicts: false,
+      placement_outdated: false,
+      warnings: [],
+      courses: [],
+    }),
+  ),
 }));
 
 vi.mock("./api", async (importActual) => {
@@ -82,6 +92,8 @@ describe("OturumDetayPage", () => {
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Taslağı sil/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Onayla" })).not.toBeInTheDocument();
+    // Yerleşim yokken sapma sorulmaz (bant yalnız dağıtılmış/onaylı oturumda).
+    expect(exam.participants).not.toHaveBeenCalled();
   });
 
   it("taslak silme onaylanınca remove çağrılır ve listeye dönülür", async () => {
@@ -123,6 +135,34 @@ describe("OturumDetayPage", () => {
     expect(screen.getByRole("button", { name: "Taslağa al" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Yeniden dağıt" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Onayla" })).toBeInTheDocument();
+  });
+
+  it("dağıtımdan sonra katılımcılar değiştiyse sapma bandı gerekçesiyle görünür", async () => {
+    exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
+    const mesaj =
+      "Dağıtımdan sonra katılımcılar değişti (1 öğrencinin dersi değişti). Yerleşim ve " +
+      "kitapçıklar eski listeye göre — oturumu yeniden dağıtın.";
+    exam.participants.mockResolvedValueOnce({
+      total_count: 30,
+      has_blocking_conflicts: false,
+      placement_outdated: true,
+      warnings: [mesaj, "başka bir uyarı"],
+      courses: [],
+    });
+    renderPage();
+
+    expect(await screen.findByText(mesaj)).toBeInTheDocument();
+    expect(exam.participants).toHaveBeenCalledWith(5);
+    // Bant yalnız ilk uyarıyı (sapma açıklaması) taşır.
+    expect(screen.queryByText("başka bir uyarı")).not.toBeInTheDocument();
+  });
+
+  it("katılımcılar yerleşimle aynıysa sapma bandı çizilmez", async () => {
+    exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
+    renderPage();
+    expect(await screen.findByText("YERLEŞİM PANELİ 5")).toBeInTheDocument();
+    await waitFor(() => expect(exam.participants).toHaveBeenCalledWith(5));
+    expect(screen.queryByText(/Dağıtımdan sonra katılımcılar değişti/)).not.toBeInTheDocument();
   });
 
   it("DAĞITILDI: 'Onayla' diyalogdan geçer; ad boşsa boş gönderilir (backend okul müdürünü yazar)", async () => {

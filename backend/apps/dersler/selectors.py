@@ -310,15 +310,39 @@ def taught_course_levels(
 def course_level_student_ids(
     *, course_id: int, level: int, school_year_id: int, on_date: Any = None
 ) -> set[int]:
-    """Derse kayıtlı öğrenci kümesi — KS v1'de kayıt verisi YOK, hep boş döner.
+    """Derse kayıtlı öğrenci kümesi — seçmeli ders öğrenci listesinden (19.09.2026).
 
-    Boş dönüş, `_daily_exam_load`'da dersin "seviyenin tamamını kapsadığı"
-    konservatif varsayımını tetikler (OYS ADR-0044 karar 13 ile birebir).
-    Seçmeli ders kayıtları ileride gelirse yalnız bu fonksiyon dolar; sayım
-    algoritması değişmez.
+    Boş dönüş "bilinmiyor" demektir ve `_daily_exam_load`'da dersin "seviyenin
+    tamamını kapsadığı" konservatif varsayımını tetikler (OYS ADR-0044 karar 13
+    ile birebir; sayım algoritması değişmez). Küme YALNIZ veri TAMKEN döner:
+    dersin o düzeyde şube kapsamı (`CourseSectionOffering`) var ve kapsamdaki
+    HER şubenin öğrenci listesi girilmiş (e-Okul aktarımından sonra olağan
+    durum). Tek bir şube listesizse (= "şubenin tamamı" beyanı, kayıt verisi
+    değil — TB10 gerekçesi) boş döner: eksik sayım günlük sınav sınırını
+    delerdi, fazla sayım yalnız uyarıyı erken verir.
+
+    Küme şubeden bağımsızdır (günlük yük öğrenci başınadır): listedeki, hâlâ
+    aktif ve o sınıf düzeyindeki öğrenciler — şube değiştirmiş öğrenci dersi
+    bırakmış sayılmaz.
     """
-    del course_id, level, school_year_id, on_date
-    return set()
+    from apps.okul.models import Student, StudentStatus
+
+    del on_date
+    kapsam = course_section_map(school_year_id).get((int(course_id), int(level)))
+    if not kapsam:
+        return set()
+    index = enrollment_index(school_year_id, course_ids=[course_id])
+    uyeler: set[int] = set()
+    for section_id in kapsam:
+        liste = index.members(course_id, section_id)
+        if liste is None:
+            return set()  # listesiz şube: kayıt verisi eksik → bilinmiyor
+        uyeler.update(liste)
+    return set(
+        Student.objects.filter(
+            pk__in=uyeler, status=StudentStatus.ACTIVE, class_level=level
+        ).values_list("pk", flat=True)
+    )
 
 
 def course_level_coverage(
@@ -371,3 +395,65 @@ def course_section_map(school_year_id: int) -> dict[tuple[int, int], list[int]]:
         ]
         for kayit in kayitlar
     }
+
+
+# --------------------------------------------------------------------------- #
+# Seçmeli ders öğrenci listesi (19.09.2026) — `CourseEnrollment`
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class EnrollmentIndex:
+    """(ders, şube) → listedeki öğrenci pk kümesi — bir ders yılının anlık görüntüsü.
+
+    Kural şube bazındadır (`CourseEnrollment` docstring'i): anahtar YOKSA dersi
+    şubenin tamamı alır, varsa yalnız kümedeki öğrenciler. Küme HAM listedir —
+    öğrencinin hâlâ o şubede ve aktif olup olmadığı tüketicide, şube mevcuduyla
+    kesiştirilerek denetlenir (katılımcı çözümü bunu sayıyla uyarır).
+
+    Tek sorguyla kurulur; takvimin otomatik yerleştiricisi gibi döngüde
+    `_scope_overlaps` çağıran yollar dizini BİR KEZ kurup geçirir.
+    """
+
+    school_year_id: int
+    lists: dict[tuple[int, int], frozenset[int]]
+
+    def members(self, course_id: int, section_id: int) -> frozenset[int] | None:
+        """Listeli şubede öğrenci kümesi; listesiz şubede None (= şubenin tamamı)."""
+        return self.lists.get((int(course_id), int(section_id)))
+
+    def is_listed(self, course_id: int, section_id: int) -> bool:
+        return (int(course_id), int(section_id)) in self.lists
+
+
+def enrollment_index(
+    school_year_id: int, *, course_ids: Sequence[int] | None = None
+) -> EnrollmentIndex:
+    """Ders yılının öğrenci listeleri — silinmiş şube/öğrenci satırı hiç girmez."""
+    from apps.dersler.models import CourseEnrollment
+
+    qs = CourseEnrollment.objects.filter(
+        school_year_id=school_year_id,
+        section__deleted_at__isnull=True,
+        student__deleted_at__isnull=True,
+    )
+    if course_ids is not None:
+        qs = qs.filter(course_id__in=list(course_ids))
+    toplama: dict[tuple[int, int], set[int]] = {}
+    for course_id, section_id, student_id in qs.values_list(
+        "course_id", "section_id", "student_id"
+    ):
+        toplama.setdefault((int(course_id), int(section_id)), set()).add(int(student_id))
+    return EnrollmentIndex(
+        school_year_id=int(school_year_id),
+        lists={anahtar: frozenset(ids) for anahtar, ids in toplama.items()},
+    )
+
+
+def course_enrollment_counts(school_year_id: int) -> dict[tuple[int, int], int]:
+    """(ders, şube) → listedeki öğrenci sayısı — Ders Havuzu tablosunun "Şubeler" etiketi.
+
+    Yalnız SAYI döner (arayüz "9/A (14)" basar); öğrenci kimliği gerekmeyen her
+    ekran bunu kullanır, kişisel veri taşımaz.
+    """
+    return {anahtar: len(ids) for anahtar, ids in enrollment_index(school_year_id).lists.items()}

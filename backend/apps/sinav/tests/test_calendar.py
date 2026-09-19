@@ -1302,6 +1302,126 @@ def test_kapsam_sonradan_genisleyince_dogrulama_cakismayi_yakalar() -> None:
     assert any("kapsamları kesişiyor" in h for h in hatalar)
 
 
+# ===========================================================================
+# Seçmeli ders öğrenci listesi (19.09.2026) — aynı şubede iki seçmeli aynı saatte
+# ===========================================================================
+
+
+def _din_secmelileri() -> tuple[ExamCalendar, int, list[int], int, int]:
+    """9/A'da iki öğrenci; Kur'an-ı Kerim ve Peygamberimizin Hayatı (seçmeli, 9. sınıf)."""
+    from apps.okul.models import Student
+
+    calendar, _astro, a_pk = _secmeli_takvim()
+    kk = ders("Kur'an-ı Kerim", levels=[9], course_type=CourseType.ELECTIVE)
+    ph = ders("Peygamberimizin Hayatı", levels=[9], course_type=CourseType.ELECTIVE)
+    ogr = list(
+        Student.objects.filter(class_level=9, class_section="A")
+        .order_by("student_number")
+        .values_list("pk", flat=True)
+    )
+    return calendar, a_pk, ogr, kk.pk, ph.pk
+
+
+def _liste(course_pk: int, section_pk: int, ids: list[int], *, kalan: int | None = None) -> None:
+    from apps.dersler import services as ders_services
+
+    ders_services.set_section_enrollment(
+        course_id=course_pk,
+        school_year_id=aktif_yil().pk,
+        section_id=section_pk,
+        student_ids=ids,
+        complement_course_id=kalan,
+    )
+
+
+def _girdi(calendar: ExamCalendar, course_pk: int, section_pk: int) -> ExamCalendarEntry:
+    return takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=course_pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[section_pk],
+    )
+
+
+def test_ayni_subede_ayrik_listeli_iki_secmeli_ayni_saate_konur() -> None:
+    """9/A'nın bir grubu Kur'an-ı Kerim, kalanı Peygamberimizin Hayatı: aynı saat serbest."""
+    calendar, a_pk, ogr, kk, ph = _din_secmelileri()
+    _liste(kk, a_pk, ogr[:1], kalan=ph)
+    g_kk, g_ph = _girdi(calendar, kk, a_pk), _girdi(calendar, ph, a_pk)
+    gun = date(2026, 10, 27)
+
+    takvim.place_entry(g_kk, on_date=gun, period_no=1)
+    takvim.place_entry(g_ph, on_date=gun, period_no=1)
+
+    assert takvim.calendar_validation(calendar)["errors"] == []
+    # Izgara dipnotu listeyi sayar (şubenin tamamını değil).
+    onizleme = takvim.entry_participant_preview(calendar)
+    assert onizleme[g_kk.pk]["student_count"] == 1
+    assert onizleme[g_ph.pk]["student_count"] == 1
+
+
+def test_iki_dersi_birden_alan_ogrenci_ayni_saatte_sayiyla_reddedilir() -> None:
+    calendar, a_pk, ogr, kk, ph = _din_secmelileri()
+    _liste(kk, a_pk, ogr)
+    _liste(ph, a_pk, ogr[1:])
+    g_kk, g_ph = _girdi(calendar, kk, a_pk), _girdi(calendar, ph, a_pk)
+    gun = date(2026, 10, 27)
+    takvim.place_entry(g_kk, on_date=gun, period_no=1)
+
+    # Metin "ortak" demez: MEB'de ortak sınav okul geneli sınavdır (docs/sozluk.md).
+    with pytest.raises(ValidationError, match="1 öğrenci iki dersi de alıyor") as hata:
+        takvim.place_entry(g_ph, on_date=gun, period_no=1)
+    assert "ortak" not in str(hata.value)
+
+
+def test_listesiz_sube_listeli_dersle_kesisir() -> None:
+    """Listesiz şube 'şubenin tamamı'dır — öbür dersin listesini kapsar (ihtiyatlı)."""
+    calendar, a_pk, ogr, kk, ph = _din_secmelileri()
+    _liste(kk, a_pk, ogr[:1])
+    g_kk, g_ph = _girdi(calendar, kk, a_pk), _girdi(calendar, ph, a_pk)
+    gun = date(2026, 10, 27)
+    takvim.place_entry(g_kk, on_date=gun, period_no=1)
+
+    with pytest.raises(ValidationError, match="kapsamlar kesişiyor"):
+        takvim.place_entry(g_ph, on_date=gun, period_no=1)
+
+
+def test_liste_sonradan_kesisince_dogrulama_yakalar() -> None:
+    """e-Okul yeniden aktarılıp listeler kesişirse yerleşik takvim hata verir."""
+    calendar, a_pk, ogr, kk, ph = _din_secmelileri()
+    _liste(kk, a_pk, ogr[:1], kalan=ph)
+    g_kk, g_ph = _girdi(calendar, kk, a_pk), _girdi(calendar, ph, a_pk)
+    gun = date(2026, 10, 27)
+    takvim.place_entry(g_kk, on_date=gun, period_no=1)
+    takvim.place_entry(g_ph, on_date=gun, period_no=1)
+
+    _liste(kk, a_pk, ogr)  # artık iki öğrenci de Kur'an-ı Kerim'de, biri ikisinde birden
+
+    hatalar = takvim.calendar_validation(calendar)["errors"]
+    assert any("1 öğrenci iki dersi de alıyor" in h for h in hatalar)
+
+
+def test_otomatik_yerlestirme_ayrik_listeleri_ayni_saate_koyabilir() -> None:
+    """Tek sınav saatli takvimde iki seçmeli ancak aynı saate konarak yerleşir."""
+    calendar, a_pk, ogr, kk, ph = _din_secmelileri()
+    _liste(kk, a_pk, ogr[:1], kalan=ph)
+    g_kk, g_ph = _girdi(calendar, kk, a_pk), _girdi(calendar, ph, a_pk)
+    SchoolConfig.objects.update_or_create(
+        pk=SchoolConfig.SINGLETON_PK, defaults={"exam_period_nos": [1]}
+    )
+    calendar.end_date = calendar.start_date  # tek gün × tek saat = tek slot
+    calendar.save(update_fields=["end_date", "updated_at"])
+
+    takvim.auto_place_entries(calendar)
+
+    g_kk.refresh_from_db()
+    g_ph.refresh_from_db()
+    # 26.10.2026 pazartesidir: tek slot (o gün, 1. ders) — ikisi de oraya yerleşir.
+    assert g_kk.placed_date == g_ph.placed_date == date(2026, 10, 26)
+    assert g_kk.period_no == g_ph.period_no == 1
+
+
 def test_gunluk_ders_saati_ayari_zil_cizelgesini_uzatir() -> None:
     """Meslek lisesinde gün 10 saat olabilir: varsayılan çizelge ayardan türer."""
     SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, daily_period_count=10)

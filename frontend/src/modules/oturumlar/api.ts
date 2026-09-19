@@ -166,12 +166,19 @@ export interface ParticipantRow {
 export interface ParticipantsResponse {
   total_count: number;
   has_blocking_conflicts: boolean;
+  /**
+   * Dağıtımdan sonra katılımcılar değişti (seçmeli ders listesi, öğrenci aktarımı,
+   * nakil) — yerleşim ve kitapçıklar eski listeye göre; açıklaması `warnings[0]`.
+   */
+  placement_outdated?: boolean;
   warnings: string[];
   courses: {
     session_course_id: number;
     course_id: number;
     course_name: string;
     count: number;
+    /** Seçmeli ders öğrenci listesiyle (şubenin bir kısmı) çözülen şubeler ("9/A"). */
+    listed_sections?: string[];
     warnings: string[];
     participants: ParticipantRow[];
   }[];

@@ -174,6 +174,91 @@ export interface CourseSectionOfferingRow extends CourseSectionOffering {
   course: number;
 }
 
+// ---------------------------------------------------------------------------
+// Seçmeli ders öğrenci listesi (19.09.2026) — "şubenin bir kısmı dersi alıyor".
+// Kural ŞUBE BAZINDADIR: listesiz şubeyi dersi tamamen alır, listeli şubede
+// yalnız listedekiler (backend `dersler.CourseEnrollment`).
+// ---------------------------------------------------------------------------
+
+/** (ders, şube) → listedeki öğrenci sayısı; listesiz şube satırda yoktur. */
+export interface EnrollmentCountRow {
+  course: number;
+  section: number;
+  count: number;
+}
+
+export interface CourseEnrollmentSection {
+  section_id: number;
+  student_ids: number[];
+}
+
+export interface SetSectionEnrollmentBody {
+  section_id: number;
+  /** Boş liste = şubenin tamamı dersi alır. */
+  student_ids: number[];
+  /** Verilirse şubenin listede OLMAYAN öğrencileri bu derse yazılır. */
+  complement_course_id?: number;
+}
+
+export interface SetSectionEnrollmentResult {
+  school_year: number;
+  section_id: number;
+  student_ids: number[];
+  complement: { course_id: number; student_ids: number[] } | null;
+}
+
+/** e-Okul OOK10002R010 raporundaki bir ders grubunun eşleşme özeti. */
+export interface ElectiveImportCourse {
+  /** e-Okul başlığı ("SEÇMELİ KUR`AN-I KERİM"). */
+  title: string;
+  status: "matched" | "unmatched";
+  course_id: number | null;
+  course_name: string;
+  note: string;
+  report_rows: number;
+  students: number;
+  /** "9/A" etiketleri, Türk alfabesiyle sıralı. */
+  sections: string[];
+}
+
+/** Satır sorunu — sayfa/satır konumu + okul no (ad YOK). */
+export interface ElectiveImportIssue {
+  page: number;
+  line: number;
+  issue: string;
+  value: string;
+}
+
+export interface ElectiveImportReport {
+  file_hash: string;
+  file_name: string;
+  school_year: string;
+  pages: number;
+  total_rows: number;
+  processed: number;
+  already_imported: boolean;
+  dry_run: boolean;
+  courses: ElectiveImportCourse[];
+  /**
+   * Raporun kapsadığı şube sayısı ve sınıf düzeyleri ("9. Sınıf"): listeler YALNIZ
+   * bu şubelerde yenilenir — tek düzey/şube için alınmış rapor öbürlerini silmez.
+   */
+  covered_section_count: number;
+  covered_levels: string[];
+  /** Listesi olup bu raporda yer almayan dersler — dokunulmadı. */
+  untouched_courses: string[];
+  warnings: ElectiveImportIssue[];
+  skipped: ElectiveImportIssue[];
+  warnings_truncated: number;
+  skipped_truncated: number;
+}
+
+function electiveImport(path: string, file: File): Promise<ElectiveImportReport> {
+  const form = new FormData();
+  form.append("file", file);
+  return api.postForm<ElectiveImportReport>(path, form);
+}
+
 export const derslerApi = {
   listCourses: (params: CourseListParams = {}): Promise<Course[]> => {
     const parts: string[] = [];
@@ -233,4 +318,22 @@ export const derslerApi = {
       `/courses/${courseId}/sections/`,
       { offerings },
     ),
+
+  /** Ders havuzu tablosu: (ders, şube) → listedeki öğrenci sayısı. */
+  enrollmentCounts: () =>
+    api.get<{ school_year: number; results: EnrollmentCountRow[] }>("/courses/enrollment-counts/"),
+  /** Tek dersin listeli şubeleri ve öğrenci kimlikleri. */
+  courseEnrollments: (courseId: number) =>
+    api.get<{ school_year: number; sections: CourseEnrollmentSection[] }>(
+      `/courses/${courseId}/enrollments/`,
+    ),
+  /** TEK ŞUBEYİ tamamen değiştirir; boş liste = şubenin tamamı. */
+  setSectionEnrollment: (courseId: number, body: SetSectionEnrollmentBody) =>
+    api.put<SetSectionEnrollmentResult>(`/courses/${courseId}/enrollments/`, body),
+  /** e-Okul OOK10002R010 PDF'i — yazmadan önizleme. */
+  previewEnrollmentImport: (file: File) =>
+    electiveImport("/courses/enrollments/import/preview/", file),
+  /** e-Okul OOK10002R010 PDF'i — rapordaki derslerin listelerini yazar. */
+  commitEnrollmentImport: (file: File) =>
+    electiveImport("/courses/enrollments/import/commit/", file),
 };

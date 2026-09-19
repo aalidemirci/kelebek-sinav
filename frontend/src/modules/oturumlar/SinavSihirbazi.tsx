@@ -473,9 +473,13 @@ function CoursesStep({
     ((ptype === "LEVEL" && level !== "") || (ptype === "SECTIONS" && sectionIds.length > 0));
 
   const countByCourse = useMemo(() => {
-    const map = new Map<number, { count: number; warnings: string[] }>();
+    const map = new Map<number, { count: number; warnings: string[]; listed: string[] }>();
     for (const c of participants.data?.courses ?? []) {
-      map.set(c.session_course_id, { count: c.count, warnings: c.warnings });
+      map.set(c.session_course_id, {
+        count: c.count,
+        warnings: c.warnings,
+        listed: c.listed_sections ?? [],
+      });
     }
     return map;
   }, [participants.data]);
@@ -540,6 +544,13 @@ function CoursesStep({
               {info && (
                 <span className="text-body-small text-on-surface-variant">
                   {info.count} öğrenci
+                </span>
+              )}
+              {info && info.listed.length > 0 && (
+                // Seçmeli dersi şubenin yalnız bir kısmı alıyor: katılımcılar Ders
+                // Havuzu'ndaki öğrenci listesinden gelir (e-Okul aktarımı ya da elle).
+                <span className="rounded-shape-sm bg-secondary-container px-2 py-0.5 text-label-medium text-on-secondary-container">
+                  öğrenci listesiyle: {info.listed.join(", ")}
                 </span>
               )}
               <span className="ml-auto" />

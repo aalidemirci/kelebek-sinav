@@ -23,6 +23,7 @@ import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import Dialog from "../../ui/Dialog";
+import Icon from "../../ui/Icon";
 import ModuleHeader from "../../ui/ModuleHeader";
 import { SkeletonList } from "../../ui/Skeleton";
 import Tabs, { tabPanelProps } from "../../ui/Tabs";
@@ -70,6 +71,7 @@ export default function OturumDetayPage() {
     void qc.invalidateQueries({ queryKey: ["exam-seating", sessionId] });
     void qc.invalidateQueries({ queryKey: ["exam-proctors", sessionId] });
     void qc.invalidateQueries({ queryKey: ["exam-proctor-candidates", sessionId] });
+    void qc.invalidateQueries({ queryKey: ["exam-participants", sessionId] });
   };
 
   const TRANSITIONS = {
@@ -241,6 +243,10 @@ export default function OturumDetayPage() {
         <StatusBadge status={data.status} />
       </div>
 
+      {(data.status === "DISTRIBUTED" || data.status === "APPROVED") && (
+        <YerlesimSapmaBandi sessionId={data.id} />
+      )}
+
       {isDraft ? (
         <SinavSihirbazi session={data} onChanged={refresh} />
       ) : (
@@ -293,5 +299,31 @@ export default function OturumDetayPage() {
         />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Dağıtımdan sonra katılımcılar değiştiyse uyarı bandı (19.09.2026).
+ *
+ * Seçmeli ders öğrenci listesi (e-Okul yeniden aktarıldı ya da elle düzeltildi),
+ * öğrenci aktarımı veya nakil yerleşimden SONRA olursa yerleşim ve kitapçıklar
+ * eski listeye göre kalır; backend yerleşim snapshot'ını güncel çözümle
+ * karşılaştırıp `placement_outdated` döner. Sorgu yalnız dağıtılmış/onaylı
+ * oturumda çalışır; bilgi yoksa bant çizilmez (sessiz başarı).
+ */
+function YerlesimSapmaBandi({ sessionId }: { sessionId: number }) {
+  const katilimci = useQuery({
+    queryKey: ["exam-participants", sessionId, "sapma"],
+    queryFn: () => examSessionApi.participants(sessionId),
+  });
+  if (!katilimci.data?.placement_outdated) return null;
+  return (
+    <p
+      role="status"
+      className="mb-4 flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-3 py-2 text-body-medium text-on-tertiary-container"
+    >
+      <Icon name="warning" size="lg" />
+      <span>{katilimci.data.warnings[0]}</span>
+    </p>
   );
 }

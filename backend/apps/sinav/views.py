@@ -439,17 +439,21 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
         session = self.get_object()
         resolution = sinav_participants.resolve_session(session)
         cross = sinav_participants.overlapping_session_conflicts(session)
+        drift = sinav_participants.placement_drift(session, resolution)
+        sapma = [drift.message()] if drift is not None and drift.outdated else []
         return Response(
             {
                 "total_count": resolution.total_count,
                 "has_blocking_conflicts": resolution.has_blocking_conflicts,
-                "warnings": [*resolution.warnings, *cross],
+                "placement_outdated": bool(drift is not None and drift.outdated),
+                "warnings": [*sapma, *resolution.warnings, *cross],
                 "courses": [
                     {
                         "session_course_id": c.session_course_id,
                         "course_id": c.course_id,
                         "course_name": c.course_name,
                         "count": c.count,
+                        "listed_sections": c.listed_sections,
                         "warnings": c.warnings,
                         "participants": ParticipantSerializer(c.participants, many=True).data,
                     }

@@ -174,7 +174,10 @@ class ParticipantType(models.TextChoices):
     OYS'deki üçüncü tip (GROUPS — şube içi ders grupları) ALINMADI: gruplar
     OYS'de ders programı çekirdeğinden (LessonGroup/SectionGroup) türer ve o
     zincir KS'ye taşınmadı (tasarım §11 ALMA). LEVEL + SECTIONS lise ortak
-    sınav pratiğini karşılar; sapma teknik borç kütüğüne işlendi (TB7).
+    sınav pratiğini karşılar (TB7). Seçmeliyi şubenin bir kısmı alıyorsa
+    karşılığı yeni bir tip DEĞİL, ders havuzundaki şube öğrenci listesidir
+    (`dersler.CourseEnrollment`, 19.09.2026, tasarım §7.3): SECTIONS çözümü
+    listeli şubede yalnız listedekileri alır.
     """
 
     # Etiketler docs/sozluk.md "Katılımcılar" kararıdır; FE `PARTICIPANT_TYPE_TR`

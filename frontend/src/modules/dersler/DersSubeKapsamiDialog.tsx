@@ -8,6 +8,13 @@
 //
 // Kaydetme TAM DEĞİŞTİRMEDİR: diyalog dersin bütün seviyelerini birlikte
 // gösterir, boş bırakılan seviyenin kaydı silinir.
+//
+// 19.09.2026: seçili her şubenin yanında "şubenin tamamı / N öğrenci" durumu ve
+// "Öğrenciler" düğmesi — dersi şubenin yalnız bir kısmı alıyorsa öğrenciler
+// seçilir (`DersOgrenciListesiDialog`). Seçici bu diyaloğun YERİNE açılır, iç içe
+// DEĞİL: iki diyalog da belge düzeyinde klavye dinler — Esc ikisini birden
+// kapatır, dış odak tuzağı içteki odağı çalardı. Bileşen bağlı kaldığı için
+// kaydedilmemiş şube seçimi kaybolmaz.
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,6 +29,8 @@ import { okulApi } from "../okul/api";
 import SubeSecici from "../okul/SubeKapsamSecici";
 import type { Course } from "./api";
 import { derslerApi } from "./api";
+import DersOgrenciListesiDialog from "./DersOgrenciListesiDialog";
+import type { SubeBilgisi } from "./DersOgrenciListesiDialog";
 
 export default function DersSubeKapsamiDialog({
   course,
@@ -35,11 +44,23 @@ export default function DersSubeKapsamiDialog({
   const snackbar = useSnackbar();
   const queryClient = useQueryClient();
   const [secim, setSecim] = useState<Record<number, number[]>>({});
+  // Öğrenci listesi düzenlenen şube (dolu iken bu diyalog yerine seçici çizilir).
+  const [ogrenciSube, setOgrenciSube] = useState<SubeBilgisi | null>(null);
 
   const kapsamQuery = useQuery({
     queryKey: ["course-sections", course.id],
     queryFn: () => derslerApi.courseSections(course.id),
   });
+  // Listeli şubeler (şubenin bir kısmı dersi alıyor); listesiz şube = tamamı.
+  const listeler = useQuery({
+    queryKey: ["course-enrollments", course.id],
+    queryFn: () => derslerApi.courseEnrollments(course.id),
+    retry: false,
+  });
+  const listeHaritasi = useMemo(
+    () => new Map((listeler.data?.sections ?? []).map((s) => [s.section_id, s.student_ids])),
+    [listeler.data],
+  );
   // Şube kataloğu + kümeler okul modülünden — takvim diyaloglarıyla AYNI
   // queryKey'ler, aynı oturumda ikinci kez indirilmez.
   const sections = useQuery({
@@ -93,6 +114,18 @@ export default function DersSubeKapsamiDialog({
   // Aktif ders yılı yokken uç 400 döner; hata "şube yok" diye sunulmaz.
   const yuklemeHatasi = kapsamQuery.error ?? sections.error;
 
+  if (ogrenciSube !== null) {
+    return (
+      <DersOgrenciListesiDialog
+        course={course}
+        section={ogrenciSube}
+        listedIds={listeHaritasi.get(ogrenciSube.id) ?? null}
+        onClose={() => setOgrenciSube(null)}
+        onSaved={() => setOgrenciSube(null)}
+      />
+    );
+  }
+
   return (
     <Dialog
       open
@@ -118,7 +151,9 @@ export default function DersSubeKapsamiDialog({
       <p className="mb-3 text-body-small text-on-surface-variant">
         Bu seçmeli dersi hangi şubelerin aldığını işaretleyin. Sınav takvimi havuzu bu bilgiyi
         kullanır: şubeleri girilmiş seçmeliler havuza kendiliğinden girer, takvimde tekrar şube
-        seçmezsiniz. Bir sınıf düzeyini boş bırakırsanız o düzeyde şubeler tanımsız kalır.
+        seçmezsiniz. Bir sınıf düzeyini boş bırakırsanız o düzeyde şubeler tanımsız kalır. Dersi
+        şubenin yalnız bir kısmı alıyorsa şubenin yanındaki <strong>Öğrenciler</strong> düğmesiyle
+        öğrencileri seçin.
       </p>
       {yukleniyor ? (
         <SkeletonList rows={3} />
@@ -170,6 +205,46 @@ export default function DersSubeKapsamiDialog({
                     }))
                   }
                 />
+                {secili.length > 0 && (
+                  <ul
+                    className="mt-2 flex flex-col gap-1"
+                    aria-label={`${gradeLevelLabel(level)} şubelerinde öğrenciler`}
+                  >
+                    {seviyeSubeleri
+                      .filter((s) => secili.includes(s.id))
+                      .map((s) => {
+                        const liste = listeHaritasi.get(s.id);
+                        return (
+                          <li
+                            key={s.id}
+                            className="flex flex-wrap items-center gap-2 text-body-small"
+                          >
+                            <span className="w-12 text-on-surface">{s.class_label}</span>
+                            <span className="text-on-surface-variant">
+                              {liste
+                                ? `${liste.length} öğrenci (şubenin bir kısmı)`
+                                : "şubenin tamamı"}
+                            </span>
+                            <Button
+                              variant="text"
+                              icon="group"
+                              aria-label={`${s.class_label} şubesinde bu dersi alan öğrenciler`}
+                              onClick={() =>
+                                setOgrenciSube({
+                                  id: s.id,
+                                  class_level: s.class_level,
+                                  class_section: s.class_section,
+                                  class_label: s.class_label,
+                                })
+                              }
+                            >
+                              Öğrenciler
+                            </Button>
+                          </li>
+                        );
+                      })}
+                  </ul>
+                )}
               </section>
             );
           })}

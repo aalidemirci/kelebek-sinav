@@ -62,7 +62,9 @@ class SeatingReport:
     # Aynı şubeden (section_label eşit, boş değil) FARKLI çakışma grubundan iki
     # öğrencinin 1. halka komşuluğu — GROUPS-tipi ayrım açık ucu (farklı kitapçık
     # → kopya riski düşük; metrik sahada anlamlı sayı üretirse V2'de
-    # separate_sections yumuşak cezası değerlendirilir, ADR-0044).
+    # separate_sections yumuşak cezası değerlendirilir, ADR-0044). 19.09.2026'dan
+    # beri seçmeli ders öğrenci listesiyle sahada oluşur (9/A'nın bir grubu
+    # Kur'an-ı Kerim, kalanı Peygamberimizin Hayatı — aynı şube, iki grup).
     cross_group_same_section_first_ring_pairs: int = 0
     # Salon başına yerleşen öğrenci sayısı (doluluk gözlemi; her düzende dolar).
     room_counts: dict[int, int] = field(default_factory=dict)

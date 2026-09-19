@@ -28,6 +28,7 @@ from apps.dersler.models import (
     VALID_COURSE_LEVELS,
     Course,
     CourseAlias,
+    CourseEnrollment,
     CourseExamMode,
     CourseSectionOffering,
     CourseSource,
@@ -782,4 +783,190 @@ def set_course_sections(
         CourseSectionOffering.objects.create(
             course=course, school_year_id=school_year_id, level=level, section_ids=ids
         )
+    # Kapsamdan çıkan şubenin öğrenci listesi de düşer (19.09.2026): liste
+    # "şubenin hangi öğrencileri"dir, şube dersi almıyorsa anlamı kalmaz ve
+    # artık satır şube yeniden eklenince eski listeyi sessizce geri getirirdi.
+    kalan_subeler = {sid for ids in temiz.values() for sid in ids}
+    CourseEnrollment.all_objects.get_queryset().filter(
+        course=course, school_year_id=school_year_id
+    ).exclude(section_id__in=kalan_subeler).hard_delete()
     return dict(sorted(temiz.items()))
+
+
+# --------------------------------------------------------------------------- #
+# Seçmeli ders öğrenci listesi (19.09.2026) — `CourseEnrollment`
+# --------------------------------------------------------------------------- #
+
+
+def _elective_course(course_id: int, *, field: str = "course") -> Course:
+    """Liste yalnız seçmeli derste tutulur (şube kapsamıyla aynı kural)."""
+    course: Course | None = Course.objects.filter(pk=course_id).first()
+    if course is None:
+        raise ValidationError({field: "Ders bulunamadı."})
+    if course.course_type != CourseType.ELECTIVE:
+        raise ValidationError(
+            {
+                field: f"'{course.name}' zorunlu ders — öğrenci listesi yalnız seçmeli "
+                "derslerde tutulur."
+            }
+        )
+    return course
+
+
+def course_enrollments(*, course_id: int, school_year_id: int) -> dict[int, list[int]]:
+    """Tek dersin şube → listedeki öğrenci pk'leri (listesiz şube sözlükte yoktur)."""
+    from apps.dersler import selectors as ders_selectors
+
+    index = ders_selectors.enrollment_index(school_year_id, course_ids=[course_id])
+    return {
+        section_id: sorted(ids)
+        for (cid, section_id), ids in sorted(index.lists.items())
+        if cid == course_id
+    }
+
+
+def _offering_add_section(course: Course, school_year_id: int, level: int, section_id: int) -> None:
+    """Şubeyi dersin o seviyedeki kapsamına ekler (yoksa kapsam kaydı açılır)."""
+    kayit = CourseSectionOffering.objects.filter(
+        course=course, school_year_id=school_year_id, level=level
+    ).first()
+    if kayit is None:
+        CourseSectionOffering.objects.create(
+            course=course, school_year_id=school_year_id, level=level, section_ids=[section_id]
+        )
+        return
+    ids = [int(x) for x in kayit.section_ids or []]
+    if section_id not in ids:
+        kayit.section_ids = [*ids, section_id]
+        kayit.save(update_fields=["section_ids", "updated_at"])
+
+
+def _offering_remove_section(
+    course: Course, school_year_id: int, level: int, section_id: int
+) -> None:
+    """Şubeyi dersin kapsamından çıkarır; kapsamı boşalan kayıt silinir."""
+    kayit = CourseSectionOffering.objects.filter(
+        course=course, school_year_id=school_year_id, level=level
+    ).first()
+    if kayit is None:
+        return
+    ids = [int(x) for x in kayit.section_ids or [] if int(x) != section_id]
+    if ids:
+        kayit.section_ids = ids
+        kayit.save(update_fields=["section_ids", "updated_at"])
+    else:
+        kayit.delete()
+
+
+def _replace_section_list(
+    course: Course, school_year_id: int, section: Any, student_ids: list[int]
+) -> None:
+    """(ders, yıl, şube) listesini KALICI siler ve yeniden yazar.
+
+    Aynı öğrencinin bu derste BAŞKA şubeden kalmış satırı da silinir (şube
+    değiştirmiş öğrenci): teklik anahtarı (ders, yıl, öğrenci)'dir.
+    """
+    # `get_queryset()` SoftDeleteQuerySet döndürür — `hard_delete` tipli kalır.
+    CourseEnrollment.all_objects.get_queryset().filter(
+        course=course, school_year_id=school_year_id, section=section
+    ).hard_delete()
+    if not student_ids:
+        return
+    CourseEnrollment.all_objects.get_queryset().filter(
+        course=course, school_year_id=school_year_id, student_id__in=student_ids
+    ).hard_delete()
+    CourseEnrollment.objects.bulk_create(
+        [
+            CourseEnrollment(
+                course=course, school_year_id=school_year_id, section=section, student_id=sid
+            )
+            for sid in student_ids
+        ]
+    )
+
+
+@transaction.atomic
+def set_section_enrollment(
+    *,
+    course_id: int,
+    school_year_id: int,
+    section_id: int,
+    student_ids: list[int],
+    complement_course_id: int | None = None,
+) -> dict[str, Any]:
+    """Tek şubede seçmeli dersi alan öğrencileri TAMAMEN değiştirir.
+
+    - Boş liste = "şubenin tamamı" (listesiz şube kuralı): satırlar silinir,
+      şube kapsamda kalır.
+    - Dolu liste şubeyi dersin kapsamına EKLER (listelenen şube, dersin
+      okutulduğu şubedir — iki ayrı yerden girilmesi gerekmesin).
+    - `complement_course_id` verilirse şubenin LİSTEDE OLMAYAN aktif
+      öğrencileri o derse yazılır ("kalanları öbür derse ata": 9/A'nın bir
+      grubu Kur'an-ı Kerim, kalanı Peygamberimizin Hayatı). Tamamlayıcı küme
+      BOŞSA o ders için şube kapsamdan çıkarılır — listesiz şube "tamamı"
+      demek olduğundan "bu şubede kimse almıyor" ancak böyle ifade edilir.
+
+    Öğrenci o şubenin AKTİF öğrencisi olmalı; hata metni ad içermez (KVKK).
+    """
+    from apps.okul.models import ClassSection, Student, StudentStatus
+
+    course = _elective_course(course_id)
+    section = ClassSection.objects.filter(pk=section_id, school_year_id=school_year_id).first()
+    if section is None:
+        raise ValidationError(
+            {"section_id": "Şube bu ders yılında bulunamadı (silinmiş olabilir)."}
+        )
+    level = int(section.class_level)
+    if level not in (course.levels or []):
+        raise ValidationError(
+            {"section_id": f"'{course.name}' dersi {level_label(level)} düzeyinde okutulmuyor."}
+        )
+
+    ids: list[int] = []
+    for raw in student_ids:
+        if isinstance(raw, bool) or not isinstance(raw, int):
+            raise ValidationError({"student_ids": "Öğrenci seçimi geçersiz; listeden seçin."})
+        ids.append(raw)
+    ids = list(dict.fromkeys(ids))
+
+    roster = set(
+        Student.objects.filter(
+            status=StudentStatus.ACTIVE,
+            class_level=section.class_level,
+            class_section=section.class_section,
+        ).values_list("pk", flat=True)
+    )
+    yabanci = [sid for sid in ids if sid not in roster]
+    if yabanci:
+        raise ValidationError(
+            {
+                "student_ids": f"Seçilen öğrencilerden {len(yabanci)} tanesi {section.class_label} "
+                "şubesinin aktif öğrencisi değil — listeyi yenileyip yeniden seçin."
+            }
+        )
+
+    _replace_section_list(course, school_year_id, section, ids)
+    if ids:
+        _offering_add_section(course, school_year_id, level, int(section.pk))
+
+    tamamlayici: dict[str, Any] | None = None
+    if complement_course_id is not None:
+        if complement_course_id == course_id:
+            raise ValidationError({"complement_course_id": "Kalanlar aynı derse atanamaz."})
+        diger = _elective_course(complement_course_id, field="complement_course_id")
+        if level not in (diger.levels or []):
+            raise ValidationError(
+                {
+                    "complement_course_id": f"'{diger.name}' dersi {level_label(level)} "
+                    "düzeyinde okutulmuyor."
+                }
+            )
+        kalan = sorted(roster - set(ids))
+        _replace_section_list(diger, school_year_id, section, kalan)
+        if kalan:
+            _offering_add_section(diger, school_year_id, level, int(section.pk))
+        else:
+            _offering_remove_section(diger, school_year_id, level, int(section.pk))
+        tamamlayici = {"course_id": diger.pk, "student_ids": kalan}
+
+    return {"section_id": int(section.pk), "student_ids": ids, "complement": tamamlayici}
