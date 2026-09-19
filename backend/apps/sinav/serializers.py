@@ -514,6 +514,9 @@ class ExamCalendarSerializer(serializers.ModelSerializer[ExamCalendar]):
     round = serializers.IntegerField(min_value=1, max_value=3)
     # İmza bloğu zümreleri: yazmada pk listesi, okumada ad listesi (FE rozeti).
     signatory_department_names = serializers.SerializerMethodField()
+    # Önerilen pencere (Bakanlık ilanı ya da Yönetmelik kuralı) — takvim sayfası
+    # tarihler farklıysa "Bakanlık tarihlerini kullan" önerisi gösterir. Kısıt değil.
+    default_window = serializers.SerializerMethodField()
 
     class Meta:
         model = ExamCalendar
@@ -526,6 +529,7 @@ class ExamCalendarSerializer(serializers.ModelSerializer[ExamCalendar]):
             "name",
             "start_date",
             "end_date",
+            "default_window",
             "status",
             "description_text",
             "footnote_text",
@@ -549,6 +553,12 @@ class ExamCalendarSerializer(serializers.ModelSerializer[ExamCalendar]):
 
     def get_signatory_department_names(self, obj: ExamCalendar) -> list[str]:
         return [d.name for d in obj.signatory_departments.all()]
+
+    def get_default_window(self, obj: ExamCalendar) -> dict[str, Any] | None:
+        from apps.sinav import services_calendar
+
+        pencere = services_calendar.default_window(obj.semester, int(obj.round))
+        return pencere.as_dict() if pencere is not None else None
 
 
 class ExamCalendarEntrySerializer(serializers.ModelSerializer[ExamCalendarEntry]):

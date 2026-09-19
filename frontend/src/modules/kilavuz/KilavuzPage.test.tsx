@@ -90,6 +90,17 @@ describe("KilavuzPage", () => {
     expect(screen.queryByText(/ortak öğrenci/i)).not.toBeInTheDocument();
   });
 
+  it("sınav haftalarını Bakanlık yazısıyla verir; son günden başlama bir tercihtir", () => {
+    renderPage();
+    // 2026-2027 için ÖDSHGM 10.09.2026 tarihli yazı (docs/mevzuat/meb-2026-2027-…).
+    expect(screen.getByText(/10\.09\.2026 tarihli yazısı esastır/)).toBeInTheDocument();
+    expect(screen.getByText(/1\. dönem 1\. yazılı 2-13 Kasım 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/Bu tarihleri kullan/)).toBeInTheDocument();
+    expect(screen.getByText(/sınav haftalarının son gününden başlanarak/)).toBeInTheDocument();
+    expect(screen.getByText(/kutuyu kaldırırsanız sınavlar günlere dengeli/)).toBeInTheDocument();
+    expect(screen.getByText(/merkezî bir sınav denk gelirse/)).toBeInTheDocument();
+  });
+
   it("günlük sınav sayısı sınırını mevzuat dayanağıyla verir", () => {
     renderPage();
     expect(

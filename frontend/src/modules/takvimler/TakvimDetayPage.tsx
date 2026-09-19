@@ -26,8 +26,9 @@ import Tabs from "../../ui/Tabs";
 import TextField from "../../ui/TextField";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import { useSnackbar } from "../../ui/SnackbarProvider";
-import type { ExamCalendarStatusCode } from "./api";
+import type { DefaultWindow, ExamCalendarStatusCode } from "./api";
 import { calendarPdfFileName, examCalendarApi } from "./api";
+import PencereOnerisi from "./PencereOnerisi";
 import { CalendarStatusBadge } from "./TakvimlerPage";
 import TakvimHavuzPaneli from "./TakvimHavuzPaneli";
 import TakvimOnizlemePaneli from "./TakvimOnizlemePaneli";
@@ -232,6 +233,28 @@ export default function TakvimDetayPage() {
         </p>
       ) : null}
 
+      {/* Bakanlığın ilan ettiği haftalardan farklı taslak: yalnız ÖNERİ (kısıt değil). */}
+      {isDraft &&
+      calendar.default_window?.official &&
+      (calendar.default_window.start_date !== calendar.start_date ||
+        calendar.default_window.end_date !== calendar.end_date) ? (
+        <p
+          role="status"
+          className="mb-3 flex flex-wrap items-center gap-2 rounded-shape-sm bg-secondary-container px-3 py-2 text-body-small text-on-secondary-container"
+        >
+          <Icon name="info" size="sm" />
+          <span>
+            Bu takvimin tarihleri Bakanlığın ilan ettiği sınav haftalarından farklı (
+            {formatDate(calendar.default_window.start_date)} –{" "}
+            {formatDate(calendar.default_window.end_date)}). İsterseniz tarihleri
+            güncelleyebilirsiniz; yerleştirme bundan etkilenmez.
+          </span>
+          <Button variant="text" icon="edit_calendar" onClick={() => setDateEditOpen(true)}>
+            Tarihleri düzenle
+          </Button>
+        </p>
+      ) : null}
+
       <Tabs items={tabs} active={tab} onChange={setTab} idBase="takvim-detay" />
 
       <div className="mt-4">
@@ -260,6 +283,7 @@ export default function TakvimDetayPage() {
           calendarId={calendarId}
           startDate={calendar.start_date}
           endDate={calendar.end_date}
+          oneri={calendar.default_window}
           onClose={closeDateEdit}
           onSaved={() => {
             setDateEditOpen(false);
@@ -276,12 +300,15 @@ function DateEditDialog({
   calendarId,
   startDate,
   endDate,
+  oneri,
   onClose,
   onSaved,
 }: {
   calendarId: number;
   startDate: string;
   endDate: string;
+  /** Önerilen haftalar (Bakanlık ilanı / Yönetmelik) — "Bu tarihleri kullan". */
+  oneri: DefaultWindow | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -330,6 +357,15 @@ function DateEditDialog({
           value={end}
           onChange={(e) => setEnd(e.target.value)}
         />
+        {oneri ? (
+          <PencereOnerisi
+            pencere={oneri}
+            onApply={() => {
+              setStart(oneri.start_date);
+              setEnd(oneri.end_date);
+            }}
+          />
+        ) : null}
       </div>
     </Dialog>
   );

@@ -361,7 +361,8 @@
   kopyası yazılırsa iki motor zamanla ayrışır. Üst makam sınavları OTOMATİK
   YERLEŞTİRİLMEZ (tarihleri ilgili makamın kılavuzunda — Yönerge md. 5), rapora
   gerekçesiyle düşer. Ceza demeti leksikografiktir (motor `_pair_penalty`
-  deseni): `(3. sınav, kapasite aşımı, seviye günlük yükü, gün toplamı, saat)`.
+  deseni): `(3. sınav, kapasite aşımı, seviye günlük yükü, [geç gün], gün
+  toplamı, saat)` — köşeli bileşen yalnız "son günden başla" açıkken (aşağıda).
 - **Sabitleme (`is_pinned`) elle yerleştirmenin yan etkisidir:** `place_entry`
   varsayılan `pin=True` (idareci bilerek koydu), otomatik yerleştirme
   `pin=False`. `REDISTRIBUTE` kipi yalnız sabitsizleri havuza alır; `unplace`
@@ -375,6 +376,16 @@
   BAĞLAR, elle yerleştirmeyi yalnız UYARIR (mevzuat saat kısıtı koymaz; Yönerge
   md. 5 saati okul müdürlüğüne bırakır). Ayar açıkça gönderilirse aralık dışı
   saat HATA, yalnız gün kısaldıysa taşan kuyruk kırpılır.
+- **Sınav haftaları VARSAYILANDIR, kısıt değil** (19.09.2026, kullanıcı kararı —
+  "katı bir kısıtlama olmasın"): Bakanlığın ilan ettiği haftalar
+  `sinav/official_windows.py`'de yıl bazında durur (2026-2027: ÖDSHGM
+  10.09.2026 yazısı, metni `docs/mevzuat/`); `default_window` ilanı, ilan yoksa
+  Yönetmelik kuralını (`statutory_window`) verir. Yalnız yeni takvimin ön
+  tarihleri ve takvim sayfasındaki öneridir — takvim tarihi idarecinin kararıdır,
+  yerleştirme buna göre REDDEDİLMEZ. Yeni yılın yazısı gelince tabloya yıl eklenir
+  (önce metin `docs/mevzuat/`e). Otomatik yerleştirmenin "son günden başla"sı
+  (yazı md. 7) da TERCİHTİR: ceza demetinde geç gün, gün toplamından ÖNCE gelir
+  (`from_last_day`, varsayılan açık; kapalıyken eski dengeli yayma).
 - **Salon kapasitesi UYARIDIR:** aynı slottaki toplam mevcut aktif salon
   kapasitesini aşarsa uyarılır; kapasite 0 iken (salon tanımsız) denetim hiç
   çalışmaz — sert kısıt, kataloğu eksik okulda takvimi kurulamaz hâle getirirdi.

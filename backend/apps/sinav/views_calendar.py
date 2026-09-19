@@ -103,6 +103,24 @@ class ExamCalendarViewSet(viewsets.ModelViewSet[ExamCalendar]):
         created = services_calendar.generate_default_calendars(school_year_id=year_id)
         return Response({"created": ExamCalendarSerializer(created, many=True).data})
 
+    @action(detail=False, methods=["get"], url_path="default-window")
+    def default_window(self, request: Request) -> Response:
+        """Yeni takvimin ön tarihleri: `?semester=<id>&round=<1-3>`.
+
+        Çıktı `{"window": {"start_date", "end_date", "source", "official"} | null}`
+        — Bakanlığın o yıl ilan ettiği haftalar, yoksa Yönetmelik kuralı; 3.
+        sınavda `null` (tarihleri idareci girer). VARSAYILANDIR — takvim her zaman
+        düzenlenebilir.
+        """
+        semester = okul_selectors.get_school_term(
+            _int_or_none(request.query_params.get("semester")) or 0
+        )
+        if semester is None:
+            raise drf_serializers.ValidationError({"semester": "Dönem bulunamadı."})
+        round_ = _int_or_none(request.query_params.get("round")) or 1
+        pencere = services_calendar.default_window(semester, round_)
+        return Response({"window": pencere.as_dict() if pencere is not None else None})
+
     @action(detail=False, methods=["get"], url_path="default-description")
     def default_description(self, request: Request) -> Response:
         """Varsayılan açıklama metni (Önizleme sekmesi "Varsayılan metne dön")."""
@@ -202,12 +220,18 @@ class ExamCalendarViewSet(viewsets.ModelViewSet[ExamCalendar]):
     def auto_place(self, request: Request, pk: str | None = None) -> Response:
         """Havuzda bekleyen sınavları kurallara uyarak ızgaraya dağıtır.
 
-        Gövde: `{"mode": "FILL" | "REDISTRIBUTE"}` — varsayılan FILL (yalnız
-        boşları doldurur, ızgaradakine dokunmaz).
+        Gövde: `{"mode": "FILL" | "REDISTRIBUTE", "from_last_day"?: bool}` —
+        varsayılan FILL (yalnız boşları doldurur, ızgaradakine dokunmaz) ve son
+        günden başlayarak (Bakanlık yazısı md. 7; `false` eski dengeli yayma).
         """
         mode = str(request.data.get("mode") or services_calendar.AUTO_MODE_FILL).upper()
+        son_gun = request.data.get("from_last_day", True)
+        if not isinstance(son_gun, bool):
+            raise drf_serializers.ValidationError({"from_last_day": "Evet/hayır olmalı."})
         try:
-            result = services_calendar.auto_place_entries(self.get_object(), mode=mode)
+            result = services_calendar.auto_place_entries(
+                self.get_object(), mode=mode, from_last_day=son_gun
+            )
         except DjangoValidationError as exc:
             _raise_drf(exc)
         return Response(

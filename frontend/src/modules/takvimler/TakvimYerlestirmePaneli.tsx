@@ -81,6 +81,9 @@ export default function TakvimYerlestirmePaneli({
   const queryClient = useQueryClient();
   const [pickSlot, setPickSlot] = useState<SlotTarget | null>(null);
   const [autoOpen, setAutoOpen] = useState(false);
+  // Bakanlık yazısı (10.09.2026) md. 7: sınavlar haftaların son gününden
+  // başlanarak planlanır — varsayılan açık, idareci kapatabilir (kısıt değil).
+  const [fromLastDay, setFromLastDay] = useState(true);
   const [autoResult, setAutoResult] = useState<AutoPlaceResult | null>(null);
   // Elle yerleştirmenin uyarıları: işlemi ENGELLEMEZ ama okunmalıdır — kalıcı
   // bantta birikir (aynı cümle iki kez yazılmaz), "Kapat" ile boşalır.
@@ -129,7 +132,7 @@ export default function TakvimYerlestirmePaneli({
   });
 
   const autoPlaceMutation = useMutation({
-    mutationFn: (mode: AutoPlaceMode) => examCalendarApi.autoPlace(calendarId, mode),
+    mutationFn: (mode: AutoPlaceMode) => examCalendarApi.autoPlace(calendarId, mode, fromLastDay),
     onSuccess: (data) => {
       // Rapor DİYALOGDA kalır: atlanan girdi gerekçesiyle görülmeden kapanmasın
       // (snackbar tek satırlık ve kaybolur — sessiz düşme kanalı olurdu).
@@ -440,6 +443,22 @@ export default function TakvimYerlestirmePaneli({
               sınavı olan güne okul sınavı yazmaz (MEB Yazılı ve Uygulamalı Sınavlar Yönergesi md.
               5). Bakanlık/İl/İlçe sınavları elle yerleştirilir.
             </p>
+            <label className="flex items-start gap-2 text-body-medium text-on-surface">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-5 w-5 accent-primary"
+                checked={fromLastDay}
+                onChange={(e) => setFromLastDay(e.target.checked)}
+              />
+              <span>
+                Son günden başlayarak yerleştir
+                <span className="block text-body-small text-on-surface-variant">
+                  Bakanlığın 10.09.2026 tarihli yazısı: okul geneli sınav tarihleri sınav
+                  haftalarının son gününden başlanarak planlanır. Kapatırsanız sınavlar günlere
+                  dengeli yayılır.
+                </span>
+              </span>
+            </label>
             {(["FILL", "REDISTRIBUTE"] as AutoPlaceMode[]).map((mode) => (
               <button
                 key={mode}

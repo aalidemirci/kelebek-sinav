@@ -380,6 +380,17 @@ export default function KilavuzPage() {
           ayı ilk haftası aralığında yapılır.
         </Mevzuat>
         <p>
+          Bakanlık bir ders yılının sınav haftalarını ayrıca ilan ettiyse takvimler{" "}
+          <strong>o tarihlerle</strong> açılır. 2026-2027 için Ölçme, Değerlendirme ve Sınav
+          Hizmetleri Genel Müdürlüğünün 10.09.2026 tarihli yazısı esastır: 1. dönem 1. yazılı 2-13
+          Kasım 2026, 1. dönem 2. yazılı 4-15 Ocak 2027, 2. dönem 1. yazılı 29 Mart-9 Nisan 2027, 2.
+          dönem 2. yazılı 7-18 Haziran 2027. Bu tarihler <strong>varsayılandır</strong>: yeni takvim
+          penceresinde tarih alanları onlarla dolar, siz değiştirebilirsiniz. Tarihleri ilandan
+          farklı bir taslak takvimde başlığın altında bir öneri görünür; “Tarihleri düzenle”
+          penceresindeki <strong>“Bu tarihleri kullan”</strong> düğmesi ilan edilen haftaları tek
+          tıkla yazar.
+        </p>
+        <p>
           Takvimin dört sekmesi vardır: <strong>Havuz</strong> (hangi ders hangi sınıf düzeyinde
           sınav olacak), <strong>Yerleştirme</strong> (hangi gün, hangi ders saati),{" "}
           <strong>Süreç Takip</strong> (soru teslimi, basım, puan girişi gibi kalemler) ve{" "}
@@ -478,7 +489,19 @@ export default function KilavuzPage() {
             Bakanlık/İl MEM/İlçe MEM sınavlarını <strong>hiç yerleştirmez</strong> — tarihleri
             ilgili makamın kılavuzundadır, onları siz koyarsınız.
           </li>
+          <li>
+            Sınavları haftaların <strong>son gününden başlayarak</strong> yerleştirir: Bakanlığın
+            10.09.2026 tarihli yazısı okul geneli sınav tarihlerinin, derslerin konu kapsamı ve
+            öğretim sürecinin ilerleyişi gözetilerek sınav haftalarının son gününden başlanarak
+            planlanmasını ister. Bu bir tercihtir; “Otomatik yerleştir” penceresindeki kutuyu
+            kaldırırsanız sınavlar günlere dengeli yayılır.
+          </li>
         </ul>
+        <Ipucu>
+          2. dönem 2. yazılı haftasına YKS gibi merkezî bir sınav denk gelirse o sınava girecek
+          öğrencilerin yazılılarını okul yönetimi ayrıca planlar (aynı yazı, 11. madde). Program
+          bunu kendiliğinden bilmez; o hafta için takvimi elle gözden geçirin.
+        </Ipucu>
         <p>
           İşlem bitince bir rapor açılır: kaç sınav yerleştirildi, hangileri yerleştirilemedi ve
           neden. Yerleştirilemeyen sınav kalırsa takvim aralığını genişletin, sınav saati ekleyin ya

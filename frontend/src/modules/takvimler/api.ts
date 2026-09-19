@@ -42,6 +42,19 @@ export const EXAM_AUTHORITY_SHORT_TR: Record<ExamAuthorityCode, string> = {
   DISTRICT: "İLÇE",
 };
 
+/**
+ * Önerilen sınav haftaları (19.09.2026): Bakanlığın o yıl ilan ettiği tarihler
+ * (`official`), ilan yoksa Yönetmelik kuralı. VARSAYILANDIR, kısıt değil —
+ * takvim tarihleri her zaman düzenlenebilir.
+ */
+export interface DefaultWindow {
+  start_date: string;
+  end_date: string;
+  /** Dayanak: yazının tarihi ve sayısı ya da Yönetmelik maddesi. */
+  source: string;
+  official: boolean;
+}
+
 export interface ExamCalendar {
   id: number;
   school_year_name: string;
@@ -51,6 +64,8 @@ export interface ExamCalendar {
   name: string;
   start_date: string;
   end_date: string;
+  /** 3. sınavda null (tarihleri idareci girer). */
+  default_window: DefaultWindow | null;
   status: ExamCalendarStatusCode;
   description_text: string;
   footnote_text: string;
@@ -303,6 +318,11 @@ export const examCalendarApi = {
     api.post<{ created: ExamCalendar[] }>("/exam-calendars/generate-defaults/", {
       school_year_id: schoolYearId,
     }),
+  /** Yeni takvimin ön tarihleri (dönem + tur); 3. sınavda `window: null`. */
+  defaultWindow: (semester: number, round: number) =>
+    api.get<{ window: DefaultWindow | null }>(
+      `/exam-calendars/default-window/?semester=${semester}&round=${round}`,
+    ),
   defaultDescription: () => api.get<{ text: string }>("/exam-calendars/default-description/"),
   defaultFootnote: () => api.get<{ text: string }>("/exam-calendars/default-footnote/"),
   fillPool: (id: number) => api.post<FillPoolResult>(`/exam-calendars/${id}/fill-pool/`, {}),
@@ -378,9 +398,16 @@ export const examCalendarApi = {
     api.post<ExamCalendarEntryRow>(`/exam-calendar-entries/${entryId}/pin/`, {
       is_pinned: isPinned,
     }),
-  /** Havuzda bekleyenleri kurallara uyarak ızgaraya dağıtır (F6 eki-2). */
-  autoPlace: (id: number, mode: AutoPlaceMode) =>
-    api.post<AutoPlaceResult>(`/exam-calendars/${id}/auto-place/`, { mode }),
+  /**
+   * Havuzda bekleyenleri kurallara uyarak ızgaraya dağıtır (F6 eki-2).
+   * `fromLastDay`: Bakanlık yazısı md. 7 — sınavlar haftaların son gününden
+   * başlanarak yerleştirilir (varsayılan); kapalıysa günlere dengeli yayar.
+   */
+  autoPlace: (id: number, mode: AutoPlaceMode, fromLastDay = true) =>
+    api.post<AutoPlaceResult>(`/exam-calendars/${id}/auto-place/`, {
+      mode,
+      from_last_day: fromLastDay,
+    }),
 };
 
 export const examTrackItemApi = {

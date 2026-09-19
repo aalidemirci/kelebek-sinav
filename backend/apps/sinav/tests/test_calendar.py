@@ -12,12 +12,15 @@ seçilen zümrelerden üretimi (B7 revizyonu).
 
 from __future__ import annotations
 
+import importlib
 import io
 import re
 from datetime import date, time, timedelta
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
+from django.apps import apps as django_apps
 from django.core.exceptions import ValidationError
 from pypdf import PdfReader
 from rest_framework.test import APIClient
@@ -1718,3 +1721,160 @@ def test_api_havuz_listesi_katalog_farkini_bildirir() -> None:
     assert yanit.status_code == 200
     satir = next(r for r in yanit.data["results"] if r["course"] == ders_pk)
     assert satir["scope_differs_from_catalog"] is True
+
+
+# ===========================================================================
+# Bakanlık ilanı — 2026-2027 ortak yazılı sınav haftaları (19.09.2026)
+# Dayanak: MEB ÖDSHGM 10.09.2026 / E-26614336-480.99-168561496. VARSAYILANDIR,
+# kısıt değil: takvim tarihleri her zaman düzenlenebilir.
+# ===========================================================================
+
+
+def test_varsayilan_pencere_bakanlik_ilanidir() -> None:
+    """2026-2027'de ilan kural hesabından farklı: 1. dönem 1. yazılı 2-13 Kasım."""
+    for donem_kaydi, tur, bas, bit in [
+        (_guz(), 1, date(2026, 11, 2), date(2026, 11, 13)),
+        (_guz(), 2, date(2027, 1, 4), date(2027, 1, 15)),
+        (_bahar(), 1, date(2027, 3, 29), date(2027, 4, 9)),
+        (_bahar(), 2, date(2027, 6, 7), date(2027, 6, 18)),
+    ]:
+        pencere = takvim.default_window(donem_kaydi, tur)
+        assert pencere is not None
+        assert (pencere.start, pencere.end) == (bas, bit)
+        assert pencere.official and "10.09.2026" in pencere.source
+    # Kural hesabı değişmedi — ilan onun ÖNÜNE geçer.
+    assert takvim.statutory_window(_guz(), 1) == (date(2026, 10, 26), date(2026, 11, 6))
+
+
+def test_ilan_olmayan_yilda_kural_hesabi_kullanilir() -> None:
+    sonraki = SimpleNamespace(sequence=1, start_date=date(2027, 9, 13), end_date=date(2028, 1, 21))
+
+    pencere = takvim.default_window(sonraki, 1)
+
+    assert pencere is not None and not pencere.official
+    assert (pencere.start, pencere.end) == takvim.statutory_window(sonraki, 1)
+    assert "Yönetmeliği md. 5" in pencere.source
+    # 3. sınavın ne ilanı ne kuralı var — tarihleri idareci girer.
+    assert takvim.default_window(_guz(), 3) is None
+
+
+def test_ilan_donem_sinirina_kirpilir_ortusmezse_kurala_duser() -> None:
+    kirpilan = takvim.default_window(_guz(end=date(2026, 11, 10)), 1)
+    assert kirpilan is not None and kirpilan.official
+    assert (kirpilan.start, kirpilan.end) == (date(2026, 11, 2), date(2026, 11, 10))
+
+    erken = _guz(end=date(2026, 10, 30))  # dönem ilandan önce bitiyor
+    dusen = takvim.default_window(erken, 1)
+    assert dusen is not None and not dusen.official
+    assert (dusen.start, dusen.end) == takvim.statutory_window(erken, 1)
+
+
+def test_on_tanimli_takvimler_bakanlik_haftalariyla_uretilir() -> None:
+    yil = aktif_yil()
+    _iki_donem()
+
+    olusan = {
+        (c.semester.sequence, c.round): (c.start_date, c.end_date)
+        for c in takvim.generate_default_calendars(school_year_id=yil.pk)
+    }
+
+    assert olusan == {
+        (1, 1): (date(2026, 11, 2), date(2026, 11, 13)),
+        (1, 2): (date(2027, 1, 4), date(2027, 1, 15)),
+        (2, 1): (date(2027, 3, 29), date(2027, 4, 9)),
+        (2, 2): (date(2027, 6, 7), date(2027, 6, 18)),
+    }
+
+
+def test_api_varsayilan_pencere_ve_takvim_onerisi() -> None:
+    guz, _ = _iki_donem()
+    client = APIClient()
+    url = "/api/v1/exam-calendars/default-window/"
+
+    cevap = client.get(url, {"semester": guz.pk, "round": 1})
+    assert cevap.status_code == 200
+    assert cevap.data["window"]["start_date"] == "2026-11-02"
+    assert cevap.data["window"]["end_date"] == "2026-11-13"
+    assert cevap.data["window"]["official"] is True
+    assert client.get(url, {"semester": guz.pk, "round": 3}).data == {"window": None}
+    assert client.get(url, {"semester": 999999}).status_code == 400
+
+    # Eski kuralla kurulmuş takvim: kayıt öneriyi taşır, tarihler DEĞİŞMEZ.
+    calendar = _takvim(round_=1, semester=guz)
+    detay = client.get(f"/api/v1/exam-calendars/{calendar.pk}/")
+    assert detay.data["start_date"] == "2026-10-26"
+    assert detay.data["default_window"]["start_date"] == "2026-11-02"
+
+
+def test_otomatik_yerlestirme_son_gunden_baslar() -> None:
+    """Bakanlık yazısı md. 7: okul geneli sınavlar haftaların son gününden başlanarak."""
+    SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, exam_period_nos=[1])
+    calendar = _havuzlu_takvim(course_count=2)  # 26.10-6.11: on iş günü
+
+    takvim.auto_place_entries(calendar)
+
+    gunler = sorted(
+        e.placed_date for e in ExamCalendarEntry.objects.filter(calendar=calendar) if e.placed_date
+    )
+    assert gunler == [date(2026, 11, 5), date(2026, 11, 6)]
+
+
+def test_otomatik_yerlestirme_son_gun_tercihi_kapatilabilir() -> None:
+    """Tercih kapalıyken eski davranış: erken günden dengeli yayma."""
+    SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, exam_period_nos=[1])
+    calendar = _havuzlu_takvim(course_count=2)
+
+    takvim.auto_place_entries(calendar, from_last_day=False)
+
+    gunler = sorted(
+        e.placed_date for e in ExamCalendarEntry.objects.filter(calendar=calendar) if e.placed_date
+    )
+    assert gunler == [date(2026, 10, 26), date(2026, 10, 27)]
+
+
+def test_api_otomatik_yerlestirme_son_gun_bayragi() -> None:
+    SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, exam_period_nos=[1])
+    calendar = _havuzlu_takvim(course_count=1)
+    client = APIClient()
+    url = f"/api/v1/exam-calendars/{calendar.pk}/auto-place/"
+
+    assert client.post(url, {"from_last_day": "evet"}, format="json").status_code == 400
+    cevap = client.post(url, {"mode": "FILL", "from_last_day": False}, format="json")
+
+    assert cevap.status_code == 200
+    assert cevap.data["placed"][0]["date"] == "2026-10-26"
+
+
+def _goc() -> Any:
+    return importlib.import_module("apps.sinav.migrations.0013_resmi_sinav_haftalari")
+
+
+def test_goc_dokunulmamis_taslagi_bakanlik_haftasina_ceker() -> None:
+    guz, _ = _iki_donem()
+    # 1. tur: eski kuralın tarihleri (26.10-6.11) — dokunulmamış.
+    dokunulmamis = _takvim(round_=1, semester=guz)
+    # 2. tur: idareci başlangıcı değiştirmiş (eski kural 28.12 derdi).
+    elle = takvim.create_exam_calendar(
+        semester_id=guz.pk, round=2, start_date=date(2026, 12, 21), end_date=date(2027, 1, 8)
+    )
+
+    _goc().uygula(django_apps, None)
+
+    dokunulmamis.refresh_from_db()
+    elle.refresh_from_db()
+    assert (dokunulmamis.start_date, dokunulmamis.end_date) == (
+        date(2026, 11, 2),
+        date(2026, 11, 13),
+    )
+    assert (elle.start_date, elle.end_date) == (date(2026, 12, 21), date(2027, 1, 8))
+
+
+def test_goc_yerlesik_sinavi_olan_takvime_dokunmaz() -> None:
+    calendar = _havuzlu_takvim(course_count=1)  # 26.10-6.11 = eski kural
+    entry = ExamCalendarEntry.objects.get(calendar=calendar)
+    takvim.place_entry(entry, on_date=date(2026, 10, 27), period_no=1)
+
+    _goc().uygula(django_apps, None)
+
+    calendar.refresh_from_db()
+    assert (calendar.start_date, calendar.end_date) == (date(2026, 10, 26), date(2026, 11, 6))

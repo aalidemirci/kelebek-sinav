@@ -10,12 +10,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../lib/api";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
+import type { DefaultWindow } from "./api";
 import { makeCalendar, paginated } from "./testFixtures";
 
 const calApi = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
   generateDefaults: vi.fn(),
+  // Varsayılan: öneri yok (3. sınav gibi) — ön-dolum testleri kendi değerini verir.
+  defaultWindow: vi.fn((): Promise<{ window: DefaultWindow | null }> =>
+    Promise.resolve({ window: null }),
+  ),
 }));
 const sessionApi = vi.hoisted(() => ({
   terms: vi.fn(() =>
@@ -138,5 +143,47 @@ describe("TakvimlerPage", () => {
       }),
     );
     expect(await screen.findByText("TAKVİM DETAY")).toBeInTheDocument();
+  });
+
+  it("dönem + tur seçilince tarihler Bakanlığın ilan ettiği haftalarla dolar (değiştirilebilir)", async () => {
+    const user = userEvent.setup();
+    calApi.list.mockResolvedValue(paginated([]));
+    calApi.defaultWindow.mockResolvedValue({
+      window: {
+        start_date: "2026-11-02",
+        end_date: "2026-11-13",
+        source: "MEB ÖDSHGM 10.09.2026 tarihli yazı",
+        official: true,
+      },
+    });
+    calApi.create.mockResolvedValue(makeCalendar({ id: 9 }));
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Yeni takvim" }));
+    const dialog = await screen.findByRole("dialog", { name: "Yeni sınav takvimi" });
+    await user.selectOptions(within(dialog).getByLabelText("Dönem"), "3");
+
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText("Başlangıç tarihi")).toHaveValue("2026-11-02"),
+    );
+    expect(calApi.defaultWindow).toHaveBeenLastCalledWith(3, 1);
+    expect(within(dialog).getByLabelText("Bitiş tarihi")).toHaveValue("2026-11-13");
+    expect(within(dialog).getByText(/Bakanlığın ilan ettiği sınav haftaları/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/değiştirebilirsiniz/)).toBeInTheDocument();
+
+    // Öneri kısıt değildir: idareci bitişi değiştirir, gönderilen onun değeridir.
+    const bitis = within(dialog).getByLabelText("Bitiş tarihi");
+    await user.clear(bitis);
+    await user.type(bitis, "2026-11-12");
+    await user.click(within(dialog).getByRole("button", { name: "Oluştur" }));
+
+    await waitFor(() =>
+      expect(calApi.create).toHaveBeenCalledWith({
+        semester: 3,
+        round: 1,
+        start_date: "2026-11-02",
+        end_date: "2026-11-12",
+      }),
+    );
   });
 });

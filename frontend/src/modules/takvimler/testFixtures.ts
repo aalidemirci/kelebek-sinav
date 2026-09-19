@@ -27,6 +27,8 @@ export function makeCalendar(overrides: Partial<ExamCalendar> = {}): ExamCalenda
     name: "1. Dönem 1. Sınav Takvimi",
     start_date: "2026-10-26",
     end_date: "2026-11-06",
+    // Öneri bandı yalnız Bakanlık ilanı farklıysa çizilir — varsayılan fixture'da yok.
+    default_window: null,
     status: "DRAFT",
     description_text: "AÇIKLAMALAR\n1. Örnek madde.",
     footnote_text: "Mazeret sınavları izleyen hafta yapılır.",

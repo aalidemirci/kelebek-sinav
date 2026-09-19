@@ -211,7 +211,8 @@ describe("TakvimYerlestirmePaneli", () => {
     const secim = await screen.findByRole("dialog", { name: "Otomatik yerleştir" });
     await user.click(within(secim).getByRole("button", { name: /Boşları doldur/ }));
 
-    await waitFor(() => expect(calApi.autoPlace).toHaveBeenCalledWith(7, "FILL"));
+    // Son günden başlama varsayılan AÇIK (Bakanlık yazısı md. 7).
+    await waitFor(() => expect(calApi.autoPlace).toHaveBeenCalledWith(7, "FILL", true));
     // Rapor DİYALOGDA kalır: atlanan girdi gerekçesiyle görülmeden kapanmaz.
     const rapor = await screen.findByRole("dialog", { name: "Otomatik yerleştirme sonucu" });
     expect(within(rapor).getByText(/1 sınav yerleştirildi/)).toBeInTheDocument();
@@ -229,8 +230,25 @@ describe("TakvimYerlestirmePaneli", () => {
     const secim = await screen.findByRole("dialog", { name: "Otomatik yerleştir" });
     await user.click(within(secim).getByRole("button", { name: /Sabitler hariç yeniden dağıt/ }));
 
-    await waitFor(() => expect(calApi.autoPlace).toHaveBeenCalledWith(7, "REDISTRIBUTE"));
+    await waitFor(() => expect(calApi.autoPlace).toHaveBeenCalledWith(7, "REDISTRIBUTE", true));
     expect(await screen.findByText(/3 sınav yeniden dağıtıldı/)).toBeInTheDocument();
+  });
+
+  it("son günden başlama tercihi kapatılabilir (kısıt değil, tercih)", async () => {
+    const user = userEvent.setup();
+    calApi.grid.mockResolvedValue(makeGrid());
+    calApi.autoPlace.mockResolvedValue({ placed: [], skipped: [], warnings: [], cleared: 0 });
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: /Otomatik yerleştir/ }));
+    const secim = await screen.findByRole("dialog", { name: "Otomatik yerleştir" });
+    const kutu = within(secim).getByRole("checkbox", { name: /Son günden başlayarak yerleştir/ });
+    expect(kutu).toBeChecked();
+    expect(within(secim).getByText(/10\.09\.2026 tarihli yazısı/)).toBeInTheDocument();
+    await user.click(kutu);
+    await user.click(within(secim).getByRole("button", { name: /Boşları doldur/ }));
+
+    await waitFor(() => expect(calApi.autoPlace).toHaveBeenCalledWith(7, "FILL", false));
   });
 
   it("çipteki kilit sabitlemeyi çevirir; sabit çip basılı durur", async () => {

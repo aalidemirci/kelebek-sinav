@@ -646,7 +646,16 @@ varsayılan, ayarla değiştirilebilir" ilkesi.
 
 - Takvim pencereleri (Yönerge md. 5/1-ç): 1D1S Ekim, 1D2S Aralık, 2D1S Mart,
   2D2S Mayıs — ayın son Pazartesisi + 11 gün (`statutory_window`); dönemde 2
-  sınav; 3. tur dönemin son iki haftası elle.
+  sınav; 3. tur dönemin son iki haftası elle. **19.09.2026 eki:** Bakanlık bir
+  ders yılının haftalarını ayrıca ilan ettiyse varsayılan İLANDIR
+  (`official_windows.OFFICIAL_WINDOWS` → `services_calendar.default_window`;
+  2026-2027: ÖDSHGM 10.09.2026 / E-26614336-480.99-168561496 — 2-13 Kasım,
+  4-15 Ocak, 29 Mart-9 Nisan, 7-18 Haziran). "Kılavuz uyumlu varsayılan,
+  değiştirilebilir" ilkesi: yeni takvim tarihleri ilanla dolar, takvim sayfası
+  farkı öneri olarak gösterir, hiçbir yerleştirme buna göre reddedilmez.
+  Yazının md. 7'si ("son günden başlanarak") otomatik yerleştirmede TERCİHTİR
+  (`from_last_day`, varsayılan açık). Göç `sinav/0013` yalnız dokunulmamış ve
+  yerleştirmesiz taslakları ilana çeker.
 - Günlük sınav limiti **öğrenci-bazlı**: 3. sınav = uyarı (OKY md. 45),
   ≥4 = sert hata; kayıt verisi olmayan ders "seviyenin tamamı" sayılır
   (konservatif düşüş korunmalı).

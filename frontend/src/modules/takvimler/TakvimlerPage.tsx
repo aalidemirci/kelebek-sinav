@@ -3,7 +3,7 @@
 // seçici oturumlar modülünün `terms` ucundan. Ön tanımlı üretim + yeni takvim
 // + durum/dönem filtreleri korunur. M3 token'ları — ham renk/px yok.
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 
@@ -21,6 +21,7 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import { examSessionApi } from "../oturumlar/api";
 import type { ExamCalendar, ExamCalendarStatusCode } from "./api";
 import { CALENDAR_STATUS_TR, examCalendarApi } from "./api";
+import PencereOnerisi from "./PencereOnerisi";
 
 const STATUS_BADGE: Record<ExamCalendarStatusCode, string> = {
   DRAFT: "bg-surface-container-high text-on-surface-variant",
@@ -193,6 +194,21 @@ function CreateDialog({
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
+  // Dönem + tur seçilince tarihler önerilen haftalarla dolar (Bakanlık ilanı,
+  // yoksa Yönetmelik kuralı). VARSAYILANDIR: idareci alanları değiştirebilir.
+  const pencere = useQuery({
+    queryKey: ["calendar-default-window", semester, round],
+    queryFn: () => examCalendarApi.defaultWindow(Number(semester), Number(round)),
+    enabled: semester !== "",
+    retry: false,
+  });
+  const oneri = pencere.data?.window ?? null;
+  useEffect(() => {
+    if (!oneri) return;
+    setStartDate(oneri.start_date);
+    setEndDate(oneri.end_date);
+  }, [oneri]);
+
   const createMutation = useMutation({
     mutationFn: () =>
       examCalendarApi.create({
@@ -259,6 +275,7 @@ function CreateDialog({
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
         />
+        {oneri ? <PencereOnerisi pencere={oneri} /> : null}
       </div>
     </Dialog>
   );

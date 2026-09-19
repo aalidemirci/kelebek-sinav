@@ -18,6 +18,7 @@ import { makeCalendar } from "./testFixtures";
 
 const calApi = vi.hoisted(() => ({
   get: vi.fn(),
+  update: vi.fn(),
   submit: vi.fn(),
   approve: vi.fn(),
   reopen: vi.fn(),
@@ -202,5 +203,64 @@ describe("TakvimDetayPage — hata ve indirme", () => {
     await waitFor(() =>
       expect(indirme.saveBlob).toHaveBeenCalledWith(blob, "1-Dönem-1-Sınav-Takvimi_26.10.2026.pdf"),
     );
+  });
+});
+
+describe("TakvimDetayPage — Bakanlık sınav haftaları önerisi (kısıt değil)", () => {
+  const ILAN = {
+    start_date: "2026-11-02",
+    end_date: "2026-11-13",
+    source: "MEB ÖDSHGM 10.09.2026 tarihli yazı",
+    official: true,
+  };
+
+  it("ilandan farklı taslakta bant görünür; “Bu tarihleri kullan” alanları doldurur", async () => {
+    const user = userEvent.setup();
+    calApi.get.mockResolvedValue(makeCalendar({ default_window: ILAN }));
+    calApi.update.mockResolvedValue(
+      makeCalendar({ start_date: "2026-11-02", end_date: "2026-11-13", default_window: ILAN }),
+    );
+    renderPage();
+
+    // Yüklenirken iskelet de role=status taşır — bant metninden bulunur.
+    const metin = await screen.findByText(/Bakanlığın ilan ettiği sınav haftalarından farklı/);
+    const bant = metin.closest<HTMLElement>("[role='status']");
+    if (bant === null) throw new Error("öneri bandı role=status taşımıyor");
+    expect(bant).toHaveTextContent("02.11.2026");
+    await user.click(within(bant).getByRole("button", { name: "Tarihleri düzenle" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Takvim tarihlerini düzenle" });
+    await user.click(within(dialog).getByRole("button", { name: "Bu tarihleri kullan" }));
+    expect(within(dialog).getByLabelText("Başlangıç tarihi")).toHaveValue("2026-11-02");
+    expect(within(dialog).getByLabelText("Bitiş tarihi")).toHaveValue("2026-11-13");
+    await user.click(within(dialog).getByRole("button", { name: "Kaydet" }));
+
+    await waitFor(() =>
+      expect(calApi.update).toHaveBeenCalledWith(7, {
+        start_date: "2026-11-02",
+        end_date: "2026-11-13",
+      }),
+    );
+  });
+
+  it("tarihler ilanla aynıysa, öneri Yönetmelik kuralıysa ya da takvim onaylıysa bant yok", async () => {
+    calApi.get.mockResolvedValue(
+      makeCalendar({ start_date: "2026-11-02", end_date: "2026-11-13", default_window: ILAN }),
+    );
+    const { unmount } = renderPage();
+    await screen.findByRole("button", { name: "Onayla" });
+    expect(screen.queryByText(/haftalarından farklı/)).not.toBeInTheDocument();
+    unmount();
+
+    calApi.get.mockResolvedValue(makeCalendar({ default_window: { ...ILAN, official: false } }));
+    const ikinci = renderPage();
+    await screen.findByRole("button", { name: "Onayla" });
+    expect(screen.queryByText(/haftalarından farklı/)).not.toBeInTheDocument();
+    ikinci.unmount();
+
+    calApi.get.mockResolvedValue(makeCalendar({ status: "APPROVED", default_window: ILAN }));
+    renderPage();
+    await screen.findByRole("button", { name: "Taslağa al" });
+    expect(screen.queryByText(/haftalarından farklı/)).not.toBeInTheDocument();
   });
 });

@@ -43,6 +43,7 @@ from apps.sinav.models import (
     ExamTrackMarkStatus,
     ParticipantType,
 )
+from apps.sinav.official_windows import official_window
 
 if TYPE_CHECKING:
     from apps.dersler.selectors import EnrollmentIndex
@@ -180,6 +181,59 @@ def statutory_window(semester: Any, round_: int) -> tuple[date, date]:
     return (start, end)
 
 
+#: Kural hesabının kullanıcıya gösterilen dayanağı (ilan olmayan yıllar).
+_KURAL_KAYNAGI = "Ölçme ve Değerlendirme Yönetmeliği md. 5 (ayın son haftası kuralı)"
+
+
+@dataclass(frozen=True)
+class DefaultWindow:
+    """Yeni takvimin ön tarihleri + dayanağı — VARSAYILANDIR, kısıt değil."""
+
+    start: date
+    end: date
+    source: str
+    #: Bakanlığın o yıl için ilan ettiği hafta mı (False: Yönetmelik kuralı).
+    official: bool
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "start_date": self.start.isoformat(),
+            "end_date": self.end.isoformat(),
+            "source": self.source,
+            "official": self.official,
+        }
+
+
+def _school_year_start(semester: Any) -> int:
+    """Dönemin ders yılının başladığı takvim yılı (2026-2027 → 2026)."""
+    ders_yili = getattr(semester, "school_year", None)
+    baslangic = getattr(ders_yili, "start_date", None)
+    if baslangic is not None:
+        return int(baslangic.year)
+    yil = int(semester.start_date.year)
+    return yil if _semester_donem(semester) == 1 else yil - 1
+
+
+def default_window(semester: Any, round_: int) -> DefaultWindow | None:
+    """Dönem + tur için ön tanımlı pencere: Bakanlık ilanı varsa o, yoksa kural.
+
+    İlan dönem sınırlarına kırpılır; kırpma pencereyi boşaltırsa (dönem tarihleri
+    ilanla örtüşmüyor) kural hesabına düşülür. 3. sınavın ilanı ve kuralı yoktur —
+    None döner (tarihleri idareci girer).
+    """
+    if round_ not in (1, 2):
+        return None
+    donem = _semester_donem(semester)
+    ilan = official_window(_school_year_start(semester), donem, round_)
+    if ilan is not None:
+        start = max(ilan.start, semester.start_date)
+        end = min(ilan.end, semester.end_date)
+        if start <= end:
+            return DefaultWindow(start=start, end=end, source=ilan.source, official=True)
+    start, end = statutory_window(semester, round_)
+    return DefaultWindow(start=start, end=end, source=_KURAL_KAYNAGI, official=False)
+
+
 def default_calendar_name(semester: Any, round_: int) -> str:
     donem = _semester_donem(semester)
     return f"{donem}. Dönem {round_}. Sınav Takvimi"
@@ -187,20 +241,26 @@ def default_calendar_name(semester: Any, round_: int) -> str:
 
 @transaction.atomic
 def generate_default_calendars(*, school_year_id: int) -> list[ExamCalendar]:
-    """Yılın dönemleri × 2 turu için ön tanımlı takvimleri üretir (idempotent)."""
+    """Yılın dönemleri × 2 turu için ön tanımlı takvimleri üretir (idempotent).
+
+    Tarihler `default_window`dan: Bakanlığın o yıl ilan ettiği haftalar, ilan
+    yoksa Yönetmelik kuralı. İkisi de VARSAYILANDIR — idareci düzenler.
+    """
     semesters = list(okul_selectors.school_terms(school_year_id=school_year_id))
     created: list[ExamCalendar] = []
     for semester in semesters:
         for round_ in (1, 2):
             if ExamCalendar.objects.filter(semester=semester, round=round_).exists():
                 continue
-            start, end = statutory_window(semester, round_)
+            pencere = default_window(semester, round_)
+            if pencere is None:  # tur 1-2'nin penceresi daima vardır (mypy için)
+                continue
             calendar = ExamCalendar.objects.create(
                 semester=semester,
                 round=round_,
                 name=default_calendar_name(semester, round_),
-                start_date=start,
-                end_date=end,
+                start_date=pencere.start,
+                end_date=pencere.end,
                 description_text=DEFAULT_CALENDAR_DESCRIPTION,
                 footnote_text=DEFAULT_CALENDAR_FOOTNOTE,
             )
@@ -1224,8 +1284,18 @@ def _auto_candidate_slots(calendar: ExamCalendar) -> list[tuple[date, int]]:
 
 
 @transaction.atomic
-def auto_place_entries(calendar: ExamCalendar, *, mode: str = AUTO_MODE_FILL) -> AutoPlaceResult:
+def auto_place_entries(
+    calendar: ExamCalendar, *, mode: str = AUTO_MODE_FILL, from_last_day: bool = True
+) -> AutoPlaceResult:
     """Havuzda bekleyen sınavları ızgaraya dağıtır (mevzuat kuralları korunarak).
+
+    `from_last_day` (varsayılan AÇIK, 19.09.2026): Bakanlığın 10.09.2026 tarihli
+    yazısı md. 7 — okul geneli sınav tarihleri "sınav uygulama haftalarının son
+    gününden başlanarak" planlanır. Tercih sıralamasında GEÇ gün, gün toplamından
+    önce gelir: her sınıf düzeyi sınavlarını pencerenin sonundan geriye doğru
+    alır, erken günler ancak gerekirse kullanılır. Kapalıyken eski davranış
+    (günlere dengeli yayma, erken gün önce). Bir TERCİHTİR — elle yerleştirme ve
+    `place_entry` kuralları değişmez.
 
     KURAL MOTORU TEK: her yerleştirme `place_entry` üzerinden yapılır — bu
     fonksiyon yalnız SIRA ve TERCİH üretir, kendi mevzuat kopyasını tutmaz.
@@ -1358,9 +1428,11 @@ def auto_place_entries(calendar: ExamCalendar, *, mode: str = AUTO_MODE_FILL) ->
                 continue  # 4. sınav sert sınırı (ÖDY md. 5/1-k) — place_entry de reddeder
             asim = int(kapasite > 0 and slot_mevcut.get((gun, saat), 0) + aday_mevcut > kapasite)
             # Leksikografik ceza demeti (motor `_pair_penalty` deseni): önce
-            # mevzuat esası (günde 2), sonra salon gerçekliği, sonra yayma,
-            # sonra erken ders saati; en sonda eşitlik bozucu slot sırası.
-            puan = (int(gunluk >= 2), asim, gunluk, gun_toplam.get(gun, 0), saat)
+            # mevzuat esası (günde 2), sonra salon gerçekliği, sonra düzeyin o
+            # günkü yükü; "son günden başla" açıksa GEÇ gün (yazı md. 7), sonra
+            # günlere yayma, sonra erken ders saati; en sonda slot sırası.
+            gec_gun = -gun.toordinal() if from_last_day else 0
+            puan = (int(gunluk >= 2), asim, gunluk, gec_gun, gun_toplam.get(gun, 0), saat)
             puanli.append((puan, slot_sira, gun, saat))
         puanli.sort(key=lambda t: (t[0], t[1]))
 
