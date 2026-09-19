@@ -18,7 +18,8 @@ Kürasyon notları:
   işaretler. Ana çizelge `anadolu-imam-hatip-lisesi-2025.md`'dir (ortak dersler,
   meslek dersleri ve A grubu seçmeliler oradadır); bu dosya tek başına
   uygulanmaz. "Fen ve Sosyal Bilimler Programı/Projesi" BAŞKA bir programdır ve
-  yalnız A grubundan seçer (açıklama md. 8-a, md. 9) — bu dosyayı işaretlemez.
+  yalnız A grubundan seçer (açıklama md. 8-a, md. 9) — bu dosyayı işaretlemez,
+  kendi dosyası `anadolu-imam-hatip-lisesi-fen-ve-sosyal-bilimler-2025.md`'dir.
 - Kararın B grubu tablosu yedi program/projeye ayrılır ve her biri ayrı
   dosyadır (19.09.2026; önceki tek dosya yedi programın derslerini birden havuza
   sokuyordu). B grubunda hazırlık sınıfı satırı taşıyan TEK program budur

@@ -283,6 +283,9 @@ AIHL_B_GRUBU = (
     "anadolu-imam-hatip-lisesi-cocuk-gelisimi-2025",
     "anadolu-imam-hatip-lisesi-kuran-egitim-merkezi-2025",
 )
+# Yalnız A grubundan seçen program (açıklama md. 8-a, 9) — B grubu dizisine GİRMEZ:
+# `okul/0007` göçü eski B grubu anahtarını yalnız yukarıdaki yedi anahtara açar.
+AIHL_FEN_VE_SOSYAL_BILIMLER = "anadolu-imam-hatip-lisesi-fen-ve-sosyal-bilimler-2025"
 
 
 class TestAihlBGrubuProgramlari:
@@ -294,7 +297,7 @@ class TestAihlBGrubuProgramlari:
             pytest.skip("çizelge dizini bu ortamda yok")
 
     def _aihl(self, *b_grubu: str, levels: tuple[int, ...] = (9, 10, 11, 12)) -> dict[str, Any]:
-        """Ana çizelge + verilen B grubu programları `levels`te işaretli AİHL havuzu."""
+        """Ana çizelge + verilen program/proje dosyaları `levels`te işaretli AİHL havuzu."""
         overrides = {str(lv): [AIHL_ANA, *b_grubu] for lv in levels} if b_grubu else None
         plan = _plan(SchoolType.ANADOLU_IMAM_HATIP_LISESI, overrides=overrides)
         assert not plan.warnings, plan.warnings
@@ -395,6 +398,30 @@ class TestAihlBGrubuProgramlari:
         # Kürasyon sayımı: eski birleşik dosyanın havuza kattığı 74 ders + o aktarımda
         # düşmüş olan "Müzik ve Dramatik Etkinlikler Atölyesi".
         assert len(eklenen) == 75
+
+    def test_fen_ve_sosyal_bilimler_yalniz_osmanli_turkcesini_secmeliye_cevirir(self) -> None:
+        """Açıklama md. 9: saat farkları havuzu değiştirmez, (ç) bendi dersi seçmeli yapar.
+
+        Yalnız A grubundan seçen program (md. 8-a) — B grubu dosyası değildir ve
+        yeni ders getirmez; havuzun ders kümesi varsayılan AİHL ile AYNI kalır.
+        """
+        programs = catalog.load_programs(GERCEK_DIZIN)
+        fsb = programs[AIHL_FEN_VE_SOSYAL_BILIMLER]
+        assert not fsb.default_included and fsb.department
+        assert fsb.department not in {programs[k].department for k in AIHL_B_GRUBU}
+        assert [(r.name, r.levels, r.course_type) for r in fsb.rows] == [
+            ("Osmanlı Türkçesi", (10,), CourseType.ELECTIVE)
+        ]
+        varsayilan = self._aihl()
+        havuz = self._aihl(AIHL_FEN_VE_SOSYAL_BILIMLER)
+        assert set(havuz) == set(varsayilan)
+        degisen = {ad for ad in havuz if havuz[ad] != varsayilan[ad]}
+        assert degisen == {"Osmanlı Türkçesi"}
+        assert havuz["Osmanlı Türkçesi"].course_type == CourseType.ELECTIVE
+        assert havuz["Osmanlı Türkçesi"].levels == (10, 11, 12)  # A grubunda seçmeli kalır
+        # Program alt sınıflardan başlayıp 10'a henüz gelmediyse ders zorunlu kalır.
+        yalniz_9 = self._aihl(AIHL_FEN_VE_SOSYAL_BILIMLER, levels=(9,))
+        assert yalniz_9["Osmanlı Türkçesi"].course_type == CourseType.COMMON
 
 
 class TestMetaVeYururluk:

@@ -238,8 +238,9 @@ DD'nin kanıtlı katmanı taşınır: `shared/crypto.py` (Fernet + Argon2id) +
   okul türü başına **program dosyaları** (`<program_key>.md`; 03.09.2026'da
   15 dosya: AL, Fen, SBL ve hazırlık varyantları, AİHL (+program/proje),
   GSL dört bölüm, Spor (+tematik), MTAL ortak dersler; 19.09.2026'da AİHL
-  program/proje dosyası B grubundaki yedi programa bölündü → 21 dosya, okul
-  yalnız uyguladığı programı işaretler) +
+  program/proje dosyası B grubundaki yedi programa bölündü, AİHL Fen ve Sosyal
+  Bilimler programı ile Spor'un 2026 nesli (+tematik) eklendi → 24 dosya; okul
+  program/proje dosyalarından yalnız uyguladığını işaretler) +
   `ders-adi-takma-adlari.md` (~55 takma ad). Eski birleşik
   `anadolu-lisesi-2025-2026.md` ve OYS'den kopyalanan `cerceveler/` (KS'de
   hiç tüketilmeyen saat matrisleri) kaldırıldı — bkz. §7.2.

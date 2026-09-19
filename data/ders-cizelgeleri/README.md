@@ -90,7 +90,7 @@ import'u durdurmaz. `README.md` ve `ders-adi-takma-adlari.md` program sayılmaz.
 | `anadolu-lisesi-2025.md` · `anadolu-lisesi-hazirlik-2025.md` | TTK 09.05.2025/5 | 2025-2026, tüm seviyeler |
 | `fen-lisesi-2025.md` · `fen-lisesi-hazirlik-2025.md` | TTK 09.05.2025/5 | 2025-2026, tüm seviyeler |
 | `sosyal-bilimler-lisesi-2025.md` · `sosyal-bilimler-lisesi-hazirlik-2025.md` | TTK 09.05.2025/5 | 2025-2026, tüm seviyeler |
-| `anadolu-imam-hatip-lisesi-2025.md` (+ yedi B grubu program/proje dosyası, varsayılan dışı: `…-{spor,musiki,gorsel-sanatlar,ilahiyat-odakli-hafizlik,fen-ve-teknoloji,cocuk-gelisimi,kuran-egitim-merkezi}-2025.md`) | TTK 23.07.2025/26 | 2025-2026, tüm seviyeler |
+| `anadolu-imam-hatip-lisesi-2025.md` (+ yedi B grubu program/proje dosyası, varsayılan dışı: `…-{spor,musiki,gorsel-sanatlar,ilahiyat-odakli-hafizlik,fen-ve-teknoloji,cocuk-gelisimi,kuran-egitim-merkezi}-2025.md`; + `…-fen-ve-sosyal-bilimler-2025.md`, varsayılan dışı, yalnız A grubu) | TTK 23.07.2025/26 | 2025-2026, tüm seviyeler |
 | `guzel-sanatlar-lisesi-{gorsel-sanatlar,tiyatro}-2025.md` | TTK 09.05.2025/6 | 2025-2026, ortak dersler hazırlık-9-10'dan kademeli |
 | `guzel-sanatlar-lisesi-{muzik,turk-muzigi}-2025.md` | TTK 09.05.2025/7 | 2025-2026, ortak dersler kademeli |
 | `spor-lisesi-2026.md` (+ `spor-lisesi-tematik-2026.md`, varsayılan dışı) | TTK 02.09.2026/102, /103 | 2026-2027, tüm seviyeler (kademe yok) |
@@ -144,8 +144,12 @@ dersi birden havuza giriyordu). Her dosya ayrıca 10. seviyede SEÇMELİ bir
 okulunda ders zorunlu değildir ve birleştirme kuralı (tür çatışmasında SEÇMELİ
 kazanır) ana çizelgedeki ORTAK kaydı o okulda seçmeliye çevirir — kod
 değişikliği olmadan.
-Yalnız A grubundan seçen iki programın (Fen ve Sosyal Bilimler; Arapça/İngilizce
-dışı dilde hazırlık) dosyası yoktur; onlarda ders ORTAK görünür.
+Yalnız A grubundan seçen "Fen ve Sosyal Bilimler Programı/Projesi" de aynı
+desenle kendi varsayılan dışı dosyasını taşır (19.09.2026): açıklama md. 9'un
+havuza tek etkisi Osmanlı Türkçesi'nin zorunlu olmamasıdır (öbür bentler saat
+farkıdır, A grubu satırları ana çizelgededir), dosyanın tek satırı da odur.
+Dosyası olmayan tek durum Arapça/İngilizce dışı dilde hazırlık uygulamasıdır
+(md. 20-d); orada ders ORTAK görünür.
 
 ## Yeni çizelge nasıl eklenir
 

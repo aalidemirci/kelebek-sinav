@@ -131,7 +131,9 @@ export default function KilavuzPage() {
           programlarının dersleri ayrı çizelgelerdir: okul yalnız kendi programını, ana çizelgenin{" "}
           <strong>yanına</strong> işaretler; öbür programların dersleri havuza girmez. Bu okullarda
           Osmanlı Türkçesi zorunlu ders olmaktan çıkar, program 10. sınıfta işaretlenince ders
-          seçmeliye döner. Tematik program uygulayan Spor Lisesi de çizelgesini buradan seçer.
+          seçmeliye döner. Fen ve sosyal bilimler programının da kendi çizelgesi vardır: yeni ders
+          getirmez, işaretlenince yalnız Osmanlı Türkçesi seçmeliye döner. Tematik program uygulayan
+          Spor Lisesi de çizelgesini buradan seçer.
         </p>
         <p>
           Verilerinizi korumak için <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran>{" "}

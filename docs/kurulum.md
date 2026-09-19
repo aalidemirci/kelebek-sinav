@@ -102,9 +102,9 @@ dokunmaz; yine de program her sürüm geçişinden önce kendiliğinden bir yede
    çizelge uygulanıyorsa Ayarlar'dan seviye-program eşlemesini yaparsınız.
    Program/proje uygulayan Anadolu İmam Hatip Lisesi (spor, musiki, görsel
    sanatlar, ilahiyat odaklı hafızlık, fen ve teknoloji, çocuk gelişimi, Kur'an
-   eğitim merkezi) kendi program derslerini aynı yerden, "Sınıf düzeyine göre
-   özelleştir" ile ana çizelgenin yanına işaretler; işaretlenmeyen programın
-   dersleri havuza girmez.
+   eğitim merkezi, fen ve sosyal bilimler) kendi program çizelgesini aynı yerden,
+   "Sınıf düzeyine göre özelleştir" ile ana çizelgenin yanına işaretler;
+   işaretlenmeyen programın dersleri havuza girmez.
 5. İsterseniz Ayarlar → Güvenlik'ten **uygulama parolası** kurarsınız: ad-soyad
    alanları şifrelenir, size TEK SEFERLİK bir kurtarma anahtarı verilir —
    yazdırıp güvenli bir yerde saklayın.

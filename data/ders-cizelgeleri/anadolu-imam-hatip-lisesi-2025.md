@@ -34,10 +34,10 @@ Kürasyon notları:
 - "Osmanlı Türkçesi" yalnız "İmam Hatip Programı"nda zorunludur (10. sınıf).
   B grubu program dosyaları dersi SEÇMELİ satırıyla taşır; program 10. sınıfta
   işaretlenince birleştirme kuralı dersi seçmeliye çevirir. Yalnız A grubundan
-  seçen iki programda da ders zorunlu DEĞİLDİR ama bunların dosyası yoktur:
-  "Fen ve Sosyal Bilimler Programı/Projesi" (açıklama md. 9-ç) ve Arapça/
-  İngilizce dışı dilde hazırlık uygulaması (md. 20-d). Bu okullar dersi takvim
-  havuzundan elle çıkarır.
+  seçen "Fen ve Sosyal Bilimler Programı/Projesi" de aynı yolla kendi dosyasıyla
+  seçilir (`anadolu-imam-hatip-lisesi-fen-ve-sosyal-bilimler-2025.md`, açıklama
+  md. 9-ç; 19.09.2026). Dosyası OLMAYAN tek durum Arapça/İngilizce dışı dilde
+  hazırlık uygulamasıdır (md. 20-d): o okul dersi takvim havuzundan elle çıkarır.
 - Sınav sütunu kürasyondur (tasarım §7.1): uygulamalı değerlendirilen meslek
   dersleri (Hitabet ve Mesleki Uygulama, Mesleki Uygulama, Kur'an Okuma
   Teknikleri, Dinî Musiki, Ebru, Hüsnühat, Tezhip) `UYGULAMA`; Kur'an-ı Kerim
