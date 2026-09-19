@@ -202,12 +202,12 @@ export default function KilavuzPage() {
         <p>
           Fotoğraflar aktarılırsa salon evrakındaki oturma planı ve Yoklama ekranı her koltukta
           öğrencinin fotoğrafını gösterir; gözetmen öğrenciyi yerine fotoğrafla eşleştirerek
-          oturtur. Fotoğrafları e-Okul'dan alırsınız: <strong>OOG01001R080</strong> kodlu fotoğraflı
-          öğrenci listesi raporunu <strong>Excel</strong> olarak indirin ve{" "}
-          <Ekran to="/kisiler">Kişiler</Ekran> ekranındaki <strong>Öğrenci fotoğrafları</strong>{" "}
-          kartından yükleyin. e-Okul bu raporu <strong>sınıf düzeyi başına</strong> verir; her
-          düzeyin dosyasını ayrı ayrı aktarın. Fotoğraf okul numarasıyla eşleşir, bu yüzden önce
-          öğrenci listesini aktarın.
+          oturtur. Fotoğrafları e-Okul'dan alırsınız: <strong>Öğrenci İşlemleri → Raporlar</strong>{" "}
+          altındaki <strong>OOG01001R080 - Fotoğraflı Öğrenci Listesi</strong> raporunu{" "}
+          <strong>Excel</strong> olarak indirin ve <Ekran to="/kisiler">Kişiler</Ekran> ekranındaki{" "}
+          <strong>Öğrenci fotoğrafları</strong> kartından yükleyin. e-Okul bu raporu{" "}
+          <strong>sınıf düzeyi başına</strong> verir; her düzeyin dosyasını ayrı ayrı aktarın.
+          Fotoğraf okul numarasıyla eşleşir, bu yüzden önce öğrenci listesini aktarın.
         </p>
         <p>
           Önizleme, dosyadaki fotoğrafların kaçının yeni, kaçının kayıtlı fotoğrafla aynı, kaçının

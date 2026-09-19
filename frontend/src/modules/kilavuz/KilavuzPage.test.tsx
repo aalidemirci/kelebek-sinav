@@ -261,7 +261,9 @@ describe("KilavuzPage", () => {
       screen.getByRole("heading", { level: 3, name: "Öğrenci fotoğrafları (isteğe bağlı)" }),
     ).toBeInTheDocument();
     // e-Okul raporu kodu, biçimi ve düzey başına ayrı dosya.
-    expect(screen.getByText("OOG01001R080")).toBeInTheDocument();
+    // e-Okul yolu ekrandaki adlarla birebir: modül → Raporlar → rapor kodu ve adı.
+    expect(screen.getAllByText("Öğrenci İşlemleri → Raporlar").length).toBeGreaterThan(0);
+    expect(screen.getByText("OOG01001R080 - Fotoğraflı Öğrenci Listesi")).toBeInTheDocument();
     expect(screen.getByText("sınıf düzeyi başına")).toBeInTheDocument();
     // Mükerrer yüklemede seçim kullanıcıdadır; KVKK silme düğmesi anlatılır.
     expect(screen.getByText("Mevcut fotoğrafları koru")).toBeInTheDocument();

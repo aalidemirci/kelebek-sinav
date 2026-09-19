@@ -82,11 +82,12 @@ export default function FotografPaneli() {
         />
       </div>
       <p className="text-body-small text-on-surface-variant">
-        e-Okul'daki <strong>OOG01001R080</strong> fotoğraflı öğrenci listesi raporunu{" "}
-        <strong>Excel</strong> olarak indirip olduğu gibi yükleyin. e-Okul bu raporu sınıf düzeyi
-        başına verir: her düzeyin dosyasını ayrı ayrı aktarın. Fotoğraflar okul numarasıyla eşleşir
-        ve salon evrakındaki fotoğraflı oturma planında ve yoklama ekranında kullanılır. Uygulama
-        parolası açıksa şifreli saklanır; ayrılan öğrencinin fotoğrafı silinir.
+        e-Okul'da <strong>Öğrenci İşlemleri → Raporlar</strong> altındaki{" "}
+        <strong>OOG01001R080 - Fotoğraflı Öğrenci Listesi</strong> raporunu <strong>Excel</strong>{" "}
+        olarak indirip olduğu gibi yükleyin. e-Okul bu raporu sınıf düzeyi başına verir: her düzeyin
+        dosyasını ayrı ayrı aktarın. Fotoğraflar okul numarasıyla eşleşir ve salon evrakındaki
+        fotoğraflı oturma planında ve yoklama ekranında kullanılır. Uygulama parolası açıksa şifreli
+        saklanır; ayrılan öğrencinin fotoğrafı silinir.
       </p>
       <label className="flex flex-wrap items-center gap-3 text-body-medium text-on-surface">
         <span className="text-label-large">Rapor dosyası (Excel)</span>

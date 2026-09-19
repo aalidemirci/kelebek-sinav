@@ -92,7 +92,7 @@ describe("FotografPaneli", () => {
     expect(
       await screen.findByText("12 öğrencinin fotoğrafı var · 28 öğrencinin yok"),
     ).toBeInTheDocument();
-    expect(screen.getByText("OOG01001R080")).toBeInTheDocument();
+    expect(screen.getByText("OOG01001R080 - Fotoğraflı Öğrenci Listesi")).toBeInTheDocument();
     expect(screen.getByText(/sınıf düzeyi başına verir/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Fotoğrafları aktar" })).toBeDisabled();
 

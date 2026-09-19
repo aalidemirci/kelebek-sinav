@@ -309,8 +309,9 @@ def parse_photo_workbook(file_bytes: bytes) -> PhotoSheet:
         stream = ole.get_named_stream("Workbook") or ole.get_named_stream("Book")
     except Exception as exc:  # noqa: BLE001 — xlrd'nin kendi hata sınıfları dağınık
         raise ParserError(
-            "Dosya e-Okul Excel raporu olarak okunamadı. e-Okul'dan fotoğraflı öğrenci "
-            "listesini (OOG01001R080) Excel olarak indirip olduğu gibi yükleyin."
+            "Dosya e-Okul Excel raporu olarak okunamadı. e-Okul'da Öğrenci İşlemleri → "
+            "Raporlar altındaki OOG01001R080 - Fotoğraflı Öğrenci Listesi raporunu Excel "
+            "olarak indirip olduğu gibi yükleyin."
         ) from exc
     if not stream:
         raise ParserError("Dosyada Excel çalışma kitabı bulunamadı.")
@@ -320,8 +321,8 @@ def parse_photo_workbook(file_bytes: bytes) -> PhotoSheet:
     blips = parse_blip_store(_joined(altlar[0], _MSODRAWINGGROUP))
     if not blips:
         raise ParserError(
-            "Bu Excel dosyasında fotoğraf yok — e-Okul'un fotoğraflı öğrenci listesi "
-            "(OOG01001R080) raporu olmayabilir."
+            "Bu Excel dosyasında fotoğraf yok — e-Okul'un OOG01001R080 - Fotoğraflı "
+            "Öğrenci Listesi raporu olmayabilir."
         )
     try:
         kitap = xlrd.open_workbook(file_contents=file_bytes, on_demand=True, logfile=_Sessiz())

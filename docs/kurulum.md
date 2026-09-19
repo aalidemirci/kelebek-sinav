@@ -116,8 +116,8 @@ dokunmaz; yine de program her sürüm geçişinden önce kendiliğinden bir yede
    tek bir sınıf düzeyi için almak öbür düzeylerin listesini silmez.
 
    Salon evrakının oturma planında ve Yoklama ekranında öğrenci fotoğrafı
-   görünsün isterseniz (isteğe bağlı) e-Okul'un **OOG01001R080** kodlu
-   fotoğraflı öğrenci listesi raporunu **Excel** olarak indirip Kişiler
+   görünsün isterseniz (isteğe bağlı) e-Okul'da *Öğrenci İşlemleri → Raporlar
+   → OOG01001R080 - Fotoğraflı Öğrenci Listesi* raporunu **Excel** olarak indirip Kişiler
    ekranındaki "Öğrenci fotoğrafları" kartından yükleyin. e-Okul bu raporu sınıf
    düzeyi başına verir: her düzeyin dosyasını ayrı ayrı aktarın. Fotoğraflar
    okul numarasıyla eşleştiği için bunu da öğrenci listesinden sonra yapın.
