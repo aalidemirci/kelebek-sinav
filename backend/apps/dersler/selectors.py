@@ -457,3 +457,78 @@ def course_enrollment_counts(school_year_id: int) -> dict[tuple[int, int], int]:
     ekran bunu kullanır, kişisel veri taşımaz.
     """
     return {anahtar: len(ids) for anahtar, ids in enrollment_index(school_year_id).lists.items()}
+
+
+# --------------------------------------------------------------------------- #
+# "Bu yıl açılmadı" — e-Okul seçmeli raporunun kapsamından (19.09.2026)
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class ElectiveOfferStatus:
+    """e-Okul seçmeli raporuna göre hangi seçmeliler bu yıl AÇILMADI.
+
+    Pasifleştirme DEĞİLDİR (kullanıcı kararı 19.09.2026 — `is_active` idari
+    karardır): Ders Havuzu bu dersleri ayrı gösterir, takvim havuzu doldurması
+    onları "atlananlar" listesine tek tek yazmaz. Şube girilince ders kendiliğinden
+    yeniden açılmış sayılır (kapsam kaydı "açık" demektir).
+    """
+
+    #: Öğrencili BÜTÜN şubeleri e-Okul raporunda geçmiş sınıf düzeyleri.
+    covered_levels: frozenset[int]
+    #: (ders, düzey): kapsanan düzeyde şube kapsamı olmayan seçmeli.
+    not_offered_pairs: frozenset[tuple[int, int]]
+    #: Öğrencili bütün düzeylerinde açılmamış seçmeliler.
+    not_offered_courses: frozenset[int]
+
+
+_BOS_DURUM = ElectiveOfferStatus(frozenset(), frozenset(), frozenset())
+
+
+def elective_offer_status(school_year_id: int) -> ElectiveOfferStatus:
+    """Raporun TAM kapsadığı düzeylerde şube kapsamı olmayan seçmeliler.
+
+    Bir düzey ancak öğrencili bütün şubeleri raporda geçtiyse "kapsanmış" sayılır
+    (`ElectiveReportSection`); tek şube için alınmış rapor o düzey hakkında hüküm
+    vermez — eksik veri "açılmadı" diye okunmaz. Pasif ve öğrencisiz düzeydeki
+    dersler `taught_course_levels` süzgecinden hiç geçmez.
+    """
+    from apps.dersler.models import CourseType, ElectiveReportSection
+    from apps.okul.models import ClassSection, Student, StudentStatus
+
+    kapsanan = set(
+        ElectiveReportSection.objects.filter(
+            school_year_id=school_year_id, section__deleted_at__isnull=True
+        ).values_list("section_id", flat=True)
+    )
+    if not kapsanan:
+        return _BOS_DURUM
+    ogrencili = set(
+        Student.objects.filter(status=StudentStatus.ACTIVE)
+        .values_list("class_level", "class_section")
+        .distinct()
+    )
+    duzey_subeleri: dict[int, set[int]] = {}
+    for sube in ClassSection.objects.filter(school_year_id=school_year_id):
+        if (sube.class_level, sube.class_section) in ogrencili:
+            duzey_subeleri.setdefault(int(sube.class_level), set()).add(int(sube.pk))
+    kapsanan_duzeyler = frozenset(
+        duzey for duzey, ids in duzey_subeleri.items() if ids and ids <= kapsanan
+    )
+    if not kapsanan_duzeyler:
+        return _BOS_DURUM
+    acik = {anahtar for anahtar, ids in course_section_map(school_year_id).items() if ids}
+    acilmayan: set[tuple[int, int]] = set()
+    ders_durumu: dict[int, list[bool]] = {}
+    for cift in taught_course_levels(school_year_id, course_types=[CourseType.ELECTIVE]):
+        kapali = cift.level in kapsanan_duzeyler and (cift.course_id, cift.level) not in acik
+        if kapali:
+            acilmayan.add((cift.course_id, cift.level))
+        ders_durumu.setdefault(cift.course_id, []).append(kapali)
+    return ElectiveOfferStatus(
+        covered_levels=kapsanan_duzeyler,
+        not_offered_pairs=frozenset(acilmayan),
+        not_offered_courses=frozenset(
+            ders for ders, durumlar in ders_durumu.items() if durumlar and all(durumlar)
+        ),
+    )

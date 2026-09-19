@@ -189,11 +189,17 @@ class CourseSectionOfferingsView(APIView):
     kaynağı ders havuzudur — takvim girdisi kopya tutar).
 
     Silinmiş şube okuma anında düşer (`selectors.course_section_map`).
+
+    19.09.2026 eki: `not_offered` (e-Okul seçmeli raporuna göre öğrencili bütün
+    düzeylerinde bu yıl AÇILMAYAN seçmeliler — pasif değil, ayrı gösterilir) ve
+    `covered_levels` (raporun tam kapsadığı düzeyler). Rapor hiç aktarılmadıysa
+    ikisi de boştur.
     """
 
     def get(self, request: Request) -> Response:
         year_id = _cozulen_yil_id(request)
         harita = selectors.course_section_map(year_id)
+        durum = selectors.elective_offer_status(year_id)
         return Response(
             {
                 "school_year": year_id,
@@ -201,6 +207,8 @@ class CourseSectionOfferingsView(APIView):
                     {"course": course_id, "level": level, "section_ids": section_ids}
                     for (course_id, level), section_ids in sorted(harita.items())
                 ],
+                "not_offered": sorted(durum.not_offered_courses),
+                "covered_levels": sorted(durum.covered_levels),
             }
         )
 
@@ -335,9 +343,14 @@ class _EnrollmentImportView(APIView):
         uploaded = request.FILES.get("file")
         if uploaded is None:
             raise serializers.ValidationError({"file": "e-Okul raporunun PDF dosyasını seçin."})
+        # Havuza eklenmesi onaylanan e-Okul başlıkları (çok değerli form alanı).
+        getlist = getattr(request.data, "getlist", None)
+        eklenecek = [str(t) for t in getlist("add_titles")] if getlist else []
         handler = getattr(enrollment_import, self.handler_name)
         try:
-            report = handler(file_bytes=uploaded.read(), file_name=uploaded.name or "")
+            report = handler(
+                file_bytes=uploaded.read(), file_name=uploaded.name or "", add_titles=eklenecek
+            )
         except ParserError as exc:
             raise serializers.ValidationError(str(exc)) from exc
         return Response(report.to_dict())

@@ -253,6 +253,11 @@ class CourseSummary:
     report_rows: int = 0
     students: int = 0
     sections: list[str] = field(default_factory=list)  # '9/A' etiketleri, Türk alfabesiyle
+    #: Havuzda HİÇ karşılığı yok — aktarımda onayla seçmeli olarak eklenebilir
+    #: (zorunlu dersle çakışan ad eklenemez: ikinci bir "Fizik" açılmaz).
+    addable: bool = False
+    proposed_name: str = ""
+    proposed_levels: list[int] = field(default_factory=list)
 
 
 @dataclass
@@ -303,9 +308,58 @@ def _sinif_etiketi(level: int, section: str) -> str:
     return f"Hz/{section}" if level == 0 else f"{level}/{section}"
 
 
-@transaction.atomic
-def _ingest(parsed: ParsedReport, *, source_hash: str, file_name: str) -> ElectiveImportReport:
+def proposed_course_name(baslik: str) -> str:
+    """e-Okul başlığından havuz adı: 'SEÇMELİ ASTRONOMİ VE UZAY…' → 'Astronomi ve Uzay…'.
+
+    'Seçmeli' öneki düşer: ders türü zaten SEÇMELİ yazılır, önekli ad yalnız
+    resmî çizelge adıysa korunur (katalog kuralı) — havuzda karşılığı olmayan
+    derste çizelge adı bilinmediğinden öneksiz biçim önerilir; idareci Ders
+    Havuzu'ndan yeniden adlandırabilir.
+    """
+    from apps.dersler.text import titlecase_tr
+
+    ad = titlecase_tr(baslik.translate(_KESME))
+    oneksiz = ad[len("Seçmeli ") :] if course_match_key(ad).startswith(_SECMELI_ONEK) else ad
+    return oneksiz.strip() or ad
+
+
+def _add_new_courses(parsed: ParsedReport, add_titles: set[str]) -> set[str]:
+    """Onaylanan başlıklar için havuza SEÇMELİ ders açar; açılan başlıkları döner.
+
+    Yalnız havuzda HİÇBİR adayı olmayan başlık açılır (`_adaylar` boş): zorunlu
+    dersle aynı ada ikinci bir kayıt açılmaz. Düzeyler rapordaki satırlardan gelir;
+    ders elle eklenmiş sayılır (`MANUAL`), sınav biçimi varsayılan YAZILI.
+    """
     from apps.dersler import services as ders_services
+    from apps.dersler.models import VALID_COURSE_LEVELS, CourseSource
+
+    acilan: set[str] = set()
+    for grup in parsed.groups:
+        if grup.title not in add_titles or grup.title in acilan or _adaylar(grup.title):
+            continue
+        duzeyler = sorted({s.class_level for s in grup.lines} & set(VALID_COURSE_LEVELS))
+        if not duzeyler:
+            continue
+        ders_services.create_course(
+            name=proposed_course_name(grup.title),
+            levels=duzeyler,
+            course_type=CourseType.ELECTIVE,
+            source=CourseSource.MANUAL,
+        )
+        acilan.add(grup.title)
+    return acilan
+
+
+@transaction.atomic
+def _ingest(
+    parsed: ParsedReport,
+    *,
+    source_hash: str,
+    file_name: str,
+    add_titles: Iterable[str] = (),
+) -> ElectiveImportReport:
+    from apps.dersler import services as ders_services
+    from apps.dersler.models import ElectiveReportSection
     from apps.okul.models import ClassSection, ImportSourceType, Student, StudentStatus
     from apps.okul.selectors import active_school_year
     from apps.okul.services import imports as okul_imports
@@ -317,6 +371,9 @@ def _ingest(parsed: ParsedReport, *, source_hash: str, file_name: str) -> Electi
             "listeleri ders yılına bağlıdır."
         )
     ders_services.ensure_seeded()  # katalog + takma adlar (ad çözümü onlara dayanır)
+    # Önizlemede onaylanan yeni seçmeliler ÖNCE açılır; aşağıdaki ad çözümü
+    # onları olağan bir havuz dersi gibi bulur (önizleme de aynı yoldan geçer).
+    acilan = _add_new_courses(parsed, set(add_titles))
 
     rapor = ElectiveImportReport(
         file_hash=source_hash,
@@ -361,6 +418,11 @@ def _ingest(parsed: ParsedReport, *, source_hash: str, file_name: str) -> Electi
         rapor.courses.append(ozet)
         if ders is None:
             ozet.note = gerekce
+            if not _adaylar(grup.title):
+                # Havuzda hiç karşılığı yok: arayüz "Havuza ekle" kutusu sunar.
+                ozet.addable = True
+                ozet.proposed_name = proposed_course_name(grup.title)
+                ozet.proposed_levels = sorted({s.class_level for s in grup.lines})
             ilk = grup.lines[0] if grup.lines else None
             rapor.add_skip(
                 ilk.page if ilk else 0,
@@ -377,6 +439,8 @@ def _ingest(parsed: ParsedReport, *, source_hash: str, file_name: str) -> Electi
         ozet.status = "matched"
         ozet.course_id = ders.pk
         ozet.course_name = ders.name
+        if grup.title in acilan:
+            ozet.note = "Ders Havuzu'na seçmeli olarak eklendi."
         if not ders.is_active:
             ozet.note = (ozet.note + " " if ozet.note else "") + (
                 "Ders havuzda pasif; liste yine de aktarıldı."
@@ -433,6 +497,11 @@ def _ingest(parsed: ParsedReport, *, source_hash: str, file_name: str) -> Electi
         ozet.students = len(yeni)
         ozet.sections = sorted({s.class_label for s, _ in yeni.values()}, key=normalize.tr_sort_key)
         ders_ogrencileri.setdefault(int(ders.pk), {}).update(yeni)
+
+    # Raporun kapsadığı şubeler kalıcı kaydedilir: "bu yıl açılmadı" çıkarımı
+    # (`selectors.elective_offer_status`) yalnız TAM kapsanan düzeyde hüküm verir.
+    for sube_pk in sorted(kapsam):
+        ElectiveReportSection.objects.get_or_create(school_year=year, section_id=sube_pk)
 
     # 2. geçiş — yazım. Kapsanan şubelerde dersin listesi ve şube kapsamı rapora
     # çekilir (raporda öğrencisi olmayan kapsanan şube dersten ÇIKAR); kapsam dışı
@@ -492,18 +561,25 @@ def _ingest(parsed: ParsedReport, *, source_hash: str, file_name: str) -> Electi
     return rapor
 
 
-def _giris(file_bytes: bytes, file_name: str, *, preview: bool) -> ElectiveImportReport:
+def _giris(
+    file_bytes: bytes, file_name: str, *, preview: bool, add_titles: Iterable[str] = ()
+) -> ElectiveImportReport:
     """Ortak giriş: ayrıştırma hatasında kalıcı FAILED izi bırakır ve hatayı yükseltir."""
     from apps.okul.models import ImportSourceType
     from apps.okul.services import imports as okul_imports
 
     source_hash = okul_imports.file_hash(file_bytes)
+    eklenecek = tuple(add_titles)
     try:
         parsed = parse_report_pdf(file_bytes)
         if not preview:
-            return _ingest(parsed, source_hash=source_hash, file_name=file_name)
+            return _ingest(
+                parsed, source_hash=source_hash, file_name=file_name, add_titles=eklenecek
+            )
         with transaction.atomic():
-            rapor = _ingest(parsed, source_hash=source_hash, file_name=file_name)
+            rapor = _ingest(
+                parsed, source_hash=source_hash, file_name=file_name, add_titles=eklenecek
+            )
             transaction.set_rollback(True)
         rapor.dry_run = True
         okul_imports.record_import_preview(
@@ -515,11 +591,23 @@ def _giris(file_bytes: bytes, file_name: str, *, preview: bool) -> ElectiveImpor
         raise
 
 
-def preview_elective_report(*, file_bytes: bytes, file_name: str = "") -> ElectiveImportReport:
-    """Yazmadan simüle eder (gerçek yazım + geri alma) — PREVIEWED izi kalır."""
-    return _giris(file_bytes, file_name, preview=True)
+def preview_elective_report(
+    *, file_bytes: bytes, file_name: str = "", add_titles: Iterable[str] = ()
+) -> ElectiveImportReport:
+    """Yazmadan simüle eder (gerçek yazım + geri alma) — PREVIEWED izi kalır.
+
+    `add_titles`: havuza eklenmesi onaylanan e-Okul başlıkları; önizleme onları
+    da açıp eşleştirir (aktarımla birebir sonuç), sonra geri alır.
+    """
+    return _giris(file_bytes, file_name, preview=True, add_titles=add_titles)
 
 
-def commit_elective_report(*, file_bytes: bytes, file_name: str = "") -> ElectiveImportReport:
-    """Rapordaki derslerin öğrenci listelerini ve şube kapsamlarını yazar."""
-    return _giris(file_bytes, file_name, preview=False)
+def commit_elective_report(
+    *, file_bytes: bytes, file_name: str = "", add_titles: Iterable[str] = ()
+) -> ElectiveImportReport:
+    """Rapordaki derslerin öğrenci listelerini ve şube kapsamlarını yazar.
+
+    `add_titles`: havuzda karşılığı olmayan ve idarecinin "Havuza ekle" dediği
+    seçmeliler — önce seçmeli olarak açılır, sonra listeleri yazılır.
+    """
+    return _giris(file_bytes, file_name, preview=False, add_titles=add_titles)

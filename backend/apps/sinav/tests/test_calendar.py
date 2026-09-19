@@ -1878,3 +1878,36 @@ def test_goc_yerlesik_sinavi_olan_takvime_dokunmaz() -> None:
 
     calendar.refresh_from_db()
     assert (calendar.start_date, calendar.end_date) == (date(2026, 10, 26), date(2026, 11, 6))
+
+
+# ===========================================================================
+# Bu yıl açılmayan seçmeli (19.09.2026): e-Okul raporunun tam kapsadığı düzeyde
+# öğrencisi olmayan seçmeli takvim havuzu doldurmasında tek tek atlanmaz.
+# ===========================================================================
+
+
+def test_havuz_doldurma_acilmayan_secmeliyi_tek_ozet_satirla_bildirir() -> None:
+    from apps.dersler.models import ElectiveReportSection
+
+    guz, _ = _iki_donem()
+    a = sube(9, "A", students=2, start_no=101)
+    acik = ders("Kur'an-ı Kerim", levels=[9], course_type=CourseType.ELECTIVE)
+    ders("Astronomi ve Uzay Bilimleri", levels=[9], course_type=CourseType.ELECTIVE)
+    ders("Sanat Tarihi", levels=[9], course_type=CourseType.ELECTIVE)
+    _kapsam_yaz(acik.pk, 9, [a.pk])
+    # e-Okul raporu 9. sınıfın tek (öğrencili) şubesini kapsadı.
+    ElectiveReportSection.objects.create(school_year=aktif_yil(), section=a)
+    calendar = _takvim(round_=1, semester=guz)
+
+    sonuc = takvim.fill_calendar_pool(calendar)
+
+    tum = sonuc["created"] + sonuc["existed"]
+    assert any("Kur'an-ı Kerim" in etiket for etiket in tum)
+    assert not any("Astronomi" in s or "Sanat Tarihi" in s for s in sonuc["skipped"])
+    assert any("2 seçmeli ders–sınıf düzeyi bu yıl açılmadı" in s for s in sonuc["skipped"])
+    # Seçim penceresi açılmayanı işaretler (gizlemez — elle eklenebilir).
+    secenekler = {
+        c["name"]: c for lvl in takvim.elective_pool_options(calendar) for c in lvl["courses"]
+    }
+    assert secenekler["Sanat Tarihi"]["not_offered"] is True
+    assert secenekler["Kur'an-ı Kerim"]["not_offered"] is False

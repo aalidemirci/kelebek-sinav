@@ -326,7 +326,14 @@
   AYRIŞTIRILMAZ) ya da şube penceresindeki seçici. Aktarım yalnız raporun
   KAPSADIĞI şubelerde (raporda satırı geçen) yeniler: rapor tek düzey/şube için
   alınmış olabilir, kapsam dışı şubenin listesi ve kapsamı SİLİNMEZ; raporda
-  olmayan derse hiç dokunulmaz. Liste dağıtımdan SONRA
+  olmayan derse hiç dokunulmaz. Aktarım havuzu da toparlar (kullanıcı kararı):
+  havuzda HİÇ adayı olmayan başlık önizlemede `addable` gelir, idarecinin
+  işaretlediği `add_titles` seçmeli (MANUAL) açılır — zorunlu adla çakışan başlık
+  açılmaz; kapsanan şubeler `ElectiveReportSection`e yazılır ve öğrencili bütün
+  şubeleri kapsanan düzeyde kapsamı olmayan seçmeli "bu yıl açılmadı" sayılır
+  (`selectors.elective_offer_status`) — PASİFLEŞTİRİLMEZ (`is_active` idari
+  karar), Ders Havuzu'nda gizlenir, `fill_calendar_pool` onları `skipped`'a tek
+  özet satırla yazar; şube girilince kendiliğinden açılır. Liste dağıtımdan SONRA
   değişirse yerleşim DEĞİŞMEZ: `participants.placement_drift` snapshot'ı güncel
   çözümle karşılaştırır, oturum sayfası "yeniden dağıtın" bandı gösterir.
 - **Takvim girdisi kapsamın KOPYASINI tutar** (snapshot): katalog sonradan

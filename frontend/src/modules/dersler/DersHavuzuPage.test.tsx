@@ -30,8 +30,12 @@ const dersler = vi.hoisted(() => ({
   // mockResolvedValue kapsam satırlarını kabul etmez (tsc kapısı — emsal
   // TakvimHavuzPaneli.test.tsx şube mock'u).
   sectionOfferings: vi.fn(
-    (): Promise<{ school_year: number; results: CourseSectionOfferingRow[] }> =>
-      Promise.resolve({ school_year: 1, results: [] }),
+    (): Promise<{
+      school_year: number;
+      results: CourseSectionOfferingRow[];
+      not_offered?: number[];
+      covered_levels?: number[];
+    }> => Promise.resolve({ school_year: 1, results: [] }),
   ),
   courseSections: vi.fn((): Promise<{ school_year: number; offerings: CourseSectionOffering[] }> =>
     Promise.resolve({ school_year: 1, offerings: [] }),
@@ -535,5 +539,60 @@ describe("DersHavuzuPage", () => {
         screen.queryByRole("dialog", { name: "e-Okul'dan seçmeli ders öğrencilerini aktar" }),
       ).not.toBeInTheDocument(),
     );
+  });
+});
+
+describe("DersHavuzuPage — bu yıl açılmayan seçmeliler (19.09.2026)", () => {
+  it("açılmayan seçmeli varsayılan gizli; göster deyince “Bu yıl açılmadı” diye görünür", async () => {
+    const user = userEvent.setup();
+    dersler.listCourses.mockResolvedValue([
+      ders({ id: 2, name: "Kur'an-ı Kerim", course_type: "ELECTIVE" }),
+      ders({ id: 3, name: "Astronomi ve Uzay Bilimleri", course_type: "ELECTIVE" }),
+    ]);
+    dersler.sectionOfferings.mockResolvedValue({
+      school_year: 1,
+      results: [{ course: 2, level: 9, section_ids: [1, 2] }],
+      not_offered: [3],
+      covered_levels: [9],
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByText(
+        /1 seçmeli bu yıl açılmadı \(e-Okul seçmeli raporunda öğrencisi yok\)/,
+      ),
+    ).toBeInTheDocument();
+    const tablo = within(screen.getByRole("table"));
+    expect(tablo.getByText("Kur'an-ı Kerim")).toBeInTheDocument();
+    expect(tablo.queryByText("Astronomi ve Uzay Bilimleri")).not.toBeInTheDocument();
+    // Pasifleştirme değil — metin bunu söyler.
+    expect(screen.getByText(/Pasifleştirilmedi/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Açılmayanları göster" }));
+
+    const dugme = await screen.findByRole("button", {
+      name: "Astronomi ve Uzay Bilimleri dersinin şubelerini düzenle",
+    });
+    expect(dugme).toHaveTextContent("Bu yıl açılmadı");
+    // Uyarı simgesi yok: açılmamak bir eksik değil, e-Okul'un söylediği durumdur.
+    expect(within(dugme).queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Açılmayanları gizle" })).toBeInTheDocument();
+  });
+
+  it("rapor aktarılmadıysa açılmayan bilgisi ve düğmesi hiç görünmez", async () => {
+    dersler.listCourses.mockResolvedValue([
+      ders({ id: 3, name: "Astronomi ve Uzay Bilimleri", course_type: "ELECTIVE" }),
+    ]);
+    dersler.sectionOfferings.mockResolvedValue({ school_year: 1, results: [] });
+
+    renderPage();
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Astronomi ve Uzay Bilimleri dersinin şubelerini düzenle",
+      }),
+    ).toHaveTextContent("Girilmedi");
+    expect(screen.queryByText(/bu yıl açılmadı/)).not.toBeInTheDocument();
   });
 });

@@ -329,6 +329,14 @@ export default function SecmeliDersSecimDialog({
                                 Havuzda
                               </span>
                             ) : null}
+                            {c.not_offered && !c.in_pool ? (
+                              <span
+                                className="rounded-full bg-surface-container-high px-2 py-0.5 text-label-small text-on-surface-variant"
+                                title="e-Okul seçmeli raporunda bu sınıf düzeyinde bu dersi alan öğrenci yok."
+                              >
+                                Bu yıl açılmadı
+                              </span>
+                            ) : null}
                           </label>
                           {kapsam !== undefined && !c.in_pool ? (
                             <KapsamSatiri

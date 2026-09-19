@@ -310,3 +310,48 @@ class CourseEnrollment(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.course_id} / şube {self.section_id} ← öğrenci {self.student_id}"
+
+
+class ElectiveReportSection(BaseModel):
+    """e-Okul seçmeli raporunun KAPSADIĞI şube — (ders yılı, şube) (19.09.2026).
+
+    "Bu seçmeli bu yıl açılmadı" çıkarımının dayanağıdır (kullanıcı kararı
+    19.09.2026: açılmayan seçmeliler ayrı görünsün, takvimde atlananlar listesini
+    kalabalık etmesin; PASİFLEŞTİRİLMEZ — `is_active` idari karardır). Bir sınıf
+    düzeyinin öğrencili BÜTÜN şubeleri raporda geçtiyse ve seçmelinin o düzeyde
+    şube kapsamı yoksa, e-Okul'a göre o düzeyde bu dersi alan öğrenci yoktur
+    (`selectors.elective_offer_status`). Kapsam aktarım yazılırken kaydedilir
+    (`enrollment_import._ingest`); rapor tek düzey/şube için alınmışsa yalnız o
+    şubeler kapsanır ve öbür düzeyler "bilinmiyor" kalır (sessiz çıkarım yok).
+
+    Kişisel veri taşımaz. Geri dönüş kendiliğindendir: açılmadı sayılan
+    seçmeliye Ders Havuzu'ndan şube girilince ders yeniden açılmış olur.
+    """
+
+    school_year = models.ForeignKey(
+        "okul.SchoolYear",
+        on_delete=models.CASCADE,
+        related_name="elective_report_sections",
+        verbose_name="ders yılı",
+    )
+    section = models.ForeignKey(
+        "okul.ClassSection",
+        on_delete=models.CASCADE,
+        related_name="elective_report_sections",
+        verbose_name="şube",
+    )
+
+    class Meta:
+        verbose_name = "seçmeli raporu kapsamı"
+        verbose_name_plural = "seçmeli raporu kapsamları"
+        ordering = ["school_year", "section"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["school_year", "section"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_elective_report_section_alive",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.school_year_id} / şube {self.section_id}"

@@ -13,6 +13,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "../../lib/api";
+import { gradeLevelLabel } from "../../lib/gradeLevels";
 import Button from "../../ui/Button";
 import Dialog from "../../ui/Dialog";
 import Icon from "../../ui/Icon";
@@ -33,6 +34,10 @@ export default function SecmeliOgrenciAktarDialog({
   const [report, setReport] = useState<ElectiveImportReport | null>(null);
   const [busy, setBusy] = useState<"preview" | "commit" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Havuzda karşılığı olmayan ve "Havuza ekle" işaretli e-Okul başlıkları
+  // (19.09.2026, kullanıcı kararı: yeni seçmeli onayla eklenir). Önizleme her
+  // eklenebilir başlığı İŞARETLİ getirir; idareci kutuyu kaldırabilir.
+  const [eklenecek, setEklenecek] = useState<Set<string>>(new Set());
 
   const run = (mode: "preview" | "commit") => {
     if (!file) return;
@@ -41,11 +46,13 @@ export default function SecmeliOgrenciAktarDialog({
     const istek =
       mode === "preview"
         ? derslerApi.previewEnrollmentImport(file)
-        : derslerApi.commitEnrollmentImport(file);
+        : derslerApi.commitEnrollmentImport(file, [...eklenecek]);
     istek
       .then((r) => {
         setReport(r);
-        if (mode === "commit") {
+        if (mode === "preview") {
+          setEklenecek(new Set(r.courses.filter((c) => c.addable).map((c) => c.title)));
+        } else {
           const dersler = r.courses.filter((c) => c.status === "matched").length;
           snackbar.success(
             `${dersler} dersin öğrenci listesi aktarıldı (${r.processed} öğrenci-ders kaydı).`,
@@ -55,6 +62,7 @@ export default function SecmeliOgrenciAktarDialog({
             ["course-enrollment-counts"],
             ["course-section-offerings"],
             ["course-sections"],
+            ["courses"],
           ]) {
             void queryClient.invalidateQueries({ queryKey: key });
           }
@@ -129,13 +137,42 @@ export default function SecmeliOgrenciAktarDialog({
         </p>
       )}
 
-      {report && <RaporGorunumu report={report} />}
+      {report && (
+        <RaporGorunumu
+          report={report}
+          eklenecek={eklenecek}
+          onToggle={
+            onizlendi
+              ? (title) =>
+                  setEklenecek((prev) => {
+                    const yeni = new Set(prev);
+                    if (yeni.has(title)) yeni.delete(title);
+                    else yeni.add(title);
+                    return yeni;
+                  })
+              : undefined
+          }
+        />
+      )}
     </Dialog>
   );
 }
 
-function RaporGorunumu({ report }: { report: ElectiveImportReport }) {
+function RaporGorunumu({
+  report,
+  eklenecek,
+  onToggle,
+}: {
+  report: ElectiveImportReport;
+  eklenecek: Set<string>;
+  /** Yalnız önizlemede: "Havuza ekle" kutusu. */
+  onToggle?: (title: string) => void;
+}) {
   const eslesmeyen = report.courses.filter((c) => c.status === "unmatched");
+  const eklenecekler = onToggle
+    ? eslesmeyen.filter((c) => c.addable && eklenecek.has(c.title))
+    : [];
+  const aktarilmayacak = eslesmeyen.length - eklenecekler.length;
   return (
     <div className="mt-4 space-y-3">
       <p className="text-body-medium text-on-surface">
@@ -156,11 +193,20 @@ function RaporGorunumu({ report }: { report: ElectiveImportReport }) {
           Bu dosya daha önce aktarılmış; yeniden aktarım listeleri aynı içerikle yeniler.
         </p>
       )}
-      {eslesmeyen.length > 0 && (
+      {eklenecekler.length > 0 && (
+        <p className="flex items-start gap-2 rounded-shape-sm bg-secondary-container px-3 py-2 text-body-small text-on-secondary-container">
+          <Icon name="add_circle" size="sm" />
+          <span>
+            {eklenecekler.length} seçmeli Ders Havuzu'nda yok; aktarımda seçmeli ders olarak havuza
+            eklenecek (aşağıda işaretli — istemediğinizin işaretini kaldırın).
+          </span>
+        </p>
+      )}
+      {aktarilmayacak > 0 && (
         <p className="flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-3 py-2 text-body-small text-on-tertiary-container">
           <Icon name="warning" size="sm" />
           <span>
-            {eslesmeyen.length} ders Ders Havuzu'nda eşleşmedi ve aktarılmayacak — aşağıdaki tabloda
+            {aktarilmayacak} ders Ders Havuzu'nda eşleşmedi ve aktarılmayacak — aşağıdaki tabloda
             gerekçesi var.
           </span>
         </p>
@@ -187,6 +233,23 @@ function RaporGorunumu({ report }: { report: ElectiveImportReport }) {
                   )}
                   {c.note && (
                     <span className="block text-label-small text-on-surface-variant">{c.note}</span>
+                  )}
+                  {onToggle && c.status === "unmatched" && c.addable && (
+                    <label className="mt-1 flex items-center gap-2 text-on-surface">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-primary"
+                        checked={eklenecek.has(c.title)}
+                        onChange={() => onToggle(c.title)}
+                        aria-label={`${c.proposed_name} dersini Ders Havuzu'na ekle`}
+                      />
+                      <span>
+                        Havuza ekle: <strong>{c.proposed_name}</strong>
+                        {c.proposed_levels.length > 0
+                          ? ` (${c.proposed_levels.map((l) => gradeLevelLabel(l)).join(", ")})`
+                          : ""}
+                      </span>
+                    </label>
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">

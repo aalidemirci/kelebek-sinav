@@ -246,6 +246,11 @@ export interface ElectivePoolCourse {
    * (kaynak Ders Havuzu ekranıdır, 03.09.2026). Boşsa kapsam tanımsızdır.
    */
   default_section_ids: number[];
+  /**
+   * e-Okul seçmeli raporuna göre bu sınıf düzeyinde bu yıl açılmadı (öğrencisi
+   * yok). Gizlenmez, işaretlenir: idareci yine de seçebilir (19.09.2026).
+   */
+  not_offered?: boolean;
 }
 
 /** Seviye başına seçilebilir seçmeli dersler (ders adları backend'de TR sıralı). */

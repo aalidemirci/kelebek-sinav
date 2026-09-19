@@ -612,6 +612,11 @@ def fill_calendar_pool(calendar: ExamCalendar) -> dict[str, Any]:
             "course_id", "level"
         )
     )
+    # e-Okul seçmeli raporuna göre bu yıl AÇILMAYAN seçmeliler (19.09.2026, kullanıcı
+    # kararı): atlananlar listesine tek tek yazılmaz — tek özet satırı düşer, ayrıntı
+    # Ders Havuzu'ndadır. Sessiz düşme değil: sayı ve nerede görüleceği söylenir.
+    acilmayan = ders_selectors.elective_offer_status(year_id).not_offered_pairs
+    acilmayan_sayisi = 0
     created: list[str] = []
     existed: list[str] = []
     skipped: list[str] = []
@@ -619,6 +624,9 @@ def fill_calendar_pool(calendar: ExamCalendar) -> dict[str, Any]:
     for pair, secmeli in adaylar:
         label = f"{pair.course_name} — {_level_display(pair.level)}"
         kapsam = section_map.get((pair.course_id, pair.level))
+        if secmeli and (pair.course_id, pair.level) in acilmayan:
+            acilmayan_sayisi += 1
+            continue
         if secmeli and not kapsam:
             skipped.append(
                 f"{label} (şubeleri girilmemiş — Ders Havuzu ekranında tanımlayın "
@@ -642,6 +650,11 @@ def fill_calendar_pool(calendar: ExamCalendar) -> dict[str, Any]:
             skipped.append(f"{label} ({_validation_text(exc)})")
             continue
         created.append(label)
+    if acilmayan_sayisi:
+        skipped.append(
+            f"{acilmayan_sayisi} seçmeli ders–sınıf düzeyi bu yıl açılmadı (e-Okul seçmeli "
+            "raporunda öğrencisi yok) — Ders Havuzu'nda ayrıca listelenir"
+        )
     return {
         "created": created,
         "existed": existed,
@@ -800,6 +813,10 @@ def elective_pool_options(calendar: ExamCalendar) -> list[dict[str, Any]]:
     # Ders havuzunda girilmiş kapsam diyaloğa ÖN SEÇİM olarak iner; idareci
     # yalnız istisna varsa dokunur (kaynak Ders Havuzu ekranıdır — 03.09.2026).
     section_map = ders_selectors.course_section_map(calendar.semester.school_year_id)
+    # e-Okul raporuna göre bu yıl açılmayan (ders, düzey) — diyalog işaretler, gizlemez.
+    acilmayan = ders_selectors.elective_offer_status(
+        calendar.semester.school_year_id
+    ).not_offered_pairs
     by_level: dict[int, list[dict[str, Any]]] = {}
     for pair in pairs:
         by_level.setdefault(pair.level, []).append(
@@ -808,6 +825,7 @@ def elective_pool_options(calendar: ExamCalendar) -> list[dict[str, Any]]:
                 "name": pair.course_name,
                 "in_pool": (pair.course_id, pair.level) in live_pairs,
                 "default_section_ids": list(section_map.get((pair.course_id, pair.level), [])),
+                "not_offered": (pair.course_id, pair.level) in acilmayan,
             }
         )
     return [

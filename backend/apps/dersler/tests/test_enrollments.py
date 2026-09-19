@@ -626,3 +626,155 @@ def test_api_pdf_onizleme_ve_aktarim(okul: dict[str, Any]) -> None:
     assert bozuk.status_code == 400
     assert ImportRun.objects.filter(status=ImportStatus.FAILED).exists()
     assert client.post("/api/v1/courses/enrollments/import/preview/", {}).status_code == 400
+
+
+# ===========================================================================
+# Havuz otomasyonu (19.09.2026, kullanıcı kararı): raporda olup havuzda olmayan
+# seçmeli ONAYLA eklenir; raporun tam kapsadığı düzeyde öğrencisi olmayan
+# seçmeli "bu yıl açılmadı" sayılır (pasifleştirilmez).
+# ===========================================================================
+
+
+def test_onerilen_ad_secmeli_onekini_duserek_basliklastirir() -> None:
+    oneri = enrollment_import.proposed_course_name
+    assert oneri("SEÇMELİ ASTRONOMİ VE UZAY BİLİMLERİ") == "Astronomi ve Uzay Bilimleri"
+    assert oneri("SEÇMELİ KUR`AN-I KERİM") == "Kur'an-ı Kerim"
+    assert oneri("SANAT TARİHİ") == "Sanat Tarihi"
+
+
+ASTRONOMI = "SEÇMELİ ASTRONOMİ VE UZAY BİLİMLERİ"
+
+
+def test_havuzda_olmayan_secmeli_onayla_eklenir(okul: dict[str, Any]) -> None:
+    rapor = _rapor(
+        ("SEÇMELİ KUR`AN-I KERİM", [("101", 9, "A")]),
+        (ASTRONOMI, [("102", 9, "A"), ("201", 9, "B")]),
+    )
+
+    # Onaysız: eşleşmez, eklenebilir diye işaretlenir; havuza bir şey yazılmaz.
+    onaysiz = enrollment_import._ingest(rapor, source_hash="j" * 64, file_name="")
+    astro = next(c for c in onaysiz.courses if c.title == ASTRONOMI)
+    assert astro.status == "unmatched" and astro.addable
+    assert astro.proposed_name == "Astronomi ve Uzay Bilimleri"
+    assert astro.proposed_levels == [9]
+    assert not Course.objects.filter(name="Astronomi ve Uzay Bilimleri").exists()
+
+    # Onaylı önizleme: aktarımla aynı sonuç, ama geri alınır.
+    with transaction.atomic():
+        on = enrollment_import._ingest(
+            rapor, source_hash="k" * 64, file_name="", add_titles=[ASTRONOMI]
+        )
+        transaction.set_rollback(True)
+    assert next(c for c in on.courses if c.title == ASTRONOMI).status == "matched"
+    assert not Course.objects.filter(name="Astronomi ve Uzay Bilimleri").exists()
+
+    # Onaylı aktarım: seçmeli olarak açılır ve listesi yazılır.
+    sonuc = enrollment_import._ingest(
+        rapor, source_hash="l" * 64, file_name="", add_titles=[ASTRONOMI]
+    )
+    yeni = Course.objects.get(name="Astronomi ve Uzay Bilimleri")
+    assert yeni.course_type == CourseType.ELECTIVE and yeni.levels == [9]
+    ozet = next(c for c in sonuc.courses if c.title == ASTRONOMI)
+    assert ozet.status == "matched" and ozet.students == 2
+    assert "eklendi" in ozet.note
+    assert set(services.course_enrollments(course_id=yeni.pk, school_year_id=okul["yil"].pk)) == {
+        okul["a"].pk,
+        okul["b"].pk,
+    }
+
+
+def test_zorunlu_derse_cakisan_baslik_eklenemez(okul: dict[str, Any]) -> None:
+    Course.objects.create(name="Fizik", levels=[9], course_type=CourseType.COMMON)
+    sonuc = enrollment_import._ingest(
+        _rapor(("SEÇMELİ FİZİK", [("101", 9, "A")])),
+        source_hash="m" * 64,
+        file_name="",
+        add_titles=["SEÇMELİ FİZİK"],
+    )
+    ozet = sonuc.courses[0]
+    assert ozet.status == "unmatched" and not ozet.addable
+    assert Course.objects.filter(name__icontains="fizik").count() == 1
+
+
+def test_tam_kapsanan_duzeyde_ogrencisi_olmayan_secmeli_acilmadi_sayilir(
+    okul: dict[str, Any],
+) -> None:
+    astro = _secmeli("Astronomi ve Uzay Bilimleri", levels=[9])
+    yil = okul["yil"].pk
+    # Rapor verilmeden hüküm yok.
+    assert selectors.elective_offer_status(yil).not_offered_courses == frozenset()
+
+    # 9. sınıfın iki şubesi de raporda: Astronomi'yi kimse almıyor.
+    enrollment_import._ingest(
+        _rapor(
+            ("SEÇMELİ KUR`AN-I KERİM", [("101", 9, "A"), ("201", 9, "B")]),
+            ("SEÇMELİ PEYGAMBERİMİZİN HAYATI", [("102", 9, "A")]),
+        ),
+        source_hash="n" * 64,
+        file_name="",
+    )
+
+    durum = selectors.elective_offer_status(yil)
+    assert durum.covered_levels == frozenset({9})
+    assert (astro.pk, 9) in durum.not_offered_pairs
+    assert astro.pk in durum.not_offered_courses
+    assert okul["kk"].pk not in durum.not_offered_courses
+    # Pasifleştirme DEĞİL: ders havuzda etkin kalır; şube girilince yeniden açılır.
+    astro.refresh_from_db()
+    assert astro.is_active
+    services.set_course_sections(
+        course_id=astro.pk,
+        school_year_id=yil,
+        offerings=[{"level": 9, "section_ids": [okul["a"].pk]}],
+    )
+    assert astro.pk not in selectors.elective_offer_status(yil).not_offered_courses
+
+
+def test_tek_subelik_rapor_duzey_hakkinda_hukum_vermez(okul: dict[str, Any]) -> None:
+    astro = _secmeli("Astronomi ve Uzay Bilimleri", levels=[9])
+    enrollment_import._ingest(
+        _rapor(("SEÇMELİ KUR`AN-I KERİM", [("101", 9, "A")])),
+        source_hash="o" * 64,
+        file_name="",
+    )
+    durum = selectors.elective_offer_status(okul["yil"].pk)
+    assert durum.covered_levels == frozenset()  # 9/B raporda yok
+    assert astro.pk not in durum.not_offered_courses
+
+
+def test_api_kapsam_haritasi_acilmayanlari_bildirir(okul: dict[str, Any]) -> None:
+    astro = _secmeli("Astronomi ve Uzay Bilimleri", levels=[9])
+    enrollment_import._ingest(
+        _rapor(("SEÇMELİ KUR`AN-I KERİM", [("101", 9, "A"), ("201", 9, "B")])),
+        source_hash="p" * 64,
+        file_name="",
+    )
+
+    cevap = APIClient().get("/api/v1/courses/section-offerings/")
+
+    assert cevap.status_code == 200
+    assert astro.pk in cevap.data["not_offered"]
+    assert okul["ph"].pk in cevap.data["not_offered"]  # raporda öğrencisi yok
+    assert okul["kk"].pk not in cevap.data["not_offered"]
+    assert cevap.data["covered_levels"] == [9]
+
+
+def test_api_aktarim_havuza_ekle_alanini_okur(okul: dict[str, Any]) -> None:
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    bayt = _pdf(
+        [[f"{ASTRONOMI} DERSİ ÖĞRENCİLERİ", SUTUNLAR, _satir(101, "9. Sınıf / A Şubesi", 1)]]
+    )
+
+    cevap = APIClient().post(
+        "/api/v1/courses/enrollments/import/commit/",
+        {
+            "file": SimpleUploadedFile("r.pdf", bayt, content_type="application/pdf"),
+            "add_titles": [ASTRONOMI],
+        },
+        format="multipart",
+    )
+
+    assert cevap.status_code == 200, cevap.json()
+    assert Course.objects.filter(name="Astronomi ve Uzay Bilimleri").exists()
+    assert cevap.json()["courses"][0]["status"] == "matched"

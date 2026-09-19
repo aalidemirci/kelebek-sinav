@@ -274,6 +274,15 @@ export default function KilavuzPage() {
           girer.
         </p>
         <p>
+          Aktarım ders havuzunu da toparlar. Raporda olup havuzda hiç karşılığı olmayan seçmeli
+          önizlemede <strong>“Havuza ekle”</strong> kutusuyla, işaretli gelir; aktarınca seçmeli
+          ders olarak havuza eklenir (istemediğinizin işaretini kaldırın). Raporun bütün şubelerini
+          kapsadığı bir sınıf düzeyinde öğrencisi olmayan seçmeli <strong>“Bu yıl açılmadı”</strong>{" "}
+          sayılır: Ders Havuzu'nda kendiliğinden gizlenir (“Açılmayanları göster” ile görünür),
+          takvimde “Dersleri ekle” onları atlananlar listesine tek tek yazmaz. Bu dersler
+          pasifleştirilmez; şubelerini girerseniz yeniden açılır.
+        </p>
+        <p>
           Elle düzeltmek için dersin <strong>“Şubeler”</strong> penceresinde şubenin yanındaki{" "}
           <strong>Öğrenciler</strong> düğmesine basın: <em>Şubenin tamamı bu dersi alıyor</em> ya da{" "}
           <em>Yalnız işaretlenen öğrenciler alıyor</em>. İşaretlemediğiniz öğrencileri aynı adımda

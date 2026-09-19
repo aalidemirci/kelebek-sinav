@@ -490,6 +490,15 @@ yaz" seçeneği tamamlayıcı dersin listesini aynı işlemde yazar.
   düzeylerin listesini sessizce silerdi. Önizleme kapsamı ("9. Sınıf düzeyinden
   12 şube") söyler. Bedeli: hiçbir seçmeliyi almayan şube kapsanmaz, eski
   listesi varsa elle temizlenir.
+- **Havuz otomasyonu (19.09.2026, kullanıcı kararı "açılmayanlar ayrılsın, yenisi
+  eklensin"):** raporda olup havuzda hiçbir adayı bulunmayan seçmeli önizlemede
+  "Havuza ekle" ile işaretli gelir ve aktarımda seçmeli (MANUAL) açılır —
+  zorunlu dersle aynı adlı başlık açılmaz. Rapor kapsamı `ElectiveReportSection`e
+  yazılır; öğrencili BÜTÜN şubeleri kapsanan düzeyde şube kapsamı olmayan seçmeli
+  "bu yıl açılmadı" sayılır. Pasifleştirme DEĞİLDİR (`is_active` idari karar):
+  Ders Havuzu'nda gizlenir, takvim havuzu doldurması onları tek özet satırla
+  bildirir; şube girilince ders kendiliğinden yeniden açılır. Kısmi rapor
+  (tek şube) o düzey hakkında hüküm vermez.
 - Yıl geçişinde liste KOPYALANMAZ (şube pk'leri yıla bağlı; kapsam kararıyla
   aynı).
 - Motor ve evrak DEĞİŞMEDİ: çakışma anahtarı hâlâ `"<course_id>:<level>"`;

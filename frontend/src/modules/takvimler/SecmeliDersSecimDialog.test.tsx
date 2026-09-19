@@ -95,6 +95,23 @@ describe("SecmeliDersSecimDialog", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("e-Okul raporuna göre açılmayan seçmeli işaretlenir ama seçilebilir kalır", async () => {
+    const user = userEvent.setup();
+    const secenekler = makeElectiveOptions();
+    secenekler[0].courses[0] = { ...secenekler[0].courses[0], not_offered: true };
+    calApi.electiveOptions.mockResolvedValue(secenekler);
+    okul.listClassSections.mockResolvedValue(SUBELER);
+    okul.listClassSectionGroups.mockResolvedValue([kume()]);
+
+    renderDialog();
+
+    const kutu = await screen.findByRole("checkbox", { name: /Çağdaş Türk ve Dünya Tarihi/ });
+    expect(kutu.closest("label")).toHaveTextContent("Bu yıl açılmadı");
+    expect(kutu).toBeEnabled();
+    await user.click(kutu);
+    expect(kutu).toBeChecked();
+  });
+
   it("havuzda olan ders işaretli ve kilitli gelir", async () => {
     calApi.electiveOptions.mockResolvedValue(makeElectiveOptions());
     okul.listClassSections.mockResolvedValue(SUBELER);

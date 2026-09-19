@@ -219,6 +219,14 @@ export interface ElectiveImportCourse {
   students: number;
   /** "9/A" etiketleri, Türk alfabesiyle sıralı. */
   sections: string[];
+  /**
+   * Havuzda HİÇ karşılığı yok: aktarımda onayla seçmeli olarak eklenebilir
+   * (zorunlu dersle aynı adlı başlık eklenemez). 19.09.2026.
+   */
+  addable: boolean;
+  /** Eklenirse havuzdaki adı ("Seçmeli" öneki düşer) ve sınıf düzeyleri. */
+  proposed_name: string;
+  proposed_levels: number[];
 }
 
 /** Satır sorunu — sayfa/satır konumu + okul no (ad YOK). */
@@ -253,9 +261,15 @@ export interface ElectiveImportReport {
   skipped_truncated: number;
 }
 
-function electiveImport(path: string, file: File): Promise<ElectiveImportReport> {
+function electiveImport(
+  path: string,
+  file: File,
+  addTitles: readonly string[] = [],
+): Promise<ElectiveImportReport> {
   const form = new FormData();
   form.append("file", file);
+  // Havuza eklenmesi onaylanan e-Okul başlıkları (çok değerli alan).
+  for (const title of addTitles) form.append("add_titles", title);
   return api.postForm<ElectiveImportReport>(path, form);
 }
 
@@ -305,9 +319,14 @@ export const derslerApi = {
     api.post<MergeResult>("/courses/merge/", { duplicate, canonical }),
   /** Seçmeli derslerin şube kapsamı — sınav takvimi de bu kaynaktan beslenir. */
   sectionOfferings: (schoolYearId?: number) =>
-    api.get<{ school_year: number; results: CourseSectionOfferingRow[] }>(
-      `/courses/section-offerings/${schoolYearId ? `?school_year=${schoolYearId}` : ""}`,
-    ),
+    api.get<{
+      school_year: number;
+      results: CourseSectionOfferingRow[];
+      /** e-Okul seçmeli raporuna göre bu yıl AÇILMAYAN seçmeliler (pasif değil). */
+      not_offered?: number[];
+      /** Raporun öğrencili bütün şubelerini kapsadığı sınıf düzeyleri. */
+      covered_levels?: number[];
+    }>(`/courses/section-offerings/${schoolYearId ? `?school_year=${schoolYearId}` : ""}`),
   courseSections: (courseId: number, schoolYearId?: number) =>
     api.get<{ school_year: number; offerings: CourseSectionOffering[] }>(
       `/courses/${courseId}/sections/${schoolYearId ? `?school_year=${schoolYearId}` : ""}`,
@@ -333,7 +352,10 @@ export const derslerApi = {
   /** e-Okul OOK10002R010 PDF'i — yazmadan önizleme. */
   previewEnrollmentImport: (file: File) =>
     electiveImport("/courses/enrollments/import/preview/", file),
-  /** e-Okul OOK10002R010 PDF'i — rapordaki derslerin listelerini yazar. */
-  commitEnrollmentImport: (file: File) =>
-    electiveImport("/courses/enrollments/import/commit/", file),
+  /**
+   * e-Okul OOK10002R010 PDF'i — rapordaki derslerin listelerini yazar;
+   * `addTitles` havuzda karşılığı olmayan ve eklenmesi onaylanan seçmelilerdir.
+   */
+  commitEnrollmentImport: (file: File, addTitles: readonly string[] = []) =>
+    electiveImport("/courses/enrollments/import/commit/", file, addTitles),
 };

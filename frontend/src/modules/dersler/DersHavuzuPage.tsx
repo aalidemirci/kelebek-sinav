@@ -48,6 +48,9 @@ export default function DersHavuzuPage() {
   const [sectionsFor, setSectionsFor] = useState<Course | null>(null);
   // e-Okul OOK10002R010 (Seçmeli Ders Öğrencileri) PDF aktarımı.
   const [importing, setImporting] = useState(false);
+  // e-Okul raporuna göre bu yıl açılmayan seçmeliler varsayılan GİZLİ (kullanıcı
+  // kararı 19.09.2026: ayrı görünsün, listeyi kalabalık etmesin; pasif değildir).
+  const [acilmayanGoster, setAcilmayanGoster] = useState(false);
   const [duplicates, setDuplicates] = useState<DuplicateCluster[]>([]);
 
   const offeringsQuery = useQuery({
@@ -93,6 +96,13 @@ export default function DersHavuzuPage() {
     }
     return ozet;
   }, [offeringsQuery.data, sectionCatalog.data, enrollmentCounts.data]);
+
+  /** e-Okul seçmeli raporuna göre öğrencili bütün düzeylerinde açılmayan seçmeliler. */
+  const acilmayan = useMemo(
+    () => new Set(offeringsQuery.data?.not_offered ?? []),
+    [offeringsQuery.data],
+  );
+  const gorunen = acilmayanGoster ? rows : rows.filter((c) => !acilmayan.has(c.id));
 
   useEffect(() => {
     okulApi
@@ -208,11 +218,24 @@ export default function DersHavuzuPage() {
             ]}
           />
         </div>
+        {acilmayan.size > 0 && (
+          <p className="mt-3 flex flex-wrap items-center gap-2 text-body-small text-on-surface-variant">
+            <Icon name="info" size="sm" />
+            <span>
+              {acilmayan.size} seçmeli bu yıl açılmadı (e-Okul seçmeli raporunda öğrencisi yok) —{" "}
+              {acilmayanGoster ? "listede gösteriliyor" : "listede gizli"}. Pasifleştirilmedi:
+              şubelerini girerseniz yeniden açılır.
+            </span>
+            <Button variant="text" onClick={() => setAcilmayanGoster((v) => !v)}>
+              {acilmayanGoster ? "Açılmayanları gizle" : "Açılmayanları göster"}
+            </Button>
+          </p>
+        )}
       </Card>
 
       {loading ? (
         <SkeletonList rows={6} />
-      ) : rows.length === 0 ? (
+      ) : gorunen.length === 0 ? (
         // Yükleme hatasında bant yukarıdadır; hata "havuzda ders yok" diye sunulmaz.
         error ? null : (
           <EmptyState
@@ -237,11 +260,12 @@ export default function DersHavuzuPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((course) => (
+              {gorunen.map((course) => (
                 <CourseRow
                   key={course.id}
                   course={course}
                   kapsamOzeti={kapsamOzetleri.get(course.id) ?? []}
+                  acilmadi={acilmayan.has(course.id)}
                   onEdit={() => setEditing(course)}
                   onEditSections={() => setSectionsFor(course)}
                   onChanged={load}
@@ -307,14 +331,30 @@ function ExamModeBadge({ course }: { course: Course }) {
 function SubeKapsamiHucresi({
   course,
   ozet,
+  acilmadi,
   onEdit,
 }: {
   course: Course;
   ozet: string[];
+  /** e-Okul seçmeli raporuna göre bu yıl açılmadı (uyarı değil, bilgi). */
+  acilmadi: boolean;
   onEdit: () => void;
 }) {
   if (course.course_type !== "ELECTIVE") {
     return <span className="text-on-surface-variant">{SINIF_DUZEYININ_TAMAMI}</span>;
+  }
+  if (acilmadi) {
+    return (
+      <button
+        type="button"
+        aria-label={`${course.name} dersinin şubelerini düzenle`}
+        onClick={onEdit}
+        title="e-Okul seçmeli raporunda bu dersi alan öğrenci yok. Şubelerini girerseniz yeniden açılır."
+        className="rounded-shape-sm px-2 py-1 text-left text-on-surface-variant underline-offset-4 hover:bg-on-surface/5 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        Bu yıl açılmadı
+      </button>
+    );
   }
   const uyarili = course.exam_mode === "WRITTEN";
   return (
@@ -353,12 +393,14 @@ function SubeKapsamiHucresi({
 function CourseRow({
   course,
   kapsamOzeti,
+  acilmadi,
   onEdit,
   onEditSections,
   onChanged,
 }: {
   course: Course;
   kapsamOzeti: string[];
+  acilmadi: boolean;
   onEdit: () => void;
   onEditSections: () => void;
   onChanged: () => void;
@@ -400,7 +442,12 @@ function CourseRow({
         <ExamModeBadge course={course} />
       </td>
       <td className="px-4 py-3 text-body-small">
-        <SubeKapsamiHucresi course={course} ozet={kapsamOzeti} onEdit={onEditSections} />
+        <SubeKapsamiHucresi
+          course={course}
+          ozet={kapsamOzeti}
+          acilmadi={acilmadi}
+          onEdit={onEditSections}
+        />
       </td>
       <td className="px-4 py-3 text-on-surface-variant">{COURSE_SOURCE_TR[course.source]}</td>
       <td className="px-4 py-3">

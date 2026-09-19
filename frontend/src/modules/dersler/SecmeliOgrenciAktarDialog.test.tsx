@@ -46,6 +46,9 @@ function rapor(overrides: Partial<ElectiveImportReport> = {}): ElectiveImportRep
         report_rows: 3,
         students: 3,
         sections: ["9/A", "9/B"],
+        addable: false,
+        proposed_name: "",
+        proposed_levels: [],
       },
       {
         title: "SEÇMELİ ASTRONOMİ",
@@ -56,6 +59,10 @@ function rapor(overrides: Partial<ElectiveImportReport> = {}): ElectiveImportRep
         report_rows: 1,
         students: 0,
         sections: ["10/A"],
+        // Zorunlu bir derse çakışan ad gibi: eklenebilir DEĞİL (ayrı testte eklenebilir).
+        addable: false,
+        proposed_name: "",
+        proposed_levels: [],
       },
     ],
     untouched_courses: ["Peygamberimizin Hayatı"],
@@ -154,7 +161,7 @@ describe("SecmeliOgrenciAktarDialog", () => {
     await screen.findByText(/Önizleme — 2026-2027/);
     await user.click(screen.getByRole("button", { name: "Aktar" }));
 
-    await waitFor(() => expect(dersler.commitEnrollmentImport).toHaveBeenCalledWith(PDF));
+    await waitFor(() => expect(dersler.commitEnrollmentImport).toHaveBeenCalledWith(PDF, []));
     expect(
       await screen.findByText("1 dersin öğrenci listesi aktarıldı (4 öğrenci-ders kaydı)."),
     ).toBeInTheDocument();
@@ -197,5 +204,83 @@ describe("SecmeliOgrenciAktarDialog", () => {
       "Dosya PDF değil — e-Okul raporunu PDF olarak kaydedin.",
     );
     expect(screen.getByRole("button", { name: "Aktar" })).toBeDisabled();
+  });
+});
+
+describe("SecmeliOgrenciAktarDialog — havuzda olmayan seçmeli (19.09.2026)", () => {
+  const YENI = {
+    title: "SEÇMELİ ASTRONOMİ VE UZAY BİLİMLERİ",
+    status: "unmatched" as const,
+    course_id: null,
+    course_name: "",
+    note: "Ders havuzunda karşılığı bulunamadı.",
+    report_rows: 2,
+    students: 0,
+    sections: [],
+    addable: true,
+    proposed_name: "Astronomi ve Uzay Bilimleri",
+    proposed_levels: [9, 10],
+  };
+
+  it("eklenebilir seçmeli işaretli gelir; aktarım onu havuza ekletir", async () => {
+    const user = userEvent.setup();
+    dersler.previewEnrollmentImport.mockResolvedValue(rapor({ courses: [YENI] }));
+    dersler.commitEnrollmentImport.mockResolvedValue(
+      rapor({
+        dry_run: false,
+        courses: [
+          {
+            ...YENI,
+            status: "matched",
+            course_id: 30,
+            course_name: "Astronomi ve Uzay Bilimleri",
+            note: "Ders Havuzu'na seçmeli olarak eklendi.",
+            students: 2,
+          },
+        ],
+      }),
+    );
+    renderDialog();
+
+    await user.upload(screen.getByLabelText("e-Okul OOK10002R010 raporu (PDF)"), PDF);
+    await user.click(screen.getByRole("button", { name: "Önizle" }));
+
+    const kutu = await screen.findByRole("checkbox", {
+      name: "Astronomi ve Uzay Bilimleri dersini Ders Havuzu'na ekle",
+    });
+    expect(kutu).toBeChecked();
+    // Önerilen düzeyler kutunun yanında (kapsam cümlesi de düzey sayar — parantezle ayrılır).
+    expect(screen.getByText(/\(9\. Sınıf, 10\. Sınıf\)/)).toBeInTheDocument();
+    expect(screen.getByText(/1 seçmeli Ders Havuzu'nda yok/)).toBeInTheDocument();
+    expect(screen.queryByText(/eşleşmedi ve aktarılmayacak/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Aktar" }));
+
+    await waitFor(() =>
+      expect(dersler.commitEnrollmentImport).toHaveBeenCalledWith(PDF, [YENI.title]),
+    );
+    expect(await screen.findByText("Ders Havuzu'na seçmeli olarak eklendi.")).toBeInTheDocument();
+  });
+
+  it("işareti kaldırılan seçmeli eklenmez ve aktarılmayacaklar arasında sayılır", async () => {
+    const user = userEvent.setup();
+    dersler.previewEnrollmentImport.mockResolvedValue(rapor({ courses: [YENI] }));
+    dersler.commitEnrollmentImport.mockResolvedValue(rapor({ dry_run: false, courses: [YENI] }));
+    renderDialog();
+
+    await user.upload(screen.getByLabelText("e-Okul OOK10002R010 raporu (PDF)"), PDF);
+    await user.click(screen.getByRole("button", { name: "Önizle" }));
+    await user.click(
+      await screen.findByRole("checkbox", {
+        name: "Astronomi ve Uzay Bilimleri dersini Ders Havuzu'na ekle",
+      }),
+    );
+    expect(
+      screen.getByText(/1 ders Ders Havuzu'nda eşleşmedi ve aktarılmayacak/),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Aktar" }));
+
+    await waitFor(() => expect(dersler.commitEnrollmentImport).toHaveBeenCalledWith(PDF, []));
   });
 });

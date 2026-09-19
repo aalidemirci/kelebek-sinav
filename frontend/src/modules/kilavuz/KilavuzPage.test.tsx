@@ -86,6 +86,12 @@ describe("KilavuzPage", () => {
     // Excel ihracı ders adlarını düşürür — yalnız PDF okunur.
     expect(screen.getByText(/Excel çıktısında ders adları bulunmaz/)).toBeInTheDocument();
     expect(screen.getByText(/iki dersi birden alan öğrenci yoksa/)).toBeInTheDocument();
+    // Havuz otomasyonu: yeni seçmeli onayla eklenir; açılmayan gizlenir ama pasif olmaz.
+    expect(screen.getByText(/Havuza ekle/)).toBeInTheDocument();
+    expect(screen.getByText(/Bu yıl açılmadı/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/pasifleştirilmez; şubelerini girerseniz yeniden açılır/),
+    ).toBeInTheDocument();
     // "Ortak" yalnız MEB anlamında (okul geneli sınav) geçer — docs/sozluk.md.
     expect(screen.queryByText(/ortak öğrenci/i)).not.toBeInTheDocument();
   });
