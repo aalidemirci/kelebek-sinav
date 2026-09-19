@@ -1,4 +1,4 @@
-# Spor Lisesi Haftalık Ders Çizelgesi (2025-2026 →, ortak dersler kademeli)
+# Spor Lisesi Haftalık Ders Çizelgesi (yalnız 2025-2026, ortak dersler kademeli)
 
 - program_key: spor-lisesi-2025
 - ad: Spor Lisesi Haftalık Ders Çizelgesi (TTK 09.05.2025/9)
@@ -12,6 +12,13 @@
 
 Kürasyon notları:
 
+- **YALNIZ 2025-2026 ders yılı içindir** (19.09.2026): TTK 02.09.2026 tarihli ve
+  102 sayılı karar bu çizelgenin "2026-2027 eğitim ve öğretim yılından itibaren
+  tüm sınıf seviyelerinde uygulamadan kaldırılması"nı uygun gördü; yerini
+  `spor-lisesi-2026.md` aldı (satır farkları oradaki notlarda). Dosya SİLİNMEZ: aktif ders yılı
+  2025-2026 olan kurulum bununla çözülür, 2026-2027'de program kendiliğinden
+  yeni nesli seçer (`yururluk` süzgeci — veri göçü gerekmez). Aşağıdaki
+  "2026-2027'de 12. sınıf" öngörüsü yeni kararla hükümsüz kaldı.
 - Karar metni: 2025-2026'dan itibaren "hazırlık sınıfı, 9 ve 10. sınıf
   seviyelerinden başlamak üzere ORTAK DERSLER bölümünün kademeli, diğer
   bileşenlerinin ise tüm sınıf seviyelerinde uygulanması"; 24.08.2023/42 ve

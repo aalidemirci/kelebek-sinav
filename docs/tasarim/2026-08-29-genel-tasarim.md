@@ -279,10 +279,17 @@ hazırlık-9-10'dan başlatır.
 2. **Seviye ataması** (`catalog.default_assignment`): okul türü + hazırlık +
    aktif ders yılı → her seviyede hangi program(lar). Aynı bölüm grubunda
    birden çok nesil varsa (seviye, tür) için EN YENİ kapsayan nesil; hiçbiri
-   kapsamıyorsa en yeni program yedek + UYARI (aktarılmamış önceki nesil).
+   kapsamıyorsa yürürlüğü BAŞLAMIŞ en yeni program yedek + UYARI (aktarılmamış
+   önceki nesil; henüz başlamamış çizelge geçmiş yıla yedek olmaz).
    `SchoolConfig.level_programs` (`{"9": ["fen-lisesi-2025"]}`) seviye bazında
    ezer: kademeli tür dönüşümü, çok programlı okul, bölümlü GSL'de bulunmayan
-   bölümü bırakma. Boş sözlük = varsayılan. OYS'nin
+   bölümü bırakma. Boş sözlük = varsayılan. **19.09.2026 eki (TTK 02.09.2026/
+   102-103, Spor):** aynı çizelgenin yeni kararı YENİ program dosyasıdır; eski
+   dosya geçmiş yıl için kalır. Açık atama yürürlük süzgecinden geçmediğinden
+   yeni nesle kendiliğinden GEÇMEZ — aynı bölüm grubu + hazırlık varyantında
+   daha yeni bir nesil o seviyenin ortak derslerini kapsıyorsa plan UYARIR
+   (`catalog._superseded_by`), atamaya dokunmaz: atama idari karardır, sessiz
+   düzeltme de sessiz düşme kadar yanlıştır. OYS'nin
    `CurriculumFramework/Entry/Assignment` üçlüsü (ADR-0037) ALINMADI: KS'de
    haftalık saat ve ders programı yok; dosya + JSON alanı yeter.
 3. **Birleştirme** (`catalog.effective_rows`): ad → seviye birleşimi; tür
@@ -318,10 +325,12 @@ karşılaştırıldı: 9-12 satırları birebir doğru çıktı; kullanıcının
 Kürasyon düzeltmesi: "Hedef Temelli Destek Eğitimi" `YOK` (kararın
 AÇIKLAMALAR bölümü: "Ders notla değerlendirilmez").
 
-**Bilinçli boşluklar** (TB2): GSL/Spor önceki nesil çizelgeleri (2026-2027'de
-yalnız 12. sınıf ortak dersleri; uyarıyla yedek), MTAL seçmeli tablosu ve
-hazırlıklı MTAL (resmî PDF taranmış görüntü), MTAL alan/dal meslek dersleri
-(56 alan — okul elle ekler), ÖP Fen/SBL (2025/24-25; SBL nüshası "TASLAK").
+**Bilinçli boşluklar** (TB2): GSL önceki nesil çizelgeleri (2026-2027'de
+yalnız 12. sınıf ortak dersleri; uyarıyla yedek — Spor'da bu boşluk 19.09.2026'da
+TTK 2026/102-103 ile kapandı), MTAL seçmeli tablosu ve hazırlıklı MTAL (resmî
+PDF taranmış görüntü), MTAL alan/dal meslek dersleri (56 alan — okul elle
+ekler), ÖP Fen/SBL (2025/24-25; SBL nüshası "TASLAK"), ÖP hazırlıklı Anadolu
+Lisesi (2026/104 — yalnız protokollü proje okulları).
 
 ### 7.1 Sınav biçimi (`exam_mode`) ve havuz doldurmanın daralması (31.08.2026, K19)
 
@@ -689,8 +698,8 @@ app'i, guardian_* alanları.
 7. **UTC tarih tuzağı:** 00:00-03:00 arası bir gün geri kayma —
    format.test.ts koruma testi taşınmazsa sınav tarihli evrakta nüksedebilir.
 8. **Okul türü verisi (U4):** 03.09.2026'dan itibaren sekiz türün çizelgesi
-   gömülü (§7.2); kalan boşluklar (MTAL seçmeli/meslek dersleri, GSL/Spor
-   önceki nesil) uyarıyla görünür, elle ekleme yolu açık.
+   gömülü (§7.2); kalan boşluklar (MTAL seçmeli/meslek dersleri, GSL önceki
+   nesil) uyarıyla görünür, elle ekleme yolu açık.
 9. **F27 geri dönüşsüz:** onay diyaloğu + aday listesi olmadan tetiklenirse
    veri kaybı şikâyeti kaçınılmaz.
 10. **Takvim damgaları:** tek-kullanıcı sadeleştirmesi onaylayan/tarih
@@ -700,9 +709,11 @@ app'i, guardian_* alanları.
 
 - e-Okul PDF parser'ları (şube listesi, personel) → v2 adayı.
 - Okul türü çizelgeleri: sekiz tür gömülü (§7.2, 03.09.2026). Kalan
-  küratörlük: GSL/Spor önceki nesil çizelgeleri (2023/41-42, 2024/46-47), MTAL
+  küratörlük: GSL önceki nesil çizelgeleri (2023/41, 2024/46; Spor'unki
+  19.09.2026'da TTK 2026/102-103 ile gereksizleşti), MTAL
   seçmeli dersler tablosu (2026/62 — taranmış PDF, OCR/elle aktarım gerekir),
-  hazırlıklı MTAL (2024/42, 2026/63), ÖP Fen/SBL (2025/24-25). Meslek dersleri
+  hazırlıklı MTAL (2024/42, 2026/63), ÖP Fen/SBL (2025/24-25), ÖP hazırlıklı
+  Anadolu Lisesi (2026/104). Meslek dersleri
   özel: ortak sınavın en az biri uygulamalı yapılır (Yönetmelik md. 5/1-h) —
   sınıflama zümre kararına bağlı, katalogla taşınmaz.
 - Ortaokul/ilkokul kademesi → seviye kümesi parametrik olduğunda değerlendirilir.

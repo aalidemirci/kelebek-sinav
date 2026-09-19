@@ -138,6 +138,20 @@
   ve KVKK koruması tam orada delinir. Sağlamalı örnek bir kimlik numarası test
   KAYNAĞINA yazılmaz, çalışma anında üretilir (aksi hâlde kapı kendi testini
   yakalar — `test_depo_sizintisi.py` deseni).
+- **Aynı çizelgenin YENİ KARARI yeni program dosyasıdır** (ders havuzu
+  maddesinin eki — 19.09.2026, TTK 02.09.2026/102-103 Spor emsali): eski dosya
+  yerinde düzenlenmez ve silinmez (`program_key` kararlı anahtardır; aktif ders
+  yılı eski olan kurulum onunla çözülür), yeni dosya yeni `yururluk` ile eklenir
+  ve program her (seviye, tür) için en yeni KAPSAYAN nesli kendisi seçer. İki
+  sonucu: hiçbir neslin kapsamadığı seviyede yedek, yürürlüğü BAŞLAMIŞ en yeni
+  nesildir (2026 çizelgesi 2025-2026'ya sızmaz); AÇIK atama (`level_programs`
+  — varsayılan dışı Tematik Spor yalnız böyle seçilir) yeni nesle kendiliğinden
+  GEÇMEZ, `catalog._superseded_by` UYARIR ve atamaya dokunmaz (idari karar).
+  TTKB listesinde bağlantısı değişen çizelgede önce karar sayfasına bakın:
+  yeniden dizgi sanılan şey yeni karar çıkabilir. 09.2026'dan beri TTKB PDF'leri
+  DYS çıktısıdır (sayfa Form XObject'e sarılı): düz pypdf düzen kipi yalnız
+  filigranı döker ve PDF "taranmış" SANILIR — `scripts/cizelge_pdf_metni.py`
+  formu açar; usul `data/ders-cizelgeleri/README.md` "Aktarım tuzakları".
 - **Django `{# #}` yorumu TEK satırlıktır:** çok satıra yayılınca metin olarak
   BASILIR (R8 doluluk tablosunda örnek PDF'e sızdı, 18.09.2026). Şablonda çok
   satırlı açıklama `{% comment %}` bloğuyla yazılır; koruma testi

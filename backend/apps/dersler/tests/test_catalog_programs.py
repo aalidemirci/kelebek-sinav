@@ -100,6 +100,21 @@ SPOR_ESKI_MD = """
 """
 
 
+# Kademeyi kaldıran yeni nesil (TTK 02.09.2026/102 emsali): 2026-2027'den itibaren tüm seviyeler.
+SPOR_YENI_MD = """
+- program_key: spor-yeni-test
+- ad: Spor yeni test
+- okul_turu: SPOR_LISESI
+- yururluk: 2026-2027
+- kademeli: hayır
+
+| Ders | Seviyeler | Tür | Sınav |
+|---|---|---|---|
+| Türk Dili ve Edebiyatı | 9-12 | ORTAK | YAZILI |
+| Müsabaka Analizi | 11, 12 | SECMELI | YAZILI |
+"""
+
+
 def _dizin(tmp_path: Path, **dosyalar: str) -> Path:
     for ad, icerik in dosyalar.items():
         (tmp_path / f"{ad}.md").write_text(icerik, encoding="utf-8")
@@ -177,11 +192,60 @@ class TestGercekDosyalar:
         assert sbl["Sanat Tarihi"].levels == (12,)
         assert sbl["Coğrafya"].levels == (9, 10, 11, 12)
 
-    def test_spor_lisesi_2026_12_sinif_uyarisi_2027_de_kalkar(self) -> None:
-        """Ortak dersler hazırlık-9-10'dan kademeli (TTK 2025/9): 2026-27'de 12 kapsanmaz."""
-        uyarili = _plan(SchoolType.SPOR_LISESI, year=2026)
+    def test_guzel_sanatlar_2026_12_sinif_uyarisi_2027_de_kalkar(self) -> None:
+        """Ortak dersler hazırlık-9-10'dan kademeli (TTK 2025/6-7): 2026-27'de 12 kapsanmaz.
+
+        Emsal 19.09.2026'ya dek Spor Lisesi'ydi; TTK 02.09.2026/102 Spor'da kademeyi
+        kaldırınca kademeli-gerçek-dosya sigortası GSL'ye taşındı.
+        """
+        uyarili = _plan(SchoolType.GUZEL_SANATLAR_LISESI, year=2026)
         assert any("12. sınıf zorunlu dersleri" in w for w in uyarili.warnings)
-        assert not _plan(SchoolType.SPOR_LISESI, year=2027).warnings
+        assert not _plan(SchoolType.GUZEL_SANATLAR_LISESI, year=2027).warnings
+
+    def test_spor_lisesi_2026_cizelgesi_tum_seviyelerde(self) -> None:
+        """TTK 02.09.2026/102: 2026-2027'den itibaren TÜM sınıf seviyeleri, 2025/9 kalkar."""
+        plan = _plan(SchoolType.SPOR_LISESI, year=2026)
+        assert not plan.warnings
+        assert all(lp.program_keys == ("spor-lisesi-2026",) for lp in plan.plans.values())
+        rows = {r.name: r for r in plan.rows()}
+        # 2025/9'a göre dört satır farkı (dosyanın kürasyon notları).
+        assert "Spor Uygulamaları" not in rows and "Seçmeli Müsabaka Analizi" not in rows
+        assert rows["Müsabaka Analizi"].course_type == CourseType.ELECTIVE
+        assert rows["Müsabaka Analizi"].levels == (11, 12)
+        assert rows["Beden Eğitimi ve Spor Tarihi"].course_type == CourseType.ELECTIVE
+        assert rows["Rehberlik ve Yönlendirme"].levels == (9, 10, 11, 12)
+        # Tematik varyant varsayılana kendiliğinden girmez.
+        assert "Takım Sporları/Bireysel Sporlar" not in rows and "Takım Sporları" in rows
+
+    def test_spor_lisesi_2025_2026_yili_eski_cizelgede_kalir(self) -> None:
+        """Yürürlüğü başlamamış 2026 çizelgesi 2025-2026'da YEDEK de olmaz."""
+        plan = _plan(SchoolType.SPOR_LISESI, year=2025)
+        assert all(lp.program_keys == ("spor-lisesi-2025",) for lp in plan.plans.values())
+        assert any("12. sınıf zorunlu dersleri" in w for w in plan.warnings)
+        rows = {r.name: r for r in plan.rows()}
+        assert rows["Spor Uygulamaları"].course_type == CourseType.COMMON
+        assert rows["Müsabaka Analizi"].levels == (10,)
+
+    def test_tematik_spor_eski_acik_atama_uyarir(self) -> None:
+        """Varsayılan dışı program yalnız açık atamayla seçilir → yeni nesle kendiliğinden geçmez."""
+        eski = {str(lv): ["spor-lisesi-tematik-2025"] for lv in (9, 10, 11, 12)}
+        plan = _plan(SchoolType.SPOR_LISESI, year=2026, overrides=eski)
+        uyarilar = [w for w in plan.warnings if "TTK 02.09.2026/103" in w]
+        assert len(uyarilar) == 1, plan.warnings  # seviyeler tek uyarıda toplanır
+        assert uyarilar[0].startswith("9. sınıf, 10. sınıf, 11. sınıf, 12. sınıf:")
+        # Atamaya dokunulmaz: idareci değiştirene dek eski çizelge uygulanır.
+        assert plan.plans[9].program_keys == ("spor-lisesi-tematik-2025",)
+        yeni = {str(lv): ["spor-lisesi-tematik-2026"] for lv in (9, 10, 11, 12)}
+        guncel = _plan(SchoolType.SPOR_LISESI, year=2026, overrides=yeni)
+        assert not guncel.warnings
+        adlar = {r.name for r in guncel.rows()}
+        assert {"Spor Basını ve Hukuku", "Atletik Gelişim ve Performans"} <= adlar
+        # 2025-2026'da eski atama doğrudur: uyarı yok.
+        assert not [
+            w
+            for w in _plan(SchoolType.SPOR_LISESI, year=2025, overrides=eski).warnings
+            if "yerini" in w
+        ]
 
     def test_cok_programli_al_uc_cizelgeyi_birlestirir(self) -> None:
         plan = _plan(SchoolType.COK_PROGRAMLI_ANADOLU_LISESI)
@@ -244,6 +308,84 @@ class TestMetaVeYururluk:
         )
         assert plans[12].common_from == ("spor-test",)
         assert plans[12].warnings and "12. sınıf" in plans[12].warnings[0]
+
+    def test_yururlugu_baslamamis_nesil_yedek_olmaz(self, tmp_path: Path) -> None:
+        """Yedek, yürürlüğü BAŞLAMIŞ en yeni nesildir; 2026 çizelgesi 2025-2026'ya sızmaz."""
+        programs = catalog.load_programs(_dizin(tmp_path, spor=SPOR_MD, yeni=SPOR_YENI_MD))
+
+        def plan(year: int) -> dict[int, catalog.LevelPlan]:
+            return catalog.default_assignment(
+                programs,
+                school_type=SchoolType.SPOR_LISESI,
+                has_prep=False,
+                levels=(9, 10, 11, 12),
+                year=year,
+            )
+
+        onceki = plan(2025)
+        assert onceki[12].common_from == ("spor-test",)  # yedek: başlamış nesil
+        assert onceki[12].warnings and "'Spor test'" in onceki[12].warnings[0]
+        assert onceki[12].elective_from == ("spor-test",)
+        # 2026-2027: yeni nesil kademesiz → her seviyede, uyarısız.
+        sonraki = plan(2026)
+        assert all(lp.program_keys == ("spor-yeni-test",) for lp in sonraki.values())
+        assert not any(lp.warnings for lp in sonraki.values())
+
+    def test_hicbir_nesil_baslamamissa_en_yeniye_duser(self, tmp_path: Path) -> None:
+        programs = catalog.load_programs(_dizin(tmp_path, yeni=SPOR_YENI_MD))
+        plans = catalog.default_assignment(
+            programs,
+            school_type=SchoolType.SPOR_LISESI,
+            has_prep=False,
+            levels=(9, 10, 11, 12),
+            year=2025,
+        )
+        assert plans[9].common_from == ("spor-yeni-test",)
+        assert plans[9].warnings
+
+    def test_acik_atama_eski_nesilde_kalirsa_uyarir(self, tmp_path: Path) -> None:
+        """Açık atama yeni nesle kendiliğinden geçmez — sessiz de kalmaz, atamaya da dokunulmaz."""
+        root = _dizin(tmp_path, spor=SPOR_MD, yeni=SPOR_YENI_MD)
+        eski = {"9": ["spor-test"], "12": ["spor-test"]}
+        plan = _plan(SchoolType.SPOR_LISESI, year=2026, overrides=eski, root=root)
+        assert plan.plans[9].program_keys == ("spor-test",)
+        uyarilar = [w for w in plan.warnings if "'Spor yeni test'" in w]
+        assert len(uyarilar) == 1, plan.warnings
+        assert uyarilar[0].startswith("9. sınıf, 12. sınıf: 'Spor test' çizelgesinin yerini")
+        assert "2026-2027" in uyarilar[0] and "Okul Bilgileri" in uyarilar[0]
+        # Yeni nesil yürürlüğe girmeden önce eski atama doğrudur (11. sınıfın kademe
+        # uyarısı ayrı konudur; "yerini aldı" uyarısı çıkmaz).
+        onceki = _plan(SchoolType.SPOR_LISESI, year=2025, overrides=eski, root=root)
+        assert not [w for w in onceki.warnings if "yerini" in w]
+        # Yeni nesli işaretleyen atama uyarmaz.
+        yeni = {"9": ["spor-yeni-test"], "12": ["spor-yeni-test"]}
+        assert not _plan(SchoolType.SPOR_LISESI, year=2026, overrides=yeni, root=root).warnings
+
+    def test_kademeli_yeni_nesil_kapsamadigi_seviyede_uyarmaz(self, tmp_path: Path) -> None:
+        """MTAL kalıbı: yeni nesil 9'dan başlar; 12'de eski çizelgeyi işaretlemek DOĞRUDUR."""
+        kademeli_yeni = SPOR_YENI_MD.replace("kademeli: hayır", "kademeli: evet")
+        root = _dizin(tmp_path, eski=SPOR_ESKI_MD, yeni=kademeli_yeni)
+        plan = _plan(
+            SchoolType.SPOR_LISESI,
+            year=2026,
+            overrides={"9": ["spor-eski-test"], "12": ["spor-eski-test"]},
+            root=root,
+        )
+        uyarilar = [w for w in plan.warnings if "yerini" in w]
+        assert len(uyarilar) == 1 and uyarilar[0].startswith("9. sınıf: ")
+
+    def test_baska_varyant_ya_da_bolum_yerini_almis_sayilmaz(self, tmp_path: Path) -> None:
+        """Yalnız AYNI bölüm grubu + hazırlık varyantının yeni nesli 'yerini alır'."""
+        haz_yeni = AL_HAZ_MD.replace("al-haz-test", "al-haz-yeni-test").replace(
+            "yururluk: 2025-2026", "yururluk: 2026-2027"
+        )
+        plan = _plan(
+            SchoolType.ANADOLU_LISESI,
+            year=2026,
+            overrides={"9": ["al-test"]},
+            root=_dizin(tmp_path, al=AL_MD, haz=haz_yeni),
+        )
+        assert not plan.warnings
 
     def test_hazirlik_varyanti_okul_bayragina_gore_secilir(self, tmp_path: Path) -> None:
         programs = catalog.load_programs(_dizin(tmp_path, al=AL_MD, haz=AL_HAZ_MD))

@@ -1,31 +1,45 @@
-# Tematik Program Uygulayan Spor Lisesi Haftalık Ders Çizelgesi (yalnız 2025-2026, ortak dersler kademeli)
+# Spor Lisesi Haftalık Ders Çizelgesi (2026-2027 →, tüm sınıf seviyeleri)
 
-- program_key: spor-lisesi-tematik-2025
-- ad: Tematik Program Uygulayan Spor Lisesi Haftalık Ders Çizelgesi (TTK 09.05.2025/10)
+- program_key: spor-lisesi-2026
+- ad: Spor Lisesi Haftalık Ders Çizelgesi (TTK 02.09.2026/102)
 - okul_turu: SPOR_LISESI
 - hazirlik: hayır
-- bolum: Tematik program
-- varsayilan: hayır
-- kaynak: TTK 09.05.2025 tarihli ve 10 sayılı karar, s. 2 — https://ttkb.meb.gov.tr/meb_iys_dosyalar/2025_05/20144722_202510.pdf
-- yururluk: 2025-2026
-- kademeli: evet
-- kademeli_ilk_seviyeler: 0, 9, 10
-- secmeli_kademeli: hayır
+- kaynak: TTK 02.09.2026 tarihli ve 102 sayılı karar, s. 2 — https://ttkb.meb.gov.tr/meb_iys_dosyalar/2026_09/6aa10af7e5e37220778699_Spor_Lisesi_Haftal%C4%B1k_Ders_%C3%87izelgesi.pdf
+- yururluk: 2026-2027
+- kademeli: hayır
 
-Kürasyon notları: VARSAYILAN DIŞIDIR — yalnız tematik program uygulayan spor
-liseleri çizelge matrisinden seçer ve `spor-lisesi-2025`'i bırakır. Yürürlük
-kuralı ve kürasyon ilkeleri `spor-lisesi-2025.md` ile aynıdır (aynı gün alınan
-karar, 03.09.2024/48 çizelgesini kaldırır). Tek fark: takım ve bireysel sporlar
-tek birleşik derstir ("Takım Sporları/Bireysel Sporlar", 9-12).
+Kürasyon notları:
 
-**YALNIZ 2025-2026 ders yılı içindir** (19.09.2026): TTK 02.09.2026 tarihli ve
-103 sayılı karar bu çizelgenin "2026-2027 eğitim ve öğretim yılından itibaren
-tüm sınıf seviyelerinde uygulamadan kaldırılması"nı uygun gördü; yerini
-`spor-lisesi-tematik-2026.md` aldı. Varsayılan dışı program yalnız AÇIK
-atamayla seçildiğinden yeni nesle kendiliğinden geçilmez: 2026-2027'de bu dosya
-işaretli kalan okula ders havuzu ve Ayarlar → Okul Bilgileri ekranı uyarı
-gösterir, idareci matristen yeni çizelgeyi seçer (atama idari karardır,
-program sessizce değiştirmez).
+- Karar metni: çizelgenin "2026-2027 eğitim ve öğretim yılından itibaren tüm
+  sınıf seviyelerinde ekli örneğine göre uygulanması"; 09.05.2025/9 çizelgesinin
+  aynı yıldan itibaren "tüm sınıf seviyelerinde uygulamadan kaldırılması". Kademe
+  YOKTUR: 2026-2027'de 9-12'nin tamamı bu dosyadan çözülür, `spor-lisesi-2025`
+  yalnız 2025-2026 ders yılı için kalır (program en yeni kapsayan nesli seçer).
+  2025/9'un kademeli takvimi yüzünden 2026-2027'de 12. sınıf için görünen
+  "önceki çizelge bu sürümde yok" uyarısı da böylece kalkar.
+- 2025/9'a göre satır farkları (ders · seviye · tür): "Spor Uygulamaları"
+  (ortak, 9-12) çizelgeden ÇIKTI; "Müsabaka Analizi" ortak bölümden (10) çıktı,
+  seçmeli bölümdeki ders artık öneksiz "Müsabaka Analizi" adıyla 11-12'de
+  (2025/9'da "Seçmeli Müsabaka Analizi"); "Beden Eğitimi ve Spor Tarihi" ortaktan
+  (12) seçmeliye (12, Akademik Çalışmalar) geçti; "Rehberlik ve Yönlendirme"
+  9. sınıfa da indi (9-12). Öbür derslerin adı, seviyesi ve türü aynıdır.
+  Haftalık toplam 43 → 40 saate indi (ortak toplam 37-37-35-31; Birinci Yabancı
+  Dil 9-10'da 3, Temel Spor Eğitimi 2, Spor ve Beslenme 1 saat) — saatler bu
+  dosyada tutulmaz, yalnız farkın kaynağını belgelemek için yazıldı.
+- Aktarım: PDF, DYS çıktısıdır (sayfa tek Form XObject'e sarılı, üstünde indirme
+  filigranı) — pypdf düzen kipi forma inmediğinden metin form açılarak döküldü
+  (README "Yeni çizelge nasıl eklenir"). `scripts/cizelge_metninden_tablo.py`
+  bu dizgide beş satırda sütun kaydırdı; hücreler tek tek metin çizim
+  işlemlerinin x-koordinatından sütuna atanarak teyit edildi ve ortak blok sütun
+  toplamları çizelgenin "Ortak Ders Saati Toplamı" satırıyla (37-37-35-31)
+  sağlandı.
+- Ortak kültür bölümünde beden eğitimi yoktur; "Görsel Sanatlar/Müzik" 9-12
+  ortaktır.
+- Sınav sütunu kürasyondur (ilkeler `spor-lisesi-2025.md` ile aynı):
+  antrenman/uygulama dersleri `UYGULAMA`; anatomi, antrenman bilgisi, spor
+  tarihi, yönetim, psikoloji, beslenme, müsabaka analizi gibi kuram dersleri
+  `YAZILI`; Hedef Temelli Destek Eğitimi `YOK` (Açıklamalar md. 9: "Ders notla
+  değerlendirilmez").
 
 ## Ortak dersler
 
@@ -46,7 +60,6 @@ program sessizce değiştirmez).
 | Sağlık Bilgisi ve Trafik Kültürü | 9 | ORTAK | YAZILI |
 | Temel Spor Eğitimi | 9 | ORTAK | UYGULAMA |
 | Spor Anatomisi ve Fizyolojisi | 11 | ORTAK | YAZILI |
-| Beden Eğitimi ve Spor Tarihi | 12 | ORTAK | YAZILI |
 | Antrenman Bilgisi | 12 | ORTAK | YAZILI |
 | Antrenörlük Eğitimi | 12 | ORTAK | YAZILI |
 | Sporcu Sağlığı | 11 | ORTAK | YAZILI |
@@ -57,10 +70,9 @@ program sessizce değiştirmez).
 | Genel Jimnastik | 9 | ORTAK | UYGULAMA |
 | Ritim Eğitimi ve Halk Dansları | 11 | ORTAK | UYGULAMA |
 | Atletizm | 11, 12 | ORTAK | UYGULAMA |
-| Takım Sporları/Bireysel Sporlar | 9-12 | ORTAK | UYGULAMA |
-| Müsabaka Analizi | 10 | ORTAK | YAZILI |
-| Spor Uygulamaları | 9-12 | ORTAK | UYGULAMA |
-| Rehberlik ve Yönlendirme | 10-12 | ORTAK | YOK |
+| Takım Sporları | 9-12 | ORTAK | UYGULAMA |
+| Bireysel Sporlar | 10-12 | ORTAK | UYGULAMA |
+| Rehberlik ve Yönlendirme | 9-12 | ORTAK | YOK |
 
 ## Seçmeli dersler — Akademik Çalışmalar
 
@@ -80,7 +92,8 @@ program sessizce değiştirmez).
 | Mantık | 11, 12 | SECMELI | YAZILI |
 | Seçmeli Birinci Yabancı Dil | 11, 12 | SECMELI | YAZILI |
 | Artistik Jimnastik | 11, 12 | SECMELI | UYGULAMA |
-| Seçmeli Müsabaka Analizi | 11, 12 | SECMELI | YAZILI |
+| Müsabaka Analizi | 11, 12 | SECMELI | YAZILI |
+| Beden Eğitimi ve Spor Tarihi | 12 | SECMELI | YAZILI |
 | Hedef Temelli Destek Eğitimi | 12 | SECMELI | YOK |
 | Fen Bilimleri Uygulamaları | 11, 12 | SECMELI | YAZILI |
 

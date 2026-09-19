@@ -14,14 +14,25 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
   yalnız Excel düğmesi olmayan raporlar için gerekir. v2 adayı.
 - **TB2 — Çizelge verisi boşlukları (U4, 03.09.2026'da daraldı):** sekiz
   ortaöğretim türünün TTK çizelgeleri gömülü (tasarım §7.2). Kalanlar:
-  (a) GSL/Spor 2025 çizelgeleri ortak dersleri kademeli uygular; 2026-2027'de
-  12. sınıfın tabi olduğu önceki nesil (TTK 2023/41-42, 2024/46-47) aktarılmadı
+  (a) GSL 2025 çizelgeleri ortak dersleri kademeli uygular; 2026-2027'de
+  12. sınıfın tabi olduğu önceki nesil (TTK 2023/41, 2024/46) aktarılmadı
   — program en yeni çizelgeyi yedek kullanır ve ders havuzu ekranında uyarır;
-  2027-2028'de kendiliğinden kapanır. (b) MTAL seçmeli dersler tablosu (TTK
+  2027-2028'de kendiliğinden kapanır. Spor Lisesi'nde aynı boşluk 19.09.2026'da
+  KAPANDI: TTK 02.09.2026/102-103 (yeni nesil dosyalar `spor-lisesi-2026`,
+  `spor-lisesi-tematik-2026`) 2026-2027'den itibaren tüm sınıf seviyelerine
+  girer, 2025/9-10 kalkar; Spor'un önceki nesli (2023/42, 2024/47, tematik
+  2024/48) yalnız GEÇMİŞ 2025-2026 yılının 11-12. sınıfları için eksiktir.
+  (b) MTAL seçmeli dersler tablosu (TTK
   2026/62, 2024/41 eki) ve hazırlıklı MTAL çizelgesi (2024/42, 2026/63) resmî
   PDF'te taranmış görüntü — OCR ya da elle aktarım bekliyor; MTAL alan/dal
   meslek dersleri (56 alan) katalogla taşınmaz, okul elle ekler. (c) Özel
-  Program Uygulayan Fen/SBL (2025/24-25; SBL nüshası "TASLAK"). Yeni dosya
+  Program Uygulayan Fen/SBL (2025/24-25; SBL nüshası "TASLAK") ve Özel Program
+  Uygulayan Hazırlık Sınıfı Bulunan Anadolu Lisesi (TTK 02.09.2026/104 —
+  2026-2027'den itibaren hazırlık sınıfından başlayarak kademeli; yalnız proje
+  protokolü kapsamındaki okullar, Açıklamalar md. 1). Sonuncusu aktarılacaksa
+  ÖNCE `CatalogProgram.covers` düzeltilir: `kademeli_ilk_seviyeler`de 9 ve üstü
+  yokken tavan 9 sayılıyor, "yalnız hazırlıktan başlar" ifade edilemiyor
+  (ayrıntı `data/ders-cizelgeleri/README.md` "Aktarılmayanlar"). Yeni dosya
   eklerken **"Sınav" sütunu** kürasyonu şart (K19, tasarım §7.1).
 - **TB3 — Şifreli kipte ad-temelli DB sorgusu yok (U3 bedeli):** arama/
   sıralama/teklik selector katmanında Python ile; yeni ad sorgusu ORM

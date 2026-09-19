@@ -93,11 +93,44 @@ import'u durdurmaz. `README.md` ve `ders-adi-takma-adlari.md` program sayılmaz.
 | `anadolu-imam-hatip-lisesi-2025.md` (+ `…-program-proje-2025.md`, varsayılan dışı) | TTK 23.07.2025/26 | 2025-2026, tüm seviyeler |
 | `guzel-sanatlar-lisesi-{gorsel-sanatlar,tiyatro}-2025.md` | TTK 09.05.2025/6 | 2025-2026, ortak dersler hazırlık-9-10'dan kademeli |
 | `guzel-sanatlar-lisesi-{muzik,turk-muzigi}-2025.md` | TTK 09.05.2025/7 | 2025-2026, ortak dersler kademeli |
-| `spor-lisesi-2025.md` (+ `spor-lisesi-tematik-2025.md`, varsayılan dışı) | TTK 09.05.2025/9, /10 | 2025-2026, ortak dersler kademeli |
+| `spor-lisesi-2026.md` (+ `spor-lisesi-tematik-2026.md`, varsayılan dışı) | TTK 02.09.2026/102, /103 | 2026-2027, tüm seviyeler (kademe yok) |
+| `spor-lisesi-2025.md` (+ `spor-lisesi-tematik-2025.md`, varsayılan dışı) | TTK 09.05.2025/9, /10 | YALNIZ 2025-2026 (ortak dersler kademeli); 2026/102-103 ile 2026-2027'den itibaren tüm seviyelerde kaldırıldı |
 | `mesleki-ve-teknik-anadolu-lisesi-2023.md` (yalnız ortak dersler) | TTK 2023/40 · 2024/41 · 2026/85 | 2023-2024'ten itibaren; üç neslin ortak bloğu aynı |
 
-Aktarılmayanlar (bilinçli boşluk, `docs/teknik-borc.md` TB2): GSL/Spor'un
-önceki nesil çizelgeleri (2023/41-42, 2024/46-47 — 2026-2027'de yalnız 12. sınıf
+**Aynı çizelgenin yeni kararı = YENİ dosya** (19.09.2026, Spor emsali): eski
+dosya yerinde düzenlenmez ve silinmez. `program_key` kararlı anahtardır
+(`SchoolConfig.level_programs` ona işaret eder) ve aktif ders yılı eski olan
+kurulum eski nesille çözülür; yeni dosya yeni `yururluk` ile eklenir, program
+her (seviye, tür) için en yeni KAPSAYAN nesli kendisi seçer. İki sonucu:
+(1) hiçbir neslin kapsamadığı seviyede yedek, yürürlüğü BAŞLAMIŞ en yeni
+nesildir (henüz başlamamış çizelge geçmiş yıla sızmaz); (2) AÇIK atama
+(`level_programs`; varsayılan dışı programlar — Tematik Spor — yalnız böyle
+seçilir) yeni nesle kendiliğinden GEÇMEZ: program uyarır, idareci matristen
+değiştirir. Eski dosyanın kürasyon notuna kaldıran karar yazılır.
+
+**19.09.2026 TTKB liste denetimi (TTK 02.09.2026/102-104).** Spor'da önceki
+nesil boşluğu 2026-2027 için kapandı: 2026/102-103 tüm sınıf seviyelerine
+girer; Spor 2023/42 · 2024/47 ve Tematik Spor 2024/48 yalnız GEÇMİŞ 2025-2026
+yılının 11-12. sınıfları için eksiktir. Listeye 09.09.2026'da yeni bir çizelge
+eklendi ve AKTARILMADI: **Özel Program Uygulayan Hazırlık Sınıfı Bulunan
+Anadolu Lisesi** (TTK 02.09.2026 tarihli ve 104 sayılı karar; önceki kararı
+yok). Kapsamı: "2026-2027 eğitim ve öğretim yılından itibaren hazırlık
+sınıfından başlamak üzere kademeli"; Açıklamalar md. 1'e göre uygulanacağı
+"proje protokolü kapsamındaki okullar ve sınıf seviyeleri ilgili Genel Müdürlük
+tarafından belirlenir" (okul listesi kararda yok); haftalık 45 saat, iki
+tematik alan (Temel Bilimler / Sosyal Bilimler) + çok yönlü gelişim
+seçmelileri. Aktarılırsa iki not: (1) çizelge yalnız protokollü okullarda
+uygulandığından ÖP Fen/SBL gibi `varsayilan: hayır` olmalıdır — varsayılana
+girerse her hazırlıklı Anadolu Lisesi'nin havuzuna karışır; (2) mevcut kademe
+kuralı bu kararı İFADE EDEMEZ: `CatalogProgram.covers`
+`kademeli_ilk_seviyeler`de 9 ve üstü yoksa tavanı 9 sayar, yani "yalnız
+hazırlıktan başlar" yazılsa bile 2026-2027'de 9. sınıfı da kapsar (doğrusu
+2027-2028) — önce o kural ve testi düzeltilir. Ham PDF ve döküm:
+`data/raw/ttkb-2026-104-ozel-program-al-hazirlik.*`.
+
+Aktarılmayanlar (bilinçli boşluk, `docs/teknik-borc.md` TB2): ÖP hazırlıklı
+Anadolu Lisesi (2026/104 — üstteki paragraf), GSL'nin önceki nesil çizelgeleri
+(2023/41, 2024/46 — 2026-2027'de yalnız 12. sınıf
 ortak dersleri; program en yeni çizelgeyi yedek kullanır ve uyarır), MTAL
 seçmeli dersler tablosu ve hazırlıklı MTAL çizelgesi (resmî PDF taranmış
 görüntü), MTAL alan/dal meslek dersleri (56 alan — okul elle ekler), Özel

@@ -21,6 +21,10 @@ YÜRÜRLÜKTEKİ çizelgelerinden türetilen bir kesittir:
   okul: aynı seviyede birden çok program). Bölümlü türlerde (GSL: Görsel
   Sanatlar/Tiyatro/Müzik/Türk Müziği) varsayılan, türün bütün bölümlerinin
   birleşimidir; okul matristen istemediğini bırakır.
+- **Yeni karar = yeni nesil dosya** (19.09.2026, TTK 02.09.2026/102-103 Spor):
+  varsayılan atama en yeni KAPSAYAN nesli kendisi seçer, eski dosya geçmiş ders
+  yılı için kalır. Açık atama yeni nesle kendiliğinden geçmez; yerini yeni bir
+  neslin aldığı atama uyarıyla bildirilir (`_superseded_by`), değiştirilmez.
 - **Birleştirme** (`effective_rows`): (ders adı) → seviye kümesi birleşimi.
   Aynı ad iki programda farklı türdeyse SEÇMELİ kazanır (havuz otomatik
   doldurması ORTAK+YAZILI çeker; şüphede fazla değil eksik doldurmak, idareci
@@ -266,8 +270,11 @@ def default_assignment(
 
     Aynı bölüm grubunda birden çok nesil varsa her (seviye, tür) için EN YENİ
     kapsayan nesil seçilir. Hiçbir nesil kapsamıyorsa (önceki çizelge bu
-    sürümde aktarılmamış olabilir) en yeni program yedek olarak kullanılır ve
-    plan bir UYARI taşır — sessiz düşmenin panzehiri.
+    sürümde aktarılmamış olabilir) yürürlüğü BAŞLAMIŞ en yeni program yedek
+    olarak kullanılır ve plan bir UYARI taşır — sessiz düşmenin panzehiri.
+    Yürürlüğü başlamamış nesil yedek olmaz (TTK 02.09.2026/102 emsali: 2025-2026
+    yılında 11-12'nin yedeği 2026 çizelgesi değil 2025 çizelgesidir); yalnız
+    hiçbiri başlamamışsa en yeniye düşülür.
     """
     candidates = candidates_for(programs, school_type=school_type, has_prep=has_prep)
     groups: dict[tuple[str, str], list[CatalogProgram]] = {}
@@ -288,7 +295,8 @@ def default_assignment(
             ):
                 pick = _newest_covering(has_level, level, year, course_type)
                 if pick is None:
-                    pick = max(has_level, key=lambda p: (p.start_year or -1, p.key))
+                    started = [p for p in has_level if p.start_year is None or p.start_year <= year]
+                    pick = max(started or has_level, key=lambda p: (p.start_year or -1, p.key))
                     # Kullanıcı metninde ders türü "zorunlu"dur (docs/sozluk.md): "ortak"
                     # yalnız MEB'in okul geneli sınavı için kullanılır. TTK çizelgesinin
                     # "Ortak Dersler" başlığı bu türün resmî adıdır, ekranda geçmez.
@@ -309,18 +317,54 @@ def default_assignment(
     return plans
 
 
+def _superseded_by(
+    programs: Mapping[str, CatalogProgram], program: CatalogProgram, level: int, year: int
+) -> CatalogProgram | None:
+    """Açık atanan programın yerini `year` yılında bu seviyede alan daha yeni nesil (yoksa None).
+
+    Aynı bölüm grubunun (okul türü + bölüm + hazırlık varyantı) daha yeni
+    yürürlüklü bir programı bu seviyenin ORTAK derslerini kapsıyorsa eski nesil o
+    seviyede uygulamadan kalkmıştır. Kademeli yeni nesilde henüz kapsanmayan
+    seviye eski çizelgede KALIR — `covers` bunu söyler, uyarı üretilmez.
+    """
+    if program.start_year is None:
+        return None
+    newer = [
+        p
+        for p in programs.values()
+        if p.key != program.key
+        and p.school_type == program.school_type
+        and p.department == program.department
+        and p.has_prep == program.has_prep
+        and p.start_year is not None
+        and p.start_year > program.start_year
+        and any(level in r.levels for r in p.rows)
+        and p.covers(level, year, course_type=CourseType.COMMON)
+    ]
+    if not newer:
+        return None
+    return max(newer, key=lambda p: (p.start_year or -1, p.key))
+
+
 def apply_overrides(
     plans: Mapping[int, LevelPlan],
     overrides: Mapping[str, object] | None,
     programs: Mapping[str, CatalogProgram],
+    *,
+    year: int | None = None,
 ) -> tuple[dict[int, LevelPlan], list[str]]:
     """`SchoolConfig.level_programs` sözlüğünü plana işler; bilinmeyen anahtar uyarıya düşer.
 
     Açık atama yürürlük süzgecinden GEÇMEZ: idareci "bu seviyede bu program"
-    dediyse o programın o seviyedeki tüm satırları uygulanır.
+    dediyse o programın o seviyedeki tüm satırları uygulanır. Bu yüzden açık
+    atama yeni nesle KENDİLİĞİNDEN geçmez (varsayılan dışı programlar — Tematik
+    Spor — yalnız açık atamayla seçilir): `year` verilirse yerini daha yeni bir
+    neslin aldığı atama UYARIYLA bildirilir, atamanın kendisine dokunulmaz
+    (idari karar — sessiz düzeltme de sessiz düşme kadar yanlıştır).
     """
     result = dict(plans)
     warnings: list[str] = []
+    superseded: dict[tuple[str, str], list[int]] = {}
     for raw_level, raw_keys in (overrides or {}).items():
         try:
             level = int(raw_level)
@@ -333,6 +377,13 @@ def apply_overrides(
         for key in raw_keys if isinstance(raw_keys, list | tuple) else []:
             if str(key) in programs:
                 keys.append(str(key))
+                newer = (
+                    _superseded_by(programs, programs[str(key)], level, year)
+                    if year is not None
+                    else None
+                )
+                if newer is not None:
+                    superseded.setdefault((str(key), newer.key), []).append(level)
             else:
                 warnings.append(
                     f"{_level_phrase(level)}: '{key}' adlı çizelge programı bulunamadı."
@@ -344,6 +395,15 @@ def apply_overrides(
             explicit=True,
             warnings=(),
         )
+    if year is not None:  # `superseded` yalnız yıl verildiğinde dolar
+        for (old_key, new_key), levels in superseded.items():
+            seviyeler = ", ".join(_level_phrase(lv) for lv in sorted(levels))
+            warnings.append(
+                f"{seviyeler}: '{programs[old_key].name}' çizelgesinin yerini "
+                f"{year}-{year + 1} ders yılında '{programs[new_key].name}' aldı, ancak sınıf "
+                "düzeyi atamasında eski çizelge işaretli. Ayarlar → Okul Bilgileri ekranından "
+                "güncelleyin."
+            )
     return result, warnings
 
 
@@ -449,7 +509,7 @@ def resolve_plan(
     plans = default_assignment(
         programs, school_type=school_type, has_prep=has_prep, levels=level_tuple, year=year
     )
-    plans, warnings = apply_overrides(plans, overrides, programs)
+    plans, warnings = apply_overrides(plans, overrides, programs, year=year)
     for plan in plans.values():
         warnings.extend(plan.warnings)
     for program in programs.values():
