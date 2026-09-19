@@ -13,11 +13,19 @@ import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import Select from "../../ui/Select";
 import { SkeletonList } from "../../ui/Skeleton";
+import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import TextField from "../../ui/TextField";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import { useSnackbar } from "../../ui/SnackbarProvider";
-import type { ExamAttendanceRecordRow, ExamSession, ExcuseStatusCode } from "./api";
+import { examRoomApi } from "../salonlar/api";
+import type {
+  ExamAttendanceRecordRow,
+  ExamSession,
+  ExcuseStatusCode,
+  SeatAssignmentRow,
+} from "./api";
 import { attendanceApi, examSessionApi, EXCUSE_STATUS_TR } from "./api";
+import YoklamaPlani from "./YoklamaPlani";
 
 /** Mazeret durumu → tonal çip rengi (M3 token — ham renk yok). */
 const EXCUSE_TONES: Record<ExcuseStatusCode, string> = {
@@ -105,7 +113,9 @@ function AbsentRecordRow({
 
 export default function YoklamaPaneli({ session }: { session: ExamSession }) {
   const snackbar = useSnackbar();
+  const confirm = useConfirm();
   const qc = useQueryClient();
+  const [activeRoom, setActiveRoom] = useState<string>("");
 
   const seating = useQuery({
     queryKey: ["exam-seating", session.id],
@@ -114,6 +124,19 @@ export default function YoklamaPaneli({ session }: { session: ExamSession }) {
   const records = useQuery({
     queryKey: ["exam-attendance", session.id],
     queryFn: () => attendanceApi.list(session.id),
+  });
+  // Salon planları (pasifler DAHİL — arşiv oturumu) + fotoğraflar (19.09.2026):
+  // yoklama fotoğraflı plan üzerinde alınır. İkisi de gelmezse liste görünümüne
+  // düşülür — yoklama hiçbir koşulda alınamaz hâle gelmez.
+  const rooms = useQuery({
+    queryKey: ["exam-rooms-all"],
+    queryFn: () => examRoomApi.list(true),
+    retry: false,
+  });
+  const photos = useQuery({
+    queryKey: ["exam-seating-photos", session.id],
+    queryFn: () => examSessionApi.seatingPhotos(session.id),
+    retry: false,
   });
 
   const refresh = () => void qc.invalidateQueries({ queryKey: ["exam-attendance", session.id] });
@@ -126,6 +149,14 @@ export default function YoklamaPaneli({ session }: { session: ExamSession }) {
       snackbar.success("Girmedi olarak işaretlendi — mazeret durumu beklemede.");
     },
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "İşaretlenemedi."),
+  });
+  const unmark = useMutation({
+    mutationFn: (recordId: number) => attendanceApi.remove(recordId),
+    onSuccess: () => {
+      refresh();
+      snackbar.success("İşaret kaldırıldı.");
+    },
+    onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Kaldırılamadı."),
   });
 
   if (seating.isPending || records.isPending) {
@@ -140,15 +171,38 @@ export default function YoklamaPaneli({ session }: { session: ExamSession }) {
   }
 
   const recordRows = records.data?.results ?? [];
-  const absentStudentIds = new Set(recordRows.map((r) => r.student_id));
-  const rooms = seating.data?.rooms ?? [];
+  // F27 anonim arşivde kaydın student_id'si null — kümeye girmez.
+  const absentStudentIds = new Set(
+    recordRows.map((r) => r.student_id).filter((id): id is number => id !== null),
+  );
+  const seatingRooms = seating.data?.rooms ?? [];
+  const fotolar = photos.data?.photos ?? {};
+  const roomTabs = seatingRooms.map((r) => ({ key: String(r.room_id), label: r.room_name }));
+  const currentKey = activeRoom || roomTabs[0]?.key || "";
+  const currentRoom = seatingRooms.find((r) => String(r.room_id) === currentKey);
+  const plan = rooms.data?.results.find((r) => r.id === currentRoom?.room_id)?.layout_plan;
+
+  const toggle = (a: SeatAssignmentRow, absent: boolean) => {
+    if (!absent) {
+      mark.mutate(a.id);
+      return;
+    }
+    const kayit = recordRows.find((r) => r.student_id === a.student_id);
+    if (!kayit) return;
+    void confirm({
+      title: "İşaret kaldırılsın mı?",
+      message: "Öğrenci sınava girmiş sayılacak; yoklama kaydı kaldırılır.",
+      confirmLabel: "Kaldır",
+    }).then((ok) => ok && unmark.mutate(kayit.id));
+  };
 
   return (
     <div className="flex flex-col gap-4">
       <p className="text-body-small text-on-surface-variant">
-        Sınava girmeyen öğrenciyi salon listesinden işaretleyin. Mazeret belgesi (veli yazısı,
-        rapor) sınav tarihinden itibaren en geç 5 iş günü içinde okul müdürlüğüne bildirilir — belge
-        no/tarihi nota yazın; durum arşivde de güncellenebilir.
+        Sınava girmeyen öğrencinin kartına basın; kart “Girmedi” olarak işaretlenir (yeniden basmak
+        işareti kaldırır). Basılı salon evrakındaki fotoğraflı planla aynı düzendir. Mazeret belgesi
+        (veli yazısı, rapor) sınav tarihinden itibaren en geç 5 iş günü içinde okul müdürlüğüne
+        bildirilir — belge no/tarihi nota yazın; durum arşivde de güncellenebilir.
       </p>
 
       <Card elevation={1} className="flex flex-col gap-3 p-4">
@@ -168,47 +222,94 @@ export default function YoklamaPaneli({ session }: { session: ExamSession }) {
         )}
       </Card>
 
-      {rooms.map((room) => (
-        <Card key={room.room_id} elevation={1} className="flex flex-col gap-2 p-4">
-          <h3 className="text-title-small text-on-surface">{room.room_name}</h3>
-          <ul className="flex flex-col gap-1">
-            {room.assignments.map((a) => {
-              // F27 anonim arşivde student_id null'dur — null asla eşleşmesin
-              // (aksi hâlde tüm satırlar "Girmedi" görünürdü).
-              const absent = a.student_id !== null && absentStudentIds.has(a.student_id);
-              return (
-                <li
-                  key={a.id}
-                  className={`flex flex-wrap items-center gap-3 rounded-shape-sm px-3 py-1 ${
-                    absent ? "bg-error-container/40" : ""
-                  }`}
-                >
-                  <span className="w-10 text-label-large text-on-surface-variant">
-                    #{a.seat_no}
-                  </span>
-                  <span className="text-body-medium text-on-surface">{a.full_name}</span>
-                  <span className="text-body-small text-on-surface-variant">
-                    {a.student_number} · {a.class_label}
-                  </span>
-                  <span className="ml-auto" />
-                  {absent ? (
-                    <span className="text-label-small text-error">Girmedi</span>
-                  ) : (
-                    <Button
-                      variant="text"
-                      icon="person_off"
-                      onClick={() => mark.mutate(a.id)}
-                      disabled={mark.isPending}
-                    >
-                      Girmedi işaretle
-                    </Button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+      {currentRoom && plan ? (
+        <Card elevation={1} className="flex flex-col gap-3 p-4">
+          <Tabs
+            items={roomTabs}
+            active={currentKey}
+            onChange={setActiveRoom}
+            idBase="yoklama-salon"
+            ariaLabel="Salonlar"
+          />
+          <div {...tabPanelProps("yoklama-salon", currentKey)}>
+            <YoklamaPlani
+              roomName={currentRoom.room_name}
+              plan={plan}
+              assignments={currentRoom.assignments}
+              photos={fotolar}
+              absentStudentIds={absentStudentIds}
+              busy={mark.isPending || unmark.isPending}
+              onToggle={toggle}
+            />
+          </div>
         </Card>
-      ))}
+      ) : (
+        seatingRooms.map((room) => (
+          <YoklamaListesi
+            key={room.room_id}
+            roomName={room.room_name}
+            assignments={room.assignments}
+            absentStudentIds={absentStudentIds}
+            busy={mark.isPending}
+            onMark={(id) => mark.mutate(id)}
+          />
+        ))
+      )}
     </div>
+  );
+}
+
+/** Plan yüklenemezse (salon silinmiş, uç hatası) koltuk sırasında liste görünümü. */
+function YoklamaListesi({
+  roomName,
+  assignments,
+  absentStudentIds,
+  busy,
+  onMark,
+}: {
+  roomName: string;
+  assignments: SeatAssignmentRow[];
+  absentStudentIds: Set<number>;
+  busy: boolean;
+  onMark: (seatAssignmentId: number) => void;
+}) {
+  return (
+    <Card elevation={1} className="flex flex-col gap-2 p-4">
+      <h3 className="text-title-small text-on-surface">{roomName}</h3>
+      <ul className="flex flex-col gap-1">
+        {assignments.map((a) => {
+          // F27 anonim arşivde student_id null'dur — null asla eşleşmesin
+          // (aksi hâlde tüm satırlar "Girmedi" görünürdü).
+          const absent = a.student_id !== null && absentStudentIds.has(a.student_id);
+          return (
+            <li
+              key={a.id}
+              className={`flex flex-wrap items-center gap-3 rounded-shape-sm px-3 py-1 ${
+                absent ? "bg-error-container/40" : ""
+              }`}
+            >
+              <span className="w-10 text-label-large text-on-surface-variant">#{a.seat_no}</span>
+              <span className="text-body-medium text-on-surface">{a.full_name}</span>
+              <span className="text-body-small text-on-surface-variant">
+                {a.student_number} · {a.class_label}
+              </span>
+              <span className="ml-auto" />
+              {absent ? (
+                <span className="text-label-small text-error">Girmedi</span>
+              ) : (
+                <Button
+                  variant="text"
+                  icon="person_off"
+                  onClick={() => onMark(a.id)}
+                  disabled={busy}
+                >
+                  Girmedi işaretle
+                </Button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }

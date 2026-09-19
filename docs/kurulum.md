@@ -114,9 +114,17 @@ dokunmaz; yine de program her sürüm geçişinden önce kendiliğinden bir yede
    ders adları yoktur). Öğrenciler okul numarasıyla eşleştiği için bunu öğrenci
    listesinden sonra yapın. Aktarım yalnız raporda geçen şubeleri yeniler; raporu
    tek bir sınıf düzeyi için almak öbür düzeylerin listesini silmez.
+
+   Salon evrakının oturma planında ve Yoklama ekranında öğrenci fotoğrafı
+   görünsün isterseniz (isteğe bağlı) e-Okul'un **OOG01001R080** kodlu
+   fotoğraflı öğrenci listesi raporunu **Excel** olarak indirip Kişiler
+   ekranındaki "Öğrenci fotoğrafları" kartından yükleyin. e-Okul bu raporu sınıf
+   düzeyi başına verir: her düzeyin dosyasını ayrı ayrı aktarın. Fotoğraflar
+   okul numarasıyla eşleştiği için bunu da öğrenci listesinden sonra yapın.
+   Fotoğraflar yalnız bu bilgisayarın veritabanında durur ve yedeğe girer.
 5. İsterseniz Ayarlar → Güvenlik'ten **uygulama parolası** kurarsınız: ad-soyad
-   alanları şifrelenir, size TEK SEFERLİK bir kurtarma anahtarı verilir —
-   yazdırıp güvenli bir yerde saklayın.
+   alanları ve öğrenci fotoğrafları şifrelenir, size TEK SEFERLİK bir kurtarma
+   anahtarı verilir — yazdırıp güvenli bir yerde saklayın.
 
 ## 5. Verileriniz nerede? Yedekleme
 

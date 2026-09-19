@@ -74,6 +74,16 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
   bırakılacağı kararıdır (taban bookworm'a çıkarsa glibc yükselir, Pardus 21'de
   paket açılmaz) — karar kullanıcıdadır, saha kurulumlarına bakılarak verilir.
 
+- **TB14 — Öğrenci fotoğrafı yalnız Excel'den (19.09.2026, tasarım §6):**
+  e-Okul OOG01001R080 raporunun PDF'i okunmaz; fotoğraf ile okul no'nun bağı
+  PDF'te yalnız sayfa konumundan kurulabilirdi. Excel ayrıştırması e-Okul'un
+  bugünkü dizgisine dayanır: okul no, fotoğraf çapasının ALTINDAKİ hücrenin
+  sonundaki sayıdır. e-Okul dizgiyi değiştirirse belirti sessiz eksik aktarım
+  DEĞİLDİR — önizleme "Fotoğrafın altında okul numarası bulunamadı" satırlarını
+  Excel konumuyla listeler ve eşleşme sayısı düşer. İkinci bilinçli bedel: fotoğrafın snapshot'ı
+  yok (KVKK); ayrılan öğrencinin fotoğrafı silindiği için arşiv oturumunun
+  salon evrakı yeniden basılırsa o kartta "fotoğraf yok" kutusu çıkar.
+
 ## Kapanan
 
 - **TB7 — GROUPS katılımcı tipi (19.09.2026'da kapandı — başka yoldan):**

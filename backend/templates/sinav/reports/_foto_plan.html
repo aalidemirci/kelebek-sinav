@@ -1,0 +1,77 @@
+{% load l10n %}{% comment %}FOTOĞRAFLI OTURMA PLANI — R1 yaprak 1 (19.09.2026, kullanıcı kararı:
+"salon oturma planı fotoğraflı olsun; yoklama/imza doğrudan bu plan üzerinde").
+
+Bağlam:
+  plan     reports.build_photo_plan çıktısı (grid + col_width_pct + metrics + unplaced),
+  plan_id  salon sırası (ölçü kuralları başlıkta `.fp<id>` sınıfıyla basılır —
+           WeasyPrint gövdedeki `<style>`ı ve inline CSS değişkenini yok sayar).
+
+Her koltuk bir KART: koltuk no (+ karışık salonda ders kodu), fotoğraf, ad,
+okul no · şube, "Yok" kutulu imza alanı. Kart yönü `metrics.layout`tan:
+"vertical" fotoğraf üstte, "horizontal" fotoğraf solda (derin salon). Kutular
+blok öğedir ve yüksekliği sabittir — tablo hücresine `height` vermek satırı
+UZATIR (ölçüldü). Fotoğrafı olmayan öğrencide "fotoğraf yok" kutusu basılır;
+çok sıralı salonda fotoğraf düşer (`show_photo`), ad ve imza alanı kalır.
+
+GEOMETRİ KURALI kroki ile aynı: çizim GRID kimliğinden (desk_row, desk_col,
+slot); satır 0 = ön cephe, üstte. Masasız satır ince şerittir (`fp-fill`).
+{% endcomment %}
+<div class="front-label">ÖN CEPHE · TAHTA VE ÖĞRETMEN MASASI YÖNÜ</div>
+<div class="front-rule"></div>
+<table class="fplan fp{{ plan_id }}">
+  {% for grid_row in plan.grid %}
+  <tr>
+    {% for cell in grid_row.cells %}
+    {# Türkçe locale ondalığı virgülle basar — CSS yutulur; unlocalize şart (F25/T244 bulgusu). #}
+    <td style="width: {{ plan.col_width_pct|unlocalize }}%;">
+      {% if cell.kind == "desk" %}
+      <table class="fp-desk"><tr>
+        {% for seat in cell.seats %}
+        <td>
+          <div class="fp-card fp-{{ plan.metrics.layout }}">
+            <div class="fp-head"><span class="fp-no">{{ seat.seat_no|default_if_none:"–" }}</span>{% if seat.course_code %}<span class="fp-code">{{ seat.course_code }}</span>{% endif %}</div>
+            {% if seat.empty %}
+            <div class="fp-empty">BOŞ</div>
+            {% else %}
+            <div class="fp-body">
+              {% if plan.metrics.show_photo and plan.metrics.layout == "horizontal" %}
+              {% comment %}Yatay kart İKİ HÜCRELİ tablodur: WeasyPrint taşmayı kırpan
+              blok kutuyu float'ın yanına değil ALTINA yerleştiriyor (ölçüldü —
+              ad imza alanının altında kalıyordu).{% endcomment %}
+              <table class="fp-hbody"><tr>
+                <td class="fp-hphoto">{% if seat.photo %}<img class="fp-photo" src="{{ seat.photo }}" alt="">{% else %}<div class="fp-photo fp-nophoto">fotoğraf yok</div>{% endif %}</td>
+                <td class="fp-htext">
+                  <div class="fp-name">{{ seat.full_name }}</div>
+                  <div class="fp-meta">{{ seat.student_number }} · {{ seat.class_label }}</div>
+                </td>
+              </tr></table>
+              {% else %}
+              {% if plan.metrics.show_photo %}{% if seat.photo %}<img class="fp-photo" src="{{ seat.photo }}" alt="">{% else %}<div class="fp-photo fp-nophoto">fotoğraf yok</div>{% endif %}{% endif %}
+              <div class="fp-name">{{ seat.full_name }}</div>
+              <div class="fp-meta">{{ seat.student_number }} · {{ seat.class_label }}</div>
+              {% endif %}
+            </div>
+            <div class="fp-sign"><span class="fp-sign-label">İmza</span><span class="fp-yok"><span class="box"></span> Yok</span></div>
+            {% endif %}
+          </div>
+        </td>
+        {% endfor %}
+      </tr></table>
+      {% elif cell.kind == "disabled_desk" %}
+      <div class="fp-fill fp-disabled{% if grid_row.desk_row %} fp-tall{% endif %}">KULLANIM DIŞI</div>
+      {% elif cell.kind == "furniture" %}
+      <div class="fp-fill fp-furniture{% if grid_row.desk_row %} fp-tall{% endif %}">{{ cell.label }}</div>
+      {% else %}
+      <div class="fp-fill{% if grid_row.desk_row %} fp-tall{% endif %}"></div>
+      {% endif %}
+    </td>
+    {% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+{% if plan.unplaced %}
+<div class="kroki-legend"><b>DİKKAT:</b> {{ plan.unplaced|length }} öğrencinin koltuğu güncel salon
+  planında yok (plan dağıtımdan sonra değiştirilmiş) — yoklamaları aşağıdaki satırlarda alınır; oturumu yeniden dağıtın.</div>
+{% else %}
+<div class="kroki-legend">Salonun arka duvarı · {{ plan.numbering_legend }} · Öğrenci imzasını kendi kartındaki kutuya atar; sınava girmeyenin “Yok” kutusu işaretlenir.</div>
+{% endif %}

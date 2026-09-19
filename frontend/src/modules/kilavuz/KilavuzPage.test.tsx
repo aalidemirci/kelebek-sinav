@@ -251,6 +251,31 @@ describe("KilavuzPage", () => {
       screen.getByText(/en geç 5 \(beş\) iş günü\s+içerisinde velisi tarafından okul müdürlüğüne/),
     ).toBeInTheDocument();
     expect(screen.getByText("arşivlenmiş oturumda da güncellenebilir")).toBeInTheDocument();
+    // Yoklama fotoğraflı plan üzerinde alınır (19.09.2026) — eski liste düğmesi yok.
+    expect(screen.queryByText(/“Girmedi işaretle”/)).not.toBeInTheDocument();
+  });
+
+  it("öğrenci fotoğraflarını ve fotoğraflı oturma planını anlatır (19.09.2026)", () => {
+    renderPage();
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Öğrenci fotoğrafları (isteğe bağlı)" }),
+    ).toBeInTheDocument();
+    // e-Okul raporu kodu, biçimi ve düzey başına ayrı dosya.
+    expect(screen.getByText("OOG01001R080")).toBeInTheDocument();
+    expect(screen.getByText("sınıf düzeyi başına")).toBeInTheDocument();
+    // Mükerrer yüklemede seçim kullanıcıdadır; KVKK silme düğmesi anlatılır.
+    expect(screen.getByText("Mevcut fotoğrafları koru")).toBeInTheDocument();
+    expect(screen.getByText("Yenileriyle değiştir")).toBeInTheDocument();
+    expect(screen.getByText("“Tüm fotoğrafları sil”")).toBeInTheDocument();
+    for (const link of screen.getAllByRole("link", { name: "Kişiler" })) {
+      expect(link).toHaveAttribute("href", "/kisiler");
+    }
+    // Salon evrakı: 1. yaprak fotoğraflı plan + yoklama; eski "yoklama ve imza
+    // listesi (2. yaprak)" anlatımı yanlış bilgi olurdu.
+    expect(
+      screen.getByText(/fotoğraflı oturma planıdır ve yoklama da onun üstünde/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/yoklama ve imza listesi/)).not.toBeInTheDocument();
   });
 
   it("Ayarlar → Şubeler sekmesini ve süreç takip kalemlerini anlatır", () => {

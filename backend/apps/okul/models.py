@@ -29,7 +29,7 @@ from __future__ import annotations
 from django.db import models
 from django.utils import timezone
 
-from shared.crypto import EncryptedCharField
+from shared.crypto import EncryptedCharField, EncryptedTextField
 from shared.models import BaseModel
 
 
@@ -497,6 +497,47 @@ class Student(BaseModel):
         return f"{self.class_level}/{self.class_section}"
 
 
+class StudentPhoto(BaseModel):
+    """Öğrencinin e-Okul fotoğrafı (19.09.2026) — fotoğraflı salon planı ve yoklama için.
+
+    Kaynak e-Okul'un fotoğraflı öğrenci listesi (OOG01001R080) Excel ihracıdır
+    (`eokul_foto`, `services.photos`); eşleşme okul numarasıyla.
+
+    KVKK (kullanıcı kararı 19.09.2026 — "veritabanında, yedeğe girer"):
+    - Uygulama parolası açıksa adlar gibi Fernet ile ŞİFRELİ saklanır
+      (`EncryptedTextField`, base64 JPEG); parola açma/kapama geçişi alanı
+      kendiliğinden kapsar (`app_password.encrypted_field_map`).
+    - Görüntü YENİDEN KODLANIR: meta veri (EXIF vb.) atılır, boyut sınırlanır.
+    - Öğrenci ayrılınca ya da silinince fotoğraf KATI silinir (soft-delete yok —
+      kişisel veri artığı kalmasın); Ayarlar'dan hepsi tek düğmeyle silinir.
+    - Arşiv evrakı fotoğrafın KOPYASINI tutmaz (snapshot deseni ad/no içindir):
+      silinen fotoğraf eski oturumun evrakında da basılmaz.
+    """
+
+    student = models.OneToOneField(
+        Student,
+        on_delete=models.CASCADE,
+        related_name="photo",
+        verbose_name="öğrenci",
+    )
+    image = EncryptedTextField("fotoğraf", help_text="Yeniden kodlanmış JPEG (base64).")
+    sha256 = models.CharField(
+        "özet",
+        max_length=64,
+        help_text="Yeniden kodlanmış JPEG'in özeti — aynı fotoğrafın yeniden aktarımını ayırt eder.",
+    )
+    width = models.PositiveSmallIntegerField("genişlik")
+    height = models.PositiveSmallIntegerField("yükseklik")
+
+    class Meta:
+        verbose_name = "öğrenci fotoğrafı"
+        verbose_name_plural = "öğrenci fotoğrafları"
+        ordering = ["student"]
+
+    def __str__(self) -> str:
+        return f"fotoğraf — öğrenci {self.student_id}"
+
+
 class ImportSourceType(models.TextChoices):
     """İçe aktarma kaynak türü (xlsx ve pano yapıştırma AYNI türdedir)."""
 
@@ -504,6 +545,7 @@ class ImportSourceType(models.TextChoices):
     PERSONNEL = "PERSONNEL", "Personel"
     # e-Okul "Seçmeli Ders Öğrencileri" (OOK10002R010) PDF'i — `dersler.enrollment_import`.
     ELECTIVES = "ELECTIVES", "Seçmeli ders öğrencileri"
+    PHOTOS = "PHOTOS", "Öğrenci fotoğrafları"
 
 
 class ImportStatus(models.TextChoices):

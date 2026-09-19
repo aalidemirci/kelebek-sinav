@@ -61,10 +61,14 @@
   `tr { break-inside: avoid }` ŞART: `documents/base.html` bunu `.doc-table`
   için TANIMLAMAZ (kardeş `sinav/reports/base.html` tanımlar) ve kural yoksa
   uzun tablo satırı sayfa sınırında bölünüp devam sayfasında satır başlığı
-  (tarih/saat) OLMADAN basılır. Bütçe sabitleri `reports.py`
-  (`KROKI_BOX_*_PX`, `_ATT_FIXED_PX`, `_ANN_FIXED_PX`) — ÖLÇÜLEREK bulundu;
-  garanti `test_reports.py::test_r1_salon_evraki_iki_yaprak` (bir derslikte
-  40 öğrenci sığar, fazlası kontrolsüz taşmaz).
+  (tarih/saat) OLMADAN basılır · `overflow: hidden` blok kutunun yanına
+  float konmaz (içerik float'ın ALTINA kayar) — yan yana iki kutu gerekiyorsa
+  iki hücreli tablo (`.fp-hbody`) · aynı görsel TEK nesne olarak gömülür:
+  görsel SAYAN testte her fotoğraf farklı üretilir. Bütçe sabitleri
+  `reports.py` (`PHOTO_PLAN_BOX_PX` — R1 fotoğraflı plan, `KROKI_BOX_LAYOUT_PX`,
+  `_ANN_FIXED_PX`) — ÖLÇÜLEREK bulundu; garanti
+  `test_reports.py::test_r1_salon_evraki_iki_yaprak` (bir derslikte 40 öğrenci
+  sığar, fazlası kontrolsüz taşmaz).
 - **Şifreli alan sorguları:** ad-temelli filtre/sıralama/teklik DB'de
   çalışmaz → selector katmanında Python ile (tasarım §5). Yeni ad sorgusu
   doğrudan ORM filtresiyle yazılmaz.
@@ -73,10 +77,26 @@
   R4 duyuru +57pt). Çözüm `box-sizing: border-box`'u O TABLOYA vermek; ama o
   zaman ad sütununun içi dolgu kadar daralır — `_NAME_CELL_CHROME_PX` yatay
   dolguyu da içermek ZORUNDA, yoksa adlar sarar ve sayfa bütçesi kırılır.
-- **Kroki kutu modeli:** `box-sizing: border-box` YALNIZ `.kroki` alt ağacına
-  verilir. GLOBAL verilirse sütunlar daralır, metin sarar ve R1 yoklama + R4
-  duyuru ikinci sayfaya taşar (denendi, beş test kırmızı) — o ölçüler
-  content-box'a göre kalibre edildi.
+- **Kroki kutu modeli:** `box-sizing: border-box` YALNIZ `.kroki` ve `.fplan`
+  (fotoğraflı plan) alt ağaçlarına verilir. GLOBAL verilirse sütunlar daralır,
+  metin sarar ve evrak ikinci sayfaya taşar (denendi — o gün R1 yoklama + R4
+  duyuru, beş test kırmızı) — öteki tablolar content-box'a göre kalibre edildi.
+- **Öğrenci fotoğrafı KVKK verisidir (19.09.2026, tasarım §6 + §9):**
+  `okul.StudentPhoto` — tek alan `EncryptedTextField` (base64 JPEG); parola
+  açıkken şifreli, `encrypted_field_map` parola geçişine kendiliğinden katar,
+  yedeğe girer. Kaynak e-Okul OOG01001R080 **Excel**'idir (`okul/eokul_foto.py`
+  — BIFF8 içindeki OfficeArt görsel deposu + şekil çapası; okul no çapanın
+  ALTINDAKİ hücreden). PDF yolu YAZILMADI (konumdan eşleştirme kırılgan).
+  Görsel Pillow'la YENİDEN KODLANIR (EXIF/meta atılır, ≤240×320); e-Okul'un
+  "fotoğraf yok" simgesi (birden çok şeklin paylaştığı görsel, DIB/metafile)
+  yer tutucudur ve kayıtlı fotoğrafı SİLMEZ. Mükerrer yükleme: aynı sha256
+  sessiz geçer, FARKLI fotoğrafta `on_conflict` (keep/replace) idarecinin
+  seçimidir — sessizce ezilmez. Öğrenci aktif olmaktan çıkınca
+  (`update_student`) ya da silinince (`delete_student`) fotoğraf KATI silinir;
+  evrak ve uç (`photo_data_uris`) yalnız aktif öğrencinin fotoğrafını verir ve
+  çözülemeyen değeri atlar (evrak fotoğrafsız basılır, çökmez). Paket
+  sigortası: `--pdf-duman` JPEG'in PDF'e gerçekten gömüldüğünü sınar —
+  WeasyPrint çözemediği görseli yalnız UYARIYLA atlar.
 - **Salon planında ÖN CEPHE bandı:** ızgaranın 0. satırı öğretmen masası/tahta/
   kapı içindir ve arayüzdeki "Sıra satırı" sayımına GİRMEZ (`planEdit
   .FRONT_BAND_ROWS`). `layout.DEFAULT_LAYOUT_PLAN` (6×4) ile `planEdit
@@ -228,9 +248,10 @@
   ≥2 seviyedeyse adı seviyeyle basar ("Coğrafya — 9. Sınıf"; R1/R5/R7 ve kitapçık
   bandı); şube duyurusunda (R4) `SeatRow.course_plain` ile SEVİYESİZ basılır
   (şube tek seviyededir).
-- **Karışık salonda DERS KODU:** yoklama listesinin "Ders" sütunu ve kroki
-  hücresi TEK HARF taşır (A, B, C — ders etiketinin doğal sırası); açıklaması
-  listenin üstünde, künyede kod özeti, sayım tablosunda kod + tam ad + süre.
+- **Karışık salonda DERS KODU:** oturma planı kartının rozeti ve planda yeri
+  olmayanlar listesinin "Ders" sütunu TEK HARF taşır (A, B, C — ders
+  etiketinin doğal sırası); açıklaması planın üstünde, künyede kod özeti,
+  sayım tablosunda kod + tam ad + süre.
   Gerekçe ölçümdür: gerçek ders etiketi ("Türk Dili ve Edebiyatı — 10. Sınıf")
   dar sütunda sarıp 40 öğrencili evrakı üçüncü sayfaya taşırıyordu. Sayfa
   bütçesi testleri bu yüzden GERÇEK uzunlukta adlarla koşar (`_GERCEK_DERSLER`);

@@ -168,7 +168,8 @@ taşar. Yoklama satır yüksekliği ÖĞRENCİ SAYISINA GÖRE kademelidir
             margin: 4pt 0; }
     .muted { color: var(--pr-muted); }
 
-    /* ---- Kroki (_kroki.html) — R1 ve boş salon planı ortak kullanır ----
+    /* ---- Kroki (_kroki.html) — boş salon yerleşim planı ----
+       (R1 yaprak 1 19.09.2026'dan beri fotoğraflı planı kullanır: .fplan)
        Ölçüler `room.metrics`ten inline custom property olarak gelir; burada
        yalnız yapı durur. Böylece geometri stili TEK yerde kalır. */
     /* ÖLÇÜLDÜ (31.08.2026): `border-collapse: separate` + `border-spacing`
@@ -181,7 +182,7 @@ taşar. Yoklama satır yüksekliği ÖĞRENCİ SAYISINA GÖRE kademelidir
     /* KUTU MODELİ — YALNIZ KROKİ ALT AĞACINDA. Ölçüldü (31.08.2026): iç
        `.cell-desk` tablosu `width:100%` + çerçeve + boşlukla content-box'ta
        her sütunda ~2pt taşıyor, 4 sütunda kroki içerik alanını 8pt aşıyordu.
-       Kural GLOBAL VERİLEMEZ: R1 yoklama ve R4 duyuru satır ölçüleri
+       Kural GLOBAL VERİLEMEZ: R1 (o günkü yoklama listesi) ve R4 duyuru satır ölçüleri
        content-box'a göre ÖLÇÜLEREK kalibre edildi (CLAUDE.md §2 sayfa
        bütçesi); global border-box sütunları daraltıp metni sardırıyor ve
        belgeler ikinci sayfaya taşıyor (denendi, R1×4 + R4 kırmızı). */
@@ -229,6 +230,54 @@ taşar. Yoklama satır yüksekliği ÖĞRENCİ SAYISINA GÖRE kademelidir
     .front-rule { border-top: 1.2pt solid var(--pr-ink); margin-bottom: 3pt; }
     .kroki-legend { margin-top: 3pt; font-size: 6.4pt; color: var(--pr-muted);
                     text-align: center; letter-spacing: 0.2pt; }
+
+    /* ---- Fotoğraflı oturma planı (_foto_plan.html) — R1 yaprak 1 (19.09.2026) ----
+       Yapı burada; ÖLÇÜLER salona özel `_foto_plan_style.html`den başlıkta gelir.
+       Kutu modeli YALNIZ bu alt ağaçta border-box (kroki gerekçesi: global
+       verilirse R4 duyurusunun content-box kalibrasyonu bozulur). Kart blok
+       öğedir ve yüksekliği sabittir; taşan metin kırpılır (kontrollü). */
+    .fplan { width: 100%; border-collapse: collapse; table-layout: fixed; margin-top: 1pt; }
+    .fplan, .fplan td, .fplan .fp-desk, .fplan .fp-card, .fplan .fp-fill,
+    .fplan .fp-body, .fplan .fp-sign, .fplan .fp-photo { box-sizing: border-box; }
+    .fplan > tr > td { vertical-align: top; padding: 1.25pt; }
+    .fplan tr { break-inside: avoid; page-break-inside: avoid; }
+    .fp-desk { width: 100%; border-collapse: collapse; table-layout: fixed;
+               border: var(--pr-border) solid var(--pr-ink); }
+    .fp-desk td { padding: 0; vertical-align: top;
+                  border-left: var(--pr-border) dotted var(--pr-line); }
+    .fp-desk td:first-child { border-left: none; }
+    .fp-card { overflow: hidden; padding: 2px 2px; }
+    .fp-head { font-weight: bold; color: var(--pr-ink); line-height: 1.15;
+               white-space: nowrap; overflow: hidden; }
+    .fp-code { float: right; border: var(--pr-border) solid var(--pr-ink);
+               border-radius: 2pt; padding: 0 2pt; }
+    .fp-body { overflow: hidden; }
+    .fp-vertical .fp-body { text-align: center; }
+    .fp-vertical .fp-photo { display: block; margin: 0 auto 1px; }
+    .fp-hbody { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .fp-hbody td { padding: 0; vertical-align: top; border: none; }
+    .fp-hphoto .fp-photo { display: block; }
+    .fp-htext { padding-left: 2px; }
+    .fp-photo { border: 0.4pt solid var(--pr-line); object-fit: cover; }
+    .fp-nophoto { background: var(--pr-fill); color: var(--pr-muted); font-size: 5.4pt;
+                  text-align: center; padding-top: 30%; line-height: 1.1; }
+    .fp-name { color: var(--pr-ink); line-height: 1.1; overflow: hidden; }
+    .fp-meta { color: var(--pr-label); line-height: 1.15; white-space: nowrap; overflow: hidden; }
+    .fp-sign { border: var(--pr-border) solid var(--pr-line); border-radius: 2pt;
+               padding: 0.5pt 1.5pt; font-size: 5.4pt; color: var(--pr-faint);
+               line-height: 1.1; overflow: hidden; }
+    .fp-yok { float: right; color: var(--pr-muted); }
+    .fp-sign .box { width: 5.5pt; height: 5.5pt; }
+    .fp-empty { color: var(--pr-faint); font-style: italic; text-align: center;
+                font-size: 6.4pt; padding-top: 6pt; }
+    .fp-fill { border-radius: 3pt; overflow: hidden; text-align: center; font-size: 6.4pt;
+               line-height: 1.1; padding-top: 2pt; }
+    .fp-furniture { border: var(--pr-border) solid var(--pr-secondary);
+                    background: var(--pr-fill-head); font-weight: bold;
+                    color: var(--pr-label); letter-spacing: 0.3pt; }
+    .fp-disabled { border: var(--pr-border) dashed var(--pr-faint); color: var(--pr-muted); }
+    .plan-kvkk { margin-top: 3pt; font-size: 6.2pt; color: var(--pr-muted);
+                 line-height: 1.2; text-align: center; }
   </style>
   {% block extra_style %}{% endblock %}
 </head>

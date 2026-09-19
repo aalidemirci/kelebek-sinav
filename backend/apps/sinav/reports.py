@@ -6,10 +6,11 @@ mevcut OYS evrakıyla tipografik tutarlılık), okul + oturum üst bandı, altbi
 "üretim zamanı + Sayfa x/y", A4 ve gri tonlamalı ofis yazıcısı dostu.
 
 Evrak seti (30.08.2026 sadeleştirmesi — kullanıcı kararı):
-- R1  **Salon Sınav Evrakı** (BİRLEŞİK, salon başına 2 yaprak): oturma planı
-      krokisi + gözetmen kontrol listesi + evrak sayımı + teslim zinciri
-      (yaprak 1) ve yoklama/imza listesi (yaprak 2). Eski R1+R2+R7+R9 yerine
-      geçer; çift yüz basıldığında salon başına TEK yaprak düşer.
+- R1  **Salon Sınav Evrakı** (BİRLEŞİK, salon başına 2 yaprak): fotoğraflı
+      oturma planı — yoklama ve imza kartların üstünde alınır (yaprak 1,
+      19.09.2026) + künye, gözetmen kontrol listesi, evrak sayımı ve teslim
+      zinciri (yaprak 2). Eski R1+R2+R7+R9 yerine geçer; çift yüz basıldığında
+      salon başına TEK yaprak düşer.
 - R4  Şube Sınav Duyurusu — öğrenci → salon + koltuk; sınıf panosuna asılır.
 - R5  Toplu Dağıtım Çizelgesi — Excel (openpyxl), idare çalışma kopyası.
 - R6  Gözetmen Görevlendirme ve Tebliğ-Tebellüğ Belgesi.
@@ -28,10 +29,11 @@ Tur 223 tuzağı). Bu modül saf veriyle çalışır; DB erişimi services.py'da
 (booklet.py deseni).
 
 TAŞMA KURALI (kullanıcı kararı): bir derslikte 40 öğrenci sığmalı, fazlası
-KONTROLSÜZ taşmamalı. İki mekanizma: (a) `kroki_metrics` krokiyi kendisine
-ayrılan kutuya sığdırır — hücre yüksekliği ve punto salonun satır/sütun
-sayısından hesaplanır; (b) `list_row_metrics` yoklama/duyuru satırının punto
-ve dolgusunu SAYFA BÜTÇESİNDEN türetir; şablon başlık yinelemesi + satır
+KONTROLSÜZ taşmamalı. Üç mekanizma: (a) `photo_plan_metrics` R1'in fotoğraflı
+planını kendisine ayrılan kutuya (`PHOTO_PLAN_BOX_PX`) sığdırır — kart ölçüsü
+ve düzeni salon geometrisinden hesaplanır; (b) `kroki_metrics` boş salon
+planının krokisini sayfaya sığdırır; (c) `list_row_metrics` duyuru satırının
+punto ve dolgusunu SAYFA BÜTÇESİNDEN türetir; şablon başlık yinelemesi + satır
 bölünmezliği listeyi düzgün akıtır. Sayfa sayısı garantileri testte sabittir.
 """
 
@@ -129,6 +131,9 @@ class SeatRow:
     #: seviyelidir ("Coğrafya — 9. Sınıf"); şube duyurusunda şube zaten tek
     #: seviyedir ve ek yalnız sütunu sardırır. Boşsa `course_name` kullanılır.
     course_plain: str = ""
+    #: Öğrenci kaydı (fotoğraflı oturma planı için, 19.09.2026). Snapshot'ın
+    #: öğrencisi silinmişse None — plan fotoğrafsız basılır.
+    student_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -194,40 +199,25 @@ _BUDGET_PX = 1024.0
 #: A4 dikey yazım genişliği: (210 - 2×13) mm × 96/25.4 = 695 px.
 _CONTENT_WIDTH_PX = 695.0
 #: Bir karakterin punto başına genişliği (px): DejaVu Sans ortalama ~0,58 em,
-#: em = punto × 4/3 px. Hem kroki hem liste punto kapaklarında kullanılır.
+#: em = punto × 4/3 px. Liste (duyuru) punto kapaklarında kullanılır.
 _NAME_CHAR_PX_PER_PT = 0.58 * 4.0 / 3.0
 #: Kroki satırları arası `border-spacing` + hücre çerçevesi (ölçüldü, px/satır).
 _KROKI_ROW_OVERHEAD_PX = 12.5
-#: Bu yüksekliğin altındaki hücreye no + ad + meta üçlüsü sığmaz (meta düşer).
-_KROKI_META_MIN_CELL_PX = 30.0
-#: Hücre dolgusu + çerçeve payı (px).
-_KROKI_CELL_CHROME_PX = 5.0
-#: Ad satırı başına hedeflenen karakter — iki kelimelik ad iki satıra sığsın.
-_KROKI_LINE_CHARS = 15.0
-#: Bir punto başına düşen hücre yüksekliği (px): no + 3 ad satırı (+ meta).
-#: no = ad + 0,7 pt · meta = ad - 0,4 pt · satır aralığı ad 1,12 / öteki 1,2.
-_KROKI_LINES_WITH_META = 7.68
-_KROKI_LINES_COMPACT = 6.08
 
-#: R1 yaprak 1'inde kroki TABLOSUNA ayrılan yükseklik. Yaprağın öteki bölümleri
-#: (künye + kontrol listesi + sayım + teslim zinciri + dayanak) ölçülerek
-#: ~660 px tuttuğundan krokiye bu kadar kalır.
-KROKI_BOX_R1_PX = 340.0
-#: Boş salon planında sayfanın neredeyse tamamı krokinindir.
+#: Boş salon planında sayfanın neredeyse tamamı krokinindir. (Adlı kroki R1
+#: yaprak 1'deydi; 19.09.2026'da yerini fotoğraflı oturma planı aldı —
+#: `PHOTO_PLAN_BOX_PX`.)
 KROKI_BOX_LAYOUT_PX = 760.0
 
 
-def kroki_metrics(
-    rows: int, cols: int, max_seats: int, *, box_height_px: float, with_names: bool
-) -> dict[str, object]:
-    """Kroki hücre yüksekliği (px) + puntolarını (pt) geometriden hesaplar.
+def kroki_metrics(rows: int, cols: int, max_seats: int, *, box_height_px: float) -> dict[str, str]:
+    """Boş kroki hücre yüksekliği (px) + koltuk no puntosunu (pt) hesaplar.
 
     Amaç TAŞMAYI ÖNLEMEK: hücre yüksekliği `box_height_px` kutusuna bölünür,
-    punto hem bu yükseklikten hem de bir koltuğa düşen GENİŞLİKTEN sınırlanır
-    (dar sütunda ad taşar). Hücre bir blok kutuya (`.seat-box`) verilir —
-    tablo hücresinin `height`i asgarî davranır, blok kutununki bağlayıcıdır.
-    Taban/tavan sınırına dayanan çok sıralı salonda kroki kutudan taşabilir;
-    taşma KONTROLLÜDÜR (kırpma yok, sonraki bölümler aşağı kayar).
+    punto hem bu yükseklikten hem de bir koltuğa düşen GENİŞLİKTEN sınırlanır.
+    Hücre bir blok kutuya (`.seat-box`) verilir — tablo hücresinin `height`i
+    asgarî davranır, blok kutununki bağlayıcıdır. Taban/tavan sınırına dayanan
+    çok sıralı salonda kroki kutudan taşabilir; taşma KONTROLLÜDÜR.
 
     Değerler METİN döner: TR locale `6.8`'i `6,8` basar ve CSS'te sessizce
     yutulur (F25/T244 tuzağı) — biçimleme burada, nokta ayraçla yapılır.
@@ -237,38 +227,14 @@ def kroki_metrics(
     seats = max(1, max_seats)
 
     raw_cell = (box_height_px - rows * _KROKI_ROW_OVERHEAD_PX) / rows
-    floor, ceiling = (22.0, 64.0) if with_names else (26.0, 100.0)
-    cell = min(max(raw_cell, floor), ceiling)
-
+    cell = min(max(raw_cell, 26.0), 100.0)
     seat_width = (_CONTENT_WIDTH_PX / cols) / seats
-    if with_names:
-        # Punto İKİ kapaktan geçer:
-        #  (1) GENİŞLİK — ad satır başına ~15 karakter alabilmeli ki iki
-        #      kelimelik bir ad ("ZEYNEP GÜLŞAH" + "KARAOĞLU") iki satıra sığsın;
-        #  (2) YÜKSEKLİK — hücre no + ÜÇ ad satırı + meta taşıyabilmeli. Üçüncü
-        #      satır payı bilinçli: uzun adlar sarınca meta satırı kırpılıyordu
-        #      (kutunun `overflow:hidden`i yarım satır bırakıyordu).
-        by_width = (seat_width - _KROKI_CELL_CHROME_PX) / (_KROKI_LINE_CHARS * _NAME_CHAR_PX_PER_PT)
-        lines = _KROKI_LINES_WITH_META if cell >= _KROKI_META_MIN_CELL_PX else _KROKI_LINES_COMPACT
-        by_height = (cell - _KROKI_CELL_CHROME_PX) / lines
-        name = min(max(min(by_height, by_width), 4.6), 7.8)
-        no = min(max(name + 0.7, 5.2), 8.6)
-        meta = min(max(name - 0.4, 4.2), 7.4)
-    else:
-        # Boş planda tek içerik koltuk numarasıdır — olabildiğince büyük basılır
-        # ve hücrede DİKEY ORTALANIR (`line_height` = hücre yüksekliği).
-        name = meta = 0.0
-        no = min(max(min(cell * 0.34, seat_width * 0.22), 8.0), 22.0)
-
+    # Boş planda tek içerik koltuk numarasıdır — olabildiğince büyük basılır ve
+    # hücrede DİKEY ORTALANIR (`line_height` = hücre yüksekliği).
+    no = min(max(min(cell * 0.34, seat_width * 0.22), 8.0), 22.0)
     return {
         "cell_height": f"{cell:.1f}",  # px
         "no_font": f"{no:.1f}",  # pt
-        "name_font": f"{name:.1f}",  # pt
-        "meta_font": f"{meta:.1f}",  # pt
-        # Çok sıralı salonda hücre no + ad + meta üçlüsünü taşımaz: meta satırı
-        # (okul no · şube) DÜŞER — bilgi yaprak 2'deki yoklama listesinde
-        # zaten var; kırpmak yerine kasıtlı sadeleşme (kontrollü taşma).
-        "compact": bool(with_names and cell < _KROKI_META_MIN_CELL_PX),
     }
 
 
@@ -283,33 +249,24 @@ _NUMBERING_LEGENDS: dict[str | None, str] = {
 
 
 def build_room_kroki(
-    sheet: RoomSheet,
-    *,
-    box_height_px: float = KROKI_BOX_R1_PX,
-    with_names: bool = True,
-    course_codes: dict[str, str] | None = None,
+    sheet: RoomSheet, *, box_height_px: float = KROKI_BOX_LAYOUT_PX
 ) -> dict[str, object]:
-    """Salon krokisi şablon bağlamı: rows×cols hücre matrisi + ölçü sözlüğü.
+    """Boş salon krokisi şablon bağlamı: rows×cols hücre matrisi + ölçü sözlüğü.
 
-    Hücre türleri: desk (koltuk kutuları slot sırasında), furniture, empty.
-    Devre dışı sıra "KULLANIM DIŞI" olarak çizilir (fiziken salonda durur);
-    öğrencisiz aktif koltuk "BOŞ" görünür.
+    Oturumdan BAĞIMSIZ plandır (`room_layout.html`): yalnız koltuk numarası,
+    sıra dizilimi ve demirbaş çizilir, `sheet.rows`a bakılmaz — kişisel veri
+    İÇERMEZ. Öğrencili plan R1'in fotoğraflı oturma planıdır
+    (`build_photo_plan`; aynı grid kimliği). Hücre türleri: desk (koltuklar
+    slot sırasında), disabled_desk ("KULLANIM DIŞI" — fiziken salonda durur),
+    furniture, empty.
     """
     plan = sheet.plan
-    by_seat_key: dict[tuple[int, int, int], SeatRow] = {
-        (r.desk_row, r.desk_col, r.slot): r for r in sheet.rows
-    }
     seat_no_by_key: dict[tuple[int, int, int], int] = {
         (s.desk_row, s.desk_col, s.slot): s.seat_no
         for s in layout.numbered_seats(plan, sheet.numbering_scheme)
     }
     desk_by_cell = {(d.row, d.col): d for d in plan.desks}
     furniture_by_cell = {(f.row, f.col): f for f in plan.furniture}
-    # Salon planı dağıtımdan SONRA değiştirilmişse (editörden tekil değişiklik
-    # bilinçli olarak serbesttir) bazı yerleşim koordinatları güncel planda
-    # karşılık bulamaz. Eskiden o öğrenciler krokiden SESSİZCE düşüyordu; artık
-    # sayılır ve lejant satırında açıkça bildirilir (A11, 18.09.2026).
-    unplaced_count = sum(1 for key in by_seat_key if key not in seat_no_by_key)
 
     grid: list[list[dict[str, object]]] = []
     for row in range(plan.rows):
@@ -318,26 +275,10 @@ def build_room_kroki(
             desk = desk_by_cell.get((row, col))
             furn = furniture_by_cell.get((row, col))
             if desk is not None and not desk.disabled:
-                seats: list[dict[str, object]] = []
-                for slot in range(desk.seat_count):
-                    key = (row, col, slot)
-                    assigned = by_seat_key.get(key)
-                    seats.append(
-                        {
-                            "seat_no": seat_no_by_key.get(key),
-                            "full_name": assigned.full_name if assigned else "",
-                            "student_number": assigned.student_number if assigned else "",
-                            "class_label": assigned.class_label if assigned else "",
-                            # Karışık salonda hücre ders KODUNU da taşır: gözetmen
-                            # kimin hangi sınava girdiğini krokiden görür.
-                            "course_code": (
-                                (course_codes or {}).get(assigned.course_name or "—", "")
-                                if assigned
-                                else ""
-                            ),
-                            "empty": assigned is None,
-                        }
-                    )
+                seats = [
+                    {"seat_no": seat_no_by_key.get((row, col, slot))}
+                    for slot in range(desk.seat_count)
+                ]
                 cells.append({"kind": "desk", "seats": seats})
             elif desk is not None:
                 cells.append({"kind": "disabled_desk"})
@@ -352,17 +293,196 @@ def build_room_kroki(
         "block": sheet.block,
         "grid": grid,
         "col_width_pct": round(100.0 / plan.cols, 4),
-        "student_count": len(sheet.rows),
         "capacity": plan.capacity,
-        "unplaced_count": unplaced_count,
         "numbering_legend": _NUMBERING_LEGENDS[layout.reference_kind(plan)],
         "metrics": kroki_metrics(
             plan.rows,
             plan.cols,
             max((d.seat_count for d in plan.desks), default=1),
             box_height_px=box_height_px,
-            with_names=with_names,
         ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Fotoğraflı oturma planı — R1 yaprak 1 (19.09.2026, kullanıcı kararı)
+# ---------------------------------------------------------------------------
+# "Salon oturma planını fotoğraflı yapalım; yoklama/imza da doğrudan bu plan
+# üzerinde olsun." Her koltuk bir KART: koltuk no (+ karışık salonda ders kodu),
+# fotoğraf, ad, okul no · şube ve "Yok" kutulu imza alanı. Ayrı yoklama listesi
+# kalktı. Kart ölçüsü salon geometrisinden hesaplanır (kroki deseni): masalı
+# satırlar kalan yüksekliği paylaşır, masasız satırlar (ön cephe bandı, koridor)
+# ince şerittir. İki kart düzeni vardır ve BÜYÜK fotoğraf veren seçilir:
+# DİKEY (fotoğraf üstte — dar koltuk, yüksek satır) / YATAY (fotoğraf solda —
+# geniş koltuk, alçak satır: 10×2 gibi derin salonlar). İkisinde de fotoğraf
+# 30 px'in altına inerse fotoğraf düşer; ad, numara ve imza alanı kalır.
+
+#: Yaprak 1'de plan TABLOSUNA ayrılan yükseklik (px) — üst bant, bölüm barı,
+#: ön cephe şeridi, lejant ve KVKK satırı DIŞINDA kalan. Karışık salonda ders
+#: kodu açıklaması bundan düşülür (`_ATT_LEGEND_PX`). ÖLÇÜLEREK bulundu; garanti
+#: `test_reports.py::test_r1_salon_evraki_iki_yaprak`.
+PHOTO_PLAN_BOX_PX = 820.0
+#: Satır başına hücre dolgusu + çerçeve (px).
+_PP_ROW_OVERHEAD_PX = 6.0
+#: Masasız satırın (ön cephe bandı, koridor) şerit yüksekliği (px).
+_PP_SPARE_ROW_PX = 20.0
+#: Kart yüksekliği sınırları (px): küçük salonda kart devleşmesin, çok sıralı
+#: salonda imza alanı yok olmasın (alt sınırda kontrollü taşma).
+_PP_CARD_MIN_PX, _PP_CARD_MAX_PX = 64.0, 190.0
+#: e-Okul fotoğrafının boy/en oranı (131×169).
+_PP_PHOTO_RATIO = 169.0 / 131.0
+#: Fotoğrafın basılacağı en küçük yükseklik (px) — altında yüz seçilmez.
+_PP_PHOTO_MIN_PX = 30.0
+#: Yatay kartta metne kalması gereken en az genişlik (px).
+_PP_TEXT_MIN_PX = 50.0
+#: Ad satırı başına hedeflenen karakter ve BÜYÜK HARFLİ DejaVu Sans'ın ortalama
+#: genişliği (em). e-Okul adları büyük harflidir ("ÇAĞLAYANOĞLU" 12 harf); küçük
+#: harf ortalamasıyla (0,58) hesaplanan punto soyadı kırpıyordu (ölçüldü).
+_PP_NAME_CHARS = 14.0
+_PP_UPPER_EM = 0.68
+
+
+def _pt_px(pt: float, line: float = 1.15) -> float:
+    return pt * 4.0 / 3.0 * line
+
+
+def _name_pt(text_width_px: float) -> float:
+    return min(max((text_width_px - 4.0) / (_PP_NAME_CHARS * _PP_UPPER_EM * 4.0 / 3.0), 4.8), 7.2)
+
+
+def photo_plan_metrics(plan: layout.LayoutPlan, *, box_height_px: float) -> dict[str, object]:
+    """Fotoğraflı plan kartının ölçüleri — METİN döner (TR locale virgül tuzağı)."""
+    masali = {d.row for d in plan.desks}
+    masali_sayi = max(1, len(masali))
+    serit_sayi = max(0, plan.rows - len(masali))
+    ham = (
+        box_height_px
+        - serit_sayi * (_PP_SPARE_ROW_PX + _PP_ROW_OVERHEAD_PX)
+        - masali_sayi * _PP_ROW_OVERHEAD_PX
+    ) / masali_sayi
+    kart = min(max(ham, _PP_CARD_MIN_PX), _PP_CARD_MAX_PX)
+    koltuk = max((d.seat_count for d in plan.desks), default=1)
+    genislik = _CONTENT_WIDTH_PX / max(1, plan.cols) / max(1, koltuk) - 4.0
+    imza = min(max(kart * 0.2, 14.0), 30.0)
+
+    # DİKEY: fotoğraf metnin üstünde; ad kart genişliğini kullanır.
+    ad_d = _name_pt(genislik)
+    bas = _pt_px(min(ad_d + 0.8, 8.2))
+    metin_d = bas + 2 * _pt_px(ad_d, 1.1) + _pt_px(max(ad_d - 0.6, 4.4)) + 6.0
+    dikey_h = kart - metin_d - imza - 4.0
+    dikey_w = min(dikey_h / _PP_PHOTO_RATIO, genislik - 6.0)
+    dikey_h = dikey_w * _PP_PHOTO_RATIO
+    # YATAY: fotoğraf solda, metin sağda; metne en az _PP_TEXT_MIN_PX kalmalı.
+    yatay_h = kart - bas - imza - 8.0
+    yatay_w = min(yatay_h / _PP_PHOTO_RATIO, genislik - 8.0 - _PP_TEXT_MIN_PX)
+    yatay_h = yatay_w * _PP_PHOTO_RATIO
+
+    duzen = "vertical" if dikey_h >= yatay_h else "horizontal"
+    foto_h, foto_w = (dikey_h, dikey_w) if duzen == "vertical" else (yatay_h, yatay_w)
+    fotolu = foto_h >= _PP_PHOTO_MIN_PX
+    # Yatay kartta ad, fotoğrafın YANINDAKİ dar sütuna göre ölçülür.
+    ad = ad_d if duzen == "vertical" or not fotolu else _name_pt(genislik - foto_w - 12.0)
+    no = min(ad_d + 0.8, 8.2)
+    meta = max(ad - 0.6, 4.4)
+    ad_satir = _pt_px(ad, 1.1)
+    return {
+        "card_height": f"{kart:.1f}",
+        # Kart = dolgu (4) + başlık satırı + gövde (fotoğraf + ad + no) + imza alanı.
+        "body_height": f"{max(kart - bas - imza - 4.0, 0.0):.1f}",
+        "spare_height": f"{_PP_SPARE_ROW_PX:.1f}",
+        "photo_width": f"{max(foto_w, 0.0):.1f}",
+        "photo_height": f"{max(foto_h, 0.0):.1f}",
+        # Yatay kartta fotoğraf sütunu (fotoğraf + boşluk).
+        "photo_cell_width": f"{max(foto_w, 0.0) + 4.0:.1f}",
+        "sign_height": f"{imza:.1f}",
+        "name_lines_height": f"{2 * ad_satir:.1f}",
+        "no_font": f"{no:.1f}",
+        "name_font": f"{ad:.1f}",
+        "meta_font": f"{meta:.1f}",
+        "layout": duzen,
+        "show_photo": fotolu,
+    }
+
+
+def build_photo_plan(
+    sheet: RoomSheet,
+    *,
+    course_codes: dict[str, str] | None = None,
+    photos: dict[int, str] | None = None,
+    box_height_px: float = PHOTO_PLAN_BOX_PX,
+) -> dict[str, object]:
+    """R1 yaprak 1: salon ızgarasında koltuk kartları + planda yeri olmayanlar.
+
+    Geometri `build_room_kroki` ile AYNI kimlikten — (desk_row, desk_col, slot);
+    fotoğraf `photos` (öğrenci pk → data URI) sözlüğünden gelir, yoksa kart
+    "fotoğraf yok" kutusu basar. Plan dağıtımdan sonra değişmişse koltuğu güncel
+    planda bulunmayan öğrenci SESSİZCE düşmez: `unplaced` listesi planın altında
+    imza satırıyla basılır (yoklama bu öğrenciler için de alınabilsin — A11).
+    """
+    plan = sheet.plan
+    kodlar = course_codes or {}
+    fotolar = photos or {}
+    by_seat_key: dict[tuple[int, int, int], SeatRow] = {
+        (r.desk_row, r.desk_col, r.slot): r for r in sheet.rows
+    }
+    seat_no_by_key: dict[tuple[int, int, int], int] = {
+        (s.desk_row, s.desk_col, s.slot): s.seat_no
+        for s in layout.numbered_seats(plan, sheet.numbering_scheme)
+    }
+    desk_by_cell = {(d.row, d.col): d for d in plan.desks}
+    furniture_by_cell = {(f.row, f.col): f for f in plan.furniture}
+    masali = {d.row for d in plan.desks}
+
+    def kart(row: SeatRow | None, seat_no: int | None) -> dict[str, object]:
+        if row is None:
+            return {"seat_no": seat_no, "empty": True}
+        return {
+            "seat_no": seat_no,
+            "empty": False,
+            "full_name": row.full_name,
+            "student_number": row.student_number,
+            "class_label": row.class_label,
+            "course_code": kodlar.get(row.course_name or "—", "") if kodlar else "",
+            "photo": fotolar.get(row.student_id) if row.student_id is not None else None,
+        }
+
+    grid: list[dict[str, object]] = []
+    for r in range(plan.rows):
+        hucreler: list[dict[str, object]] = []
+        for c in range(plan.cols):
+            desk = desk_by_cell.get((r, c))
+            furn = furniture_by_cell.get((r, c))
+            if desk is not None and not desk.disabled:
+                hucreler.append(
+                    {
+                        "kind": "desk",
+                        "seats": [
+                            kart(by_seat_key.get((r, c, s)), seat_no_by_key.get((r, c, s)))
+                            for s in range(desk.seat_count)
+                        ],
+                    }
+                )
+            elif desk is not None:
+                hucreler.append({"kind": "disabled_desk"})
+            elif furn is not None:
+                hucreler.append({"kind": "furniture", "label": _FURNITURE_LABELS[furn.kind]})
+            else:
+                hucreler.append({"kind": "empty"})
+        grid.append({"desk_row": r in masali, "cells": hucreler})
+
+    yersiz = sorted(
+        (row for key, row in by_seat_key.items() if key not in seat_no_by_key),
+        key=lambda row: row.seat_no,
+    )
+    return {
+        "grid": grid,
+        "col_width_pct": round(100.0 / max(1, plan.cols), 4),
+        "numbering_legend": _NUMBERING_LEGENDS[layout.reference_kind(plan)],
+        "photo_count": sum(1 for row in sheet.rows if fotolar.get(row.student_id or -1)),
+        "unplaced": [
+            {**vars(row), "course_code": kodlar.get(row.course_name or "—", "")} for row in yersiz
+        ],
+        "metrics": photo_plan_metrics(plan, box_height_px=box_height_px),
     }
 
 
@@ -371,21 +491,17 @@ def build_room_kroki(
 # ---------------------------------------------------------------------------
 #: Listenin DIŞINDA kalan sabit yükseklikler (px) — WeasyPrint kutu ağacından
 #: ÖLÇÜLDÜ, tahmin değil; `test_reports.py` sayfa sayısıyla sabitler:
-#: R1 yaprak 2 = üst bant + bölüm barı + tablo başlığı + imza bloğu + boşluklar.
-_ATT_FIXED_PX = 225.0
 #: R4 = üst bant + salon dağılımı özeti + bölüm barı + tablo başlığı + kurallar.
+#: (R1'in koltuk sırasındaki yoklama listesi 19.09.2026'da kalktı — yoklama ve
+#: imza fotoğraflı oturma planının kartlarında; ölçüsü `photo_plan_metrics`.)
 _ANN_FIXED_PX = 292.0
 
-#: Ad sütununun sayfa genişliğine oranı (şablondaki sütun yüzdelerinin artığı).
-#: R1 yoklama: Sıra 5 + Koltuk 8 + No 9 + Şube 8 + Yok 7 + İmza 27/17
-#: (+ Ders 16) → ada 36 % (tek ders) veya 30 % (karışık salon).
-#: Şablonda `table-layout: fixed` olduğu için bu oranlar BİREBİR uygulanır.
-_ATT_NAME_RATIO, _ATT_NAME_RATIO_MIXED = 0.36, 0.34
-#: Karışık salonda yoklama listesinin üstüne basılan DERS KODU açıklaması
-#: (iki satıra kadar) — sabit yüksekliğe eklenir, satır ölçüsü ona göre küçülür.
+#: Karışık salonda oturma planının üstüne basılan DERS KODU açıklaması (iki
+#: satıra kadar) — plan kutusundan düşülür, kartlar ona göre küçülür.
 _ATT_LEGEND_PX = 30.0
-#: Ders kodları — karışık salonda yoklama "Ders" sütunu ve kroki hücresi TEK
-#: HARF taşır. Ders etiketi ("Türk Dili ve Edebiyatı — 10. Sınıf") 16 %'lik
+#: Ders kodları — karışık salonda oturma planı kartının rozeti ve planda yeri
+#: olmayanlar listesinin "Ders" sütunu TEK HARF taşır (19.09.2026'ya dek eski
+#: yoklama listesi ve kroki hücresi). Ders etiketi ("Türk Dili ve Edebiyatı — 10. Sınıf") 16 %'lik
 #: sütunda iki satıra sarıyor, satır yüksekliğini ikiye katlayıp 40 öğrencili
 #: salon evrakını üçüncü sayfaya taşırıyordu (18.09.2026, örnek PDF'te
 #: ÖLÇÜLDÜ; bütçe testi "Ders 0" gibi kısa adlarla koştuğu için görmüyordu).
@@ -548,14 +664,20 @@ def _announcement_columns(name_chars: int, course_chars: int) -> dict[str, str]:
 # R1 — birleşik salon sınav evrakı (kroki + gözetmen işlemleri + yoklama)
 # ---------------------------------------------------------------------------
 def build_room_documents(
-    sheets: list[RoomSheet], *, proctor_names: dict[str, str] | None = None
+    sheets: list[RoomSheet],
+    *,
+    proctor_names: dict[str, str] | None = None,
+    photos: dict[int, str] | None = None,
 ) -> list[dict[str, object]]:
-    """R1: salon başına İKİ yapraklık tek belge bağlamı.
+    """R1: salon başına İKİ yapraklık tek belge bağlamı (19.09.2026 düzeni).
 
-    Yaprak 1 künye + kroki + gözetmen kontrol listesi + evrak sayımı + teslim
-    zinciri; yaprak 2 koltuk sırasında yoklama/imza listesi. `proctor_names`
-    (salon adı → görevli) doluysa gözetmen adı BASILI gelir; boşsa alan elle
-    doldurulur (gözetmen modülü kapalı — K2).
+    Yaprak 1 FOTOĞRAFLI OTURMA PLANI + yoklama/imza (her koltukta "Yok" kutusu
+    ve imza alanı — ayrı yoklama listesi yok); yaprak 2 künye + gözetmen kontrol
+    listesi + evrak sayımı + teslim zinciri + imzalar. `photos` öğrenci pk →
+    data URI'dir (`okul.services.photos.photo_data_uris`); fotoğrafı olmayan
+    öğrencinin kartı "fotoğraf yok" basar. `proctor_names` (salon adı →
+    görevli) doluysa gözetmen adı BASILI gelir; boşsa alan elle doldurulur
+    (gözetmen modülü kapalı — K2).
 
     `sheets` sırası çağıranın verdiği sıradır (services `_room_sheets` salon
     adını Türk alfabesine göre dizer) — basılı evrağın sayfa sırası budur.
@@ -571,14 +693,12 @@ def build_room_documents(
             {
                 "room_name": sheet.room_name,
                 "block": sheet.block,
-                "kroki": build_room_kroki(
-                    sheet, box_height_px=KROKI_BOX_R1_PX, course_codes=codes if mixed else None
+                "plan": build_photo_plan(
+                    sheet,
+                    course_codes=codes if mixed else None,
+                    photos=photos,
+                    box_height_px=PHOTO_PLAN_BOX_PX - (_ATT_LEGEND_PX if mixed else 0.0),
                 ),
-                # Satır görünümü: şablon `row.course_code` okur (SeatRow dondurulmuştur).
-                "rows": [
-                    {**vars(row), "course_code": codes.get(row.course_name or "—", "")}
-                    for row in ordered
-                ],
                 "course_legend": (
                     " · ".join(f"{c['code']} = {c['course_name']}" for c in courses)
                     if mixed
@@ -588,14 +708,7 @@ def build_room_documents(
                 "capacity": sheet.plan.capacity,
                 "courses": courses,
                 "course_summary": _course_summary(courses, coded=mixed),
-                # Ders sütunu yalnız KARIŞIK salonda anlamlı — tek derste
-                # sütun yerine imza alanı genişler.
                 "show_course": mixed,
-                "row": list_row_metrics(
-                    len(ordered),
-                    fixed_px=_ATT_FIXED_PX + (_ATT_LEGEND_PX if mixed else 0.0),
-                    name_col_ratio=_ATT_NAME_RATIO_MIXED if mixed else _ATT_NAME_RATIO,
-                ),
                 "proctor_name": names.get(sheet.room_name, ""),
             }
         )

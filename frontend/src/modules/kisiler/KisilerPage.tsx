@@ -43,6 +43,7 @@ import type {
   StudentStatus,
   StudentWriteBody,
 } from "../okul/api";
+import FotografPaneli from "./FotografPaneli";
 
 /** Sayfa başına kayıt (CLAUDE.md §7 — liste uçları limit/offset, varsayılan 25). */
 const PAGE_SIZE = 25;
@@ -308,6 +309,9 @@ function OgrencilerSekmesi() {
       )}
 
       <ImportPanel kind="students" onImported={reload} />
+
+      {/* e-Okul fotoğraflı liste (19.09.2026) — salon evrakı ve yoklama planı için. */}
+      <FotografPaneli />
 
       {(creating || editing !== null) && (
         <OgrenciFormDialog

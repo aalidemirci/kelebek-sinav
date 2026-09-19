@@ -186,9 +186,10 @@ def test_evrakta_sinav_suresi_basilir() -> None:
 
 
 def test_r1_plan_degisince_dusen_ogrenci_bildirilir() -> None:
-    """A11: salon planı dağıtımdan SONRA değişirse kroki düşen öğrenciyi sessizce
-    yutmaz — lejant satırı uyarıya döner (editörden tekil plan değişikliği
-    bilinçli olarak serbesttir; körlemesine engel yok, görünür uyarı var)."""
+    """A11: salon planı dağıtımdan SONRA değişirse oturma planı düşen öğrenciyi
+    sessizce yutmaz — lejant satırı uyarıya döner ve öğrenci plan altındaki
+    listede imza yeriyle basılır (editörden tekil plan değişikliği bilinçli
+    olarak serbesttir; körlemesine engel yok, görünür uyarı var)."""
     session = _evrak_oturumu()
     room = ExamSessionRoom.objects.filter(session=session).select_related("room")[0].room
     temiz = " ".join(_pdf_text(services.render_session_report(session, "r1").content).split())
@@ -474,7 +475,7 @@ def _plan(rows: int, cols: int) -> dict[str, Any]:
 
 def _satirlar(n: int, *, dersler: tuple[str, ...], cols: int = 4) -> list[reports.SeatRow]:
     """`cols` ikili sıralı plana SIRAYLA oturan n öğrenci — koordinatlar planla örtüşür
-    (örtüşmezse kroki "koltuğu planda yok" uyarısı basar)."""
+    (örtüşmezse oturma planı "koltuğu planda yok" uyarısı basar)."""
     per_row = cols * 2
     return [
         reports.SeatRow(
@@ -531,7 +532,7 @@ def test_r1_salon_evraki_iki_yaprak(ogrenci: int, rows: int, cols: int, ders_say
 
     Kullanıcı kuralı: bir derslikte 40 öğrenci sığar, fazlası kontrolsüz
     taşmaz. İki yaprak = çift yüz basıldığında salon başına tek kâğıt.
-    Kırılırsa bakılacak yer: `reports.KROKI_BOX_R1_PX`, `_ATT_FIXED_PX` ve
+    Kırılırsa bakılacak yer: `reports.PHOTO_PLAN_BOX_PX` (yaprak 1 — fotoğraflı plan) ve
     yaprak 1'in sabit bölümleri (şablon yorumundaki sayfa bütçesi).
     """
     # GERÇEK uzunlukta ders etiketleri: bütçe eskiden "Ders 0" gibi kısa adlarla
@@ -545,8 +546,8 @@ def test_r1_salon_evraki_iki_yaprak(ogrenci: int, rows: int, cols: int, ders_say
 
 
 def test_r1_karisik_salonda_ders_kodu_ve_aciklamasi() -> None:
-    """Karışık salonda yoklama "Ders" sütunu TEK HARF taşır, açıklaması üstte basılır;
-    sayım tablosu ve kroki hücresi aynı kodu gösterir. Tek dersli salonda kod yoktur."""
+    """Karışık salonda oturma planı kartı TEK HARF ders kodu taşır, açıklaması üstte
+    basılır; künye ve sayım tablosu aynı kodu gösterir. Tek dersli salonda kod yoktur."""
     karisik = " ".join(_pdf_text(_r1_pdf(12, 3, 2, _GERCEK_DERSLER)).split())
     assert "DERS KODLARI:" in karisik
     # Kodlar ders adının DOĞAL sırasına göre verilir (9. Sınıf, 10. Sınıf'tan önce).
@@ -684,16 +685,21 @@ def test_r4_sube_duyurusu_tek_yaprak() -> None:
 
 
 def test_r1_birlesik_evrak_dort_belgenin_isini_tasir() -> None:
-    """Birleşik evrak eski R1 + R2 + R7 + R9'un işlerini TEK belgede taşımalı."""
+    """Birleşik evrak eski R1 + R2 + R7 + R9'un işlerini TEK belgede taşımalı.
+
+    19.09.2026: yoklama/imza ayrı listede DEĞİL, fotoğraflı oturma planının
+    kartlarında (kullanıcı kararı) — her kartta "İmza" alanı ve "Yok" kutusu.
+    """
     metin = _pdf_text(_r1_pdf(24, 4, 3, ("Coğrafya",)))
     for beklenen in (
-        "OTURMA PLANI",  # eski R1 krokisi
-        "YOKLAMA VE İMZA LİSTESİ",  # eski R2
+        "OTURMA PLANI VE YOKLAMA",  # eski R1 krokisi + R2 yoklama, tek sayfada
         "GÖZETMEN İŞLEMLERİ",  # kullanıcı talebi
         "SINAV EVRAKI SAYIMI",  # eski R7 deste sayımı
         "EVRAK TESLİM ZİNCİRİ",  # eski R9 teslim tutanağı
     ):
         assert beklenen in metin, f"birleşik evrakta eksik bölüm: {beklenen}"
+    assert "YOKLAMA VE İMZA LİSTESİ" not in metin  # ayrı liste kalktı
+    assert metin.count("İmza") >= 24  # her öğrencinin kartında imza alanı
 
 
 def test_r7_tutanak_bos_formdur() -> None:
@@ -848,3 +854,176 @@ def test_salon_sirasi_serbest_metinde_cokmez() -> None:
         "A Salonu",
         "AB Salonu",
     ]
+
+
+# ===========================================================================
+# Fotoğraflı oturma planı — R1 yaprak 1 (19.09.2026, kullanıcı kararı)
+# KVKK: fotoğraflar Pillow ile çizilmiş düz renk kareleridir, adlar uydurmadır.
+# ===========================================================================
+
+
+def _foto_uri(renk: tuple[int, int, int]) -> str:
+    import base64
+
+    from PIL import Image
+
+    tampon = io.BytesIO()
+    Image.new("RGB", (131, 169), renk).save(tampon, format="JPEG", quality=85)
+    return "data:image/jpeg;base64," + base64.b64encode(tampon.getvalue()).decode("ascii")
+
+
+def _fotolu_satirlar(n: int, *, cols: int = 4, ilk_satir: int = 0) -> list[reports.SeatRow]:
+    return [
+        reports.SeatRow(**{**vars(r), "desk_row": r.desk_row + ilk_satir, "student_id": i + 1})
+        for i, r in enumerate(_satirlar(n, dersler=("Coğrafya",), cols=cols))
+    ]
+
+
+def test_r1_fotografli_plan_fotograflari_gomer_eksik_olana_kutu_basar() -> None:
+    sheet = reports.RoomSheet(
+        room_name="D-201 Dersliği",
+        block="",
+        plan=layout.validate_layout_plan(_plan(3, 2)),
+        numbering_scheme="S_PATTERN",
+        rows=tuple(_fotolu_satirlar(10, cols=2)),
+    )
+    # 10 öğrenciden 7'sinin fotoğrafı var; 3'ünde "fotoğraf yok" kutusu basılır.
+    fotolar = {i: _foto_uri((40 * i % 255, 90, 160)) for i in range(1, 8)}
+
+    pdf = reports.render_pdf(
+        "sinav/reports/r1_salon_evraki.html",
+        {
+            "header": _BASLIK,
+            "title": reports.REPORT_TITLES["r1"][0],
+            "sheets": reports.build_room_documents([sheet], photos=fotolar),
+        },
+    )
+
+    ilk = PdfReader(io.BytesIO(pdf)).pages[0]
+    assert len(ilk.images) == 7, "yaprak 1'e fotoğraflar gömülmeli"
+    metin = " ".join((ilk.extract_text() or "").split())
+    assert metin.count("fotoğraf yok") == 3
+    assert "OTURMA PLANI VE YOKLAMA" in metin and "KVKK:" in metin
+    assert _sayfa_sayisi(pdf) == 2
+
+
+def test_r1_ogretmen_masali_varsayilan_salonda_iki_yaprak() -> None:
+    """Varsayılan şablon (ön cephe bandı + 4×5 ikili = 40) fotoğraflarla iki yaprak."""
+    for dersler in (("Coğrafya",), _GERCEK_DERSLER):
+        satirlar = [
+            reports.SeatRow(**{**vars(r), "desk_row": r.desk_row + 1, "student_id": i + 1})
+            for i, r in enumerate(_satirlar(40, dersler=dersler))
+        ]
+        sheet = reports.RoomSheet(
+            room_name="D-201 Dersliği",
+            block="A Blok",
+            plan=layout.validate_layout_plan(layout.default_section_plan(desk_rows=5, cols=4)),
+            numbering_scheme="S_PATTERN",
+            rows=tuple(satirlar),
+        )
+        # Her öğrenciye FARKLI görsel: WeasyPrint aynı görseli PDF'e tek nesne gömer.
+        fotolar = {i: _foto_uri((i * 5 % 255, 120, 140)) for i in range(1, 41)}
+        pdf = reports.render_pdf(
+            "sinav/reports/r1_salon_evraki.html",
+            {
+                "header": _BASLIK,
+                "title": reports.REPORT_TITLES["r1"][0],
+                "sheets": reports.build_room_documents([sheet], photos=fotolar),
+            },
+        )
+        assert _sayfa_sayisi(pdf) == 2, f"{len(dersler)} dersli varsayılan salon iki yaprak değil"
+        assert len(PdfReader(io.BytesIO(pdf)).pages[0].images) == 40
+
+
+@pytest.mark.parametrize(
+    ("rows", "cols", "seat_type", "beklenen"),
+    [
+        (5, 4, "DOUBLE", "vertical"),  # tipik derslik: fotoğraf üstte
+        (10, 2, "DOUBLE", "horizontal"),  # derin derslik: fotoğraf solda
+        (6, 8, "TRIPLE", None),  # 24 koltuk genişliğinde: fotoğraf sığmaz
+    ],
+)
+def test_fotografli_plan_duzeni_geometriden_secilir(
+    rows: int, cols: int, seat_type: str, beklenen: str | None
+) -> None:
+    plan = layout.validate_layout_plan(
+        {
+            "grid": {"rows": rows, "cols": cols},
+            "desks": [
+                {"row": r, "col": c, "type": seat_type} for r in range(rows) for c in range(cols)
+            ],
+            "furniture": [],
+        }
+    )
+    olcu = reports.photo_plan_metrics(plan, box_height_px=reports.PHOTO_PLAN_BOX_PX)
+    if beklenen is None:
+        assert olcu["show_photo"] is False  # ad, numara ve imza alanı yine basılır
+    else:
+        assert olcu["show_photo"] is True and olcu["layout"] == beklenen
+    # Değerler METİN ve nokta ayraçlı (TR locale virgülü CSS'te yutulur).
+    assert "," not in str(olcu["card_height"]) and "," not in str(olcu["photo_width"])
+
+
+def test_r1_servisi_kayitli_fotografi_evraka_basar() -> None:
+    """Uçtan uca: aktarılmış fotoğraf salon evrakına gömülür; ayrılan öğrencininki basılmaz."""
+    import base64
+
+    from apps.okul.models import StudentPhoto
+    from apps.okul.services import photos
+
+    session = _evrak_oturumu()
+    oturan = list(
+        Student.objects.filter(pk__in=session.seat_assignments.values_list("student_id", flat=True))
+    )
+    for ogrenci in oturan[:2]:
+        jpeg, genislik, yukseklik = photos.normalize_image(
+            base64.b64decode(_foto_uri((10, 150, 90)).split(",", 1)[1])
+        )
+        StudentPhoto.objects.create(
+            student=ogrenci,
+            image=base64.b64encode(jpeg).decode("ascii"),
+            sha256="x" * 64,
+            width=genislik,
+            height=yukseklik,
+        )
+
+    pdf = services.render_session_report(session, "r1").content
+
+    gorsel = sum(len(sayfa.images) for sayfa in PdfReader(io.BytesIO(pdf)).pages)
+    assert gorsel == 2
+
+
+def test_api_yerlesim_fotograflari_yalniz_oturanlari_dondurur() -> None:
+    """Fotoğraflı yoklama planı ucu: oturumda oturan öğrencilerin fotoğrafı, salon süzgeci."""
+    import base64
+
+    from apps.okul.models import StudentPhoto
+
+    session = _evrak_oturumu()
+    atamalar = list(session.seat_assignments.select_related("student").order_by("seat_no"))
+    foto = base64.b64decode(_foto_uri((50, 60, 70)).split(",", 1)[1])
+    StudentPhoto.objects.create(
+        student=atamalar[0].student,
+        image=base64.b64encode(foto).decode("ascii"),
+        sha256="y" * 64,
+        width=131,
+        height=169,
+    )
+    # Oturumda OLMAYAN öğrencinin fotoğrafı dönmez.
+    disarida = Student.objects.create(first_name="AD", last_name="SOYAD", student_number="9999")
+    StudentPhoto.objects.create(
+        student=disarida,
+        image=base64.b64encode(foto).decode("ascii"),
+        sha256="z" * 64,
+        width=131,
+        height=169,
+    )
+    client = APIClient()
+    url = f"{SESSIONS_URL}{session.pk}/seating-photos/"
+
+    cevap = client.get(url).json()
+
+    assert list(cevap["photos"]) == [str(atamalar[0].student_id)]
+    assert cevap["photos"][str(atamalar[0].student_id)].startswith("data:image/jpeg;base64,")
+    baska_salon = client.get(url, {"room": atamalar[0].room_id + 999}).json()
+    assert baska_salon == {"photos": {}}

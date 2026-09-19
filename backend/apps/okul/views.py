@@ -53,6 +53,7 @@ from apps.okul.services import encrypted_backup as encrypted_backup_service
 from apps.okul.services import imports as import_service
 from apps.okul.services import live_restore as live_restore_service
 from apps.okul.services import persons as persons_service
+from apps.okul.services import photos as photo_service
 from apps.okul.services import school_year as school_year_service
 from apps.okul.services import sections as section_service
 from apps.okul.services import setup as setup_service
@@ -405,6 +406,58 @@ class PersonnelImportPreviewView(_BaseImportView):
 class PersonnelImportCommitView(_BaseImportView):
     file_handler = "commit_personnel_file"
     text_handler = "commit_personnel_text"
+
+
+# ---------------------------------------------------------------------------
+# Öğrenci fotoğrafları (19.09.2026) — e-Okul OOG01001R080 Excel ihracı
+# ---------------------------------------------------------------------------
+class StudentPhotosView(APIView):
+    """`GET /api/v1/student-photos/` sayım; `DELETE` bütün fotoğrafları KATI siler.
+
+    Sayım yalnız sayıdır (fotoğraf baytı dönmez). Silme KVKK düğmesidir ("Tüm
+    fotoğrafları sil": Kişiler ve Ayarlar → Güvenlik); geri alınamaz, arayüz onay ister.
+    """
+
+    def get(self, request: Request) -> Response:
+        photo_service.purge_stale_photos()
+        return Response(photo_service.photo_stats())
+
+    def delete(self, request: Request) -> Response:
+        return Response({"deleted": photo_service.delete_all_photos()})
+
+
+class _PhotoImportView(APIView):
+    """e-Okul fotoğraflı liste — yalnız dosya; `on_conflict`: "keep" | "replace"."""
+
+    handler_name: str = ""
+
+    def post(self, request: Request) -> Response:
+        uploaded = request.FILES.get("file")
+        if uploaded is None:
+            raise serializers.ValidationError(
+                {"file": "e-Okul fotoğraflı öğrenci listesinin Excel dosyasını seçin."}
+            )
+        secim = str(request.data.get("on_conflict") or photo_service.ON_CONFLICT_KEEP)
+        if secim not in photo_service.ON_CONFLICT_CHOICES:
+            raise serializers.ValidationError(
+                {"on_conflict": "Mükerrer fotoğraf için “koru” ya da “değiştir” seçin."}
+            )
+        handler = getattr(photo_service, self.handler_name)
+        try:
+            report = handler(
+                file_bytes=uploaded.read(), file_name=uploaded.name or "", on_conflict=secim
+            )
+        except ParserError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+        return Response(report.to_dict())
+
+
+class StudentPhotoImportPreviewView(_PhotoImportView):
+    handler_name = "preview_photo_import"
+
+
+class StudentPhotoImportCommitView(_PhotoImportView):
+    handler_name = "commit_photo_import"
 
 
 # ---------------------------------------------------------------------------

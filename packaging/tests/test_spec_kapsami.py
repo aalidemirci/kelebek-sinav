@@ -97,6 +97,34 @@ def test_bagimlilik_duman_var_olan_modulde_gecer(monkeypatch: pytest.MonkeyPatch
     assert fn() == 0
 
 
+def test_pdf_duman_uctan_uca_turkce_font_ve_jpeg(tmp_path: Path) -> None:
+    """Sağlıklı kurulumda (backend kabı: WeasyPrint + DejaVu) duman kipi geçer."""
+    hedef = tmp_path / "duman.pdf"
+    assert _GIRIS["run_pdf_smoke"](hedef) == 0
+    filtreler = _GIRIS["_pdf_image_filters"](hedef)
+    assert any(_GIRIS["JPEG_FILTER"] in filtre for filtre in filtreler)
+
+
+def test_pdf_duman_jpeg_gomulmezse_kapanir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Kapının GERÇEKTEN kapandığı: görsel JPEG olarak gömülmezse 8 döner.
+
+    WeasyPrint çözemediği görseli yalnız uyarıyla atlar; JPEG zinciri eksik
+    pakette salon evrakı hata vermeden fotoğrafsız basılırdı. Burada görsel
+    PNG verilir (PDF'e JPEG olmadan gömülür) — denetim onu kabul ETMEMELİ.
+    """
+    import base64
+    import io
+
+    from PIL import Image
+
+    tampon = io.BytesIO()
+    Image.new("RGB", (4, 4), (0, 0, 0)).save(tampon, format="PNG")
+    png = "data:image/png;base64," + base64.b64encode(tampon.getvalue()).decode("ascii")
+    fn = _GIRIS["run_pdf_smoke"]
+    monkeypatch.setitem(fn.__globals__, "_smoke_photo_uri", lambda: png)
+    assert fn(tmp_path / "duman.pdf") == 8
+
+
 def test_runtime_modules_requirements_ile_senkron() -> None:
     """K7 zincirinin son halkası: her bağımlılık pakette RUNTIME'da da sınanır.
 

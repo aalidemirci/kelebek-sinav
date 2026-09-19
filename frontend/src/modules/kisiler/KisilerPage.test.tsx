@@ -3,6 +3,7 @@
 // backend `fields`'tan), boş/hata durumları ve içe aktarma paneli (önizle → aktar,
 // already_imported uyarısı, şablon indirme).
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -29,6 +30,11 @@ const okulApiMock = vi.hoisted(() => ({
   commitPersonnelImport: vi.fn(),
   studentTemplate: vi.fn(),
   personnelTemplate: vi.fn(),
+  // Fotoğraf paneli (19.09.2026) — ayrıntısı FotografPaneli.test.tsx'te.
+  photoStats: vi.fn(() => Promise.resolve({ with_photo: 0, active_students: 0, without_photo: 0 })),
+  previewPhotoImport: vi.fn(),
+  commitPhotoImport: vi.fn(),
+  deleteAllPhotos: vi.fn(),
 }));
 
 // Yalnız `okulApi` taklit edilir; etiket sabitleri + importCounts gerçek kalır
@@ -83,12 +89,15 @@ function page<T>(results: T[], count = results.length) {
 }
 
 function renderPage() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <SnackbarProvider>
-      <ConfirmProvider>
-        <KisilerPage />
-      </ConfirmProvider>
-    </SnackbarProvider>,
+    <QueryClientProvider client={qc}>
+      <SnackbarProvider>
+        <ConfirmProvider>
+          <KisilerPage />
+        </ConfirmProvider>
+      </SnackbarProvider>
+    </QueryClientProvider>,
   );
 }
 

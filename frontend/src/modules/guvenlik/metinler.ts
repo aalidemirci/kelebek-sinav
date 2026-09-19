@@ -7,7 +7,7 @@
 /** Ayarlar ve kilit ekranında gösterilen kapsam açıklaması. */
 export const KAPSAM_METNI =
   "Bu koruma, kayıtlardaki kişisel veri alanlarını (öğrenci ve öğretmen " +
-  "ad-soyadları) parolanızdan türetilen bir anahtarla şifreler. TAM DİSK " +
+  "ad-soyadları, öğrenci fotoğrafları) parolanızdan türetilen bir anahtarla şifreler. TAM DİSK " +
   "ŞİFRELEME DEĞİLDİR: bilgisayarın tamamını korumak için Windows'ta " +
   "BitLocker, Pardus/Linux'ta LUKS kullanın.";
 

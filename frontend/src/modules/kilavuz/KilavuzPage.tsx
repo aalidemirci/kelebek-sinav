@@ -195,6 +195,34 @@ export default function KilavuzPage() {
           geri gelir. Katalog aktif ders yılına bağlıdır ve üç yeri besler: “Kendi dersliğinde”
           düzenindeki salon-şube eşlemesi, şube sınav duyurusu ve sihirbazdaki şube seçim listeleri.
         </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Öğrenci fotoğrafları (isteğe bağlı)
+        </h3>
+        <p>
+          Fotoğraflar aktarılırsa salon evrakındaki oturma planı ve Yoklama ekranı her koltukta
+          öğrencinin fotoğrafını gösterir; gözetmen öğrenciyi yerine fotoğrafla eşleştirerek
+          oturtur. Fotoğrafları e-Okul'dan alırsınız: <strong>OOG01001R080</strong> kodlu fotoğraflı
+          öğrenci listesi raporunu <strong>Excel</strong> olarak indirin ve{" "}
+          <Ekran to="/kisiler">Kişiler</Ekran> ekranındaki <strong>Öğrenci fotoğrafları</strong>{" "}
+          kartından yükleyin. e-Okul bu raporu <strong>sınıf düzeyi başına</strong> verir; her
+          düzeyin dosyasını ayrı ayrı aktarın. Fotoğraf okul numarasıyla eşleşir, bu yüzden önce
+          öğrenci listesini aktarın.
+        </p>
+        <p>
+          Önizleme, dosyadaki fotoğrafların kaçının yeni, kaçının kayıtlı fotoğrafla aynı, kaçının
+          farklı olduğunu söyler; aynı dosyayı ikinci kez yüklemek hiçbir şeyi değiştirmez. Kayıtlı
+          fotoğrafı yenisinden <strong>farklı</strong> öğrenciler varsa hangisinin kalacağını siz
+          seçersiniz: <em>Mevcut fotoğrafları koru</em> ya da <em>Yenileriyle değiştir</em>.
+          e-Okul'da fotoğrafı bulunmayan öğrencinin kayıtlı fotoğrafı silinmez.
+        </p>
+        <Ipucu>
+          Fotoğraf kişisel veridir. Program onu yalnız bu bilgisayardaki veritabanında tutar ve
+          yedeğe katar; uygulama parolası kuruluysa şifreli saklar. Okuldan ayrılan ya da silinen
+          öğrencinin fotoğrafı kendiliğinden silinir. Bütün fotoğrafları kalıcı olarak kaldırmak
+          için kartın üstündeki ya da <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran>{" "}
+          bölümündeki <strong>“Tüm fotoğrafları sil”</strong> düğmesini kullanın.
+        </Ipucu>
       </Adim>
 
       <Adim no={4} icon="menu_book" title="Ders Havuzu: tür ve sınav biçimi">
@@ -837,11 +865,20 @@ export default function KilavuzPage() {
           Evrak, oturum <strong>dağıtıldığı andan itibaren</strong> basılır; onayı beklemeniz
           gerekmez. Onay yerleşimi kilitler; arşivlenmiş oturumdan da yeniden basım yapılabilir.
           Oturum detayındaki <strong>Evrak</strong> sekmesinde salon sınav evrakı tek belgede
-          birleşiktir: salon ve oturum bilgileri, oturma planı, gözetmen işlemleri, sınav evrakı
-          sayımı ve teslim zinciri (1. yaprak) ile yoklama ve imza listesi (2. yaprak) — çift yüz
-          basıldığında salon başına bir kâğıt. Ayrıca şube sınav duyurusu (kapıya asılan liste),
+          birleşiktir ve çift yüz basıldığında salon başına bir kâğıttır. <strong>1. yaprak</strong>{" "}
+          fotoğraflı oturma planıdır ve yoklama da onun üstünde alınır: her koltuğun kartında
+          öğrencinin fotoğrafı, adı, numarası ve şubesi, bir imza yeri ve bir “Yok” kutusu vardır.
+          Öğrenci imzasını kendi kartına atar; sınava girmeyenin “Yok” kutusu işaretlenir.{" "}
+          <strong>2. yaprak</strong> salon ve oturum bilgilerini, gözetmen işlemlerini, sınav evrakı
+          sayımını ve teslim zincirini taşır. Ayrıca şube sınav duyurusu (kapıya asılan liste),
           gözetmen görevlendirme yazısı, dağıtım doğrulama raporu ve ihlal/kopya tutanağı üretilir.
           Hepsi PDF olarak indirilir ve doğrudan basılabilir.
+        </p>
+        <p>
+          Fotoğrafı aktarılmamış öğrencinin kartında fotoğraf yerine boş bir kutu basılır (3. adım).
+          Salonun oturma düzeni dağıtımdan sonra değiştirildiyse koltuğu yeni planda bulunmayan
+          öğrenciler plan yerine altta ayrı bir listede, imza yeriyle basılır ve yaprak bunu
+          uyarıyla bildirir.
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
@@ -869,12 +906,14 @@ export default function KilavuzPage() {
         </h3>
         <p>
           Oturum <strong>onaylandıktan sonra</strong> oturum detayında <strong>Yoklama</strong>{" "}
-          sekmesi açılır (yerleşim kesinleşmeden yoklama alınmaz). Sınava girmeyen öğrenciyi salon
-          listesindeki <strong>“Girmedi işaretle”</strong> düğmesiyle işaretlersiniz; öğrenci
-          “Sınava girmeyenler” listesine <em>Beklemede</em> durumuyla düşer. Veli mazeretini
+          sekmesi açılır (yerleşim kesinleşmeden yoklama alınmaz). Sekme, basılı evraktaki
+          fotoğraflı oturma planının aynısını salon salon gösterir: sınava girmeyen öğrencinin
+          kartına basarsınız, kart <strong>“Girmedi”</strong> olarak işaretlenir ve öğrenci “Sınava
+          girmeyenler” listesine <em>Beklemede</em> durumuyla düşer. Böylece gözetmenin basılı
+          plandaki “Yok” işaretlerini aynı düzende, karttan karta aktarırsınız. Veli mazeretini
           bildirince durumu <em>Mazeretli</em> ya da <em>Mazeretsiz</em> yapar, belgenin numarasını
           ve tarihini not alanına yazarsınız (belgenin kendisi programa yüklenmez). Yanlış işareti
-          “İşareti kaldır” ile geri alırsınız.
+          karta yeniden basarak ya da listedeki “İşareti kaldır” ile geri alırsınız.
         </p>
         <Mevzuat kaynak="MEB Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5">
           Ortak sınavlara katılmayan öğrencilerin bilgileri okul müdürlüğü tarafından sınav
@@ -928,12 +967,12 @@ export default function KilavuzPage() {
         <p>
           Uygulama parolası isteğe bağlıdır.{" "}
           <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran> bölümündeki{" "}
-          <strong>“Parola koy”</strong> ile kurduğunuzda öğrenci ve öğretmen ad-soyadları şifrelenir
-          ve program her açılışta <strong>kilit ekranıyla</strong> başlar: parola girilmeden hiçbir
-          kayıt görünmez. Bilgisayarın başından kalkarken <strong>“Şimdi kilitle”</strong> ile
-          programı kapatmadan kilitleyebilir, aynı bölümden parolayı değiştirebilir ya da
-          kaldırabilirsiniz. Bu koruma tam disk şifrelemesi değildir: okul numarası, sınıf/şube ve
-          oturma düzeni şifrelenmez.
+          <strong>“Parola koy”</strong> ile kurduğunuzda öğrenci ve öğretmen ad-soyadları ile
+          öğrenci fotoğrafları şifrelenir ve program her açılışta <strong>kilit ekranıyla</strong>{" "}
+          başlar: parola girilmeden hiçbir kayıt görünmez. Bilgisayarın başından kalkarken{" "}
+          <strong>“Şimdi kilitle”</strong> ile programı kapatmadan kilitleyebilir, aynı bölümden
+          parolayı değiştirebilir ya da kaldırabilirsiniz. Bu koruma tam disk şifrelemesi değildir:
+          okul numarası, sınıf/şube ve oturma düzeni şifrelenmez.
         </p>
         <p>
           Parolayı kurduğunuz anda program size bir <strong>kurtarma anahtarı</strong> gösterir. Bu

@@ -31,6 +31,7 @@ from apps.sinav.models import (
     PlacementRule,
     ProctorAssignment,
     ProctorExemption,
+    SeatAssignment,
 )
 from apps.sinav.serializers import (
     ApplyDefaultPlanSerializer,
@@ -521,6 +522,25 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
                 "occupancy": services.room_occupancy(session),
             }
         )
+
+    @action(detail=True, methods=["get"], url_path="seating-photos")
+    def seating_photos(self, request: Request, pk: str | None = None) -> Response:
+        """Yerleşimdeki öğrencilerin fotoğrafları — fotoğraflı yoklama planı (19.09.2026).
+
+        Çıktı `{"photos": {"<öğrenci pk>": "data:image/jpeg;base64,…"}}`; yalnız
+        bu oturumda oturan, AKTİF öğrencilerin fotoğrafı döner (`?room=<id>`
+        verilirse o salonunkiler). Fotoğrafı olmayan öğrenci sözlükte yoktur.
+        Parola kilitliyken şifre çözülemez → boş sözlük (arayüz "fotoğraf yok").
+        """
+        from apps.okul.services import photos as photo_service
+
+        session = self.get_object()
+        oturanlar = SeatAssignment.objects.filter(session=session, student__isnull=False)
+        oda = str(request.query_params.get("room") or "")
+        if oda.isdigit():
+            oturanlar = oturanlar.filter(room_id=int(oda))
+        fotolar = photo_service.photo_data_uris(oturanlar.values_list("student_id", flat=True))
+        return Response({"photos": {str(k): v for k, v in fotolar.items()}})
 
     @action(detail=True, methods=["post"], url_path="swap-seats")
     def swap_seats(self, request: Request, pk: str | None = None) -> Response:

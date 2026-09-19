@@ -164,6 +164,11 @@ hiddenimports += [
     "pyphen",
     "PIL",
     "PIL.Image",
+    # Öğrenci fotoğrafı (19.09.2026): e-Okul Excel'indeki JPEG/PNG çözülür,
+    # JPEG'e yeniden kodlanır. Pillow eklentileri çalışma anında dizeyle yükler;
+    # `--pdf-duman` JPEG'in PDF'e gerçekten gömüldüğünü ayrıca sınar.
+    "PIL.JpegImagePlugin",
+    "PIL.PngImagePlugin",
     "brotli",
     "zopfli",
     # Opsiyonel açılış parolası (F5-D5): Argon2id cffi ikilisi `argon2` ile

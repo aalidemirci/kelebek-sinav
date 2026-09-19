@@ -91,9 +91,9 @@ export default function HakkindaPage() {
                 yayımlanan son sürümü soran anonim güncelleme denetimidir.
               </li>
               <li>
-                Uygulama parolası kurulduğunda öğrenci ve öğretmen ad-soyadları Fernet (AES-128-CBC
-                + HMAC-SHA256) ile şifrelenir; şifreleme anahtarı, parolanızdan Argon2id ile
-                türetilen anahtarla korunur.
+                Uygulama parolası kurulduğunda öğrenci ve öğretmen ad-soyadları ile öğrenci
+                fotoğrafları Fernet (AES-128-CBC + HMAC-SHA256) ile şifrelenir; şifreleme anahtarı,
+                parolanızdan Argon2id ile türetilen anahtarla korunur.
               </li>
               <li>
                 Şifreli yedekler (<span className="font-mono">.ksbak</span>) X25519 ve AES-256-GCM

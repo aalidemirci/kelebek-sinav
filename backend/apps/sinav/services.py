@@ -2056,8 +2056,8 @@ def render_room_layout_pdf(room: ExamRoom) -> ReportFile:
 
     Sınav öncesi dersliğin fiziken hazırlanması için kapıya asılır: sıra
     dizilimi + koltuk numaraları + demirbaş; ÖĞRENCİ VERİSİ İÇERMEZ (kişisel
-    veri yok). build_room_kroki R1 ile aynı grid kimliğini kullanır —
-    rows=() ile tüm koltuklar boş gelir, şablon yalnız numarayı basar.
+    veri yok). build_room_kroki R1'in fotoğraflı planıyla aynı grid kimliğini
+    kullanır ve yalnız koltuk numarasını basar (satırlara bakmaz).
     """
     plan = layout.validate_layout_plan(room.layout_plan)
     sheet = reports.RoomSheet(
@@ -2075,11 +2075,7 @@ def render_room_layout_pdf(room: ExamRoom) -> ReportFile:
             "generated_at": timezone.localtime().strftime("%d.%m.%Y %H:%M"),
             "exam_name": "",
         },
-        "room": reports.build_room_kroki(
-            sheet,
-            box_height_px=reports.KROKI_BOX_LAYOUT_PX,
-            with_names=False,
-        ),
+        "room": reports.build_room_kroki(sheet, box_height_px=reports.KROKI_BOX_LAYOUT_PX),
     }
     return ReportFile(
         filename=f"salon_yerlesim_plani_{room.pk}.pdf",
@@ -2117,6 +2113,7 @@ def _seat_rows(session: ExamSession, *, room_id: int | None = None) -> list[repo
             status=a.status,
             duration_minutes=durations.get(a.conflict_group),
             course_plain=plain_names.get(int(a.conflict_group.split(":", 1)[0]), ""),
+            student_id=a.student_id,
         )
         for a in assignments
     ]
@@ -2222,11 +2219,17 @@ def render_session_report(
 
     context: dict[str, object] = {"header": header, "title": title}
     if code == "r1":
-        # Birleşik salon evrakı: kroki + gözetmen işlemleri + yoklama/imza.
+        # Birleşik salon evrakı: fotoğraflı oturma planı + yoklama/imza (yaprak 1),
+        # künye + gözetmen işlemleri + sayım + teslim (yaprak 2) — 19.09.2026.
+        from apps.okul.services import photos as photo_service
+
         template = "r1_salon_evraki.html"
         context["sheets"] = reports.build_room_documents(
             _room_sheets(session, rows, room_id=room_id),
             proctor_names=_proctor_names_by_room(session),
+            photos=photo_service.photo_data_uris(
+                {r.student_id for r in rows if r.student_id is not None}
+            ),
         )
     elif code == "r4":
         template = "r4_announcement.html"

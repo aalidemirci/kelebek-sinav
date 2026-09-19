@@ -351,6 +351,65 @@ function asPage<T>(data: Paginated<T> | T[]): Paginated<T> {
     : data;
 }
 
+// ---------------------------------------------------------------------------
+// Öğrenci fotoğrafları (19.09.2026) — e-Okul OOG01001R080, sınıf düzeyi başına dosya
+// ---------------------------------------------------------------------------
+
+/** Mükerrer yükleme: kayıtlı fotoğrafı yenisinden FARKLI öğrenci için seçim. */
+export type PhotoConflictChoice = "keep" | "replace";
+
+export interface PhotoStats {
+  with_photo: number;
+  active_students: number;
+  without_photo: number;
+}
+
+export interface PhotoImportIssue {
+  /** Excel konumu ("C8"). */
+  location: string;
+  issue: string;
+  /** Okul numarası — ad YOK (KVKK). */
+  value: string;
+}
+
+export interface PhotoImportReport {
+  file_hash: string;
+  file_name: string;
+  dry_run: boolean;
+  already_imported: boolean;
+  on_conflict: PhotoConflictChoice;
+  total: number;
+  /** e-Okul'da fotoğrafı olmayan (yer tutucu) öğrenci sayısı. */
+  placeholders: number;
+  matched: number;
+  created: number;
+  same: number;
+  /** Kayıtlı fotoğrafı yenisinden farklı öğrenci sayısı. */
+  conflicts: number;
+  replaced: number;
+  kept: number;
+  /** Eşleşen öğrencilerin sınıf düzeyleri ("9. Sınıf") ve şubeleri ("9/A"). */
+  levels: string[];
+  sections: string[];
+  /** Bu düzeylerde aktarımdan sonra fotoğrafı olmayan aktif öğrenci sayısı. */
+  missing_in_levels: number;
+  conflict_students: { student_number: string; class_label: string }[];
+  conflicts_truncated: number;
+  skipped: PhotoImportIssue[];
+  skipped_truncated: number;
+}
+
+function photoImport(
+  path: string,
+  file: File,
+  onConflict: PhotoConflictChoice,
+): Promise<PhotoImportReport> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("on_conflict", onConflict);
+  return api.postForm<PhotoImportReport>(path, form);
+}
+
 /** Dosya yolu multipart (`file`), metin yolu JSON (`text`) — backend tam olarak birini bekler. */
 function importRequest<R>(path: string, input: ImportInput): Promise<R> {
   if ("file" in input) {
@@ -362,6 +421,16 @@ function importRequest<R>(path: string, input: ImportInput): Promise<R> {
 }
 
 export const okulApi = {
+  // --- Öğrenci fotoğrafları (e-Okul OOG01001R080) ---
+  photoStats: () => api.get<PhotoStats>("/student-photos/"),
+  /** Yazmadan önizleme: yeni/aynı/farklı sayıları, sorunlu satırlar. */
+  previewPhotoImport: (file: File, onConflict: PhotoConflictChoice = "keep") =>
+    photoImport("/student-photos/import/preview/", file, onConflict),
+  commitPhotoImport: (file: File, onConflict: PhotoConflictChoice = "keep") =>
+    photoImport("/student-photos/import/commit/", file, onConflict),
+  /** KVKK düğmesi: bütün fotoğrafları KALICI siler. */
+  deleteAllPhotos: () => api.del<{ deleted: number }>("/student-photos/"),
+
   // --- Kurulum sihirbazı ---
 
   getSetupStatus: (): Promise<SetupStatus> => api.get<SetupStatus>("/setup/status/"),

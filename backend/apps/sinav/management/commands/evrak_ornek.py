@@ -14,7 +14,12 @@ Kullanım (depo kökünden):
 öğrenciye kadar İKİ yaprak olmalıdır (CLAUDE.md §2 sayfa bütçesi kuralı;
 garanti `test_reports.py::test_r1_salon_evraki_iki_yaprak`).
 
-KVKK: bu komut gerçek öğrenci verisine BAKMAZ — adlar ve numaralar sabittir.
+Salon evrakının oturma planı fotoğraflıdır (19.09.2026): örnekte her
+öğrenciye ÇİZİLMİŞ bir siluet verilir, her yedinci öğrencide fotoğraf yoktur
+(evraktaki "fotoğraf yok" kutusu görünsün). `--fotografsiz` hepsini kaldırır.
+
+KVKK: bu komut gerçek öğrenci verisine BAKMAZ — adlar, numaralar ve
+"fotoğraflar" uydurmadır (Pillow ile çizilir).
 """
 
 from __future__ import annotations
@@ -70,6 +75,11 @@ class Command(BaseCommand):
         parser.add_argument(
             "--cikti", default="/repo/.ornek-evrak", help="Çıktı klasörü (varsayılan depo kökü)."
         )
+        parser.add_argument(
+            "--fotografsiz",
+            action="store_true",
+            help="Oturma planını fotoğrafsız bas (fotoğraf aktarılmamış okul).",
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         ogrenci = max(1, int(options["ogrenci"]))
@@ -105,6 +115,7 @@ class Command(BaseCommand):
             rows=tuple(satirlar),
         )
         proctors = {ODA: GOZETMEN}
+        fotograflar = {} if options["fotografsiz"] else self._fotograflar(satirlar)
 
         self._bas(
             cikti,
@@ -113,7 +124,9 @@ class Command(BaseCommand):
             {
                 "header": BASLIK,
                 "title": reports.REPORT_TITLES["r1"][0],
-                "sheets": reports.build_room_documents([sheet], proctor_names=proctors),
+                "sheets": reports.build_room_documents(
+                    [sheet], proctor_names=proctors, photos=fotograflar
+                ),
             },
             beklenen=2,
         )
@@ -186,9 +199,7 @@ class Command(BaseCommand):
                     "generated_at": BASLIK.generated_at,
                     "exam_name": "",
                 },
-                "room": reports.build_room_kroki(
-                    bos, box_height_px=reports.KROKI_BOX_LAYOUT_PX, with_names=False
-                ),
+                "room": reports.build_room_kroki(bos, box_height_px=reports.KROKI_BOX_LAYOUT_PX),
             },
             beklenen=1,
         )
@@ -216,9 +227,38 @@ class Command(BaseCommand):
                 course_name=dersler[i % len(dersler)],
                 status="NORMAL",
                 duration_minutes=SURELER[i % len(dersler)],
+                student_id=i + 1,
             )
             for i in range(adet)
         ]
+
+    def _fotograflar(self, satirlar: list[reports.SeatRow]) -> dict[int, str]:
+        """Uydurma vesikalık: düz zemin üstüne gri siluet (baş + omuz).
+
+        Her yedinci öğrenci fotoğrafsız bırakılır. Zemin rengi öğrenciye göre
+        değişir: WeasyPrint aynı görseli TEK nesne olarak gömer, özdeş
+        fotoğraflar evrakta ayırt edilemezdi.
+        """
+        import base64
+
+        from PIL import Image, ImageDraw
+
+        zeminler = ((214, 226, 240), (228, 222, 238), (222, 236, 226), (240, 232, 214))
+        sonuc: dict[int, str] = {}
+        for i, satir in enumerate(satirlar):
+            if satir.student_id is None or i % 7 == 6:
+                continue
+            r, g, b = zeminler[i % len(zeminler)]
+            resim = Image.new("RGB", (131, 169), (r, g, b - i % 11))
+            kalem = ImageDraw.Draw(resim)
+            kalem.ellipse((40, 30, 91, 90), fill=(120, 124, 132))  # baş
+            kalem.ellipse((12, 98, 119, 210), fill=(120, 124, 132))  # omuzlar
+            tampon = io.BytesIO()
+            resim.save(tampon, format="JPEG", quality=85)
+            sonuc[satir.student_id] = "data:image/jpeg;base64," + base64.b64encode(
+                tampon.getvalue()
+            ).decode("ascii")
+        return sonuc
 
     def _gorevliler(self) -> list[reports.ProctorRow]:
         return [

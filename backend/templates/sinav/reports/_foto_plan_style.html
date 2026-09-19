@@ -1,0 +1,16 @@
+{% comment %}Tek salonun fotoğraflı plan ölçüleri — `<head>` içindeki `extra_style`
+bloğundan çağrılır (WeasyPrint gövdedeki `<style>`ı yok sayar; `_kroki_style.html`
+ile aynı gerekçe). Bağlam: plan (build_photo_plan çıktısı), plan_id (salon sırası).
+Değerler Python'da METİN biçimlenir (TR locale virgülü CSS'te yutulur).{% endcomment %}
+.fp{{ plan_id }} .fp-card,
+.fp{{ plan_id }} .fp-fill.fp-tall { height: {{ plan.metrics.card_height }}px; }
+.fp{{ plan_id }} .fp-fill { height: {{ plan.metrics.spare_height }}px; }
+.fp{{ plan_id }} .fp-body { height: {{ plan.metrics.body_height }}px; }
+.fp{{ plan_id }} .fp-photo { width: {{ plan.metrics.photo_width }}px;
+                             height: {{ plan.metrics.photo_height }}px; }
+.fp{{ plan_id }} .fp-hphoto { width: {{ plan.metrics.photo_cell_width }}px; }
+.fp{{ plan_id }} .fp-sign { height: {{ plan.metrics.sign_height }}px; }
+.fp{{ plan_id }} .fp-name { font-size: {{ plan.metrics.name_font }}pt;
+                            max-height: {{ plan.metrics.name_lines_height }}px; }
+.fp{{ plan_id }} .fp-meta { font-size: {{ plan.metrics.meta_font }}pt; }
+.fp{{ plan_id }} .fp-head { font-size: {{ plan.metrics.no_font }}pt; }

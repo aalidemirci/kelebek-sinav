@@ -91,6 +91,18 @@ urlpatterns = [
         views.PersonnelImportCommitView.as_view(),
         name="import-personnel-commit",
     ),
+    # Öğrenci fotoğrafları (e-Okul OOG01001R080 — sınıf düzeyi başına bir dosya)
+    path("student-photos/", views.StudentPhotosView.as_view(), name="student-photos"),
+    path(
+        "student-photos/import/preview/",
+        views.StudentPhotoImportPreviewView.as_view(),
+        name="student-photos-import-preview",
+    ),
+    path(
+        "student-photos/import/commit/",
+        views.StudentPhotoImportCommitView.as_view(),
+        name="student-photos-import-commit",
+    ),
     # Şablon indirme
     path("templates/students/", views.StudentTemplateView.as_view(), name="template-students"),
     path("templates/personnel/", views.PersonnelTemplateView.as_view(), name="template-personnel"),

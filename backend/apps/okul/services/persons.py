@@ -10,7 +10,8 @@ from typing import Any
 
 from django.db import transaction
 
-from apps.okul.models import Personnel, Student
+from apps.okul.models import Personnel, Student, StudentStatus
+from apps.okul.services import photos
 
 
 @transaction.atomic
@@ -26,12 +27,17 @@ def update_student(student: Student, **fields: Any) -> Student:
         for name in changed:
             setattr(student, name, fields[name])
         student.save(update_fields=[*changed, "updated_at"])
+    if student.status != StudentStatus.ACTIVE:
+        # KVKK: ayrılan öğrencinin fotoğrafı tutulmaz (StudentPhoto docstring'i).
+        photos.delete_student_photo(student.pk)
     return student
 
 
 @transaction.atomic
 def delete_student(student: Student) -> None:
     student.delete()  # soft delete (BaseModel)
+    # Kayıt gizlenir ama fotoğraf KATI silinir — kişisel veri artığı kalmasın.
+    photos.delete_student_photo(student.pk)
 
 
 @transaction.atomic

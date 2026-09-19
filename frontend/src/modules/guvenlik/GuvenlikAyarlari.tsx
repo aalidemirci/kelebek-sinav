@@ -16,6 +16,7 @@ import { SkeletonList } from "../../ui/Skeleton";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import TextField from "../../ui/TextField";
 import KurtarmaAnahtariDiyalogu from "./KurtarmaAnahtariDiyalogu";
+import OgrenciFotograflari from "./OgrenciFotograflari";
 import SifreliYedekleme from "./SifreliYedekleme";
 import YedektenGeriYukleme from "./YedektenGeriYukleme";
 import { guvenlikApi } from "./api";
@@ -166,6 +167,8 @@ export default function GuvenlikAyarlari({ okulAdi = "" }: GuvenlikAyarlariProps
       <SifreliYedekleme parolaKurulu={durum.password_set} />
 
       <YedektenGeriYukleme />
+
+      <OgrenciFotograflari />
 
       <Dialog open={kip !== "yok"} onClose={kapat} title={dialogBasligi}>
         <form onSubmit={gonder} className="flex flex-col gap-4">

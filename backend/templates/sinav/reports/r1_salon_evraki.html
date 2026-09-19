@@ -5,48 +5,39 @@ belge; eski R1 (kroki) + R2 (yoklama/imza) + R7 (zarf kapağı/sayım) + R9
 evrakta olsun, ayrıca bir kâğıt israf edilmesin" — çift yüz basıldığında salon
 başına TEK yaprak düşer.
 
-  Yaprak 1  A. salon künyesi · B. oturma planı krokisi · C. gözetmen kontrol
-            listesi (öncesi/sonunda) · D. evrak sayımı · E. teslim zinciri
-  Yaprak 2  F. yoklama ve imza listesi (40 öğrenciye kadar tek sayfa) + imza
+19.09.2026 DÜZENİ (kullanıcı kararı: "salon oturma planı fotoğraflı olsun,
+yoklama/imza doğrudan bu plan üzerinde; bir sayfa fotoğraflı plan, bir sayfa
+diğer hususlar"):
+
+  Yaprak 1  A. fotoğraflı oturma planı ve yoklama — her koltuk kartında fotoğraf,
+            ad, okul no · şube, "Yok" kutusu ve İMZA alanı (ayrı yoklama listesi
+            yok); planda yeri bulunmayan öğrenci varsa altında imzalı satırlar
+  Yaprak 2  B. salon künyesi · C. gözetmen kontrol listesi (öncesi/sonunda) ·
+            D. evrak sayımı · E. teslim zinciri · imzalar · dayanak
 
 ANATOMİ: evrakmotoru SAL-SNV-FR-006 "Salon Yoklama Listesi ve Sınav Evrakı
 Sayım Tutanağı" formundan uyarlandı — okulun basılı form ailesiyle aynı bölüm
 düzeni (A/B/C…), aynı imza üçlüsü, aynı dayanak dipnotu.
 
-SAYFA BÜTÇESİ (WeasyPrint kutu ağacından ÖLÇÜLEREK doğrulandı; A4 dikey yazım
-alanı 1024 px = 768 pt): yaprak 1'in sabit bölümleri krokiye
-`reports.KROKI_BOX_R1_PX` kadar yer bırakır. Yaprak 2'de yoklama satırı
-`reports.list_row_metrics` ile bütçeden türetilir; 40 öğrenci tek sayfaya
-sığar, fazlası bölünmeden akar (başlık yinelenir, imza bloğu bütün hâlde
-kayar). Sayfa sayısı garantisi `test_reports.py`de sabittir.
+SAYFA BÜTÇESİ (A4 dikey yazım alanı 1024 px = 768 pt): yaprak 1'de plan
+tablosuna `reports.PHOTO_PLAN_BOX_PX` kadar yer ayrılır; kart ölçüsü
+`reports.photo_plan_metrics` ile salonun satır/sütun sayısından türetilir. 40
+öğrencilik salon her geometride tek sayfaya sığar; çok sıralı salonda kart
+alt sınırda kalır ve plan kontrollü taşar. Garanti `test_reports.py`de.
 
-KONTROL LİSTESİ METİNLERİ TEK SATIRA SIĞACAK UZUNLUKTA TUTULUR (~50 karakter):
-sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% endcomment %}
+KONTROL LİSTESİ METİNLERİ TEK SATIRA SIĞACAK UZUNLUKTA TUTULUR (~50 karakter).{% endcomment %}
 {% block extra_style %}
 <style>
-  /* Yoklama satırı ölçüsü SAYFA BÜTÇESİNDEN gelir (reports.list_row_metrics):
-     satır = (1024 px - sabitler) / öğrenci; hedefe önce PUNTO, artan boşluğa
-     DOLGU ile ulaşılır. `height` KULLANILMAZ — WeasyPrint'te hücre yüksekliği
-     satırı uzatır (ölçüldü). Değerler başlıktaki stil bloğunda basılır: gövde
-     içindeki <style> ve inline CSS değişkeni WeasyPrint'te çalışmıyor. */
-  /* Sütun genişlikleri BİLDİRİLDİĞİ gibi uygulansın (reports._ATT_NAME_RATIO). */
-  /* KUTU MODELİ (31.08.2026, ÖLÇÜLDÜ): `table-layout: fixed` + sütun yüzdeleri
-     content-box'ta hücre DOLGUSUNU yüzdenin dışına ekliyor; tablo sayfa içerik
-     alanını 91pt taşırıyordu (saha bulgusu: "çerçeveler sağa taşmış, biri
-     geniş biri dar"). Kural bu tabloya SINIRLI — global border-box R1 yoklama
-     ve R4 duyuru satır ölçülerini bozuyor (denendi, beş test kırmızı). */
+  /* Planda yeri bulunmayan öğrenci satırları (plan dağıtımdan sonra değişmiş). */
   .att, .att th, .att td { box-sizing: border-box; }
   .att { table-layout: fixed; }
-  .att td { line-height: 1.05; }
-  /* Başlık satırı TEK SATIR kalmalı: ikinci satır ~14 px yer götürür. */
+  .att td { line-height: 1.1; font-size: 7.5pt; padding: 2pt 4pt; }
   .att th { padding: 3pt 4pt; font-size: 7.5pt; line-height: 1.05; }
   .att .name { font-weight: bold; }
   /* Ders kodu açıklaması (karışık salon) — en çok iki satır; yüksekliği
      reports._ATT_LEGEND_PX ile bütçelidir. */
   .course-legend { margin: 2pt 0 3pt; font-size: 7.5pt; line-height: 1.15;
                    color: var(--pr-text); }
-  /* Beşer beşer okumayı kolaylaştıran koyu ayraç (uzun listede göz kayması). */
-  .att tr.mark5 td { border-bottom: var(--pr-border-outer) solid var(--pr-secondary); }
 
   .compact td { padding: 1pt 5pt; height: 11pt; line-height: 1.1; }
   .compact th { padding: 2pt 5pt; line-height: 1.1; }
@@ -61,14 +52,10 @@ sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% en
   .duty-head { background: var(--pr-fill-head); font-weight: bold;
                color: var(--pr-label); font-size: 7.5pt; text-align: center; }
 
-  /* Salon başına hesaplanan ölçüler — BAŞLIKTA basılmak ZORUNDA (WeasyPrint
-     gövdedeki <style> öğesini yok sayar; ölçüldü). */
+  /* Salon başına hesaplanan plan ölçüleri — BAŞLIKTA basılmak ZORUNDA
+     (WeasyPrint gövdedeki <style> öğesini yok sayar; ölçüldü). */
   {% for sheet in sheets %}
-  .att{{ forloop.counter }} td { font-size: {{ sheet.row.font_size }}pt;
-                                 padding: {{ sheet.row.padding }}pt 5pt; }
-  .att{{ forloop.counter }} .box { width: {{ sheet.row.box_size }}pt;
-                                   height: {{ sheet.row.box_size }}pt; }
-  {% include "sinav/reports/_kroki_style.html" with room=sheet.kroki kroki_id=forloop.counter %}
+  {% include "sinav/reports/_foto_plan_style.html" with plan=sheet.plan plan_id=forloop.counter %}
   {% endfor %}
 </style>
 {% endblock %}
@@ -77,11 +64,69 @@ sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% en
 
 {# ------------------------------ YAPRAK 1 ------------------------------ #}
 <div class="sheet sheet-right">
-  {% with scope_line="Salon: "|add:sheet.room_name scope_note="Yaprak 1/2 · Oturma planı ve gözetmen işlemleri" %}
+  {% with scope_line="Salon: "|add:sheet.room_name scope_note="Yaprak 1/2 · Fotoğraflı oturma planı ve yoklama" %}
     {% include "sinav/reports/_head.html" %}
   {% endwith %}
 
-  <div class="sec">A. SALON VE OTURUM BİLGİLERİ</div>
+  <div class="sec">A. OTURMA PLANI VE YOKLAMA
+    <span class="hint">Öğrenci bu plana göre oturur · imza sınav bitiminde karta alınır.</span>
+  </div>
+  {% if sheet.course_legend %}
+  {% comment %}Ders KODU açıklaması — kartlar ders adının yerine tek harf taşır.
+  Yüksekliği `reports._ATT_LEGEND_PX` ile bütçelenir: metni uzatırken yeniden
+  ölçünüz.{% endcomment %}
+  <div class="course-legend"><b>DERS KODLARI:</b> {{ sheet.course_legend }}</div>
+  {% endif %}
+  {% include "sinav/reports/_foto_plan.html" with plan=sheet.plan plan_id=forloop.counter %}
+
+  {% if sheet.plan.unplaced %}
+  {% comment %}Salon planı dağıtımdan SONRA değiştirilmiş: koltuğu güncel planda
+  bulunmayan öğrenci sessizce düşmez (A11) — yoklaması burada alınır.{% endcomment %}
+  <div class="sec">PLANDA YERİ BULUNMAYAN ÖĞRENCİLER
+    <span class="hint">Salon planı dağıtımdan sonra değiştirilmiş — oturumu yeniden dağıtın.</span>
+  </div>
+  <table class="rpt-table att">
+    <thead>
+      <tr>
+        <th class="num" style="width: 9%;">Koltuk</th>
+        <th class="num" style="width: 10%;">No</th>
+        <th style="width: 36%;">Adı Soyadı</th>
+        <th class="num" style="width: 9%;">Şube</th>
+        {% if sheet.show_course %}<th class="num" style="width: 7%;">Ders</th>{% endif %}
+        <th class="num" style="width: 7%;">Yok</th>
+        <th class="center" style="width: {% if sheet.show_course %}22{% else %}29{% endif %}%;">İmza</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in sheet.plan.unplaced %}
+      <tr>
+        <td class="num">{{ row.seat_no }}</td>
+        <td class="num">{{ row.student_number }}</td>
+        <td class="name">{{ row.full_name }}</td>
+        <td class="num">{{ row.class_label }}</td>
+        {% if sheet.show_course %}<td class="num"><b>{{ row.course_code }}</b></td>{% endif %}
+        <td class="num"><span class="box"></span></td>
+        <td></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% comment %}Madde atfı YAPRAK 2 dipnotundadır; burada tekrarlanmaz (CLAUDE.md §2
+  "mevzuat atfı depodaki metinden doğrulanır").{% endcomment %}
+  <div class="plan-kvkk"><b>KVKK:</b> Bu sayfadaki kişisel veriler (fotoğraf dahil) yalnız
+    sınavın yürütülmesi için işlenir; yetkili okul personeli ve denetim mercileri dışında
+    paylaşılmaz (dayanak: yaprak 2).</div>
+</div>
+
+{# ------------------------------ YAPRAK 2 ------------------------------ #}
+<div class="sheet">
+  {% with scope_line="Salon: "|add:sheet.room_name scope_note="Yaprak 2/2 · Salon künyesi ve gözetmen işlemleri" %}
+    {% include "sinav/reports/_head.html" %}
+  {% endwith %}
+
+  <div class="sec">B. SALON VE OTURUM BİLGİLERİ</div>
   <table class="fields">
     <colgroup><col style="width: 17%;"><col style="width: 41%;">
               <col style="width: 17%;"><col style="width: 25%;"></colgroup>
@@ -99,11 +144,6 @@ sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% en
     </tr>
   </table>
 
-  <div class="sec">B. OTURMA PLANI
-    <span class="hint">Öğrenciler bu plana göre oturtulur.</span>
-  </div>
-  {% include "sinav/reports/_kroki.html" with room=sheet.kroki kroki_names=True kroki_id=forloop.counter %}
-
   <div class="sec">C. GÖZETMEN İŞLEMLERİ
     <span class="hint">Yapılan işlemi kutucuğu işaretleyerek onaylayınız.</span>
   </div>
@@ -114,13 +154,13 @@ sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% en
     </tr>
     <tr>
       <td class="b"><span class="box"></span></td>
-      <td>Salon düzeni bu plana göre kuruldu.</td>
+      <td>Salon düzeni oturma planına göre kuruldu.</td>
       <td class="b"><span class="box"></span></td>
-      <td>Yoklama listesi öğrencilere imzalatıldı.</td>
+      <td>Plandaki imzalar alındı; girmeyenler işaretlendi.</td>
     </tr>
     <tr>
       <td class="b"><span class="box"></span></td>
-      <td>Öğrenciler plandaki koltuklara oturtuldu.</td>
+      <td>Öğrenciler fotoğrafla eşleştirilip oturtuldu.</td>
       <td class="b"><span class="box"></span></td>
       <td>Evrak, zümre temsilcisiyle birlikte sayıldı.</td>
     </tr>
@@ -150,8 +190,8 @@ sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% en
   <table class="rpt-table compact courses">
     <thead>
       <tr>
-        {% comment %}Ders sütunu GENİŞ tutulur (artık ~%44-50): uzun ders etiketi
-        ("Türk Dili ve Edebiyatı — 10. Sınıf") sararsa satır uzar ve yaprak 1 taşar.{% endcomment %}
+        {% comment %}Ders sütunu GENİŞ tutulur: uzun ders etiketi ("Türk Dili ve
+        Edebiyatı — 10. Sınıf") sararsa satır uzar.{% endcomment %}
         {% if sheet.show_course %}<th class="num" style="width: 6%;">Kod</th>{% endif %}
         <th>Ders</th>
         <th class="num" style="width: 9%;">Süre</th>
@@ -209,59 +249,6 @@ sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% en
     </tr>
   </table>
 
-  <div class="dayanak">
-    <b>DAYANAK:</b> MEB Ortaöğretim Kurumları Yönetmeliği md. 45/1-a, 48/4-5, 86/4 ·
-    MEB Ölçme ve Değerlendirme Yönetmeliği md. 4/1-d · MEB Yazılı ve Uygulamalı
-    Sınavlar Yönergesi md. 5/1-ş, ü. &nbsp;<b>KVKK:</b> Buradaki kişisel veriler 6698
-    sayılı Kanunun 5/2-ç maddesi uyarınca işlenir; yalnız yetkili okul personeli ve
-    denetim mercileriyle paylaşılır.
-  </div>
-</div>
-
-{# ------------------------------ YAPRAK 2 ------------------------------ #}
-<div class="sheet">
-  {% with scope_line="Salon: "|add:sheet.room_name scope_note="Yaprak 2/2 · Yoklama ve imza listesi" %}
-    {% include "sinav/reports/_head.html" %}
-  {% endwith %}
-
-  <div class="sec">F. YOKLAMA VE İMZA LİSTESİ
-    <span class="hint">Koltuk sırasında · &quot;Yok&quot; = sınava girmedi · imzalar SINAV BİTİMİNDE alınır.</span>
-  </div>
-  {% if sheet.course_legend %}
-  {% comment %}Ders KODU açıklaması — yoklama "Ders" sütunu tek harf taşır (uzun
-  ders etiketi satırı sardırıp sayfa bütçesini bozuyordu). Yüksekliği
-  `reports._ATT_LEGEND_PX` ile bütçelenir: metni uzatırken yeniden ölçünüz.{% endcomment %}
-  <div class="course-legend"><b>DERS KODLARI:</b> {{ sheet.course_legend }}</div>
-  {% endif %}
-  <table class="rpt-table att att{{ forloop.counter }}">
-    <thead>
-      <tr>
-        <th class="num" style="width: 5%;">Sıra</th>
-        <th class="num" style="width: 8%;">Koltuk</th>
-        <th class="num" style="width: 9%;">No</th>
-        <th style="width: {% if sheet.show_course %}34{% else %}36{% endif %}%;">Adı Soyadı</th>
-        <th class="num" style="width: 8%;">Şube</th>
-        {% if sheet.show_course %}<th class="num" style="width: 6%;">Ders</th>{% endif %}
-        <th class="num" style="width: 7%;">Yok</th>
-        <th class="center" style="width: {% if sheet.show_course %}23{% else %}27{% endif %}%;">İmza</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in sheet.rows %}
-      <tr{% if forloop.counter|divisibleby:5 and not forloop.last %} class="mark5"{% endif %}>
-        <td class="num">{{ forloop.counter }}</td>
-        <td class="num">{{ row.seat_no }}</td>
-        <td class="num">{{ row.student_number }}</td>
-        <td class="name">{{ row.full_name }}</td>
-        <td class="num">{{ row.class_label }}</td>
-        {% if sheet.show_course %}<td class="num"><b>{{ row.course_code }}</b></td>{% endif %}
-        <td class="num"><span class="box"></span></td>
-        <td></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
   <table class="signs">
     <tr><td class="date">…… / …… / 20……</td><td class="date">…… / …… / 20……</td>
         <td class="date">…… / …… / 20……</td></tr>
@@ -275,6 +262,14 @@ sarma olursa yaprak 1 taşar. Metin eklerken bütçeyi yeniden ölçünüz.{% en
           <span class="role">Ad Soyad / İmza</span></td>
     </tr>
   </table>
+
+  <div class="dayanak">
+    <b>DAYANAK:</b> MEB Ortaöğretim Kurumları Yönetmeliği md. 45/1-a, 48/4-5, 86/4 ·
+    MEB Ölçme ve Değerlendirme Yönetmeliği md. 4/1-d · MEB Yazılı ve Uygulamalı
+    Sınavlar Yönergesi md. 5/1-ş, ü. &nbsp;<b>KVKK:</b> Buradaki kişisel veriler 6698
+    sayılı Kanunun 5/2-ç maddesi uyarınca işlenir; yalnız yetkili okul personeli ve
+    denetim mercileriyle paylaşılır.
+  </div>
 </div>
 
 {% endfor %}

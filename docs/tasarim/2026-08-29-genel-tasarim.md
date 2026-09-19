@@ -116,7 +116,9 @@ okul no, `class_level`, `class_section` — **veli ve TCKN alanları yok**) ·
 `ImportRun` (source_type, sha256, koşullu unique) · `ClassSectionGroup`
 (şube kümesi SAY/EA/DİL — `ClassSection.group` FK, TEK üyelik) · `SubjectDepartment`
 (zümre adı, başkan→`Personnel`, `is_board_member` — okul zümre başkanları
-kurulu; sınav takvimi imza bloğunun kaynağı, B7 revizyonu).
+kurulu; sınav takvimi imza bloğunun kaynağı, B7 revizyonu) · `StudentPhoto`
+(öğrenci başına tek fotoğraf: `image`* base64 JPEG + sha256 + ölçü — 19.09.2026,
+§6; öğrenci aktif olmaktan çıkınca ya da silinince KATI silinir).
 
 **Ders havuzu (OYS ders_yapisi'ndan):** `Course` (name, `levels` JSON,
 course_type ORTAK/SECMELI, source MEB/MANUAL, `is_active`, **`exam_mode`
@@ -185,9 +187,13 @@ DD'nin kanıtlı katmanı taşınır: `shared/crypto.py` (Fernet + Argon2id) +
 `GuvenlikKapisi` + "Şimdi kilitle".
 
 - **Şifrelenen alanlar:** `Student.first_name/last_name`,
-  `Personnel.first_name/last_name` ve **tüm SNAPSHOT kopyaları**
+  `Personnel.first_name/last_name`, `StudentPhoto.image` (19.09.2026 —
+  fotoğraf addan daha tanıtıcıdır) ve **tüm SNAPSHOT kopyaları**
   (`SeatAssignment.full_name`, `ExamAttendanceRecord`, `ProctorAssignment.teacher_name`).
   Kaynak şifreli olup snapshot düz kalsaydı şifreleme anlamsızlaşırdı.
+  Fotoğrafın snapshot'ı YOKTUR: evrak basılırken canlı kayıttan okunur;
+  arşiv evrakının yeniden basımında silinmiş fotoğraf yerine boş kutu çıkar
+  (KVKK: ayrılan öğrencinin fotoğrafı saklanmaz).
 - **Açık kalanlar:** okul no, sınıf/şube, koltuk/salon/grup düzeni (ad
   olmadan takma-adlıdır; motor, sıralama ve teklik bunlara dayanır).
 - **Bedeller (bilinçli kabul):** ad temelli arama/sıralama/teklik DB'de
@@ -243,6 +249,29 @@ DD'nin kanıtlı katmanı taşınır: `shared/crypto.py` (Fernet + Argon2id) +
   ölçüldü: 25 ders grubu, 8.385 satır aynı raporun Excel ihracıyla birebir.
   Desen öğrenci aktarımıyla aynıdır (önizle → rapor → aktar, `ImportRun`
   `ELECTIVES`, sha256 uyarısı); sorunlar sayfa/satır + okul no ile raporlanır.
+- **Öğrenci fotoğrafları — OOG01001R080 (19.09.2026, kullanıcı isteği):**
+  e-Okul bu fotoğraflı listeyi **sınıf düzeyi başına** verir; her düzeyin
+  dosyası ayrı aktarılır. **Excel yolu seçildi, PDF değil:** `.XLS` (BIFF8)
+  içinde fotoğraflar çalışma kitabının OfficeArt görsel deposundadır
+  (MSODRAWINGGROUP → FBSE, gömülü JPEG/PNG), sayfadaki her şekil görsel
+  sırasını ve hücre çapasını taşır; okul no çapanın ALTINDAKİ hücrenin sonundaki
+  sayıdır (`apps/okul/eokul_foto.py`). Kayıt eşleşmesi okul numarasıyla,
+  öğrenci aktarımından gelen kayda yapılır — Excel'in başlığında yalnız ilk
+  şubenin adı bulunması sorun olmaz. PDF'te fotoğraf ile adın bağı yalnız sayfa
+  KONUMUNDAN kurulabilirdi (kırılgan); PDF yolu yazılmadı. Gerçek raporla
+  ölçüldü: 430 öğrenci hücresi (6'sında "fotoğraf yok" simgesi), 430 farklı
+  okul no, etiketsiz 1 logo.
+  Kurallar: (1) görsel Pillow'la YENİDEN KODLANIR (EXIF/meta atılır, ≤240×320,
+  JPEG); (2) birden çok şeklin paylaştığı görsel ve DIB/metafile "fotoğraf yok"
+  simgesidir — yer tutucu sayılır, kayıtlı fotoğrafı silmez; (3) **mükerrer
+  yükleme** (kullanıcı kararı): aynı fotoğraf (sha256) sessiz geçer, kayıtlı
+  fotoğrafı FARKLI öğrenci önizlemede sayılıp okul no · şube ile listelenir ve
+  idareci `keep`/`replace` seçer; (4) desen öğrenci aktarımıyla aynıdır
+  (önizle → rapor → aktar, `ImportRun` `PHOTOS`, sha256 uyarısı). Saklama
+  kararı (kullanıcı): veritabanında, yedeğe girer, parola açıkken şifreli
+  (§5); ayrılan öğrencinin fotoğrafı silinir; Kişiler ekranında "Tüm
+  fotoğrafları sil". Tüketiciler: R1 fotoğraflı oturma planı (§9) ve oturum
+  detayındaki Yoklama planı.
 
 ## 7. MEB ders havuzu planı
 
@@ -571,7 +600,7 @@ başına bir kâğıt**.
 
 | Kod | Belge | Kapsam | Yaprak |
 |---|---|---|---|
-| R1 | **Salon Sınav Evrakı** — oturma planı krokisi · gözetmen kontrol listesi · evrak sayımı · teslim zinciri (yaprak 1) + yoklama ve imza listesi (yaprak 2) | salon | 2 |
+| R1 | **Salon Sınav Evrakı** — fotoğraflı oturma planı, yoklama ve imza kartların üstünde (yaprak 1) + künye · gözetmen kontrol listesi · evrak sayımı · teslim zinciri (yaprak 2) — 19.09.2026 düzeni | salon | 2 |
 | R4 | **Şube Sınav Duyurusu** — öğrenci → salon + koltuk; sınıf panosuna asılır | şube | 1 |
 | R5 | Toplu Dağıtım Çizelgesi (openpyxl) — idare çalışma kopyası, basılmaz | oturum | — |
 | R6 | Gözetmen Görevlendirme / Tebliğ-Tebellüğ (yalnız gözetmen ayarı açıkken) | oturum | 1 |
@@ -595,10 +624,11 @@ ve duyuru zaten söylüyor) · R9 (teslim tutanağı — teslim zinciri R1 yapra
 kodu **ihlal/kopya tutanağına** verildi (kaynak: evrakmotoru SAL-SNV-FR-007).
 
 **Sayfa bütçesi (bağlayıcı).** Bir derslikte **40 öğrenci sığar**, fazlası
-**kontrolsüz taşmaz**. İki mekanizma: `reports.kroki_metrics` krokiyi ayrılan
-kutuya sığdırır (hücre yüksekliği + punto salonun satır/sütun sayısından),
-`reports.list_row_metrics` yoklama/duyuru satırının punto ve dolgusunu sayfa
-bütçesinden türetir. Ölçüler WeasyPrint kutu ağacından ÖLÇÜLEREK bulundu;
+**kontrolsüz taşmaz**. Üç mekanizma: `reports.photo_plan_metrics` R1'in
+fotoğraflı planını ayrılan kutuya (`PHOTO_PLAN_BOX_PX`) sığdırır,
+`reports.kroki_metrics` boş salon planının krokisini (hücre yüksekliği + punto
+salonun satır/sütun sayısından), `reports.list_row_metrics` duyuru satırının
+punto ve dolgusunu sayfa bütçesinden türetir. Ölçüler WeasyPrint kutu ağacından ÖLÇÜLEREK bulundu;
 garanti `test_reports.py::test_r1_salon_evraki_iki_yaprak` ile sabittir.
 Birim uyarısı: WeasyPrint iç birimi CSS px'tir (1 pt = 4/3 px) ve tablo
 hücresine `height` vermek satırı kısaltmaz, UZATIR.
@@ -634,9 +664,44 @@ uzunlukta ders adlarıyla yeniden üretilip gözle incelendi; bulgular ve kararl
   dolu, bilgi yaprak 2'deki yoklamada zaten var. Kitapçık bandına süre
   eklenmedi (`booklet.py` AYNEN sınıfında).
 
+**19.09.2026 — fotoğraflı oturma planı, yoklama plan üzerinde (kullanıcı
+kararı).** İstek: "salon oturma planını fotoğraflı yapalım; yoklama/imza da
+doğrudan bu plan üzerinde olsun; bir sayfası fotoğraflı plan, bir sayfası
+diğer hususlar." Yukarıdaki 18.09 maddelerinden "ders kodu", "plan sonradan
+değiştiyse" ve "bilinçli olarak yapılmayanlar" bu düzende şöyle karşılanır:
+
+* **Yaprak 1 = plan + yoklama.** Her koltuk bir KART: koltuk no (+ karışık
+  salonda ders kodu rozeti), fotoğraf, ad, okul no · şube, "İmza" alanı ve
+  "Yok" kutusu. Ayrı yoklama/imza listesi KALKTI — öğrenci imzasını kendi
+  kartına atar, gözetmen girmeyenin "Yok" kutusunu işaretler. Yaprak 2 künye,
+  gözetmen kontrol listesi, sayım ve teslim zincirini taşır; kontrol listesi
+  maddeleri plana göre yeniden yazıldı ("Öğrenciler fotoğrafla eşleştirilip
+  oturtuldu", "Plandaki imzalar alındı; girmeyenler işaretlendi").
+* **Kart geometrisi hesaplanır** (`photo_plan_metrics`, kroki deseni): masalı
+  satırlar kalan yüksekliği paylaşır, ön cephe bandı ince şerittir. İki düzen
+  vardır ve BÜYÜK fotoğraf veren seçilir: DİKEY (fotoğraf üstte — tipik 5×4
+  derslik) / YATAY (fotoğraf solda — 10×2 gibi derin salon). Fotoğraf 30 px'in
+  altına inerse düşer (6×8 üçlü sıra gibi); ad, numara ve imza kalır.
+  Ölçülen 8 geometride yaprak 1 tek sayfadır; `PHOTO_PLAN_BOX_PX = 820`
+  ölçülen sınırın (835) altında pay bırakır.
+* **Fotoğrafsız öğrenci** kartında fotoğraf yerine "fotoğraf yok" kutusu
+  basılır; fotoğraf hiç aktarılmamış okulda plan yine tam çalışır.
+* **Planda yeri olmayan öğrenci** (plan yerleşimden sonra daraltılmış):
+  lejant satırı "DİKKAT: N öğrencinin koltuğu güncel salon planında yok…"
+  uyarısına döner ve bu öğrenciler planın altında AYRI listede imza yeriyle
+  basılır — kimse yoklamadan düşmez (A11'in yeni hâli).
+* **KVKK satırı** yaprak 1'in altındadır; madde atfı yaprak 2 dipnotunda
+  durur, yaprak 1'de tekrarlanmaz.
+* **Uygulama içi eşi:** oturum detayındaki Yoklama sekmesi aynı planı salon
+  salon gösterir (`YoklamaPlani`); karta basmak "Girmedi" işaretler, yeniden
+  basmak onayla kaldırır. Salon planı yüklenemezse liste görünümüne düşülür —
+  yoklama hiçbir koşulda alınamaz hâle gelmez.
+* **Kaldırılan:** adlı kroki (`build_room_kroki(with_names=True)`,
+  `KROKI_BOX_R1_PX`) — kroki artık yalnız boş salon planındadır.
+
 Şablonlar: `templates/sinav/reports/` (base · _head · _kroki · _kroki_style ·
-r1_salon_evraki · r4_announcement · r6_assignment · r7_tutanak ·
-r8_validation · room_layout) + `booklet_overlay` + `calendar_pdf` +
+_foto_plan · _foto_plan_style · r1_salon_evraki · r4_announcement ·
+r6_assignment · r7_tutanak · r8_validation · room_layout) + `booklet_overlay` + `calendar_pdf` +
 **`print/_design.css` ("Kurumsal Sade": `--pr-*` token'ları, DejaVu,
 `text-transform` YASAK — WeasyPrint TR i→I tuzağı, `|unlocalize` zorunlu)**
 birlikte kopyalanır. Hesaplanan CSS kuralları **`<head>` içinde** basılmalıdır:

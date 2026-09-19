@@ -2,14 +2,14 @@
 {% comment %}Sınav Salonu Yerleşim Planı — oturumdan BAĞIMSIZ boş kroki: sıra
 dizilimi, koltuk numaraları ve demirbaş (öğretmen masası / tahta / kapı).
 Amaç: sınav ÖNCESİ dersliğin fiziken bu düzene getirilmesi ve düzenin
-korunması (kapıya asılır). Geometri R1 ile aynı grid kimliğinden ve aynı
-_kroki.html parçasından gelir; öğrenci verisi İÇERMEZ (kişisel veri yok —
-SENSITIVE_READ gerekmez).
+korunması (kapıya asılır). Geometri R1'in fotoğraflı oturma planıyla aynı
+grid kimliğinden gelir (_kroki.html); öğrenci verisi İÇERMEZ (kişisel veri
+yok — SENSITIVE_READ gerekmez).
 
 _head.html KULLANILMAZ (oturum bandı yok); `header` dict'i base.html @page
 altbilgisi için üç anahtarı taşımak zorundadır (school_name/generated_at/
-exam_name). Kroki kutusu R1'dekinden BÜYÜKTÜR (sayfanın tamamı krokiye ayrılı)
-— ölçüler yine reports.kroki_metrics() ile sınırlanır, taşma olmaz.{% endcomment %}
+exam_name). Sayfanın tamamı krokiye ayrılıdır — ölçüler reports.kroki_metrics()
+ile sınırlanır, taşma olmaz.{% endcomment %}
 {% block extra_style %}
 <style>
   /* Boş planda koltuk numarası tek içeriktir: yatayda ortalanır, dikeyde
@@ -36,7 +36,7 @@ exam_name). Kroki kutusu R1'dekinden BÜYÜKTÜR (sayfanın tamamı krokiye ayr�
     <td class="right">Oturumdan bağımsız · salon kapısına asılır</td>
   </tr></table>
 
-  {% include "sinav/reports/_kroki.html" with room=room kroki_names=False kroki_id=1 %}
+  {% include "sinav/reports/_kroki.html" with room=room kroki_id=1 %}
 
   <div class="kroki-foot">Kapasite: {{ room.capacity }} koltuk · Numaralar koltuk sırasını gösterir.</div>
   <div class="layout-note">

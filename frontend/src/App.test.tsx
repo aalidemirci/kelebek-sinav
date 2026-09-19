@@ -9,6 +9,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import postcss from "postcss";
@@ -32,6 +33,8 @@ const okulApiMock = vi.hoisted(() => ({
   listStudents: vi.fn(),
   listPersonnel: vi.fn(),
   listClassSections: vi.fn(),
+  // Kişiler sayfasındaki fotoğraf kartı açılışta sayımı sorar (19.09.2026).
+  photoStats: vi.fn(() => Promise.resolve({ with_photo: 0, active_students: 0, without_photo: 0 })),
 }));
 
 vi.mock("./modules/okul/api", async (importOriginal) => {
@@ -59,16 +62,20 @@ const KURULMAMIS: SetupStatus = {
   personnel_count: 0,
 };
 
-/** main.tsx ile aynı sağlayıcı zinciri — sayfalar snackbar/confirm bekliyor. */
+/** main.tsx ile aynı sağlayıcı zinciri — sayfalar react-query, snackbar ve confirm
+ *  bekliyor. Her ekran taze önbellekle açılır; başarısız sorgu yeniden denenmez. */
 function ekranaBas(yol = "/") {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter initialEntries={[yol]}>
-      <SnackbarProvider>
-        <ConfirmProvider>
-          <App />
-        </ConfirmProvider>
-      </SnackbarProvider>
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[yol]}>
+        <SnackbarProvider>
+          <ConfirmProvider>
+            <App />
+          </ConfirmProvider>
+        </SnackbarProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 

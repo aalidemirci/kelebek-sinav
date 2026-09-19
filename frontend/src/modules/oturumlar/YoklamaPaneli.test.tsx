@@ -9,15 +9,32 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
+import type { Paginated } from "../../lib/pagination";
+import type { ExamRoom } from "../salonlar/api";
 import type { ExamSession } from "./api";
-import { makeAttendanceRecord, makeSeating, makeSession, paginated } from "./testFixtures";
+import {
+  makeAssignment,
+  makeAttendanceRecord,
+  makeRoomGeometry,
+  makeSeating,
+  makeSession,
+  paginated,
+} from "./testFixtures";
 
-const sessionApi = vi.hoisted(() => ({ seating: vi.fn() }));
+const sessionApi = vi.hoisted(() => ({
+  seating: vi.fn(),
+  // Varsayılan: fotoğraf yok (eski liste testleri planı hiç görmez).
+  seatingPhotos: vi.fn(() => Promise.resolve({ photos: {} as Record<string, string> })),
+}));
 const attendance = vi.hoisted(() => ({
   list: vi.fn(),
   mark: vi.fn(),
   update: vi.fn(),
   remove: vi.fn(),
+}));
+// Salon planı gelmezse panel liste görünümüne düşer — eski testler bunu sınar.
+const rooms = vi.hoisted(() => ({
+  list: vi.fn((): Promise<Paginated<ExamRoom>> => Promise.reject(new Error("plan yok"))),
 }));
 
 vi.mock("./api", async (importActual) => {
@@ -27,6 +44,10 @@ vi.mock("./api", async (importActual) => {
     examSessionApi: { ...actual.examSessionApi, ...sessionApi },
     attendanceApi: attendance,
   };
+});
+vi.mock("../salonlar/api", async (importActual) => {
+  const actual = await importActual<typeof import("../salonlar/api")>();
+  return { ...actual, examRoomApi: { ...actual.examRoomApi, ...rooms } };
 });
 
 import YoklamaPaneli from "./YoklamaPaneli";
@@ -122,5 +143,85 @@ describe("YoklamaPaneli", () => {
     await user.click(screen.getByRole("button", { name: "Kaldır" }));
     await waitFor(() => expect(attendance.remove).toHaveBeenCalledWith(31));
     expect(await screen.findByText("İşaret kaldırıldı.")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fotoğraflı yoklama planı (19.09.2026, kullanıcı kararı: "yoklama/imza doğrudan
+// plan üzerinde") — salon planı + fotoğraflar gelince liste yerine plan çizilir.
+// KVKK: fotoğraf 1×1 piksellik uydurma data URI'dir.
+// ---------------------------------------------------------------------------
+
+const FOTO = "data:image/jpeg;base64,/9j/sahte";
+
+describe("YoklamaPaneli — fotoğraflı plan", () => {
+  it("salon planında kartlar çizilir; fotoğrafı olanda resim, olmayanda baş harfler", async () => {
+    sessionApi.seating.mockResolvedValue(makeSeating({ status: "APPROVED" }));
+    sessionApi.seatingPhotos.mockResolvedValue({ photos: { "101": FOTO } });
+    rooms.list.mockResolvedValue(paginated([makeRoomGeometry()]));
+    attendance.list.mockResolvedValue(paginated([]));
+    renderPanel(makeSession({ status: "APPROVED" }));
+
+    const plan = await screen.findByRole("group", { name: "D-204 yoklama planı" });
+    const ayse = within(plan).getByRole("button", { name: /1\. koltuk, Ayşe Yılmaz, 101/ });
+    expect(ayse.querySelector("img")?.getAttribute("src")).toBe(FOTO);
+    const mehmet = within(plan).getByRole("button", { name: /2\. koltuk, Mehmet Demir/ });
+    expect(mehmet.querySelector("img")).toBeNull();
+    expect(mehmet).toHaveTextContent("MD");
+    // Öğretmen masası planda yerinde; liste görünümü çizilmez.
+    expect(within(plan).getByText("Öğretmen masası")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Girmedi işaretle/ })).not.toBeInTheDocument();
+  });
+
+  it("karta basmak girmedi işaretler; işaretli karta basmak onayla kaldırır", async () => {
+    const user = userEvent.setup();
+    sessionApi.seating.mockResolvedValue(makeSeating({ status: "APPROVED" }));
+    sessionApi.seatingPhotos.mockResolvedValue({ photos: {} });
+    rooms.list.mockResolvedValue(paginated([makeRoomGeometry()]));
+    attendance.list.mockResolvedValue(paginated([makeAttendanceRecord()]));
+    attendance.mark.mockResolvedValue(makeAttendanceRecord({ id: 32, student_id: 102 }));
+    attendance.remove.mockResolvedValue(undefined);
+    renderPanel(makeSession({ status: "APPROVED" }));
+
+    const plan = await screen.findByRole("group", { name: "D-204 yoklama planı" });
+    const ayse = within(plan).getByRole("button", { name: /Ayşe Yılmaz/ });
+    expect(ayse).toHaveAttribute("aria-pressed", "true");
+    expect(ayse).toHaveTextContent("Girmedi");
+
+    await user.click(within(plan).getByRole("button", { name: /Mehmet Demir/ }));
+    await waitFor(() =>
+      expect(attendance.mark).toHaveBeenCalledWith({ session_id: 5, seat_assignment_id: 12 }),
+    );
+
+    await user.click(ayse);
+    expect(await screen.findByText("İşaret kaldırılsın mı?")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Kaldır" }));
+    await waitFor(() => expect(attendance.remove).toHaveBeenCalledWith(31));
+  });
+
+  it("koltuğu planda olmayan öğrenci kaybolmaz — planın altında uyarıyla gösterilir", async () => {
+    sessionApi.seating.mockResolvedValue(
+      makeSeating({
+        rooms: [
+          {
+            room_id: 1,
+            room_name: "D-204",
+            assignments: [
+              makeAssignment(),
+              makeAssignment({ id: 13, seat_no: 9, desk_row: 5, student_id: 109 }),
+            ],
+          },
+        ],
+      }),
+    );
+    sessionApi.seatingPhotos.mockResolvedValue({ photos: {} });
+    rooms.list.mockResolvedValue(paginated([makeRoomGeometry()]));
+    attendance.list.mockResolvedValue(paginated([]));
+    renderPanel(makeSession({ status: "APPROVED" }));
+
+    expect(
+      await screen.findByText(/1 öğrencinin koltuğu güncel salon planında yok/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /9\. koltuk/ })).toBeInTheDocument();
   });
 });

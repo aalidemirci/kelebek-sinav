@@ -16,8 +16,8 @@ görüldü: yeni bağımlılığın pakete girip girmediğini sınayan kapı yok
 
     kelebek-sinav --pdf-duman [dosya.pdf]
 
-Bu kip Türkçe metinli küçük bir PDF üretir ve metni pypdf ile geri okuyup
-doğrular. Amacı iki katmanı ayrı ayrı sınamaktır:
+Bu kip Türkçe metinli, tek fotoğraflı küçük bir PDF üretir ve pypdf ile geri
+okuyup doğrular. Amacı üç katmanı ayrı ayrı sınamaktır:
 
 1. **PDF motoru ayakta mı** — Windows'ta WeasyPrint pango/harfbuzz/fontconfig
    DLL'lerini çalışma anında `dlopen` ile açar; paketten bir DLL eksikse bu
@@ -27,6 +27,11 @@ doğrular. Amacı iki katmanı ayrı ayrı sınamaktır:
    `ĞÜŞİÖÇ ığüşiöç` metni geri okunabiliyor ve kullanılan font gömülü DejaVu
    ise, fontconfig gömülü fonta bakıyor demektir (tasarım §5.1 "fontconfig
    tuzağı").
+3. **Fotoğraf JPEG olarak gömülüyor mu** — salon evrakının fotoğraflı oturma
+   planı (19.09.2026) öğrenci fotoğrafını Pillow'la JPEG'e kodlar, WeasyPrint
+   onu PDF'e gömer. WeasyPrint çözemediği görseli yalnız UYARIYLA atlar: JPEG
+   zinciri pakette eksikse evrak hata vermeden fotoğrafsız basılırdı. Kip
+   görseli çalışma anında üretir ve PDF'te DCT (JPEG) görsel nesnesi arar.
 
 Kip hem CI duman testinde (§8) hem de sahada "programın PDF üretimi çalışıyor
 mu?" sorusunu tek komutla yanıtlamak için kullanılır. Veritabanına DOKUNMAZ:
@@ -97,9 +102,13 @@ _SMOKE_HTML = """<!DOCTYPE html>
   <body>
     <p>{sample}</p>
     <p>Kelebek Sınav PDF duman testi.</p>
+    <img src="{photo}" alt="" style="width: 12mm; height: 16mm" />
   </body>
 </html>
 """
+
+# PDF'te JPEG görselin süzgeç adı (WeasyPrint JPEG'i yeniden kodlamadan gömer).
+JPEG_FILTER = "/DCTDecode"
 
 
 def _write(message: str) -> None:
@@ -145,6 +154,50 @@ def _pdf_text(pdf_path: Path) -> str:
     return reader.pages[0].extract_text() or ""
 
 
+def _pdf_image_filters(pdf_path: Path) -> list[str]:
+    """PDF'in ilk sayfasındaki görsellerin süzgeçlerini döndürür.
+
+    Görsel sayfa kaynağında ya da bir form nesnesinin içinde durabilir; ikisine
+    de bakılır (derinlik sınırlı — kendini gösteren form döngüye sokmasın).
+    """
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(pdf_path))
+    resources = reader.pages[0].get("/Resources")
+    if resources is None:
+        return []
+    filters: list[str] = []
+    bekleyen = [(resources.get_object(), 0)]
+    while bekleyen:
+        kaynak, derinlik = bekleyen.pop()
+        xobjects = kaynak.get("/XObject")
+        if xobjects is None:
+            continue
+        for value in xobjects.get_object().values():
+            nesne = value.get_object()
+            if nesne.get("/Subtype") == "/Image":
+                filters.append(str(nesne.get("/Filter", "")))
+            elif nesne.get("/Resources") is not None and derinlik < 3:
+                bekleyen.append((nesne["/Resources"].get_object(), derinlik + 1))
+    return filters
+
+
+def _smoke_photo_uri() -> str:
+    """Duman fotoğrafı: Pillow ile ÇALIŞMA ANINDA kodlanmış küçük bir JPEG.
+
+    Depoya ikili gömülmez; öğrenci fotoğrafının yolunu (Pillow JPEG kodlayıcı →
+    data URI → WeasyPrint) birebir izler. Kodlayıcı pakette yoksa burada düşer.
+    """
+    import base64
+    import io
+
+    from PIL import Image
+
+    tampon = io.BytesIO()
+    Image.new("RGB", (30, 40), (170, 60, 60)).save(tampon, format="JPEG", quality=85)
+    return "data:image/jpeg;base64," + base64.b64encode(tampon.getvalue()).decode("ascii")
+
+
 def _fontconfig_teshisi() -> None:
     """Font eşleşmesi başarısızsa NEDEN olduğunu yazar.
 
@@ -177,11 +230,12 @@ def _fontconfig_teshisi() -> None:
 
 
 def run_pdf_smoke(target: Path) -> int:
-    """Türkçe metinli PDF üretir, geri okuyup doğrular; 0 = başarılı."""
+    """Türkçe metinli, fotoğraflı PDF üretir, geri okuyup doğrular; 0 = başarılı."""
     from weasyprint import HTML
 
     target.parent.mkdir(parents=True, exist_ok=True)
-    HTML(string=_SMOKE_HTML.format(sample=TURKISH_SAMPLE)).write_pdf(str(target))
+    html = _SMOKE_HTML.format(sample=TURKISH_SAMPLE, photo=_smoke_photo_uri())
+    HTML(string=html).write_pdf(str(target))
     if not target.is_file() or target.stat().st_size == 0:
         _write(f"HATA: PDF üretilemedi ({target}).")
         return EXIT_PDF_SMOKE_FAILED
@@ -203,8 +257,18 @@ def run_pdf_smoke(target: Path) -> int:
         _fontconfig_teshisi()
         return EXIT_PDF_SMOKE_FAILED
 
+    filters = _pdf_image_filters(target)
+    if not any(JPEG_FILTER in filtre for filtre in filters):
+        _write(
+            f"HATA: PDF'e JPEG fotoğraf gömülmemiş (bulunan görseller: {filters}). "
+            "Pillow JPEG eklentisi ya da WeasyPrint görsel zinciri pakette eksik; "
+            "salon evrakının oturma planı fotoğrafsız basılır."
+        )
+        return EXIT_PDF_SMOKE_FAILED
+
     _write(f"PDF duman testi başarılı: {target}")
     _write(f"Fontlar: {sorted(fonts)}")
+    _write(f"Görseller: {filters}")
     return 0
 
 

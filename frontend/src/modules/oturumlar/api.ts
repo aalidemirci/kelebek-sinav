@@ -463,6 +463,12 @@ export const examSessionApi = {
   distribute: (id: number, payload: { seed?: number; strict?: boolean } = {}) =>
     api.post<DistributeResult>(`/exam-sessions/${id}/distribute/`, payload),
   seating: (id: number) => api.get<SeatingResponse>(`/exam-sessions/${id}/seating/`),
+  /**
+   * Yerleşimdeki öğrencilerin fotoğrafları (19.09.2026) — öğrenci pk (metin) →
+   * `data:image/jpeg;base64,…`. Fotoğrafı olmayan öğrenci sözlükte yoktur.
+   */
+  seatingPhotos: (id: number) =>
+    api.get<{ photos: Record<string, string> }>(`/exam-sessions/${id}/seating-photos/`),
   swapSeats: (id: number, assignmentA: number, assignmentB: number) =>
     api.post<{ swapped: SeatAssignmentRow[]; report: ValidationReport }>(
       `/exam-sessions/${id}/swap-seats/`,
