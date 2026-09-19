@@ -2098,9 +2098,9 @@ def _pdf_day_rows(grid: dict[str, Any]) -> list[dict[str, Any]]:
 def render_calendar_pdf(calendar: ExamCalendar) -> bytes:
     """Resmî sınav takvimi PDF'i (WeasyPrint — documents/base.html; A4 YATAY)."""
     from django.template.loader import render_to_string
-    from weasyprint import HTML
 
     from shared.letterhead import letterhead_context
+    from shared.pdf import html_to_pdf
     from shared.text import tr_upper
 
     config = SchoolConfig.load()
@@ -2135,7 +2135,8 @@ def render_calendar_pdf(calendar: ExamCalendar) -> bytes:
         ),
     }
     html = render_to_string("sinav/calendar_pdf.html", context)
-    return bytes(HTML(string=html).write_pdf())
+    # Eşzamanlı basım kilidi — `shared.pdf` (19.09.2026 çöküş tanısı).
+    return html_to_pdf(html)
 
 
 # --------------------------------------------------------------------------- #

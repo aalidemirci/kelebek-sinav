@@ -229,6 +229,18 @@ iletin. Veri klasörü OneDrive/Dropbox gibi bir eşitleme klasörünün altınd
 program uyarı günlükler — eşitleme açık SQLite dosyasını bozabilir; veri
 klasörünü eşitleme kapsamından çıkarın.
 
+### 6.7 Program çalışırken aniden kapandı
+
+Böyle bir kapanma çoğunlukla PDF üretimini yapan alt katmandaki bir hatadır ve
+`logs/uygulama.log`a düşmez. Program her açılışta `logs/cokme.log` dosyasına bir
+satır ekler; ani kapanmada o anın teknik kaydı (hangi program parçasının
+çalıştığı) bu satırın altına yazılır. Dosya ad, numara gibi kişisel veri
+içermez; iki günlük dosyasını birlikte bilişim sorumlusuna iletin.
+
+Programın evrak, kitapçık ve takvim PDF'lerini aynı anda değil **sırayla**
+ürettiğini bilin: bir PDF hazırlanırken istenen ikincisi, birincinin bitmesini
+bekler.
+
 ## 7. Çıkış kodları (bilişim sorumlusu için)
 
 `kelebek-sinav --autotest` pencere açmadan tüm açılış zincirini koşar ve

@@ -912,11 +912,16 @@ def reports_zip(files: list[tuple[str, bytes]]) -> bytes:
 # Render — PDF (WeasyPrint) + Excel (openpyxl)
 # ---------------------------------------------------------------------------
 def render_pdf(template_name: str, context: dict[str, object]) -> bytes:
-    """Ortak şablonu kullanan rapor sayfasını PDF'e çevirir."""
-    from django.template.loader import render_to_string
-    from weasyprint import HTML  # tembel import — ağır bağımlılık
+    """Ortak şablonu kullanan rapor sayfasını PDF'e çevirir.
 
-    return bytes(HTML(string=render_to_string(template_name, context)).write_pdf())
+    WeasyPrint'e `shared.pdf` kapısından gidilir: süreç genelinde tek kilit —
+    eşzamanlı basım yerel belleği bozuyordu (19.09.2026 çöküş tanısı).
+    """
+    from django.template.loader import render_to_string
+
+    from shared.pdf import html_to_pdf
+
+    return html_to_pdf(render_to_string(template_name, context))
 
 
 def build_r5_workbook(header: ReportHeader, rows: list[SeatRow]) -> bytes:

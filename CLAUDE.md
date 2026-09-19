@@ -69,6 +69,19 @@
   `_ANN_FIXED_PX`) — ÖLÇÜLEREK bulundu; garanti
   `test_reports.py::test_r1_salon_evraki_iki_yaprak` (bir derslikte 40 öğrenci
   sığar, fazlası kontrolsüz taşmaz).
+- **PDF üretimi TEK kapıdan ve SIRAYLA (19.09.2026 çöküş tanısı):** WeasyPrint'e
+  yalnız `shared.pdf.html_to_pdf` ile gidilir — süreç genelinde kilit + paylaşılan
+  `FontConfiguration`. Pango/fontconfig C katmanı aynı süreçte EŞZAMANLI basımda
+  yerel belleği bozuyor: paketli program "Tümünü indir"de `libpangoft2` erişim
+  ihlaliyle kapandı (Pango NULL yazı tipi verdi), aynı DLL'lerle Windows tanısında
+  paralel basım yığın bozulmasıyla (0xC0000374) düştü, sıralı basım düşmedi.
+  Gömülü sunucu altı iş parçacıklıdır; kilit olmadan evrak/kitapçık/takvim PDF'i
+  çakışır. Koruma testi `shared/tests/test_pdf.py` başka `write_pdf`e izin vermez.
+  Yerel çöküş Python istisnası DEĞİLDİR, `uygulama.log`a düşmez — `logs/cokme.log`
+  (`faulthandler`, `desktop.logging_setup.enable_crash_log`) o anın yığınını tutar.
+  Tanı düzeneği (Windows): kurulu programın `_internal` DLL'leri + yerel Python312;
+  önce `SetDllDirectoryW(_internal)` ŞART — yoksa PATH'teki GTK3-Runtime DLL'leri
+  karışır ve süreç ilk basımda çöker (yanıltıcı "bilinmeyen modül" kaydı).
 - **Şifreli alan sorguları:** ad-temelli filtre/sıralama/teklik DB'de
   çalışmaz → selector katmanında Python ile (tasarım §5). Yeni ad sorgusu
   doğrudan ORM filtresiyle yazılmaz.

@@ -13,14 +13,22 @@ mesajlardaki sorgu dizelerini kırpar: bir kütüphane yine de URL loglarsa
 
 from __future__ import annotations
 
+import faulthandler
 import logging
 import logging.handlers
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
+from typing import TextIO
 
 LOGGER_NAME = "kelebek_sinav"
 LOG_FILE_NAME = "uygulama.log"
+CRASH_LOG_NAME = "cokme.log"
+
+_CRASH_LOG_MAX_BYTES = 512_000
+# `faulthandler` dosyanın tanıtıcısını kullanır; dosya süreç ömrünce açık kalmalı.
+_crash_log_file: TextIO | None = None
 
 _MAX_BYTES = 1_000_000
 _BACKUP_COUNT = 3
@@ -80,6 +88,46 @@ def configure_logging(
     apply_access_log_policy()
 
     return logger
+
+
+def enable_crash_log(log_dir: Path, app_version: str) -> Path:
+    """Yerel (C katmanı) çöküşte Python yığınını `logs/cokme.log`a yazdırır.
+
+    19.09.2026 çöküş tanısı: PDF motorunun (WeasyPrint → Pango) C katmanındaki
+    erişim ihlali süreci ANINDA kapattı; Python istisnası olmadığı için
+    `uygulama.log`a hiçbir şey düşmedi ve hangi belgenin basıldığı
+    bilinemedi. `faulthandler` o anda bütün iş parçacıklarının Python yığınını
+    (dosya, satır, işlev) yazar. Yalnız KOD KONUMU yazılır — değişken değeri,
+    ad, numara yazılmaz (KVKK).
+
+    Her açılışta bir ayraç satırı eklenir: çöküş kaydı son ayracın altına düşer
+    ve `uygulama.log`daki açılış satırıyla eşleştirilir. Dosya büyüdüyse
+    (>500 KB) önceki içerik `cokme.log.1` olarak kenara alınır.
+
+    Windows notu: Python'un yakalayıcısı işlenmiş bazı sistem istisnalarını da
+    yazabilir; program kapanmadıysa kayıt çöküş değildir.
+    """
+    global _crash_log_file
+    log_dir.mkdir(parents=True, exist_ok=True)
+    path = log_dir / CRASH_LOG_NAME
+    try:
+        if _crash_log_file is None and path.exists():
+            if path.stat().st_size > _CRASH_LOG_MAX_BYTES:
+                path.replace(path.with_name(f"{CRASH_LOG_NAME}.1"))
+        handle = path.open("a", encoding="utf-8")
+        handle.write(
+            f"=== {datetime.now():%Y-%m-%d %H:%M:%S} Kelebek Sınav {app_version} açıldı ===\n"
+        )
+        handle.flush()
+        faulthandler.enable(file=handle, all_threads=True)
+    except OSError:
+        logging.getLogger(LOGGER_NAME).warning("Çöküş kaydı açılamadı.", exc_info=True)
+        return path
+    # Önceki tanıtıcı ancak faulthandler yeni dosyaya geçtikten SONRA kapatılır.
+    onceki, _crash_log_file = _crash_log_file, handle
+    if onceki is not None:
+        onceki.close()
+    return path
 
 
 def apply_access_log_policy() -> None:

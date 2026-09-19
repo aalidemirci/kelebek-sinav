@@ -125,9 +125,14 @@ def _render_overlay_pdf(
     info: SessionInfo,
     page_counts: dict[str, int],
 ) -> bytes:
-    """Salonun TÜM overlay sayfalarını tek WeasyPrint render'ında üretir."""
+    """Salonun TÜM overlay sayfalarını tek WeasyPrint render'ında üretir.
+
+    WeasyPrint'e `shared.pdf` kapısından gidilir (eşzamanlı basım kilidi —
+    19.09.2026 çöküş tanısı); imza ve çıktı değişmedi.
+    """
     from django.template.loader import render_to_string
-    from weasyprint import HTML  # tembel import — ağır bağımlılık
+
+    from shared.pdf import html_to_pdf
 
     # Kurum kimliği satırı (Tur 646): boş parçalar atlanır — "T.C. · İl · İlçe".
     identity_line = " · ".join(p for p in ("T.C.", info.province, info.district) if p)
@@ -143,7 +148,7 @@ def _render_overlay_pdf(
             "identity_line": identity_line,
         },
     )
-    return bytes(HTML(string=html).write_pdf())
+    return html_to_pdf(html)
 
 
 def build_room_package(

@@ -84,6 +84,16 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
   yok (KVKK); ayrılan öğrencinin fotoğrafı silindiği için arşiv oturumunun
   salon evrakı yeniden basılırsa o kartta "fotoğraf yok" kutusu çıkar.
 
+- **TB15 — PDF motoru uygulamayla aynı süreçte (19.09.2026):** WeasyPrint'in C
+  katmanındaki (Pango, fontconfig) bir çöküş pencereyle birlikte bütün programı
+  kapatır. Bilinen nedeni — eşzamanlı basım — `shared.pdf` kilidiyle kapandı;
+  başka bir yerel hata yine programı kapatabilir. İzleme: `logs/cokme.log`.
+  Kayıt yeni çöküş gösterirse sıradaki adım PDF üretimini ayrı bir alt süreçte
+  koşmaktır (çöküş yalnız o isteği düşürür, pencere açık kalır); paketleme ve
+  süreç haberleşmesi gerektirdiği için kullanıcı kararıyla ertelendi. Yan bulgu:
+  Windows paketinde fontconfig önbelleği (`cache/fontconfig`) hiç yazılmıyor;
+  paylaşılan `FontConfiguration` etkisini süreç başına tek taramaya indiriyor.
+
 ## Kapanan
 
 - **TB7 — GROUPS katılımcı tipi (19.09.2026'da kapandı — başka yoldan):**

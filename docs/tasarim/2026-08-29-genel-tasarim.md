@@ -699,6 +699,26 @@ değiştiyse" ve "bilinçli olarak yapılmayanlar" bu düzende şöyle karşıla
 * **Kaldırılan:** adlı kroki (`build_room_kroki(with_names=True)`,
   `KROKI_BOX_R1_PX`) — kroki artık yalnız boş salon planındadır.
 
+**19.09.2026 — PDF motoru tek kapıdan, sırayla (çöküş tanısı).** Paketli program
+(beta.6) "Tümünü indir" sırasında uyarı vermeden kapandı; Windows olay günlüğünde
+`libpangoft2-1.0-0.dll` içinde erişim ihlali vardı. Makine kodu çözümlemesi: WeasyPrint
+PDF'e yazı tipi gömerken Pango'dan NULL yazı tipi almış (`pango_fc_font_map_get_hb_face`
++4). Kurulu programın DLL'leri ve gerçek şablonlarla Windows'ta koşulan tanıda sıralı
+basım (60 belge) hiç düşmedi; iki iş parçacığının eşzamanlı basımı yedi koşunun birinde
+yığın bozulmasıyla (0xC0000374) düştü. Gömülü sunucu altı iş parçacıklıdır ve üç PDF yolu
+(salon evrakı, kitapçık bandı, takvim) kilitsizdi. Kararlar (kullanıcı onaylı):
+
+* **Tek kapı + kilit** — `shared.pdf.html_to_pdf`; basımlar süreç genelinde sırayla.
+  Kilit süreyi uzatmadı (iş zaten Python kilidine bağlı). Koruma testi başka
+  `write_pdf` çağrısına izin vermez.
+* **Paylaşılan `FontConfiguration`** — Windows paketinde fontconfig önbelleği hiç
+  yazılmıyor; paylaşım belge başına ~%4-9 hız kazandırdı (ölçüldü) ve her belgede
+  fontconfig kurulumunu kaldırdı. Belgelerde `@font-face` yok (yalnız gömülü DejaVu).
+* **Çöküş kaydı** — `faulthandler` açılışta `logs/cokme.log`a bağlanır; yerel çöküşte
+  bütün iş parçacıklarının yığını (yalnız kod konumu) yazılır.
+* **Ertelenen:** PDF üretimini ayrı alt süreçte koşmak (teknik borç TB15) — kayıt
+  yeni bir çöküş gösterirse.
+
 Şablonlar: `templates/sinav/reports/` (base · _head · _kroki · _kroki_style ·
 _foto_plan · _foto_plan_style · r1_salon_evraki · r4_announcement ·
 r6_assignment · r7_tutanak · r8_validation · room_layout) + `booklet_overlay` + `calendar_pdf` +

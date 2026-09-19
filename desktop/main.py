@@ -45,7 +45,7 @@ from desktop.django_bootstrap import (
 from desktop.errors import EXIT_OK, EXIT_UNEXPECTED, StartupError
 from desktop.integrity import check_database_integrity
 from desktop.lock import SingleInstanceLock
-from desktop.logging_setup import configure_logging
+from desktop.logging_setup import configure_logging, enable_crash_log
 from desktop.paths import (
     ENV_APP_HOME,
     AppPaths,
@@ -178,6 +178,9 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     app_version = get_app_version()
     logger.info("Kelebek Sınav %s başlıyor.", app_version)
+    # PDF motorunun C katmanındaki bir çöküş süreci anında kapatır ve bu günlüğe
+    # hiçbir şey düşmez (19.09.2026); o an Python yığını `logs/cokme.log`a yazılır.
+    enable_crash_log(paths.logs, app_version)
     hazard = check_sync_hazard(paths.root)
     if hazard:
         logger.warning("%s", hazard)
