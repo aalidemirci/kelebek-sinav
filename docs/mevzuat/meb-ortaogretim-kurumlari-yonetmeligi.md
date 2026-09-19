@@ -24,6 +24,9 @@ etiketler: [yazili-sinav, mazeret, kopya, disiplin, sinav-sonucu, ozur-belgesi]
 > | R1 dayanağı · takvim açıklaması md. 6 | md. 48/5 | Raporlu ve izinli günlerde sınava alınmaz |
 > | R1 dayanağı | md. 86/4 | Öğretmenin sınav iş ve işlemlerini yürütme görevi |
 > | Takvim açıklaması md. 4 | md. 48/1 | Mazeret sınavı zümrenin belirleyeceği zamanda, bir defaya mahsus |
+> | Mazeret sınavı kuralları (`services_makeup` — ikinci mazeret sınavı reddi, tek dönem) · Mazeret Takip Çizelgesi dayanağı (`mazeret_takip.html`) · kılavuz "Mazeret takibi ve mazeret sınavı" alıntısı | md. 48/1 | Özrünü belgelendirene bir defaya mahsus; süre dönemi aşamaz |
+> | Mazeret Takip Çizelgesi "e-Okul'a G" bölümü ve dayanağı | md. 48/4 | Geçerli özrü olmadan katılmayan "G" |
+> | Mazeret Takip Çizelgesi açıklama 1 (20 iş günü uzatma) ve dayanağı | md. 36/7 | Özür belgesi 5 iş günü; zorunlu hâlde 20 iş gününü aşmamak üzere uzatma |
 > | Takvim açıklaması md. 7 | md. 49/2 | Sonuçlar 10 iş günü içinde duyurulur ve sisteme işlenir |
 > | İhlal ve Kopya Tutanağı (R7) | md. 164/1-h, ı, l, o · 164/2-j · 164/3-ı, j | Kopya ve bilişim aracı fiilleri ile yaptırımları |
 > | Günlük sınav sınırı | md. 45/1-g | Günde iki sınav esası (aynı hüküm: ÖDY md. 5/1-k, Yönerge md. 5/1-s) |

@@ -28,3 +28,12 @@ export function StatusBadge({ status }: { status: ExamSessionStatusCode }) {
     </span>
   );
 }
+
+/** Mazeret sınavı oturumu rozeti (19.09.2026) — liste satırında ve detay başlığında ortak. */
+export function MakeupBadge() {
+  return (
+    <span className="rounded-full bg-tertiary-container px-3 py-1 text-label-small text-on-tertiary-container">
+      Mazeret sınavı
+    </span>
+  );
+}

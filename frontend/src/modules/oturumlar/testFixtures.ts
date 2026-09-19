@@ -32,6 +32,7 @@ export function makeSession(overrides: Partial<ExamSession> = {}): ExamSession {
     transfer_check_confirmed_at: null,
     approved_by_name: "",
     approved_at: null,
+    is_makeup: false,
     courses: [],
     rooms: [],
     ...overrides,

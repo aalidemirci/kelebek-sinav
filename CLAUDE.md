@@ -263,6 +263,23 @@
   alınır; o andan itibaren yerleşim sınavın yapıldığı düzenin kaydıdır.
   `_ensure_no_attendance` yeniden dağıtımı ve taslağa almayı REDDEDER (kayıtlar
   sessizce silinmez — idareci isterse önce Yoklama sekmesinden kaldırır).
+- **Mazeret sınavı yoklama kaydından TÜRER** (19.09.2026, `services_makeup`,
+  ekran `/mazeret`): oturum `ExamSession.is_makeup`, satırı
+  `ParticipantType.MAKEUP` ("Mazeretli öğrenciler"), bağ
+  `ExamAttendanceRecord.makeup_course`. Katılımcı listesi SAKLANMAZ —
+  `participants._resolve_makeup` bağlı kayıtlardan YALNIZ hâlâ "Mazeretli" + aktif
+  olanı verir; sonradan değişen sayıyla uyarılır ve `placement_drift`e düşer.
+  MAKEUP satırı elle eklenmez/değiştirilmez (`MAKEUP_ROW_MANUAL_MESSAGE` — plan
+  kopyalama da atlar; yalnız süre ve "aynı kitapçık" açık) ve takvimde üçüncü tip
+  DEĞİLDİR (`CALENDAR_PARTICIPANT_CHOICES`). Mazeret oturumundaki kayda ikinci
+  mazeret sınavı AÇILMAZ (OKY md. 48/1 "bir defaya mahsus"), kayıtlar tek dönemden
+  gelir ve mazeret oturumunun dönemi değişmez, aynı öğrenci bir oturumda iki
+  mazerete alınamaz; onaylanmış mazeret sınavından çıkarma reddedilir. Bağın
+  canlılığı `live_makeup_course` ile ELLE sorulur (soft-delete SET_NULL'ı
+  tetiklemez; silinen mazeret oturumunun kaydı kendiliğinden serbest kalır).
+  5 iş günü süresi UYARIDIR (kullanıcı kararı; hafta sonu düşülür, tatil verisi
+  yok). Rapor ucu biçimi `?kind=pdf|xlsx` alır — `?format=` DRF içerik
+  müzakeresine ayrılmıştır, "pdf" verilince uç 404 döner.
 - **Karma seviyeli oturumda evrak ders adı:** `_seat_course_names` aynı ders
   ≥2 seviyedeyse adı seviyeyle basar ("Coğrafya — 9. Sınıf"; R1/R5/R7 ve kitapçık
   bandı); şube duyurusunda (R4) `SeatRow.course_plain` ile SEVİYESİZ basılır

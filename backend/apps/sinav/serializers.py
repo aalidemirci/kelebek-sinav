@@ -232,9 +232,11 @@ class ExamSessionSerializer(serializers.ModelSerializer[ExamSession]):
             "approved_by_name",
             "approved_at",
             "anonymized_at",
+            "is_makeup",
             "courses",
             "rooms",
         )
+        # `is_makeup` yalnız Mazeret Takibi ekranından doğar (services_makeup).
         read_only_fields = (
             "id",
             "term_label",
@@ -244,6 +246,7 @@ class ExamSessionSerializer(serializers.ModelSerializer[ExamSession]):
             "approved_by_name",
             "approved_at",
             "anonymized_at",
+            "is_makeup",
             "courses",
             "rooms",
         )
@@ -427,6 +430,28 @@ class AttendanceMarkSerializer(serializers.Serializer[dict[str, object]]):
     seat_assignment_id = serializers.IntegerField()
     excuse_status = serializers.CharField(required=False, default="PENDING")
     note = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class MakeupSessionCreateSerializer(serializers.Serializer[dict[str, Any]]):
+    """Mazeret sınavı oluşturma girdisi — seçilen "Mazeretli" yoklama kayıtları."""
+
+    record_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), allow_empty=False
+    )
+    name = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
+    exam_date = serializers.DateField()
+    start_time = serializers.TimeField()
+    duration_minutes = serializers.IntegerField(
+        min_value=1, max_value=600, required=False, default=40
+    )
+
+
+class MakeupRecordsSerializer(serializers.Serializer[dict[str, Any]]):
+    """Mazeret sınavından çıkarma girdisi."""
+
+    record_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), allow_empty=False
+    )
 
 
 class QuestionUploadSerializer(serializers.Serializer[Any]):

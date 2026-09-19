@@ -75,6 +75,14 @@ export const PARTICIPANT_TYPE_TR: Record<ParticipantTypeCode, string> = {
   SECTIONS: "Seçili şubeler",
 };
 
+/**
+ * Oturum dersi satırının katılımcı tipi: seçilebilen iki tip + mazeret sınavı
+ * satırı (19.09.2026). MAKEUP bir SEÇENEK değildir — satırı yalnız Mazeret Takibi
+ * ekranı kurar; bu yüzden `PARTICIPANT_TYPE_TR`'ye (seçici seçenekleri) girmez.
+ */
+export type SessionCourseParticipantCode = ParticipantTypeCode | "MAKEUP";
+export const MAKEUP_PARTICIPANT_LABEL = "Mazeretli öğrenciler";
+
 /** Mevzuat "mazeret" der; "özürlü" engellilik çağrışımı taşıdığı için kullanılmaz. */
 export const EXCUSE_STATUS_TR: Record<ExcuseStatusCode, string> = {
   PENDING: "Beklemede",
@@ -91,7 +99,7 @@ export interface ExamSessionCourseRow {
   id: number;
   course_id: number;
   course_name: string;
-  participant_type: ParticipantTypeCode;
+  participant_type: SessionCourseParticipantCode;
   level: number | null;
   display_label: string;
   section_ids: number[];
@@ -124,6 +132,8 @@ export interface ExamSession {
   transfer_check_confirmed_at: string | null;
   approved_by_name: string;
   approved_at: string | null;
+  /** Mazeret sınavı oturumu — dersleri "Mazeretli öğrenciler" satırlarıdır (Mazeret Takibi). */
+  is_makeup: boolean;
   courses: ExamSessionCourseRow[];
   rooms: ExamSessionRoomRow[];
 }

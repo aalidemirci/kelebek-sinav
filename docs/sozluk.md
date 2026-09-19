@@ -26,6 +26,8 @@ kavramları (faz/karar/evrak kodları, motor ölçütleri) yüzeye çıkmaz.
 | sert kısıt ihlali | **kural ihlali** | sert kısıt, "İHLAL = 0", halka, yakınlık skoru | Motor ölçütleri yalnız "Ayrıntı" açılır bölümünde ve R8'in teknik bölümünde |
 | katı mod | **Katı dağıtım** — "yan, ön ve arka komşuluk da kesinlikle yasak" | "Katı mod (1. halka…)" | |
 | `ExcuseStatus` | **Beklemede / Mazeretli / Mazeretsiz** | Özürlü / Özürsüz | Mevzuat "mazeret" der |
+| `ParticipantType.MAKEUP` | **"Mazeretli öğrenciler"** (ders satırında) | "mazeret grubu", "üçüncü tip" | "Katılımcılar" SEÇENEĞİ değildir — satırı yalnız Mazeret Takibi ekranı kurar |
+| `ExamSession.is_makeup` | rozet **"Mazeret sınavı"**; ekran **Mazeret Takibi**; rapor **Mazeret Takip Çizelgesi** | telafi sınavı, bütünleme | Mevzuat "mazeret sınavı" der (OKY md. 48/1) |
 | Oturum durumu | **Taslak / Dağıtıldı / Onaylandı / Arşivlendi** | Arşiv | |
 | Kitapçık üretim kaydı | **"Üretim"** + tarih-saat | Koşu #n | |
 | `LayoutMode` | **Kelebek** / **Kendi dersliğinde** | "Kelebek değil", "klasik", "(KD)" | Seçim alanı adı: "Düzen" |
@@ -88,5 +90,5 @@ kodlar serbesttir.
 
 Gezinme etiketi kısa, sayfa başlığı (h1) tam addır ve üst çubuktaki başlıkla
 AYNIDIR: Genel Bakış · Sınav Takvimleri (gezinme: Takvimler) · Sınav Oturumları
-(Oturumlar) · Sınav Salonları (Salonlar) · Kişiler · Ders Havuzu · Ayarlar ·
-Kullanım Kılavuzu (Kılavuz) · Hakkında ve Lisans.
+(Oturumlar) · Mazeret Takibi · Sınav Salonları (Salonlar) · Kişiler · Ders Havuzu ·
+Ayarlar · Kullanım Kılavuzu (Kılavuz) · Hakkında ve Lisans.

@@ -47,6 +47,7 @@ import type {
 import {
   examSessionApi,
   LAYOUT_MODE_OPTIONS,
+  MAKEUP_PARTICIPANT_LABEL,
   PARTICIPANT_TYPE_TR,
   PROCTORS_ENABLED_LABEL,
   usesDistributionNumber,
@@ -512,15 +513,36 @@ function CoursesStep({
             Toplam katılımcı: {participants.data.total_count}
           </span>
         )}
-        <Button variant="text" icon="content_copy" onClick={() => setCopyOpen(true)}>
-          Başka oturumdan kopyala
-        </Button>
-        <Button variant="tonal" icon="add" onClick={() => setAddOpen(true)}>
-          Ders ekle
-        </Button>
+        {/* Mazeret sınavında ders ve öğrenci Mazeret Takibi ekranından gelir; elle ders
+            ekleme ve plan kopyalama backend'de de kapalıdır (MAKEUP_ROW_MANUAL_MESSAGE). */}
+        {!session.is_makeup && (
+          <>
+            <Button variant="text" icon="content_copy" onClick={() => setCopyOpen(true)}>
+              Başka oturumdan kopyala
+            </Button>
+            <Button variant="tonal" icon="add" onClick={() => setAddOpen(true)}>
+              Ders ekle
+            </Button>
+          </>
+        )}
       </div>
 
-      {session.courses.length === 0 && (
+      {session.is_makeup && (
+        <p className="flex items-start gap-2 rounded-shape-md bg-secondary-container p-3 text-body-medium text-on-secondary-container">
+          <Icon name="info" size="sm" className="mt-0.5 shrink-0" />
+          <span>
+            Bu bir mazeret sınavı: dersler ve öğrenciler{" "}
+            <Link to="/mazeret" className="font-medium underline">
+              Mazeret Takibi
+            </Link>{" "}
+            ekranında seçilir ve yalnız mazereti kabul edilen (“Mazeretli”) öğrenciler girer.
+            Öğrenci eklemek ya da çıkarmak için o ekranı kullanın; bir öğrencinin durumu sonradan
+            değiştirilirse listeden kendiliğinden düşer.
+          </span>
+        </p>
+      )}
+
+      {session.courses.length === 0 && !session.is_makeup && (
         <p className="text-body-medium text-on-surface-variant">
           Henüz ders eklenmedi. Her ders için sınava kimlerin gireceğini belirleyin: sınıf düzeyinin
           tamamı ya da seçili şubeler. Aynı sınıf düzeyinde aynı dersin sınavına girenler aynı
@@ -540,6 +562,7 @@ function CoursesStep({
               <span className="text-body-small text-on-surface-variant">
                 {row.participant_type === "LEVEL" && PARTICIPANT_TYPE_TR.LEVEL}
                 {row.participant_type === "SECTIONS" && `${row.section_ids.length} şube`}
+                {row.participant_type === "MAKEUP" && MAKEUP_PARTICIPANT_LABEL}
               </span>
               {info && (
                 <span className="text-body-small text-on-surface-variant">

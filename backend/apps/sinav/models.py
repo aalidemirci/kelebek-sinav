@@ -184,6 +184,19 @@ class ParticipantType(models.TextChoices):
     # ile AYNI sözcükler (evrak ve API `participant_label` buradan beslenir).
     LEVEL = "LEVEL", "Sınıf düzeyinin tamamı"
     SECTIONS = "SECTIONS", "Seçili şubeler"
+    # Mazeret sınavı (19.09.2026, kullanıcı kararı): katılımcılar, bu satıra
+    # BAĞLANMIŞ yoklama kayıtlarından yalnız hâlâ "Mazeretli" olanlardır
+    # (`ExamAttendanceRecord.makeup_course`). Satır elle eklenmez; Mazeret Takibi
+    # ekranı `services_makeup.create_makeup_session` ile açar.
+    MAKEUP = "MAKEUP", "Mazeretli öğrenciler"
+
+
+#: Takvim girdisinin kapsamı YALNIZ düzey/şubedir (CLAUDE.md §3 "üçüncü tip yok");
+#: mazeretli öğrenci kapsamı yalnız mazeret sınavı OTURUMUNDA vardır.
+CALENDAR_PARTICIPANT_CHOICES = [
+    (ParticipantType.LEVEL.value, ParticipantType.LEVEL.label),
+    (ParticipantType.SECTIONS.value, ParticipantType.SECTIONS.label),
+]
 
 
 class ExamSession(BaseModel):
@@ -247,6 +260,11 @@ class ExamSession(BaseModel):
     # F27: arşiv saklama süresi dolunca snapshot'lar anonimleştirilir (geri
     # dönüşsüz — F8'de elle tetikli); damga doluysa oturum anonimleşmiştir.
     anonymized_at = models.DateTimeField("anonimleştirme zamanı", null=True, blank=True)
+    # Mazeret sınavı oturumu (19.09.2026): dersleri yalnız "Mazeretli öğrenciler"
+    # satırlarıdır. Bu oturumda sınava girmeyene İKİNCİ mazeret sınavı açılmaz
+    # (Ortaöğretim Kurumları Yön. md. 48/1 "bir defaya mahsus"; ülke/il/ilçe
+    # geneli sınavlarda ayrıca Yönerge md. 5/1-çç).
+    is_makeup = models.BooleanField("mazeret sınavı", default=False)
 
     class Meta:
         verbose_name = "sınav oturumu"
@@ -500,6 +518,17 @@ class ExamAttendanceRecord(BaseModel):
             "Belge no/tarih gibi serbest metin (örn. 'Rapor no 123, 10.06.2026'). "
             "SAĞLIK TANISI YAZMAYIN — KVKK Madde 6 özel nitelikli veridir."
         ),
+    )
+    # Mazeret sınavına alındığı satır (19.09.2026). Soft-delete SET_NULL'ı
+    # tetiklemez (CLAUDE.md §3): bağın CANLI olup olmadığı satırın ve oturumunun
+    # `deleted_at`ından sorulur — `services_makeup.live_makeup_course`.
+    makeup_course = models.ForeignKey(
+        ExamSessionCourse,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="makeup_records",
+        verbose_name="mazeret sınavı dersi",
     )
 
     class Meta:
@@ -953,7 +982,7 @@ class ExamCalendarEntry(BaseModel):
     participant_type = models.CharField(
         "katılımcı tipi",
         max_length=10,
-        choices=ParticipantType.choices,
+        choices=CALENDAR_PARTICIPANT_CHOICES,
         default=ParticipantType.LEVEL,
         help_text="Seviye geneli mi, seçilen şubeler mi (seçmeli derslerde şube kapsamı).",
     )

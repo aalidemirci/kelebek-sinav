@@ -776,6 +776,28 @@ varsayılan, ayarla değiştirilebilir" ilkesi.
   okul müdürlüğüne bırakır, TARİH VERMEZ (Yönerge md. 5) → "izleyen hafta"
   ifadesi varsayılan dipnot metnindedir ve madde numarasına BAĞLANMAZ;
   kullanıcı `footnote_text` ile değiştirebilir.
+- **Mazeret takibi ve mazeret sınavı** (19.09.2026, kullanıcı isteği ve
+  kararları — `services_makeup`, ekran `/mazeret`): kaynak yoklama kaydıdır
+  (`ExamAttendanceRecord`); dönemin bütün kayıtları tek listede izlenir.
+  Mazeret sınavı Mazeret Takibi ekranından TOPLU açılır: seçilen kayıtlar tek
+  TASLAK oturuma (`ExamSession.is_makeup`) girer, farklı günlerin sınavları
+  birleşebilir, her (ders, düzey) bir `ParticipantType.MAKEUP` satırıdır
+  ("Mazeretli öğrenciler"); salon/dağıtım/evrak/yoklama normal akıştır.
+  Katılımcılar kayıttan ANLIK türetilir — YALNIZ "Mazeretli" + aktif öğrenci
+  (OKY md. 48/1 "özrünü belgelendirenlerin"; Yönerge md. 5/1-aa); durum sonradan
+  değişirse öğrenci düşer, dağıtılmış oturumda `placement_drift` bandı çıkar.
+  "Bir defaya mahsus" (OKY md. 48/1; ülke/il/ilçe geneli için ayrıca Yönerge
+  md. 5/1-çç): mazeret oturumundaki kayda ikincisi açılmaz. Süre dönemi aşamaz
+  (48/1) → kayıtlar tek dönemden, mazeret oturumunun dönemi değiştirilemez.
+  Aynı öğrenci bir oturumda iki derse düşemeyeceği için iki mazerete birden
+  alınamaz. 5 iş günü (Yönerge md. 5/1-y; OKY md. 36/7 zorunlu hâlde 20 iş
+  gününe uzatma) UYARIDIR — kullanıcı kararı "uyarsın, karar idarenin"; tatil
+  verisi yok, hafta sonu düşülür. Rapor PDF (resmî antet, Düzenleyen — Müdür
+  Yardımcısı / UYGUNDUR Okul Müdürü) + Excel; bölümler: tüm girmeyenler, e-Okul'a
+  "G" (OKY md. 48/4, Yönerge md. 6/1-f), mazeret sınavı bekleyenler, il/ilçe
+  MEM'e bildirim (Yönerge md. 5/1-z; oturum türü "Okul" dışı + Mazeretli).
+  Ülke/il geneli sınavların mazeret TARİHİ il MEM'ce ilan edilir (md. 5/1-aa) —
+  ekran uyarır, tarih idarecinin girdisidir.
 - **Kümeler YALNIZ seçim aracıdır** (31.08.2026): küme kimliği hiçbir oturum
   kaydına yazılmaz; sihirbaz kümeyi yazma anında somut şube/salon pk'lerine
   açar. **Aynı kural takvim girdisine de uygulanır** (31.08.2026 eki):

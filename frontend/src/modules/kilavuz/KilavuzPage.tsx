@@ -938,6 +938,50 @@ export default function KilavuzPage() {
           <strong>arşivlenmiş oturumda da güncellenebilir</strong>: oturumu arşive kaldırmış olmanız
           mazeret durumunu işlemenize engel değildir.
         </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Mazeret takibi ve mazeret sınavı
+        </h3>
+        <p>
+          <Ekran to="/mazeret">Mazeret Takibi</Ekran> ekranı, dönemin bütün sınavlarında girmeyen
+          öğrencileri sınav sınav tek listede toplar. Mazeret durumu ve belge notu burada da
+          güncellenir. Sınav tarihinden itibaren 5 iş günü geçtiği hâlde kararı verilmemiş kayıt
+          “süre geçti” diye işaretlenir. Süre hafta sonları düşülerek hesaplanır; resmî tatiller
+          hesaba katılmaz. Bu işaret bir uyarıdır, mazereti kabul edip etmemek okul müdürlüğünün
+          kararıdır.
+        </p>
+        <p>
+          Mazereti kabul edilen (<em>Mazeretli</em>) öğrencileri işaretleyip{" "}
+          <strong>“Mazeret sınavı oluştur”</strong> dersiniz. Farklı günlerin sınavları aynı mazeret
+          sınavında toplanabilir; her ders ve sınıf düzeyi ayrı satır olur ve oturuma{" "}
+          <strong>yalnız Mazeretli öğrenciler</strong> girer. Oturum taslak açılır. Salon seçimi,
+          dağıtım, evrak ve yoklama normal oturumdaki gibidir; yalnız ders eklenmez, dersler ve
+          öğrenciler bu ekrandan gelir. Bir öğrencinin durumu sonradan <em>Mazeretsiz</em> yapılırsa
+          öğrenci mazeret sınavından kendiliğinden düşer. Oturum dağıtılmışsa program yeniden
+          dağıtmanızı ister. Aynı öğrenci iki sınavın mazeretine aynı oturumda seçilemez, çünkü aynı
+          anda iki sınava girilmez.
+        </p>
+        <Mevzuat kaynak="MEB Ortaöğretim Kurumları Yönetmeliği md. 48/1">
+          Sınavlara katılmayan, performans çalışmasını yerine getirmeyen veya projesini zamanında
+          teslim etmeyen öğrencilerden, özrünü 36 ncı maddenin yedinci fıkrasına göre
+          belgelendirenlerin mazeret sınavı ilgili zümrenin belirleyeceği bir zamanda önceden
+          duyurularak bir defaya mahsus yapılır.
+        </Mevzuat>
+        <p>
+          Bu yüzden mazeret sınavına da girmeyen öğrenciye ikinci bir mazeret sınavı açılmaz.
+          Ekrandaki <strong>Rapor (PDF)</strong> resmî antetli ve imzalı takip çizelgesidir. Dört
+          bölümü vardır: (A) sınava girmeyen bütün öğrenciler; (B) e-Okul'a “G” işlenecekler; (C)
+          mazeret sınavı bekleyenler; (D) ülke, il ve ilçe geneli sınavlarda il/ilçe millî eğitim
+          müdürlüğüne bildirilecekler. <strong>Rapor (Excel)</strong> aynı bölümleri ayrı sayfalarda
+          verir ve e-Okul'a işlerken çalışma kopyası olarak kullanılır. Ülke ve il geneli sınavların
+          mazeret sınavı tarihi il millî eğitim müdürlüğünce ilan edilir; mazeret sınavının tarihini
+          o ilana göre seçin.
+        </p>
+        <Mevzuat kaynak="MEB Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5">
+          Ülke, il ve ilçe geneli ortak yazılı sınavlara katılamayan öğrencilerden okul
+          müdürlüklerince mazeret sınavına katılmasına karar verilen öğrenciler resmî yazı ile
+          il/ilçe millî eğitim müdürlüklerine bildirilir.
+        </Mevzuat>
       </Adim>
 
       <Adim no={10} icon="shield_lock" title="Bakım: yedek, parola ve güncelleme">

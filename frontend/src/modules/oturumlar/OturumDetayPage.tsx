@@ -33,7 +33,7 @@ import type { ExamSession } from "./api";
 import { examSessionApi } from "./api";
 import EvrakPaneli from "./EvrakPaneli";
 import GozetmenlerPaneli from "./GozetmenlerPaneli";
-import { formatDate, StatusBadge } from "./oturumEtiket";
+import { formatDate, MakeupBadge, StatusBadge } from "./oturumEtiket";
 import SinavSihirbazi from "./SinavSihirbazi";
 import SorularPaneli from "./SorularPaneli";
 import KurallarPaneli from "./KurallarPaneli";
@@ -241,6 +241,7 @@ export default function OturumDetayPage() {
           {formatDate(data.exam_date)} · {data.start_time.slice(0, 5)} · {data.term_label}
         </span>
         <StatusBadge status={data.status} />
+        {data.is_makeup && <MakeupBadge />}
       </div>
 
       {(data.status === "DISTRIBUTED" || data.status === "APPROVED") && (

@@ -262,6 +262,25 @@ describe("KilavuzPage", () => {
     expect(screen.queryByText(/“Girmedi işaretle”/)).not.toBeInTheDocument();
   });
 
+  it("mazeret takibini, bir defaya mahsus kuralını ve raporu anlatır (19.09.2026)", () => {
+    renderPage();
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Mazeret takibi ve mazeret sınavı" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Mazeret Takibi" })).toHaveAttribute(
+      "href",
+      "/mazeret",
+    );
+    // Alıntılar depodaki OKY md. 48/1 ve Yönerge md. 5/1-z metniyle birebirdir.
+    expect(
+      screen.getByText(/önceden\s+duyurularak bir defaya mahsus yapılır\./),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/resmî yazı ile\s+il\/ilçe millî eğitim müdürlüklerine bildirilir\./),
+    ).toBeInTheDocument();
+    expect(screen.getByText("yalnız Mazeretli öğrenciler")).toBeInTheDocument();
+  });
+
   it("öğrenci fotoğraflarını ve fotoğraflı oturma planını anlatır (19.09.2026)", () => {
     renderPage();
     expect(

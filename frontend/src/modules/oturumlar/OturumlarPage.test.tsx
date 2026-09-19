@@ -86,6 +86,17 @@ describe("OturumlarPage", () => {
     expect(screen.queryByText("Gözetmenli")).not.toBeInTheDocument();
   });
 
+  it("mazeret sınavı oturumu listede rozetle ayrılır", async () => {
+    exam.list.mockResolvedValue(
+      paginated([makeSession(), makeSession({ id: 9, name: "Kasım Mazeret", is_makeup: true })]),
+    );
+    renderPage();
+
+    const satir = await screen.findByRole("button", { name: /Kasım Mazeret/ });
+    expect(within(satir).getByText("Mazeret sınavı")).toBeInTheDocument();
+    expect(screen.getAllByText("Mazeret sınavı")).toHaveLength(1);
+  });
+
   it("boş listede EmptyState gösterir; içindeki düğme yeni oturum diyaloğunu açar", async () => {
     const user = userEvent.setup();
     exam.list.mockResolvedValue(paginated([]));

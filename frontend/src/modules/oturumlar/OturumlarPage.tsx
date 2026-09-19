@@ -23,7 +23,7 @@ import TextField from "../../ui/TextField";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import type { LayoutModeCode } from "./api";
 import { examSessionApi, LAYOUT_MODE_OPTIONS, LAYOUT_MODE_TR, PROCTORS_ENABLED_LABEL } from "./api";
-import { formatDate, StatusBadge } from "./oturumEtiket";
+import { formatDate, MakeupBadge, StatusBadge } from "./oturumEtiket";
 
 export default function OturumlarPage() {
   const navigate = useNavigate();
@@ -128,6 +128,7 @@ export default function OturumlarPage() {
                   {LAYOUT_MODE_TR[session.layout_mode]}
                 </span>
                 <span className="ml-auto flex items-center gap-2">
+                  {session.is_makeup && <MakeupBadge />}
                   <StatusBadge status={session.status} />
                 </span>
               </Card>

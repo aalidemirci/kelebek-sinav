@@ -20,6 +20,7 @@ from apps.sinav.views_calendar import (
     ExamCalendarViewSet,
     ExamTrackItemViewSet,
 )
+from apps.sinav.views_makeup import MakeupViewSet
 
 router = DefaultRouter()
 router.register("exam-rooms", ExamRoomViewSet, basename="exam-room")
@@ -36,5 +37,6 @@ router.register("proctor-exemptions", ProctorExemptionViewSet, basename="proctor
 router.register(
     "exam-attendance-records", ExamAttendanceRecordViewSet, basename="exam-attendance-record"
 )
+router.register("makeup", MakeupViewSet, basename="makeup")
 
 urlpatterns = router.urls

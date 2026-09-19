@@ -20,6 +20,9 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Genel Bakış", icon: "space_dashboard" },
   { to: "/takvimler", label: "Takvimler", icon: "calendar_month" },
   { to: "/oturumlar", label: "Oturumlar", icon: "event_seat" },
+  // 19.09.2026: yeni öğe oturumların ARDINA eklendi — mevcut öğelerin birbirine
+  // göre sırası değişmedi (iş akışı: oturum → yoklama → mazeret).
+  { to: "/mazeret", label: "Mazeret Takibi", icon: "assignment_late" },
   { to: "/salonlar", label: "Salonlar", icon: "meeting_room" },
   { to: "/kisiler", label: "Kişiler", icon: "group" },
   { to: "/dersler", label: "Ders Havuzu", icon: "menu_book" },
@@ -33,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
 const PAGE_TITLES: Array<[prefix: string, title: string]> = [
   ["/takvimler", "Sınav Takvimleri"],
   ["/oturumlar", "Sınav Oturumları"],
+  ["/mazeret", "Mazeret Takibi"],
   ["/salonlar", "Sınav Salonları"],
   ["/kisiler", "Kişiler"],
   ["/dersler", "Ders Havuzu"],

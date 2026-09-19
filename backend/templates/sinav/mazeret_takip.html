@@ -1,0 +1,235 @@
+{% extends "documents/base.html" %}
+{% comment %}Sınava girmeyen öğrenciler ve mazeret takip çizelgesi (19.09.2026, kullanıcı
+isteği). documents/base.html anteti + .sig-grid imza deseni; A4 YATAY (on bir sütun).
+Bölümler services_makeup.makeup_report_context'ten: A tüm kayıtlar, B e-Okul'a "G",
+C mazeret sınavı bekleyenler, D il/ilçe MEM'e bildirim. text-transform YOK —
+başlıklar doğrudan büyük harf (WeasyPrint TR "i" tuzağı). Excel kopyası aynı
+bağlamdan (build_makeup_workbook).{% endcomment %}
+{% block extra_style %}
+<style>
+  @page { size: A4 landscape; }
+  /* documents/base.html .doc-table için satır bölünmesini YASAKLAMAZ (CLAUDE.md §2):
+     kural olmadan uzun açıklamalı satır sayfa sınırında ikiye bölünür. */
+  .doc-table { font-size: 7.8pt; margin: 4pt 0 6pt; }
+  .doc-table th { font-size: 7.6pt; padding: 3pt 4pt; }
+  .doc-table td { padding: 2.5pt 4pt; }
+  .doc-table tr { break-inside: avoid; page-break-inside: avoid; }
+  .doc-table td.num { text-align: center; white-space: nowrap; }
+  .doc-table td.note { font-size: 7.2pt; }
+  .gecikti { font-weight: bold; }
+  .part { margin-top: 10pt; }
+  .part .section-title { break-after: avoid; page-break-after: avoid; }
+  .part-note { font-size: 7.5pt; color: var(--pr-secondary); margin: 2pt 0 0 2pt; }
+  .summary { width: 100%; border-collapse: collapse; margin: 6pt 0 2pt;
+             border: 0.75pt solid var(--pr-line-soft); break-inside: avoid; }
+  .summary td { text-align: center; padding: 3pt 4pt; font-size: 8pt;
+                border-right: 0.5pt solid var(--pr-line-soft); }
+  .summary td b { display: block; font-size: 11pt; color: var(--pr-ink); }
+  .notes { margin-top: 8pt; font-size: 7.6pt; line-height: 1.35; color: var(--pr-label);
+           break-inside: avoid; page-break-inside: avoid; }
+  .notes ol { margin: 2pt 0 0 14pt; padding: 0; }
+  .dayanak { margin-top: 6pt; font-size: 6.8pt; color: var(--pr-muted); line-height: 1.25;
+             break-inside: avoid; page-break-inside: avoid; }
+</style>
+{% endblock %}
+{% block content %}
+  <div class="doc-title">{{ year_label }} EĞİTİM VE ÖĞRETİM YILI {{ term_sequence }}. DÖNEM</div>
+  <div class="doc-title" style="margin-top: 0;">SINAVA GİRMEYEN ÖĞRENCİLER VE MAZERET TAKİP ÇİZELGESİ</div>
+  <div class="doc-subtitle">Düzenlenme: {{ generated_at }}</div>
+
+  <table class="summary">
+    <tr>
+      <td><b>{{ summary.total }}</b>Sınava girmeyen</td>
+      <td><b>{{ summary.pending }}</b>Karar bekleyen</td>
+      <td><b>{{ summary.excused }}</b>Mazeretli</td>
+      <td><b>{{ summary.unexcused }}</b>Mazeretsiz</td>
+      <td><b>{{ summary.overdue }}</b>Bildirim süresi geçmiş</td>
+      <td><b>{{ summary.awaiting_makeup }}</b>Mazeret sınavı bekleyen</td>
+      <td style="border-right: none;"><b>{{ summary.in_makeup }}</b>Mazeret sınavına alınan</td>
+    </tr>
+  </table>
+
+  <div class="part">
+    <div class="section-title">A. SINAVA GİRMEYEN ÖĞRENCİLER</div>
+    <table class="doc-table">
+      <thead>
+        <tr>
+          <th style="width: 3%;">S.No</th>
+          <th style="width: 7%;">Sınav tarihi</th>
+          <th style="width: 17%;">Sınav</th>
+          <th style="width: 6%;">Okul No</th>
+          <th style="width: 14%;">Adı Soyadı</th>
+          <th style="width: 6%;">Sınıf/Şube</th>
+          <th style="width: 8%;">Mazeret durumu</th>
+          <th style="width: 14%;">Belge / açıklama</th>
+          <th style="width: 7%;">Bildirim son günü</th>
+          <th style="width: 11%;">Mazeret sınavı</th>
+          <th style="width: 7%;">Sonuç</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td class="num">{{ forloop.counter }}</td>
+            <td class="num">{{ r.exam_date_tr }}</td>
+            <td>{{ r.course_label }}{% if r.external %}<br><span style="font-size: 6.8pt; color: var(--pr-secondary);">{{ r.session_type_label }} geneli sınav</span>{% endif %}{% if r.session_is_makeup %}<br><span style="font-size: 6.8pt; color: var(--pr-secondary);">Mazeret sınavı</span>{% endif %}</td>
+            <td class="num">{{ r.student_number }}</td>
+            <td>{{ r.full_name }}</td>
+            <td class="num">{{ r.class_label }}</td>
+            <td>{{ r.excuse_label }}</td>
+            <td class="note">{{ r.note }}</td>
+            <td class="num{% if r.notice_overdue %} gecikti{% endif %}">{{ r.deadline_tr }}{% if r.notice_overdue %}<br>(geçti){% endif %}</td>
+            <td>{% if r.makeup_session_id %}{{ r.makeup_session_name }}<br>{{ r.makeup_date_tr }}{% endif %}</td>
+            <td>{{ r.makeup_result_label }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="11" style="text-align: center;">Bu dönemde sınava girmeyen öğrenci kaydı yok.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="part">
+    <div class="section-title">B. E-OKUL'A “G” İŞLENECEKLER</div>
+    <div class="part-note">Mazereti kabul edilmeyen öğrenciler: puan hanesine “G” yazılır ve bu hane aritmetik ortalamaya dâhil edilir.</div>
+    <table class="doc-table">
+      <thead>
+        <tr>
+          <th style="width: 4%;">S.No</th>
+          <th style="width: 9%;">Okul No</th>
+          <th style="width: 24%;">Adı Soyadı</th>
+          <th style="width: 9%;">Sınıf/Şube</th>
+          <th style="width: 30%;">Sınav</th>
+          <th style="width: 10%;">Sınav tarihi</th>
+          <th style="width: 14%;">İşlendi (paraf)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in g_rows %}
+          <tr>
+            <td class="num">{{ forloop.counter }}</td>
+            <td class="num">{{ r.student_number }}</td>
+            <td>{{ r.full_name }}</td>
+            <td class="num">{{ r.class_label }}</td>
+            <td>{{ r.course_label }}</td>
+            <td class="num">{{ r.exam_date_tr }}</td>
+            <td></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" style="text-align: center;">Kayıt yok.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="part">
+    <div class="section-title">C. MAZERET SINAVI BEKLEYENLER</div>
+    <div class="part-note">Mazereti kabul edilen, henüz bir mazeret sınavına alınmamış öğrenciler.</div>
+    <table class="doc-table">
+      <thead>
+        <tr>
+          <th style="width: 4%;">S.No</th>
+          <th style="width: 9%;">Okul No</th>
+          <th style="width: 27%;">Adı Soyadı</th>
+          <th style="width: 10%;">Sınıf/Şube</th>
+          <th style="width: 38%;">Sınav</th>
+          <th style="width: 12%;">Sınav tarihi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in waiting_rows %}
+          <tr>
+            <td class="num">{{ forloop.counter }}</td>
+            <td class="num">{{ r.student_number }}</td>
+            <td>{{ r.full_name }}</td>
+            <td class="num">{{ r.class_label }}</td>
+            <td>{{ r.course_label }}</td>
+            <td class="num">{{ r.exam_date_tr }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" style="text-align: center;">Kayıt yok.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="part">
+    <div class="section-title">D. İL/İLÇE MİLLÎ EĞİTİM MÜDÜRLÜĞÜNE BİLDİRİLECEKLER</div>
+    <div class="part-note">Ülke, il ve ilçe geneli ortak yazılı sınavlara katılamayıp mazeret sınavına alınmasına karar verilen öğrenciler resmî yazıyla bildirilir.</div>
+    <table class="doc-table">
+      <thead>
+        <tr>
+          <th style="width: 4%;">S.No</th>
+          <th style="width: 9%;">Okul No</th>
+          <th style="width: 25%;">Adı Soyadı</th>
+          <th style="width: 9%;">Sınıf/Şube</th>
+          <th style="width: 31%;">Sınav</th>
+          <th style="width: 10%;">Sınav türü</th>
+          <th style="width: 12%;">Sınav tarihi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in external_rows %}
+          <tr>
+            <td class="num">{{ forloop.counter }}</td>
+            <td class="num">{{ r.student_number }}</td>
+            <td>{{ r.full_name }}</td>
+            <td class="num">{{ r.class_label }}</td>
+            <td>{{ r.course_label }}</td>
+            <td>{{ r.session_scope_label }}</td>
+            <td class="num">{{ r.exam_date_tr }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" style="text-align: center;">Kayıt yok.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="notes">
+    <b>AÇIKLAMALAR</b>
+    <ol>
+      <li>Geçerli mazereti bulunan öğrencinin sınava katılmama gerekçesi, sınav tarihinden
+        itibaren en geç 5 iş günü içinde velisi tarafından okul müdürlüğüne yazılı olarak
+        bildirilir. “Bildirim son günü” hafta sonları düşülerek hesaplanmıştır; resmî
+        tatiller ayrıca dikkate alınmalıdır. Zorunlu hâllerde süre okul yönetimince 20 iş
+        gününü aşmamak üzere uzatılabilir.</li>
+      <li>Mazereti kabul edilen öğrencinin mazeret sınavı, ilgili zümrenin belirleyeceği ve
+        önceden duyurulan tarihte bir defaya mahsus yapılır; süre dönemi aşamaz. Ülke ve il
+        geneli sınavların mazeret sınavı tarihi il millî eğitim müdürlüğünce ilan edilir.</li>
+      <li>Geçerli mazereti olmadan sınava ya da mazeret sınavına katılmayan öğrencinin puan
+        hanesine “G” yazılır; mazeret sınavına da katılmayana ayrıca mazeret sınavı yapılmaz.
+        Özrü nedeniyle 60 günlük devamsızlık kapsamında değerlendirilen öğrenci mazeret
+        sınavına da katılamazsa ilgili derse yönelik dönem puanı zorunlu hâllerde bir sınav
+        eksiğiyle verilir.</li>
+    </ol>
+  </div>
+
+  <table class="sig-grid">
+    <tr>
+      <td>
+        <div class="space"></div>
+        <div class="line"></div>
+        <div class="name">…………………</div>
+        <div class="role">Düzenleyen — Müdür Yardımcısı</div>
+      </td>
+      <td></td>
+      <td>
+        <div style="font-size: 9.5pt; color: var(--pr-label);">UYGUNDUR</div>
+        <div style="font-size: 9pt;">…… / …… / 20……</div>
+        <div class="space"></div>
+        <div class="line"></div>
+        <div class="name">{{ principal_name|default:"…………………" }}</div>
+        <div class="role">Okul Müdürü</div>
+      </td>
+    </tr>
+  </table>
+
+  <div class="dayanak">
+    <b>DAYANAK:</b> MEB Ortaöğretim Kurumları Yönetmeliği md. 36/7, 48/1, 48/4 · MEB Yazılı ve
+    Uygulamalı Sınavlar Yönergesi md. 5/1-ü, y, z, aa, çç · md. 6/1-f, g.
+    &nbsp;<b>KVKK:</b> Bu çizelgedeki kişisel veriler, ölçme-değerlendirme mevzuatının uygulanması
+    amacıyla 6698 sayılı Kanunun 5/2-ç maddesi uyarınca işlenir; yalnızca yetkili okul personeli
+    ve denetim mercileriyle paylaşılır. Açıklama sütununa sağlık tanısı yazılmaz (md. 6/1).
+  </div>
+{% endblock %}

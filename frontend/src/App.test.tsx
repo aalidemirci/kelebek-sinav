@@ -151,7 +151,15 @@ describe("App — kabuk gezinmesi", () => {
   it("ana bölüm bağlantılarını gösterir", async () => {
     ekranaBas("/");
     await screen.findByRole("heading", { name: "Genel Bakış" });
-    for (const ad of ["Genel Bakış", "Salonlar", "Kişiler", "Ders Havuzu", "Ayarlar", "Kılavuz"]) {
+    for (const ad of [
+      "Genel Bakış",
+      "Mazeret Takibi",
+      "Salonlar",
+      "Kişiler",
+      "Ders Havuzu",
+      "Ayarlar",
+      "Kılavuz",
+    ]) {
       expect(screen.getByRole("link", { name: ad })).toBeInTheDocument();
     }
     expect(screen.getByRole("link", { name: "Hakkında ve Lisans" })).toHaveAttribute(

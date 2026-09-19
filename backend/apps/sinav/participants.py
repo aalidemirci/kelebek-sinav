@@ -9,6 +9,8 @@ mükerrer tespiti ve örtüşen oturum uyarıları; GROUPS tipi alınmadı (TB7)
 Yerine seçmeli ders öğrenci listesi (19.09.2026, `dersler.CourseEnrollment`):
 SECTIONS satırında listeli şubeden yalnız listedekiler, listesiz şubeden
 şubenin tamamı gelir; LEVEL satırı listeyi uygulamaz ama varlığını uyarır.
+MAKEUP satırı (mazeret sınavı, 19.09.2026) şube/düzey okumaz: satıra bağlı
+yoklama kayıtlarından hâlâ "Mazeretli" olan aktif öğrencileri verir.
 Dağıtılmış oturumda yerleşim güncel çözümle `placement_drift` ile karşılaştırılır.
 Öğrenci verisi okul köprüsünden okunur; burada hiçbir şey YAZILMAZ ve kişisel
 veri SAKLANMAZ — liste anlık türetilir.
@@ -216,6 +218,59 @@ def _resolve_sections(
         _append_students(resolution, sc, students, class_level=section.class_level)
 
 
+def _resolve_makeup(
+    sc: ExamSessionCourse, resolution: CourseResolution, index: EnrollmentIndex
+) -> None:
+    """Mazeret sınavı satırı (19.09.2026) — bağlı yoklama kayıtlarından YALNIZ
+    hâlâ "Mazeretli" olanlar (kullanıcı kararı; OKY md. 48/1, Yönerge md. 5/1-aa:
+    mazeret sınavı özrünü belgelendiren öğrenci içindir).
+
+    Liste anlık türetilir: kayıt sonradan "Mazeretsiz"e çekilirse, öğrenci
+    ayrılırsa ya da girmediği sınavın oturumu silinirse listeden düşer ve
+    SAYIYLA uyarılır (ad yazılmaz); dağıtılmış oturumda fark `placement_drift`
+    ile "yeniden dağıtın" bandına döner.
+    """
+    from apps.okul.models import StudentStatus
+    from apps.sinav.models import ExamAttendanceRecord, ExcuseStatus
+
+    if sc.level is None:
+        resolution.warnings.append(f"'{sc.course.name}' mazeret satırının sınıf düzeyi eksik.")
+        return
+    tum_kayitlar = list(
+        ExamAttendanceRecord.objects.filter(makeup_course=sc, student__isnull=False)
+        .select_related("student", "session")
+        .order_by("student_number")
+    )
+    # Soft-delete ileri FK'da süzmez (CLAUDE.md §2) — kaynak oturumun canlılığı elle.
+    kayitlar = [k for k in tum_kayitlar if k.session.deleted_at is None]
+    if len(tum_kayitlar) > len(kayitlar):
+        resolution.warnings.append(
+            f"'{sc.course.name}' mazeret sınavına alınan {len(tum_kayitlar) - len(kayitlar)} "
+            "öğrencinin girmediği sınav silinmiş; listeden çıkarıldı."
+        )
+    mazeretli = [k for k in kayitlar if k.excuse_status == ExcuseStatus.EXCUSED]
+    if len(kayitlar) > len(mazeretli):
+        resolution.warnings.append(
+            f"'{sc.course.name}' mazeret sınavına alınan {len(kayitlar) - len(mazeretli)} "
+            "öğrencinin mazeret durumu artık 'Mazeretli' değil; listeden çıkarıldı."
+        )
+    students: list[Student] = [
+        k.student
+        for k in mazeretli
+        if k.student is not None
+        and k.student.status == StudentStatus.ACTIVE
+        and k.student.deleted_at is None
+    ]
+    if len(mazeretli) > len(students):
+        resolution.warnings.append(
+            f"'{sc.course.name}' mazeret sınavına alınan {len(mazeretli) - len(students)} "
+            "öğrenci artık aktif değil (ayrılmış); atlandı."
+        )
+    if not students:
+        resolution.warnings.append(f"'{sc.course.name}' mazeret satırında girecek öğrenci yok.")
+    _append_students(resolution, sc, students, class_level=int(sc.level))
+
+
 def _dedupe_within_course(resolution: CourseResolution) -> None:
     """Aynı ders içinde mükerrer öğrenci (iki şubeyle gelen) sessizce teklenir."""
     seen: set[int] = set()
@@ -240,6 +295,7 @@ def resolve_session(session: ExamSession) -> SessionResolution:
     resolvers = {
         ParticipantType.LEVEL: _resolve_level,
         ParticipantType.SECTIONS: _resolve_sections,
+        ParticipantType.MAKEUP: _resolve_makeup,
     }
     result = SessionResolution()
     student_courses: dict[int, list[str]] = {}

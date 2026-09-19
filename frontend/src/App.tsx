@@ -17,6 +17,7 @@ import HakkindaPage from "./modules/hakkinda/HakkindaPage";
 import KilavuzPage from "./modules/kilavuz/KilavuzPage";
 import KisilerPage from "./modules/kisiler/KisilerPage";
 import KurulumPage from "./modules/kurulum/KurulumPage";
+import MazeretTakibiPage from "./modules/mazeret/MazeretTakibiPage";
 import OturumDetayPage from "./modules/oturumlar/OturumDetayPage";
 import OturumlarPage from "./modules/oturumlar/OturumlarPage";
 import PanelPage from "./modules/panel/PanelPage";
@@ -48,6 +49,8 @@ export default function App() {
             {/* Sınav oturumları: sihirbaz + dağıtım + yoklama (F3). */}
             <Route path="/oturumlar" element={<OturumlarPage />} />
             <Route path="/oturumlar/:id" element={<OturumDetayPage />} />
+            {/* Sınava girmeyenler + mazeret sınavı + takip raporu (19.09.2026). */}
+            <Route path="/mazeret" element={<MazeretTakibiPage />} />
             {/* Sınav takvimi: pencereler + ızgara + süreç takip + PDF (F6). */}
             <Route path="/takvimler" element={<TakvimlerPage />} />
             <Route path="/takvimler/:id" element={<TakvimDetayPage />} />

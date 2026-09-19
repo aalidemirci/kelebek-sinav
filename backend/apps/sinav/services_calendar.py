@@ -634,6 +634,15 @@ def _validate_entry_participants(
     """
     from apps.dersler.services import level_label
 
+    if participant_type == ParticipantType.MAKEUP:
+        # Üçüncü tip takvimde YOK (CLAUDE.md §3); aksi hâlde aşağıdaki şube dalı
+        # onu sessizce "Seçili şubeler"e çevirirdi.
+        raise ValidationError(
+            {
+                "participant_type": "Takvimde katılımcılar sınıf düzeyi ya da şubelerdir; "
+                "mazeretli öğrenciler yalnız mazeret sınavı oturumunda seçilir."
+            }
+        )
     if participant_type not in ParticipantType.values:
         raise ValidationError(
             {"participant_type": f"Geçersiz katılımcı tipi: {participant_type!r}."}

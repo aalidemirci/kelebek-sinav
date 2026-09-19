@@ -383,6 +383,28 @@ describe("SinavSihirbazi — adım geçişleri", () => {
     expect(within(dialog).queryByText(/Ortak kitapçık/)).not.toBeInTheDocument();
   });
 
+  it("mazeret sınavı: ders ekleme/kopyalama yok, satır 'Mazeretli öğrenciler', Mazeret Takibi'ne bağlantı", async () => {
+    const session = makeSession({
+      transfer_check_confirmed_at: ONAY_ZAMANI,
+      is_makeup: true,
+      courses: [makeCourseRow({ participant_type: "MAKEUP" })],
+    });
+    sessionApi.participants.mockResolvedValue(makeParticipants());
+    renderWizard(session);
+
+    expect(await screen.findByText("Mazeretli öğrenciler")).toBeInTheDocument();
+    // Dersler ve öğrenciler Mazeret Takibi ekranından gelir (backend de reddeder).
+    expect(screen.queryByRole("button", { name: "Ders ekle" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Başka oturumdan kopyala" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Mazeret Takibi" })).toHaveAttribute(
+      "href",
+      "/mazeret",
+    );
+    expect(screen.getByRole("button", { name: "Devam" })).toBeEnabled();
+  });
+
   it("tek seviyeli ders listesinde 'aynı kitapçık' bölümü görünmez", async () => {
     const session = makeSession({
       transfer_check_confirmed_at: ONAY_ZAMANI,

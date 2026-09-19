@@ -538,7 +538,15 @@ def update_exam_session(session: ExamSession, **fields: Any) -> ExamSession:
             raise ValidationError("Oturum adı boş olamaz.")
         fields["name"] = cleaned
     if "term_id" in fields:
-        session.semester = _resolve_term(fields.pop("term_id"))
+        term = _resolve_term(fields.pop("term_id"))
+        # Mazeret sınavı girilmeyen sınavın döneminde yapılır (OKY md. 48/1 "dönemi
+        # aşamaz"); formun değişmeden geri gönderdiği aynı dönem serbesttir.
+        if session.is_makeup and term.pk != session.semester_id:
+            raise ValidationError(
+                "Mazeret sınavının dönemi değiştirilemez; mazeret sınavı girilmeyen sınavın "
+                "döneminde yapılır."
+            )
+        session.semester = term
     for key, value in fields.items():
         setattr(session, key, value)
     session.save()
@@ -656,7 +664,16 @@ def _validate_participant_refs(
                 "seviyelerde. Her seviye için ayrı satır ekleyin."
             )
         return seen_levels.pop(), list(dict.fromkeys(section_ids))
+    if participant_type == ParticipantType.MAKEUP:
+        raise ValidationError(MAKEUP_ROW_MANUAL_MESSAGE)
     raise ValidationError(f"Geçersiz katılımcı tipi: {participant_type!r}.")
+
+
+#: Mazeret satırı yalnız `services_makeup.create_makeup_session`dan doğar (19.09.2026).
+MAKEUP_ROW_MANUAL_MESSAGE = (
+    "Mazeretli öğrenci satırı elle eklenmez ya da değiştirilmez; mazeret sınavını "
+    "Mazeret Takibi ekranından oluşturun."
+)
 
 
 def _sync_shared_booklet(
@@ -703,8 +720,12 @@ def add_session_course(
 
     `shared_booklet` None ise kardeş satırdan miras alınır (yoksa False);
     açıkça verilirse dersin tüm kardeş satırlarına yayılır (`_sync_shared_booklet`).
+    Mazeret sınavı oturumuna ders ELLE eklenmez — dersleri ve öğrencileri Mazeret
+    Takibi ekranı getirir (plan kopyalama da bu kapıdan geçer).
     """
     _ensure_draft(session)
+    if session.is_makeup:
+        raise ValidationError(MAKEUP_ROW_MANUAL_MESSAGE)
     course = ders_selectors.get_course(course_id, active_only=True)
     if course is None:
         raise ValidationError("Ders havuzunda bulunamadı (veya pasif).")
@@ -742,8 +763,22 @@ def add_session_course(
 
 @transaction.atomic
 def update_session_course(sc: ExamSessionCourse, **fields: Any) -> ExamSessionCourse:
-    """Oturum dersinin seviye/katılımcı tanımını günceller (taslakta)."""
+    """Oturum dersinin seviye/katılımcı tanımını günceller (taslakta).
+
+    Mazeret satırında kapsam bağlı yoklama kayıtlarıdır ve değişmez; yalnız
+    dersin oturum içi nitelikleri (süre, "aynı kitapçık" bayrağı) açıktır.
+    """
     _ensure_draft(sc.session)
+    if sc.participant_type == ParticipantType.MAKEUP:
+        if set(fields) - {"duration_minutes", "shared_booklet"}:
+            raise ValidationError(MAKEUP_ROW_MANUAL_MESSAGE)
+        if "shared_booklet" in fields:
+            sc.shared_booklet = bool(fields["shared_booklet"])
+            _sync_shared_booklet(sc.session, sc.course, sc.shared_booklet, exclude_pk=sc.pk)
+        if "duration_minutes" in fields:
+            sc.duration_minutes = fields["duration_minutes"]
+        sc.save(update_fields=["duration_minutes", "shared_booklet", "updated_at"])
+        return sc
     participant_type = fields.get("participant_type", sc.participant_type)
     lv, sec = _validate_participant_refs(
         participant_type=participant_type,
