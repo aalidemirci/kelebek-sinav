@@ -157,6 +157,29 @@ Yükleme sonrası **elle kalan tek iş**, `okulapp.org` deposundaki
 site indirme kartı oradan üretilir ve o deponun `npm run check-releases`
 kapısı bayat kalırsa uyarır.
 
+#### Secret'lar tanımlı değilken: yükleme geliştirme makinesinden yapılır
+
+19.09.2026 itibarıyla depoda bu iki secret **tanımlı değildir** (`gh secret list`
+boş): R2 adımı her etikette uyarı basıp atlar ve koşu yine **yeşil** biter. Yeşil
+koşu "paketler indirme alanında" demek DEĞİLDİR — `curl -I` ile doğrulayın.
+beta.5 ve beta.6 geliştirme makinesindeki **wrangler OAuth oturumuyla**
+(`wrangler login`; anahtar dosyası aranmaz, okunmaz) elle yüklendi:
+
+```bash
+gh release download v<sürüm> --repo aalidemirci/kelebek-sinav --dir <geçici>
+( cd <geçici> && sha256sum -c SHA256SUMS.txt )      # doğrulanmayan yüklenmez
+# ../okulapp.org klasöründen, iş akışındaki adla ve içerik türüyle BİREBİR:
+npx --yes wrangler@4 r2 object put "okulapp-indirme/kelebek-sinav/<ad>" \
+  --file="<dosya>" --content-type="<tür>" --remote
+```
+
+Özet dosyası kovaya `SHA256SUMS-<sürüm>.txt` adıyla yazılır; adlar ve türler
+yukarıdaki iş akışı adımındaki `case` bloğundan alınır (iki liste ayrışmasın).
+Ardından beş dosya için `curl -I https://indir.okulapp.org/kelebek-sinav/<ad>`
+→ 200 ve `Content-Length` = yerel boyut; kurulum dosyasında canlıdan indirip
+SHA-256 karşılaştırması. Kalıcı çözüm secret'ları tanımlamaktır (R2 *Object Read
+& Write* izinli bir API anahtarı gerekir — hesap sahibinin işidir).
+
 ## İki dil kuralı
 
 * **Python tanımlayıcıları İngilizce** (depo geneliyle aynı), yorumlar ve
