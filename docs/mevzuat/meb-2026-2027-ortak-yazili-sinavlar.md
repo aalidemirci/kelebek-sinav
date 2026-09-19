@@ -3,7 +3,7 @@ mevzuat-adi: "2026-2027 Eğitim Öğretim Yılı Ortak Yazılı Sınavları (MEB
 belge-turu: "yazı"
 sayi-tarih: "E-26614336-480.99-168561496 / 10.09.2026"
 kaynak: "MEB Ölçme, Değerlendirme ve Sınav Hizmetleri Genel Müdürlüğü — Dağıtım Yerlerine"
-kapsam: "yazının metni (ekteki Ülke Geneli Ortak Yazılı Sınav Takvimi hariç — depoya henüz gelmedi); iletişim ve e-imza satırları alınmadı"
+kapsam: "yazının metni ve eki (Ülke Geneli Ortak Yazılı Sınav Takvimi); iletişim ve e-imza satırları alınmadı"
 ilgili-moduller: [sinav]
 etiketler: [ortak-yazili-sinav, sinav-takvimi, sinav-haftasi, gunluk-sinav-sayisi, bep]
 ---
@@ -19,8 +19,12 @@ etiketler: [ortak-yazili-sinav, sinav-takvimi, sinav-haftasi, gunluk-sinav-sayis
 > - Madde 7 (son günden başlanarak planlama) → otomatik yerleştirmenin "Son
 >   günden başlayarak yerleştir" tercihi (varsayılan açık, kapatılabilir).
 > - Madde 11 (merkezî sınav haftası) → Kullanım Kılavuzu notu.
-> - Ek (Ülke Geneli Ortak Yazılı Sınav Takvimi) gelince Bakanlık sınavları
->   takvime tarihleriyle hazır konabilir.
+> - Ek (Ülke Geneli Ortak Yazılı Sınav Takvimi) → `official_windows.NATIONAL_EXAMS`.
+>   Takvim oluşturulurken okulun sınıf düzeylerindeki sınavlar Bakanlık sınavı
+>   olarak resmî gününe, okulun ilk sınav saatiyle SABİTLENİR; ekte ders saati
+>   yoktur (uygulama esasları ayrıca duyurulacak — yazının son paragrafı), saati
+>   idareci düzeltir. Eski taslak takvimlerde takvim sayfasındaki "Takvime
+>   uygula" (`services_calendar.apply_national_exams`, 19.09.2026).
 
 ---
 
@@ -112,3 +116,41 @@ Bakan a.
 Ölçme, Değerlendirme ve Sınav Hizmetleri Genel Müdürü
 
 **Ek:** Ülke Geneli Ortak Yazılı Sınav Takvimi (1 Sayfa)
+
+---
+
+## Ek — 2026-2027 Eğitim Öğretim Yılı Ülke Geneli Ortak Yazılı Sınav Takvimi
+
+> Kaynak: ÖDSHGM, `https://odsgm.meb.gov.tr/meb_iys_dosyalar/2026_09/6aa2d6b17db57454479127_Ulke_Geneli_Ortak_Yazılı_Sınav_Takvimi.pdf`
+> (MEB'in 10.09.2026 tarihli "Ülke Geneli Ortak Yazılı Sınav Takvimi Belli Oldu"
+> haberindeki bağlantı; erişim 19.09.2026). Belge form başlığı: T.C. Millî Eğitim
+> Bakanlığı Ölçme, Değerlendirme ve Sınav Hizmetleri Genel Müdürlüğü — Doküman
+> Kodu İMD / FR0144/R.000, Sayfa 1/1. Tablolar birebir; ekte saat/ders saati yoktur.
+
+**1. Dönem 1. Yazılı Sınavları**
+
+| Sınıf | Ders Adı | Sınav Tarihi |
+|---|---|---|
+| 6. Sınıf | Matematik | 11 Kasım 2026 Çarşamba |
+| 10. Sınıf | Türk Dili ve Edebiyatı | 12 Kasım 2026 Perşembe |
+
+**1. Dönem 2. Yazılı Sınavları**
+
+| Sınıf | Ders Adı | Sınav Tarihi |
+|---|---|---|
+| 7. Sınıf | Türkçe | 5 Ocak 2027 Salı |
+| 9. Sınıf | Matematik | 6 Ocak 2027 Çarşamba |
+
+**2. Dönem 1. Yazılı Sınavları**
+
+| Sınıf | Ders Adı | Sınav Tarihi |
+|---|---|---|
+| 7. Sınıf | Matematik | 6 Nisan 2027 Salı |
+| 9. Sınıf | Türk Dili ve Edebiyatı | 7 Nisan 2027 Çarşamba |
+
+**2. Dönem 2. Yazılı Sınavları**
+
+| Sınıf | Ders Adı | Sınav Tarihi |
+|---|---|---|
+| 6. Sınıf | Türkçe | 8 Haziran 2027 Salı |
+| 10. Sınıf | Matematik | 9 Haziran 2027 Çarşamba |

@@ -428,6 +428,18 @@ export default function KilavuzPage() {
           tıkla yazar.
         </p>
         <p>
+          Aynı yazının ekindeki <strong>ülke geneli ortak yazılı sınavlar</strong> Bakanlıkça
+          hazırlanır. 2026-2027'de lisede dört tanedir: 10. sınıf Türk Dili ve Edebiyatı (12.11.2026
+          Perşembe), 9. sınıf Matematik (06.01.2027 Çarşamba), 9. sınıf Türk Dili ve Edebiyatı
+          (07.04.2027 Çarşamba) ve 10. sınıf Matematik (09.06.2027 Çarşamba). Takvim oluşturulurken
+          program bunları <strong>Bakanlık sınavı</strong> olarak resmî günlerine, okulunuzun ilk
+          sınav saatine sabitler. Bakanlık takvimi ders saatini vermez; saat uygulama esaslarıyla
+          belli olunca sınavı <strong>Yerleştirme</strong> sekmesinde doğru saate taşırsınız. O gün
+          o sınıf düzeyine otomatik yerleştirmede okul sınavı konmaz. Takvim sayfasının üstündeki
+          bant sınavların durumunu gösterir; daha önce oluşturulmuş taslak takvimde{" "}
+          <strong>“Takvime uygula”</strong> düğmesini kullanın.
+        </p>
+        <p>
           Takvimin dört sekmesi vardır: <strong>Havuz</strong> (hangi ders hangi sınıf düzeyinde
           sınav olacak), <strong>Yerleştirme</strong> (hangi gün, hangi ders saati),{" "}
           <strong>Süreç Takip</strong> (soru teslimi, basım, puan girişi gibi kalemler) ve{" "}

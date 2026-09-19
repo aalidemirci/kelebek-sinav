@@ -105,6 +105,13 @@ describe("KilavuzPage", () => {
     expect(screen.getByText(/sınav haftalarının son gününden başlanarak/)).toBeInTheDocument();
     expect(screen.getByText(/kutuyu kaldırırsanız sınavlar günlere dengeli/)).toBeInTheDocument();
     expect(screen.getByText(/merkezî bir sınav denk gelirse/)).toBeInTheDocument();
+    // Yazının eki: ülke geneli sınavlar — tarihleri resmî ekle birebir, saat verilmez.
+    expect(
+      screen.getByText(/10\. sınıf Türk Dili ve Edebiyatı \(12\.11\.2026/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/10\. sınıf Matematik \(09\.06\.2027 Çarşamba\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Bakanlık takvimi ders saatini vermez/)).toBeInTheDocument();
+    expect(screen.getByText("“Takvime uygula”")).toBeInTheDocument();
   });
 
   it("günlük sınav sayısı sınırını mevzuat dayanağıyla verir", () => {

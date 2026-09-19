@@ -28,6 +28,7 @@ import { useConfirm } from "../../ui/ConfirmProvider";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import type { DefaultWindow, ExamCalendarStatusCode } from "./api";
 import { calendarPdfFileName, examCalendarApi } from "./api";
+import BakanlikSinavlari from "./BakanlikSinavlari";
 import PencereOnerisi from "./PencereOnerisi";
 import { CalendarStatusBadge } from "./TakvimlerPage";
 import TakvimHavuzPaneli from "./TakvimHavuzPaneli";
@@ -254,6 +255,8 @@ export default function TakvimDetayPage() {
           </Button>
         </p>
       ) : null}
+
+      <BakanlikSinavlari calendarId={calendarId} editable={isDraft} onApplied={invalidate} />
 
       <Tabs items={tabs} active={tab} onChange={setTab} idBase="takvim-detay" />
 

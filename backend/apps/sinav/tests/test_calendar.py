@@ -1911,3 +1911,148 @@ def test_havuz_doldurma_acilmayan_secmeliyi_tek_ozet_satirla_bildirir() -> None:
     }
     assert secenekler["Sanat Tarihi"]["not_offered"] is True
     assert secenekler["Kur'an-ı Kerim"]["not_offered"] is False
+
+
+# ===========================================================================
+# Ülke geneli ortak yazılı sınavlar (19.09.2026) — Bakanlık takvimi, ÖDSHGM
+# 10.09.2026 yazısının eki. Takvim gün verir, saat vermez: sınav resmî gününe
+# okulun ilk sınav saatiyle SABİTLENİR, saati idareci düzeltir (kullanıcı kararı).
+# ===========================================================================
+
+
+def _bakanlik_takvimi(round_: int = 1, *, pencere: tuple[date, date] | None = None) -> ExamCalendar:
+    """1. dönem takvimi; varsayılan pencere Bakanlığın 1. yazılı haftası (2-13 Kasım)."""
+    guz, _ = _iki_donem()
+    bas, bit = pencere or (date(2026, 11, 2), date(2026, 11, 13))
+    return takvim.create_exam_calendar(
+        semester_id=guz.pk, round=round_, start_date=bas, end_date=bit
+    )
+
+
+def test_ulke_geneli_takvim_verisi_resmi_ekle_birebir() -> None:
+    from apps.sinav.official_windows import national_exams
+
+    birinci = {(s.level, s.course_name, s.on_date) for s in national_exams(2026, 1, 1)}
+    assert birinci == {
+        (6, "Matematik", date(2026, 11, 11)),
+        (10, "Türk Dili ve Edebiyatı", date(2026, 11, 12)),
+    }
+    lise = {
+        (tur, s.level, s.course_name, s.on_date)
+        for tur in ((1, 1), (1, 2), (2, 1), (2, 2))
+        for s in national_exams(2026, *tur)
+        if s.level >= 9
+    }
+    assert lise == {
+        ((1, 1), 10, "Türk Dili ve Edebiyatı", date(2026, 11, 12)),
+        ((1, 2), 9, "Matematik", date(2027, 1, 6)),
+        ((2, 1), 9, "Türk Dili ve Edebiyatı", date(2027, 4, 7)),
+        ((2, 2), 10, "Matematik", date(2027, 6, 9)),
+    }
+    assert national_exams(2027, 1, 1) == ()  # ilan yok → boş
+
+
+def test_takvim_yaratilinca_bakanlik_sinavi_resmi_gunune_sabitlenir() -> None:
+    SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, exam_period_nos=[1, 2, 3])
+    sube(10, "A", students=2, start_no=101)
+    tde = ders("Türk Dili ve Edebiyatı", levels=[10])
+    matematik = ders("Matematik", levels=[10])
+
+    calendar = _bakanlik_takvimi()
+
+    girdi = ExamCalendarEntry.objects.get(calendar=calendar, course=tde, level=10)
+    assert girdi.authority == ExamAuthority.MINISTRY
+    assert (girdi.placed_date, girdi.period_no) == (date(2026, 11, 12), 1)
+    assert girdi.is_pinned is True
+    assert "ders saati Bakanlığın uygulama esaslarıyla kesinleşir" in girdi.note
+    # O turda Bakanlık sınavı olmayan ders okul sınavı olarak havuzda kalır.
+    okul = ExamCalendarEntry.objects.get(calendar=calendar, course=matematik, level=10)
+    assert okul.authority == ExamAuthority.SCHOOL and okul.placed_date is None
+    # Otomatik yerleştirme o günü 10. sınıfın okul sınavına kapatır (Yönerge md. 5).
+    takvim.auto_place_entries(calendar)
+    okul.refresh_from_db()
+    assert okul.placed_date is not None and okul.placed_date != date(2026, 11, 12)
+
+
+def test_bakanlik_gunu_takvim_disindaysa_havuzda_isaretli_bekler() -> None:
+    sube(10, "A", students=2, start_no=101)
+    tde = ders("Türk Dili ve Edebiyatı", levels=[10])
+
+    calendar = _bakanlik_takvimi(pencere=(date(2026, 10, 26), date(2026, 11, 6)))  # eski kural
+
+    girdi = ExamCalendarEntry.objects.get(calendar=calendar, course=tde)
+    assert girdi.authority == ExamAuthority.MINISTRY and girdi.placed_date is None
+    sonuc = takvim.apply_national_exams(calendar)
+    assert any("takvim aralığı dışında" in s for s in sonuc["skipped"])
+    plan = takvim.national_exam_plan(calendar)
+    assert [(p["course_name"], p["date"], p["status"]) for p in plan] == [
+        ("Türk Dili ve Edebiyatı", "2026-11-12", "pending")
+    ]
+
+
+def test_bakanlik_sinavi_yeniden_uygulaninca_idarecinin_saatine_dokunmaz() -> None:
+    SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, exam_period_nos=[1, 2, 3])
+    sube(10, "A", students=2, start_no=101)
+    tde = ders("Türk Dili ve Edebiyatı", levels=[10])
+    calendar = _bakanlik_takvimi()
+    girdi = ExamCalendarEntry.objects.get(calendar=calendar, course=tde)
+    takvim.place_entry(girdi, on_date=date(2026, 11, 12), period_no=3)  # saat belli oldu
+
+    sonuc = takvim.apply_national_exams(calendar)
+
+    girdi.refresh_from_db()
+    assert girdi.period_no == 3
+    assert sonuc["placed"] == [] and len(sonuc["unchanged"]) == 1
+    assert takvim.national_exam_plan(calendar)[0]["status"] == "placed"
+
+
+def test_bakanlik_sinavi_dolu_saati_atlar_ve_ayni_gunku_okul_sinavini_bildirir() -> None:
+    SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, exam_period_nos=[1, 2, 3])
+    sube(10, "A", students=2, start_no=101)
+    matematik = ders("Matematik", levels=[10])
+    calendar = _bakanlik_takvimi()  # TDE henüz katalogda yok → uygulanacak bir şey yok
+    okul = ExamCalendarEntry.objects.get(calendar=calendar, course=matematik)
+    takvim.place_entry(okul, on_date=date(2026, 11, 12), period_no=1)
+    ders("Türk Dili ve Edebiyatı", levels=[10])
+
+    sonuc = takvim.apply_national_exams(calendar)
+
+    assert len(sonuc["placed"]) == 1
+    assert "2. ders saati" in sonuc["placed"][0]  # 1. saat okul sınavıyla dolu
+    assert "okul sınavı da var" in sonuc["placed"][0]
+
+
+def test_ders_havuzda_yoksa_nedeniyle_atlanir_ve_ortaokul_satiri_gelmez() -> None:
+    sube(10, "A", students=2, start_no=101)
+    calendar = _bakanlik_takvimi()
+
+    plan = takvim.national_exam_plan(calendar)
+    sonuc = takvim.apply_national_exams(calendar)
+
+    # 6. sınıf Matematik bu okulun düzeyi değil; 10. sınıf TDE havuzda yok.
+    assert [(p["level"], p["status"]) for p in plan] == [(10, "missing_course")]
+    assert any("ders havuzunda" in s for s in sonuc["skipped"])
+
+
+def test_api_bakanlik_sinavlari_plan_ve_uygulama() -> None:
+    SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, exam_period_nos=[1, 2])
+    sube(10, "A", students=2, start_no=101)
+    calendar = _bakanlik_takvimi()  # ders henüz yok
+    ders("Türk Dili ve Edebiyatı", levels=[10])
+    client = APIClient()
+    url = f"/api/v1/exam-calendars/{calendar.pk}/national-exams/"
+
+    oncesi = client.get(url)
+    assert oncesi.status_code == 200
+    assert oncesi.data["exams"][0]["status"] == "pending"
+    assert "10.09.2026" in oncesi.data["exams"][0]["source"]
+
+    cevap = client.post(url)
+    assert cevap.status_code == 200
+    assert cevap.data["result"]["placed"] == [
+        "10. Sınıf Türk Dili ve Edebiyatı (12.11.2026): 1. ders saati"
+    ]
+    assert cevap.data["exams"][0]["status"] == "placed"
+
+    takvim.submit_calendar(calendar)
+    assert client.post(url).status_code == 400  # yalnız taslak

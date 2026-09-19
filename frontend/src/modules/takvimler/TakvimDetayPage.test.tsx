@@ -39,6 +39,8 @@ vi.mock("./TakvimHavuzPaneli", () => ({ default: () => <div>HAVUZ PANELİ</div> 
 vi.mock("./TakvimYerlestirmePaneli", () => ({ default: () => <div>YERLEŞTİRME PANELİ</div> }));
 vi.mock("./TakvimTakipPaneli", () => ({ default: () => <div>TAKİP PANELİ</div> }));
 vi.mock("./TakvimOnizlemePaneli", () => ({ default: () => <div>ÖNİZLEME PANELİ</div> }));
+// Bakanlık sınavı bandının kendi testi var (BakanlikSinavlari.test.tsx).
+vi.mock("./BakanlikSinavlari", () => ({ default: () => null }));
 
 import TakvimDetayPage from "./TakvimDetayPage";
 

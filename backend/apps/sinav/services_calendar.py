@@ -43,7 +43,7 @@ from apps.sinav.models import (
     ExamTrackMarkStatus,
     ParticipantType,
 )
-from apps.sinav.official_windows import official_window
+from apps.sinav.official_windows import NationalExam, national_exams, official_window
 
 if TYPE_CHECKING:
     from apps.dersler.selectors import EnrollmentIndex
@@ -288,6 +288,192 @@ def _seed_pool(calendar: ExamCalendar) -> None:
     except ValidationError:
         # Tohumlama bir KOLAYLIKTIR; başarısızlığı takvim yaratmayı düşürmez.
         return
+    # Bakanlığın ülke geneli sınavları havuzdaki karşılıklarını devralır ve resmî
+    # gününe yerleşir (kullanıcı kararı 19.09.2026). Aynı sertlik: hata yutulur.
+    try:
+        with transaction.atomic():
+            apply_national_exams(calendar)
+    except ValidationError:
+        return
+
+
+# ---------------------------------------------------------------------------
+# Ülke geneli ortak yazılı sınavlar (Bakanlık takvimi — 19.09.2026)
+# ---------------------------------------------------------------------------
+#: Girdinin notu: takvim gün verir, saati Bakanlığın uygulama esasları verir.
+NATIONAL_EXAM_NOTE = (
+    "Bakanlık ülke geneli ortak yazılı sınavı — ders saati Bakanlığın uygulama "
+    "esaslarıyla kesinleşir."
+)
+
+
+def _name_key(value: str) -> str:
+    """Ders adı eşleştirme anahtarı: Türkçe büyük harf, tek boşluk."""
+    from apps.okul.normalize import tr_upper
+
+    return " ".join(tr_upper(value).split())
+
+
+def _national_plan_rows(calendar: ExamCalendar) -> list[tuple[NationalExam, int | None]]:
+    """Takvimin dönem + turundaki ülke geneli sınavlar × havuzdaki ders karşılığı.
+
+    Plan, okulun AKTİF ÖĞRENCİSİ olan sınıf düzeylerini kapsar (ortaokul
+    satırları, 10. sınıfı olmayan okul dışarıda). Ders adayları havuz
+    tohumlamasıyla aynı kaynaktan gelir (ZORUNLU + YAZILI, `taught_course_levels`);
+    düzey okulda var ama ders havuzda adıyla bulunamazsa satır `None` ile döner
+    ve rapor nedenini söyler — düzeyi derslerden türetmek eksik dersi gizlerdi.
+    """
+    from apps.dersler import selectors as ders_selectors
+    from apps.dersler.models import CourseExamMode, CourseType
+
+    semester = calendar.semester
+    sinavlar = national_exams(
+        _school_year_start(semester), _semester_donem(semester), int(calendar.round)
+    )
+    if not sinavlar:
+        return []
+    pairs = ders_selectors.taught_course_levels(
+        semester.school_year_id,
+        course_types=[CourseType.COMMON],
+        exam_modes=[CourseExamMode.WRITTEN],
+    )
+    okul_duzeyleri = {
+        level for level, count in okul_selectors.active_student_counts_by_level().items() if count
+    }
+    by_key = {(_name_key(pair.course_name), pair.level): pair.course_id for pair in pairs}
+    return [
+        (sinav, by_key.get((_name_key(sinav.course_name), sinav.level)))
+        for sinav in sinavlar
+        if sinav.level in okul_duzeyleri
+    ]
+
+
+def national_exam_plan(calendar: ExamCalendar) -> list[dict[str, Any]]:
+    """Takvim sayfasının Bakanlık sınavı bandı: sınav, gün ve takvimdeki durumu.
+
+    `status`: `placed` (Bakanlık sınavı olarak resmî gününde) · `pending` (henüz
+    uygulanmadı ya da günü değişmiş) · `missing_course` (ders havuzda yok).
+    """
+    satirlar = []
+    for sinav, course_id in _national_plan_rows(calendar):
+        entry = (
+            ExamCalendarEntry.objects.filter(
+                calendar=calendar,
+                course_id=course_id,
+                level=sinav.level,
+                exam_kind=ExamKind.WRITTEN,
+            ).first()
+            if course_id is not None
+            else None
+        )
+        if course_id is None:
+            durum = "missing_course"
+        elif (
+            entry is not None
+            and entry.authority == ExamAuthority.MINISTRY
+            and entry.placed_date == sinav.on_date
+        ):
+            durum = "placed"
+        else:
+            durum = "pending"
+        satirlar.append(
+            {
+                "level": sinav.level,
+                "level_label": _level_display(sinav.level),
+                "course_name": sinav.course_name,
+                "date": sinav.on_date.isoformat(),
+                # Gün adı sunucuda: FE'de ISO'dan gün türetmek saat dilimi tuzağıdır.
+                "weekday_label": _TR_WEEKDAYS[sinav.on_date.weekday()],
+                "source": sinav.source,
+                "course_id": course_id,
+                "entry_id": entry.pk if entry is not None else None,
+                "period_no": entry.period_no if entry is not None else None,
+                "status": durum,
+            }
+        )
+    return satirlar
+
+
+@transaction.atomic
+def apply_national_exams(calendar: ExamCalendar) -> dict[str, list[str]]:
+    """Bakanlık sınavlarını takvime uygular — resmî gününe, ilk uygun sınav saatine.
+
+    Havuzdaki (ders, düzey, YAZILI) girdisi Bakanlık sınavına döner (o dersin o
+    turdaki yazılısı ülke geneli sınavdır — Bakanlık yazısı md. 1), yoksa
+    oluşturulur. Yerleştirme `place_entry` ile yapılır (tek kural motoru): okulun
+    sınav saatleri sırayla denenir, sert çakışma olan saat atlanır. Girdi
+    SABİTLENİR — "yeniden dağıt" kipi onu yerinden oynatmaz. Resmî gün takvim
+    aralığı dışındaysa girdi yalnız Bakanlık sınavı olarak işaretlenir ve havuzda
+    kalır (görünmeyen bir güne yerleştirilmez); nedeni rapora yazılır.
+    İdempotent: zaten resmî gününde duran girdiye dokunulmaz (saati idarecinin).
+    """
+    _ensure_draft(calendar)
+    placed: list[str] = []
+    unchanged: list[str] = []
+    skipped: list[str] = []
+    for sinav, course_id in _national_plan_rows(calendar):
+        gun = sinav.on_date.strftime("%d.%m.%Y")
+        etiket = f"{_level_display(sinav.level)} {sinav.course_name} ({gun})"
+        if course_id is None:
+            skipped.append(f"{etiket}: ders havuzunda bu adla ve sınıf düzeyinde ders yok")
+            continue
+        entry = ExamCalendarEntry.objects.filter(
+            calendar=calendar, course_id=course_id, level=sinav.level, exam_kind=ExamKind.WRITTEN
+        ).first()
+        if entry is None:
+            try:
+                entry = add_calendar_entry(
+                    calendar=calendar,
+                    course_id=course_id,
+                    level=sinav.level,
+                    authority=ExamAuthority.MINISTRY,
+                    note=NATIONAL_EXAM_NOTE,
+                )
+            except ValidationError as exc:
+                skipped.append(f"{etiket}: {_validation_text(exc)}")
+                continue
+        if entry.authority == ExamAuthority.MINISTRY and entry.placed_date == sinav.on_date:
+            unchanged.append(etiket)
+            continue
+        if has_live_session(entry):
+            skipped.append(f"{etiket}: bu girdinin oturumu üretilmiş — önce oturumu kaldırın")
+            continue
+        entry.authority = ExamAuthority.MINISTRY
+        if not entry.note.strip():
+            entry.note = NATIONAL_EXAM_NOTE
+        entry.save(update_fields=["authority", "note", "updated_at"])
+        if not (calendar.start_date <= sinav.on_date <= calendar.end_date):
+            skipped.append(
+                f"{etiket}: gün takvim aralığı dışında — Bakanlık sınavı olarak havuzda "
+                "bekliyor; takvim tarihlerini Bakanlık haftasına çekip yeniden uygulayın"
+            )
+            continue
+        saatler = exam_period_numbers()
+        saatler += [no for no in (int(p["no"]) for p in _bell_periods()) if no not in saatler]
+        for saat in saatler:
+            try:
+                with transaction.atomic():
+                    place_entry(entry, on_date=sinav.on_date, period_no=saat, pin=True)
+            except ValidationError:
+                continue
+            ek = ""
+            # Yönerge md. 5: üst makam sınav gününde okul geneli ayrıca sınav yapılmaz.
+            if (
+                ExamCalendarEntry.objects.filter(
+                    calendar=calendar,
+                    level=sinav.level,
+                    placed_date=sinav.on_date,
+                    authority=ExamAuthority.SCHOOL,
+                )
+                .exclude(pk=entry.pk)
+                .exists()
+            ):
+                ek = " — aynı gün bu sınıf düzeyinde okul sınavı da var, onu başka güne taşıyın"
+            placed.append(f"{etiket}: {saat}. ders saati{ek}")
+            break
+        else:
+            skipped.append(f"{etiket}: o gün boş ders saati bulunamadı — elle yerleştirin")
+    return {"placed": placed, "unchanged": unchanged, "skipped": skipped}
 
 
 @transaction.atomic

@@ -749,7 +749,15 @@ varsayılan, ayarla değiştirilebilir" ilkesi.
   farkı öneri olarak gösterir, hiçbir yerleştirme buna göre reddedilmez.
   Yazının md. 7'si ("son günden başlanarak") otomatik yerleştirmede TERCİHTİR
   (`from_last_day`, varsayılan açık). Göç `sinav/0013` yalnız dokunulmamış ve
-  yerleştirmesiz taslakları ilana çeker.
+  yerleştirmesiz taslakları ilana çeker. **Aynı gün eki — ülke geneli sınavlar:**
+  yazının eki (`official_windows.NATIONAL_EXAMS`; lisede 10. TDE 12.11.2026, 9.
+  Matematik 06.01.2027, 9. TDE 07.04.2027, 10. Matematik 09.06.2027) takvim
+  oluşturulurken uygulanır (`apply_national_exams`): girdi Bakanlık sınavı olur,
+  resmî GÜNÜNE okulun ilk uygun sınav saatiyle SABİTLENİR. Ek ders saati vermez —
+  saati idareci düzeltir (kullanıcı kararı; havuzda bekletme seçeneği reddedildi,
+  çünkü o zaman gün okul sınavlarına ancak elle yerleştirmeden sonra kapanırdı).
+  Yönerge md. 5 gereği o gün o düzeye otomatik okul sınavı konmaz (mevcut üst
+  makam kuralı).
 - Günlük sınav limiti **öğrenci-bazlı**: 3. sınav = uyarı (OKY md. 45),
   ≥4 = sert hata; kayıt verisi olmayan ders "seviyenin tamamı" sayılır
   (konservatif düşüş korunmalı).

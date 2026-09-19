@@ -50,3 +50,56 @@ OFFICIAL_WINDOWS: dict[int, dict[tuple[int, int], OfficialWindow]] = {
 def official_window(school_year_start: int, donem: int, round_: int) -> OfficialWindow | None:
     """İlan edilmiş pencere; o yıl, dönem ya da tur için ilan yoksa None."""
     return OFFICIAL_WINDOWS.get(int(school_year_start), {}).get((int(donem), int(round_)))
+
+
+# ---------------------------------------------------------------------------
+# Ülke geneli ortak yazılı sınavlar (Bakanlığın hazırladığı; 19.09.2026)
+# ---------------------------------------------------------------------------
+# Kaynak: aynı yazının eki "2026-2027 Eğitim Öğretim Yılı Ülke Geneli Ortak Yazılı
+# Sınav Takvimi" (tek sayfa; metni docs/mevzuat/meb-2026-2027-ortak-yazili-sinavlar.md).
+# Takvim GÜN verir, ders saati VERMEZ — saat Bakanlığın uygulama esaslarıyla ayrıca
+# duyurulur. Program sınavı resmî gününe okulun ilk sınav saatiyle koyar; saati
+# idareci düzeltir (kullanıcı kararı 19.09.2026, `services_calendar.apply_national_exams`).
+# Ortaokul satırları (6-7. sınıf) veri bütünlüğü için durur; program yalnız okulun
+# sınıf düzeylerindekini kullanır.
+
+
+@dataclass(frozen=True)
+class NationalExam:
+    """Bir ülke geneli ortak yazılı sınav: sınıf düzeyi + ders + gün."""
+
+    level: int
+    #: Bakanlık takvimindeki ders adı — ders havuzundaki adla eşleştirilir.
+    course_name: str
+    on_date: date
+    source: str
+
+
+_EK_2026 = f"{_YAZI_2026} eki (Ülke Geneli Ortak Yazılı Sınav Takvimi)"
+
+#: Ders yılının başladığı takvim yılı → (dönem, sınav turu) → o turun sınavları.
+NATIONAL_EXAMS: dict[int, dict[tuple[int, int], tuple[NationalExam, ...]]] = {
+    2026: {
+        (1, 1): (
+            NationalExam(6, "Matematik", date(2026, 11, 11), _EK_2026),
+            NationalExam(10, "Türk Dili ve Edebiyatı", date(2026, 11, 12), _EK_2026),
+        ),
+        (1, 2): (
+            NationalExam(7, "Türkçe", date(2027, 1, 5), _EK_2026),
+            NationalExam(9, "Matematik", date(2027, 1, 6), _EK_2026),
+        ),
+        (2, 1): (
+            NationalExam(7, "Matematik", date(2027, 4, 6), _EK_2026),
+            NationalExam(9, "Türk Dili ve Edebiyatı", date(2027, 4, 7), _EK_2026),
+        ),
+        (2, 2): (
+            NationalExam(6, "Türkçe", date(2027, 6, 8), _EK_2026),
+            NationalExam(10, "Matematik", date(2027, 6, 9), _EK_2026),
+        ),
+    },
+}
+
+
+def national_exams(school_year_start: int, donem: int, round_: int) -> tuple[NationalExam, ...]:
+    """O yıl, dönem ve turun ülke geneli sınavları; ilan yoksa boş."""
+    return NATIONAL_EXAMS.get(int(school_year_start), {}).get((int(donem), int(round_)), ())

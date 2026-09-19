@@ -433,6 +433,17 @@
   (önce metin `docs/mevzuat/`e). Otomatik yerleştirmenin "son günden başla"sı
   (yazı md. 7) da TERCİHTİR: ceza demetinde geç gün, gün toplamından ÖNCE gelir
   (`from_last_day`, varsayılan açık; kapalıyken eski dengeli yayma).
+- **Ülke geneli sınavlar resmî GÜNE sabitlenir, saati idarecinindir**
+  (19.09.2026, kullanıcı kararı): yazının eki `official_windows.NATIONAL_EXAMS`te
+  (gün verir, ders saati VERMEZ). `apply_national_exams` havuzdaki (ders, düzey,
+  YAZILI) girdiyi MINISTRY yapar — o turun yazılısı ülke geneli sınavdır — ve
+  `place_entry` ile resmî güne, okulun ilk uygun sınav saatine SABİTLER (tek kural
+  motoru; sert çakışan saat atlanır). Takvim oluşturulurken `_seed_pool` onu
+  kendiliğinden koşar (hata yutulur); eski taslaklar için `national-exams` ucu.
+  İdempotent: resmî gündeki girdinin SAATİNE dokunmaz (idareci düzeltti). Gün
+  takvim aralığı dışındaysa YERLEŞTİRMEZ (ızgarada görünmeyen güne konmaz), girdi
+  MINISTRY olarak havuzda bekler. Plan okulun AKTİF ÖĞRENCİSİ olan düzeylerden
+  kurulur, derslerden değil — aksi hâlde havuzda olmayan ders sessizce kaybolurdu.
 - **Salon kapasitesi UYARIDIR:** aynı slottaki toplam mevcut aktif salon
   kapasitesini aşarsa uyarılır; kapasite 0 iken (salon tanımsız) denetim hiç
   çalışmaz — sert kısıt, kataloğu eksik okulda takvimi kurulamaz hâle getirirdi.

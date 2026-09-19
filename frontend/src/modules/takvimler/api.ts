@@ -47,6 +47,29 @@ export const EXAM_AUTHORITY_SHORT_TR: Record<ExamAuthorityCode, string> = {
  * (`official`), ilan yoksa Yönetmelik kuralı. VARSAYILANDIR, kısıt değil —
  * takvim tarihleri her zaman düzenlenebilir.
  */
+/** Bakanlığın ülke geneli ortak yazılı sınavı ve takvimdeki durumu (19.09.2026). */
+export interface NationalExamRow {
+  level: number;
+  level_label: string;
+  course_name: string;
+  /** Bakanlık takvimindeki gün (ISO). Takvim ders saati VERMEZ. */
+  date: string;
+  weekday_label: string;
+  /** Dayanak: yazının tarihi, sayısı ve eki. */
+  source: string;
+  course_id: number | null;
+  entry_id: number | null;
+  period_no: number | null;
+  /** placed: resmî gününde Bakanlık sınavı · pending: uygulanmadı · missing_course: ders havuzda yok. */
+  status: "placed" | "pending" | "missing_course";
+}
+
+export interface NationalExamApplyResult {
+  placed: string[];
+  unchanged: string[];
+  skipped: string[];
+}
+
 export interface DefaultWindow {
   start_date: string;
   end_date: string;
@@ -331,6 +354,13 @@ export const examCalendarApi = {
   defaultDescription: () => api.get<{ text: string }>("/exam-calendars/default-description/"),
   defaultFootnote: () => api.get<{ text: string }>("/exam-calendars/default-footnote/"),
   fillPool: (id: number) => api.post<FillPoolResult>(`/exam-calendars/${id}/fill-pool/`, {}),
+  nationalExams: (id: number) =>
+    api.get<{ exams: NationalExamRow[] }>(`/exam-calendars/${id}/national-exams/`),
+  applyNationalExams: (id: number) =>
+    api.post<{ result: NationalExamApplyResult; exams: NationalExamRow[] }>(
+      `/exam-calendars/${id}/national-exams/`,
+      {},
+    ),
   entries: (id: number) =>
     api.get<{ results: ExamCalendarEntryRow[] }>(`/exam-calendars/${id}/entries/`),
   addEntry: (

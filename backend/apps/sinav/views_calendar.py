@@ -147,6 +147,27 @@ class ExamCalendarViewSet(viewsets.ModelViewSet[ExamCalendar]):
             _raise_drf(exc)
         return Response(result)
 
+    @action(detail=True, methods=["get", "post"], url_path="national-exams")
+    def national_exams(self, request: Request, pk: str | None = None) -> Response:
+        """Bakanlığın ülke geneli ortak yazılı sınavları (19.09.2026).
+
+        GET `{"exams": [...]}` — takvimin dönem + turundaki sınavlar, okulun
+        sınıf düzeylerinde; her satırda gün ve takvimdeki durum (`placed` /
+        `pending` / `missing_course`). POST uygular: girdi Bakanlık sınavına
+        döner, resmî gününe ilk uygun sınav saatiyle sabitlenir (saati idareci
+        düzeltir) → `{"result": {"placed", "unchanged", "skipped"}, "exams"}`.
+        Yalnız taslak takvimde; idempotent. Ayrı uç: plan birkaç sorgu koşar,
+        takvim listesini yavaşlatmasın.
+        """
+        calendar = self.get_object()
+        if request.method == "GET":
+            return Response({"exams": services_calendar.national_exam_plan(calendar)})
+        try:
+            result = services_calendar.apply_national_exams(calendar)
+        except DjangoValidationError as exc:
+            _raise_drf(exc)
+        return Response({"result": result, "exams": services_calendar.national_exam_plan(calendar)})
+
     # DİKKAT (OYS Tur 644): aynı `url_path`li iki @action router'da TEK
     # pattern'e düşer. "bulk-entries"/"elective-options" mevcut hiçbir action
     # yoluyla çakışmıyor ("entries" ayrı bir pattern'dir).
