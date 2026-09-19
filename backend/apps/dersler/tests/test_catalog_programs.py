@@ -8,6 +8,7 @@ okul yapılandırmasını `SchoolConfig` üzerinden değiştirir. Kişisel veri 
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from typing import Any
 
@@ -160,6 +161,17 @@ class TestGercekDosyalar:
             # Her program dosyası adıyla anahtarlanır (SchoolConfig.level_programs sözleşmesi).
             assert program.path.stem == program.key
 
+    def test_hazirlik_bayragi_sifir_seviyesi_satiriyla_ayni(self) -> None:
+        """`hazirlik: evet` ⟺ dosya Hazırlık (0) satırı taşır.
+
+        Varsayılan dışı dosyada bayrak atamayı etkilemez ama çizelge matrisinde
+        "hazırlıklı" etiketi basar; satırsız `evet` hazırlıksız okulu yanıltır
+        (19.09.2026: AİHL B grubu bölünürken altı dosyada yakalandı).
+        """
+        for program in catalog.load_programs(GERCEK_DIZIN).values():
+            tasiyor = any(0 in r.levels for r in program.rows)
+            assert program.has_prep == tasiyor, program.key
+
     def test_her_okul_turunun_verisi_var(self) -> None:
         options = catalog.school_type_options(catalog.load_programs(GERCEK_DIZIN))
         assert {o["value"] for o in options} == {str(t) for t in SchoolType}
@@ -254,8 +266,135 @@ class TestGercekDosyalar:
             "anadolu-imam-hatip-lisesi-2025",
             "mesleki-ve-teknik-anadolu-lisesi-2023",
         }
-        # Varsayılan dışı program (B grubu) kendiliğinden girmez.
-        assert "anadolu-imam-hatip-lisesi-program-proje-2025" not in plan.plans[9].program_keys
+        # Varsayılan dışı programlar (AİHL B grubu) kendiliğinden girmez.
+        assert not set(plan.plans[9].program_keys) & set(AIHL_B_GRUBU)
+
+
+# AİHL B grubu (TTK 23.07.2025/26, s. 4): kararın tablosundaki yedi program/proje,
+# tablo sırasıyla. 19.09.2026'da tek dosyadan bölündü — okul yalnız uyguladığı
+# programı işaretler.
+AIHL_ANA = "anadolu-imam-hatip-lisesi-2025"
+AIHL_B_GRUBU = (
+    "anadolu-imam-hatip-lisesi-spor-2025",
+    "anadolu-imam-hatip-lisesi-musiki-2025",
+    "anadolu-imam-hatip-lisesi-gorsel-sanatlar-2025",
+    "anadolu-imam-hatip-lisesi-ilahiyat-odakli-hafizlik-2025",
+    "anadolu-imam-hatip-lisesi-fen-ve-teknoloji-2025",
+    "anadolu-imam-hatip-lisesi-cocuk-gelisimi-2025",
+    "anadolu-imam-hatip-lisesi-kuran-egitim-merkezi-2025",
+)
+
+
+class TestAihlBGrubuProgramlari:
+    """AİHL program/proje dersleri program BAŞINA seçilir (19.09.2026 bölünmesi)."""
+
+    @pytest.fixture(autouse=True)
+    def _dizin_var(self) -> None:
+        if not GERCEK_DIZIN.is_dir():
+            pytest.skip("çizelge dizini bu ortamda yok")
+
+    def _aihl(self, *b_grubu: str, levels: tuple[int, ...] = (9, 10, 11, 12)) -> dict[str, Any]:
+        """Ana çizelge + verilen B grubu programları `levels`te işaretli AİHL havuzu."""
+        overrides = {str(lv): [AIHL_ANA, *b_grubu] for lv in levels} if b_grubu else None
+        plan = _plan(SchoolType.ANADOLU_IMAM_HATIP_LISESI, overrides=overrides)
+        assert not plan.warnings, plan.warnings
+        return {r.name: r for r in plan.rows()}
+
+    def test_yedi_program_varsayilan_disi_ve_ayri_bolum(self) -> None:
+        programs = catalog.load_programs(GERCEK_DIZIN)
+        assert set(AIHL_B_GRUBU) <= set(programs)
+        secilenler = [programs[k] for k in AIHL_B_GRUBU]
+        assert not any(p.default_included for p in secilenler)
+        assert len({p.department for p in secilenler}) == len(AIHL_B_GRUBU)
+        assert all(p.department for p in secilenler)
+        # B grubu dosyası yalnız seçmeli taşır; ortak/meslek dersleri ana çizelgededir.
+        for p in secilenler:
+            assert {r.course_type for r in p.rows} == {CourseType.ELECTIVE}, p.key
+        # Bölünen eski anahtar dosya olarak geri gelmemeli (göç onu yenilerine çevirir).
+        assert "anadolu-imam-hatip-lisesi-program-proje-2025" not in programs
+        # Kurulum/ayar matrisi türün programlarını bu listeden çizer.
+        secenek = next(
+            o
+            for o in catalog.school_type_options(programs)
+            if o["value"] == SchoolType.ANADOLU_IMAM_HATIP_LISESI
+        )
+        anahtarlar = secenek["program_keys"]
+        assert isinstance(anahtarlar, list) and set(AIHL_B_GRUBU) < set(anahtarlar)
+
+    def test_varsayilan_aihl_b_grubu_dersi_icermez(self) -> None:
+        havuz = self._aihl()
+        assert "Atletizm" not in havuz and "Blok Zincir" not in havuz
+        assert havuz["Osmanlı Türkçesi"].course_type == CourseType.COMMON
+
+    def test_okul_yalniz_isaretledigi_programin_derslerini_alir(self) -> None:
+        havuz = self._aihl("anadolu-imam-hatip-lisesi-spor-2025")
+        assert havuz["Atletizm"].levels == (11, 12)
+        assert havuz["Takım Sporları"].levels == (9, 10, 11, 12)
+        # Öbür altı programın dersleri girmez — bölünmenin gerekçesi.
+        for ad in ("Çalgı Eğitimi", "Desen", "Blok Zincir", "Çocuk Gelişimi"):
+            assert ad not in havuz, ad
+        assert "Arapça (Sarf, Nahiv ve Klasik Metinler)" not in havuz
+
+    def test_seviyeler_programin_kendi_satirlarindan(self) -> None:
+        """Birleşik dosya seviyeleri programlar arasında BİRLEŞTİRİYORDU."""
+        musiki = self._aihl("anadolu-imam-hatip-lisesi-musiki-2025")
+        gorsel = self._aihl("anadolu-imam-hatip-lisesi-gorsel-sanatlar-2025")
+        assert musiki["Geleneksel Türk Sanatları"].levels == (11, 12)
+        assert gorsel["Geleneksel Türk Sanatları"].levels == (12,)
+        programs = catalog.load_programs(GERCEK_DIZIN)
+
+        def seviye(key: str, ad: str) -> tuple[int, ...]:
+            return next(r.levels for r in programs[key].rows if r.name == ad)
+
+        hafizlik = "anadolu-imam-hatip-lisesi-ilahiyat-odakli-hafizlik-2025"
+        kem = "anadolu-imam-hatip-lisesi-kuran-egitim-merkezi-2025"
+        assert seviye(hafizlik, "Kur'an Okuma Teknikleri") == (9, 10, 11)
+        assert seviye(kem, "Kur'an Okuma Teknikleri") == (9, 10, 11, 12)
+        # A grubundaki aynı adlı satırla (11-12) havuzda tek kayıtta birleşir.
+        assert self._aihl(hafizlik)["Kur'an Okuma Teknikleri"].levels == (9, 10, 11, 12)
+
+    def test_cocuk_gelisimi_grubunun_sinirlari(self) -> None:
+        """19.09.2026 denetimi: bir ders düşmüş, bir ders yanlış gruptaydı (ölçülerek doğrulandı)."""
+        programs = catalog.load_programs(GERCEK_DIZIN)
+        cocuk = {r.name: r for r in programs["anadolu-imam-hatip-lisesi-cocuk-gelisimi-2025"].rows}
+        fen = {r.name for r in programs["anadolu-imam-hatip-lisesi-fen-ve-teknoloji-2025"].rows}
+        # Döküm betiğinin "Program Dışı Etkinlikler" süzgeci bu satırı yutmuştu.
+        atolye = cocuk["Müzik ve Dramatik Etkinlikler Atölyesi"]
+        assert atolye.levels == (9,) and atolye.exam_mode == CourseExamMode.PRACTICE
+        # Tabloda Fen ve Teknoloji grubunun hemen ARDINDAN gelir; Çocuk Gelişimi'nin ilk satırıdır.
+        assert cocuk["Mesleki Gelişim Atölyesi"].levels == (9,)
+        assert "Mesleki Gelişim Atölyesi" not in fen
+        # B grubunda hazırlık sınıfı satırı taşıyan tek program Fen ve Teknoloji'dir.
+        hazirlikli = {k for k in AIHL_B_GRUBU if any(0 in r.levels for r in programs[k].rows)}
+        assert hazirlikli == {"anadolu-imam-hatip-lisesi-fen-ve-teknoloji-2025"}
+
+    def test_osmanli_turkcesi_program_okulunda_secmeliye_doner(self) -> None:
+        """Kararın açıklamaları: program/proje okulunda ders zorunlu olarak alınmaz."""
+        for key in AIHL_B_GRUBU:
+            assert self._aihl(key)["Osmanlı Türkçesi"].course_type == CourseType.ELECTIVE, key
+        # Zorunluluk 10. sınıftadır: program yalnız 9'da işaretliyse 10. sınıf hâlâ
+        # "İmam Hatip Programı"ndadır ve ders zorunlu kalır (kohortla başlayan proje).
+        yalniz_9 = self._aihl("anadolu-imam-hatip-lisesi-spor-2025", levels=(9,))
+        assert yalniz_9["Osmanlı Türkçesi"].course_type == CourseType.COMMON
+        assert yalniz_9["Osmanlı Türkçesi"].levels == (10, 11, 12)
+
+    def test_eski_anahtar_gocu_yedi_programin_hepsini_acar(self) -> None:
+        """`okul/0007` dondurulmuş anahtar kopyası gerçek dosyalarla AYNI kalmalı."""
+        goc = importlib.import_module("apps.okul.migrations.0007_aihl_b_grubu_program_anahtarlari")
+        assert goc._YENI_ANAHTARLAR == AIHL_B_GRUBU
+        # Göçten geçen kurulumun havuzu = ana çizelge + yedi programın 9-12 dersleri.
+        programs = catalog.load_programs(GERCEK_DIZIN)
+        ana = set(self._aihl())
+        eklenen = {
+            r.name
+            for k in AIHL_B_GRUBU
+            for r in programs[k].rows
+            if set(r.levels) & {9, 10, 11, 12}
+        } - ana
+        assert set(self._aihl(*AIHL_B_GRUBU)) == ana | eklenen
+        # Kürasyon sayımı: eski birleşik dosyanın havuza kattığı 74 ders + o aktarımda
+        # düşmüş olan "Müzik ve Dramatik Etkinlikler Atölyesi".
+        assert len(eklenen) == 75
 
 
 class TestMetaVeYururluk:

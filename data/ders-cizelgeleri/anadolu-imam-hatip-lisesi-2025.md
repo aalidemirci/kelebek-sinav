@@ -26,9 +26,18 @@ Kürasyon notları:
 - Aynı ders hem ortak hem seçmeli bölümdeyse tek kayıt: ortak bölümü lise
   seviyesindeyse ORTAK + seviye birleşimi (Osmanlı Türkçesi 10 ortak → 10-12),
   yalnız hazırlıkta ortaksa SEÇMELİ (Bilişim Teknolojileri ve Yazılım).
-- B grubu seçmeliler (spor/musiki/görsel sanatlar/hafızlık/fen-teknoloji/
-  çocuk gelişimi/Kur'an eğitim merkezi PROGRAM-PROJE dersleri) ayrı, varsayılan
-  dışı dosyadadır: `anadolu-imam-hatip-lisesi-program-proje-2025.md`.
+- B grubu seçmeliler PROGRAM/PROJE dersleridir ve yedi ayrı, varsayılan dışı
+  dosyadadır (19.09.2026'da tek dosyadan bölündü; okul yalnız uyguladığı
+  programı işaretler): `anadolu-imam-hatip-lisesi-{spor, musiki,
+  gorsel-sanatlar, ilahiyat-odakli-hafizlik, fen-ve-teknoloji, cocuk-gelisimi,
+  kuran-egitim-merkezi}-2025.md`.
+- "Osmanlı Türkçesi" yalnız "İmam Hatip Programı"nda zorunludur (10. sınıf).
+  B grubu program dosyaları dersi SEÇMELİ satırıyla taşır; program 10. sınıfta
+  işaretlenince birleştirme kuralı dersi seçmeliye çevirir. Yalnız A grubundan
+  seçen iki programda da ders zorunlu DEĞİLDİR ama bunların dosyası yoktur:
+  "Fen ve Sosyal Bilimler Programı/Projesi" (açıklama md. 9-ç) ve Arapça/
+  İngilizce dışı dilde hazırlık uygulaması (md. 20-d). Bu okullar dersi takvim
+  havuzundan elle çıkarır.
 - Sınav sütunu kürasyondur (tasarım §7.1): uygulamalı değerlendirilen meslek
   dersleri (Hitabet ve Mesleki Uygulama, Mesleki Uygulama, Kur'an Okuma
   Teknikleri, Dinî Musiki, Ebru, Hüsnühat, Tezhip) `UYGULAMA`; Kur'an-ı Kerim

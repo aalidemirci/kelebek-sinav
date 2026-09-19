@@ -129,9 +129,17 @@
   yeni programa DÜŞER ve plan uyarı taşır — sessiz düşme yok; uyarı ders havuzu
   panelinde görünür. (6) Aynı ders programlar arasında AYNI adla yazılır
   (kademeli/çok programlı birleşim ada göredir); "Seçmeli X" öneki resmî
-  çizelge adıysa korunur. İki alanı karıştırma: `exam_mode` çizelge verisidir,
-  senkronda EZİLİR (`levels`/`course_type` sınıfı); `is_active` idari karardır
-  ve KORUNUR.
+  çizelge adıysa korunur. (7) Program ANAHTARI kaldırmak/yeniden adlandırmak
+  (1)'in istisnasıdır ve veri göçü İSTER: anahtar `SchoolConfig.level_programs`
+  içinde kayıtlıdır, `validate_level_programs` bilinmeyen anahtarı REDDEDER
+  (Okul Bilgileri hiç kaydedilemez) ve çizelge matrisi bayat anahtara kutu
+  çizmez. Emsal `okul/0007` (19.09.2026 — AİHL B grubu yedi programa bölündü;
+  eski anahtar yenilerine AÇILIR, havuz aynı kalır). Aynı bölünme bir ilkeyi de
+  yerleştirdi: programa göre değişen ZORUNLULUK kodla değil, varsayılan dışı
+  program dosyasındaki SEÇMELİ satırla anlatılır ("Osmanlı Türkçesi | 10" —
+  tür çatışmasında SEÇMELİ kazanır). İki alanı karıştırma: `exam_mode` çizelge
+  verisidir, senkronda EZİLİR (`levels`/`course_type` sınıfı); `is_active` idari
+  karardır ve KORUNUR.
 - **Sentetik veri fixture'ı eklerken muafiyet ADIYLA yazılır:** hem
   `.gitignore` hem `depo_sizintisi.MUAF_YOLLAR` tek tek dosya adı tutar; joker
   (`veri/*.xls`) o klasöre bırakılan GERÇEK bir e-Okul ihracını da muaf tutar

@@ -1,8 +1,9 @@
 // Çizelge ataması — okul türü + hazırlık seçimine göre yürürlükteki MEB çizelgesini
 // gösterir ve seviye bazında özelleştirmeye (kademeli dönüşüm, çok programlı okul,
-// bölümlü GSL) izin verir. Kurulum sihirbazı ve Ayarlar → Okul bilgileri AYNI
-// bileşeni kullanır; plan backend'den önizlemeyle gelir (`GET /courses/catalog-status/`
-// + kaydedilmemiş seçim), yürürlük/kademeli kuralı istemcide TEKRARLANMAZ.
+// bölümlü GSL, program/proje uygulayan AİHL) izin verir. Kurulum sihirbazı ve
+// Ayarlar → Okul bilgileri AYNI bileşeni kullanır; plan backend'den önizlemeyle
+// gelir (`GET /courses/catalog-status/` + kaydedilmemiş seçim), yürürlük/kademeli
+// kuralı istemcide TEKRARLANMAZ.
 //
 // Değer sözleşmesi (`SchoolConfig.level_programs`): boş nesne = varsayılan;
 // yazılan seviye için yalnız listedeki program anahtarları uygulanır.
@@ -184,7 +185,8 @@ export default function CizelgeAtamaMatrisi({ schoolType, hasPrepClass, value, o
         <span className="text-body-small text-on-surface-variant">
           Kademeli dönüşümde (ör. Anadolu Lisesi → Fen Lisesi) yeni tür 9. sınıftan başlar, üst
           sınıflar eski çizelgede kalır; çok programlı okulda aynı sınıf düzeyine birden çok çizelge
-          işaretlenir.
+          işaretlenir. Program/proje uygulayan okul (ör. spor ya da musiki programlı Anadolu İmam
+          Hatip Lisesi) kendi program çizelgesini ana çizelgenin yanına buradan işaretler.
         </span>
       </div>
 

@@ -57,8 +57,8 @@ Meta alanları (`catalog_parser.parse_program_meta`; tablo başlayınca okuma bi
 | `program_key` | evet | Kararlı anahtar; `SchoolConfig.level_programs` buna işaret eder. Dosya adıyla aynı tutulur. |
 | `ad` | evet | Kullanıcıya görünen ad (Ders Havuzu "yürürlükteki çizelge" paneli). |
 | `okul_turu` | evet | `okul.SchoolType` kodu; virgülle birden çok tür (ÇPAL, AL/MTAL/AİHL çizelgelerini paylaşır). Boş = her türe uygulanan genel dosya. |
-| `hazirlik` | hayır | `evet`: hazırlık sınıfı bulunan okul çizelgesi. Bölüm grubunda okulun bayrağıyla eşleşen varyant seçilir; tek varyant varsa her iki okul da onu kullanır (AİHL tek çizelgedir, 0. seviye satırları hazırlıksız okulda okul seviye kümesince düşer). |
-| `bolum` | hayır | Bölüm/varyant etiketi (GSL: Görsel Sanatlar/Tiyatro/Müzik/Türk Müziği; Spor: Tematik program; AİHL: B grubu). Aynı türün farklı bölümleri varsayılanda BİRLEŞİR. |
+| `hazirlik` | hayır | `evet`: hazırlık sınıfı bulunan okul çizelgesi. Bölüm grubunda okulun bayrağıyla eşleşen varyant seçilir; tek varyant varsa her iki okul da onu kullanır (AİHL tek çizelgedir, 0. seviye satırları hazırlıksız okulda okul seviye kümesince düşer). Bayrak dosyanın 0. seviye satırı taşımasıyla AYNI olmalıdır (test denetler): matriste "hazırlıklı" etiketini basar. |
+| `bolum` | hayır | Bölüm/varyant etiketi (GSL: Görsel Sanatlar/Tiyatro/Müzik/Türk Müziği; Spor: Tematik program; AİHL: B grubundaki yedi program/proje). Aynı türün farklı bölümleri varsayılanda BİRLEŞİR. |
 | `varsayilan` | hayır | `hayır`: varsayılan atamaya girmez, yalnız matristen seçilir (Tematik Spor, AİHL program/proje dersleri). |
 | `kaynak` | evet | Dayanak: TTK karar tarih/sayı + sayfa + bağlantı. |
 | `yururluk` | evet | Başlangıç ders yılı (`2025-2026`). Öncesindeki yıllarda uygulanmaz. |
@@ -83,14 +83,14 @@ Tablo sütunları:
 Tablo dışı satırlar (başlık, kürasyon notları) yok sayılır; hatalı satırlar
 import'u durdurmaz. `README.md` ve `ders-adi-takma-adlari.md` program sayılmaz.
 
-## Program dosyaları (03.09.2026)
+## Program dosyaları (03.09.2026; AİHL B grubu 19.09.2026'da bölündü)
 
 | Dosya | Karar | Yürürlük |
 |---|---|---|
 | `anadolu-lisesi-2025.md` · `anadolu-lisesi-hazirlik-2025.md` | TTK 09.05.2025/5 | 2025-2026, tüm seviyeler |
 | `fen-lisesi-2025.md` · `fen-lisesi-hazirlik-2025.md` | TTK 09.05.2025/5 | 2025-2026, tüm seviyeler |
 | `sosyal-bilimler-lisesi-2025.md` · `sosyal-bilimler-lisesi-hazirlik-2025.md` | TTK 09.05.2025/5 | 2025-2026, tüm seviyeler |
-| `anadolu-imam-hatip-lisesi-2025.md` (+ `…-program-proje-2025.md`, varsayılan dışı) | TTK 23.07.2025/26 | 2025-2026, tüm seviyeler |
+| `anadolu-imam-hatip-lisesi-2025.md` (+ yedi B grubu program/proje dosyası, varsayılan dışı: `…-{spor,musiki,gorsel-sanatlar,ilahiyat-odakli-hafizlik,fen-ve-teknoloji,cocuk-gelisimi,kuran-egitim-merkezi}-2025.md`) | TTK 23.07.2025/26 | 2025-2026, tüm seviyeler |
 | `guzel-sanatlar-lisesi-{gorsel-sanatlar,tiyatro}-2025.md` | TTK 09.05.2025/6 | 2025-2026, ortak dersler hazırlık-9-10'dan kademeli |
 | `guzel-sanatlar-lisesi-{muzik,turk-muzigi}-2025.md` | TTK 09.05.2025/7 | 2025-2026, ortak dersler kademeli |
 | `spor-lisesi-2026.md` (+ `spor-lisesi-tematik-2026.md`, varsayılan dışı) | TTK 02.09.2026/102, /103 | 2026-2027, tüm seviyeler (kademe yok) |
@@ -136,6 +136,17 @@ seçmeli dersler tablosu ve hazırlıklı MTAL çizelgesi (resmî PDF taranmış
 görüntü), MTAL alan/dal meslek dersleri (56 alan — okul elle ekler), Özel
 Program Uygulayan Fen/SBL (2025/24-25; ÖP SBL nüshası "TASLAK" ibareli).
 
+**AİHL program/proje dosyaları (B grubu).** Kararın B grubu tablosu yedi
+programa ayrılır; her biri ayrı, varsayılan dışı dosyadır ve okul yalnız
+uyguladığını ana çizelgenin YANINA işaretler (tek dosyayken yedi programın 74
+dersi birden havuza giriyordu). Her dosya ayrıca 10. seviyede SEÇMELİ bir
+"Osmanlı Türkçesi" satırı taşır: kararın açıklamaları gereği program/proje
+okulunda ders zorunlu değildir ve birleştirme kuralı (tür çatışmasında SEÇMELİ
+kazanır) ana çizelgedeki ORTAK kaydı o okulda seçmeliye çevirir — kod
+değişikliği olmadan.
+Yalnız A grubundan seçen iki programın (Fen ve Sosyal Bilimler; Arapça/İngilizce
+dışı dilde hazırlık) dosyası yoktur; onlarda ders ORTAK görünür.
+
 ## Yeni çizelge nasıl eklenir
 
 1. Kaynak PDF'i `data/raw/` altına koy (git dışı; ad kalıbı
@@ -147,9 +158,25 @@ Program Uygulayan Fen/SBL (2025/24-25; ÖP SBL nüshası "TASLAK" ibareli).
 2. `docker compose run --rm backend python /repo/scripts/cizelge_metninden_tablo.py <txt> --md`
    taslağını al; satırları kaynakla karşılaştır, adları kanonik yaz, sınav
    sütununu kürasyon notlarıyla doldur, meta bloğunu ve dayanağı ekle.
+   Karşılaştırma SATIR SAYISIYLA yapılır: betik özet satırlarını ("… TOPLAMI",
+   "PROGRAM DIŞI ETKİNLİKLER") süzer ve süzgeç bir ders adını yutabilir
+   (19.09.2026: "Müzik ve Dramatik Etkinlikler Atölyesi" böyle düşmüştü). `--md`
+   olmadan alınan döküm, atladığı değerli satırları tablonun sonunda listeler.
+   Sol sütunda grup etiketi olan tablolarda (AİHL B grubu) grup sınırı metinden
+   ÇÖZÜLMEZ: etiket kendi grubunun dikey ortasına basılıdır; pypdf
+   `extract_text(visitor_text=…)` ile satır ve etiket y koordinatları alınıp
+   ilk-son satır ortası etiketle karşılaştırılır.
 3. Testler her dosyayı hatasız ayrıştırmayı ve okul türü seçeneklerini
    denetler (`apps/dersler/tests/test_catalog.py`). Kod değişikliği gerekmez;
    yeni okul türü için yalnız `okul.SchoolType`'a satır eklenir.
+
+**Program anahtarı kaldırmak ya da yeniden adlandırmak veri göçü İSTER.** Dosya
+İÇERİĞİ değişikliği göç gerektirmez (damga senkronu tetikler) ama anahtar
+`SchoolConfig.level_programs` içinde kayıtlıdır: bayat anahtar planda uyarıya
+düşer, `validate_level_programs` onu reddettiği için Okul Bilgileri
+kaydedilemez ve çizelge matrisi onu kaldıracak kutu çizmez. Emsal:
+`okul/migrations/0007_aihl_b_grubu_program_anahtarlari.py` (eski anahtar yeni
+anahtarlara AÇILIR, havuz aynı kalır; anahtarlar göçte inline kopyadır).
 
 `ders-adi-takma-adlari.md` katalog değildir: e-Okul yazımlarını kanonik ada
 bağlayan seed takma adlarıdır (`ensure_course_aliases`).

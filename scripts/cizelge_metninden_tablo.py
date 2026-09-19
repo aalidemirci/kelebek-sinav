@@ -75,11 +75,15 @@ _OZET_KALIPLARI = (
     "SEÇİLEBİLECEK",
     "TOPLAM DERS SAATİ",
     "PROGRAM DIŞI",
-    "ETKİNLİKLER",
     "SOSYAL SORUMLULUK",
     "HAYAT BOYU",
     "SERTİFİKASYON",
 )
+#: Yalnız SATIR BAŞINDA özet sayılan sol etiket ("PROGRAM DIŞI / ETKİNLİKLER" iki
+#: satıra bölünür). Alt dize olarak ARANMAZ: AİHL B grubundaki "Müzik ve Dramatik
+#: Etkinlikler Atölyesi" bu yüzden 03.09.2026 aktarımında sessizce düşmüştü
+#: (19.09.2026 denetimi). Atlanan her özet satırı dökümde ayrıca listelenir.
+_OZET_SATIR_BASI = ("ETKİNLİKLER",)
 
 # Sınav biçimi ÖNERİSİ — ad anahtarına göre (nihai karar kürasyon, tasarım §7.1).
 _UYGULAMA_ANAHTARLARI = (
@@ -150,6 +154,9 @@ class Tablo:
     baslik: str
     seviyeler: list[int]
     satirlar: list[Satir] = field(default_factory=list)
+    #: Özet sayılıp atlanan ama HÜCRE DEĞERİ taşıyan satırlar — sessiz düşmenin
+    #: panzehiri: süzgeç bir ders adını yutarsa kürasyonda burada görünür.
+    atlananlar: list[str] = field(default_factory=list)
 
 
 def _sayfalar(metin: str) -> list[tuple[int, list[str]]]:
@@ -217,9 +224,11 @@ def tablolari_cikar(metin: str) -> list[Tablo]:
             if not duz:
                 continue
             ust = tr_upper(duz)
-            if any(k in ust for k in _OZET_KALIPLARI):
+            if any(k in ust for k in _OZET_KALIPLARI) or ust.startswith(_OZET_SATIR_BASI):
                 if "ORTAK DERS SAATİ TOPLAMI" in ust or "MESLEK DERS" in ust and "TOPLAM" in ust:
                     bolum = "SECMELI"
+                if CELL_RE.search(line):
+                    tablo.atlananlar.append(" ".join(duz.split()))
                 continue
             if "SINIF" in ust and not CELL_RE.search(line):
                 continue  # 'SINIF SINIF' başlık devamı
@@ -313,6 +322,9 @@ def dokum(tablolar: list[Tablo]) -> str:
             uy = f"   !! {s.uyari}" if s.uyari else ""
             grup = f" [{s.grup}]" if s.grup else ""
             out.append(f"{s.bolum:8} {s.ad}{grup} | {hucre}{uy}")
+        if t.atlananlar:
+            out.append("-- özet sayılıp ATLANAN satırlar (aralarında ders adı var mı bakın):")
+            out.extend(f"   ~ {a}" for a in t.atlananlar)
     return "\n".join(out)
 
 

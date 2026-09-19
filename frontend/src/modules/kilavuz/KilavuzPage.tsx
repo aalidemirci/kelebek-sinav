@@ -116,12 +116,21 @@ export default function KilavuzPage() {
           Okul türünün altındaki <strong>çizelge ataması</strong> kartı, hangi sınıf düzeyinde hangi
           Talim ve Terbiye Kurulu çizelgesinin yürürlükte olduğunu kararın tarih ve sayısıyla
           gösterir. Bütün sınıf düzeyleri aynı çizelgeyle okuyorsa dokunmanız gerekmez.{" "}
-          <strong>“Sınıf düzeyine göre özelleştir”</strong> iki durum içindir:{" "}
+          <strong>“Sınıf düzeyine göre özelleştir”</strong> üç durum içindir:{" "}
           <em>kademeli dönüşüm</em> — Anadolu Lisesi'nden Fen Lisesi'ne dönen okulda yeni tür 9.
-          sınıftan başlar, üst sınıflar eski çizelgede kalır — ve <em>çok programlı okul</em>: aynı
-          sınıf düzeyine birden çok çizelge işaretlenir. Kademeli bir çizelgede kapsanmayan sınıf
-          düzeyi kalırsa program onu en yeni programa düşürür ve kartta uyarı gösterir; sessizce
-          geçmez.
+          sınıftan başlar, üst sınıflar eski çizelgede kalır —, <em>çok programlı okul</em>: aynı
+          sınıf düzeyine birden çok çizelge işaretlenir — ve <em>program/proje uygulayan okul</em>.
+          Kademeli bir çizelgede kapsanmayan sınıf düzeyi kalırsa program onu en yeni programa
+          düşürür ve kartta uyarı gösterir; sessizce geçmez.
+        </p>
+        <p>
+          Program/proje çizelgeleri kendiliğinden gelmez, okul uyguladığını işaretler. Anadolu İmam
+          Hatip Lisesinde spor, musiki, geleneksel ve çağdaş görsel sanatlar, ilahiyat odaklı
+          hafızlık, fen ve teknoloji, çocuk gelişimi ve eğitimi ile Kur'an eğitim merkezi
+          programlarının dersleri ayrı çizelgelerdir: okul yalnız kendi programını, ana çizelgenin{" "}
+          <strong>yanına</strong> işaretler; öbür programların dersleri havuza girmez. Bu okullarda
+          Osmanlı Türkçesi zorunlu ders olmaktan çıkar, program 10. sınıfta işaretlenince ders
+          seçmeliye döner. Tematik program uygulayan Spor Lisesi de çizelgesini buradan seçer.
         </p>
         <p>
           Verilerinizi korumak için <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran>{" "}
