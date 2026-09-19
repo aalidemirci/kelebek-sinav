@@ -108,9 +108,10 @@ export default function KilavuzPage() {
           <strong>Çizelgede eksik kalanlar sınırlıdır</strong> ve program bunları gizlemez. Mesleki
           ve Teknik Anadolu Lisesinde yalnız zorunlu dersler gelir: alan/dal meslek derslerini ve
           seçmeli dersleri Ders Havuzu ekranından elle eklersiniz (4. adım); hazırlık sınıfı bulunan
-          mesleki ve teknik çizelge de henüz yoktur. Güzel Sanatlar ve Spor Liselerinde 2026-2027
-          ders yılında 12. sınıfın tabi olduğu önceki çizelge bulunmaz; program o sınıf düzeyinde en
-          yeni çizelgeyi kullanır ve bunu ders havuzunda uyarıyla bildirir.
+          mesleki ve teknik çizelge de henüz yoktur. Güzel Sanatlar Liselerinde 2026-2027 ders
+          yılında 12. sınıfın tabi olduğu önceki çizelge bulunmaz; program o sınıf düzeyinde en yeni
+          çizelgeyi kullanır ve bunu ders havuzunda uyarıyla bildirir. Spor Lisesinde bu boşluk
+          yoktur: 2026-2027 ders yılından itibaren yeni çizelge bütün sınıf düzeylerinde uygulanır.
         </p>
         <p>
           Okul türünün altındaki <strong>çizelge ataması</strong> kartı, hangi sınıf düzeyinde hangi

@@ -118,6 +118,10 @@ describe("KilavuzPage", () => {
     expect(
       screen.getByText(/12\. sınıfın tabi olduğu önceki çizelge bulunmaz/),
     ).toBeInTheDocument();
+    // TTK 02.09.2026/102: Spor Lisesi'nin yeni çizelgesi 2026-2027'den itibaren bütün
+    // sınıf düzeylerinde — önceki çizelge boşluğu yalnız Güzel Sanatlar'da kaldı.
+    expect(screen.getByText(/Spor Lisesinde bu boşluk yoktur/)).toBeInTheDocument();
+    expect(screen.queryByText(/Güzel Sanatlar ve Spor Liselerinde/)).not.toBeInTheDocument();
     expect(screen.queryByText(/çizelge verisi henüz gelmemiş türler/)).not.toBeInTheDocument();
   });
 
