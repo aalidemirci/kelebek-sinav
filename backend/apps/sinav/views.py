@@ -434,6 +434,38 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
         session.refresh_from_db()
         return Response({"session": ExamSessionSerializer(session).data, "report": report})
 
+    @action(detail=True, methods=["get"], url_path="butterfly-fit")
+    def butterfly_fit(self, request: Request, pk: str | None = None) -> Response:
+        """Kelebek SIRA bütçesi (Adım 3 göstergesi) — koltuk değil SIRA sayar.
+
+        `?rooms=1,2,3` henüz KAYDEDİLMEMİŞ salon seçimini sorar; salon
+        editöründeki `preview_room_seats` deseni: iş kuralı backend'de kalır,
+        ön yüz her değişimde ucu çağırır. Parametre yoksa oturumun kayıtlı
+        salonları kullanılır.
+        """
+        session = self.get_object()
+        raw = str(request.query_params.get("rooms", "")).strip()
+        room_ids: list[int] | None = None
+        if raw:
+            try:
+                room_ids = [int(part) for part in raw.split(",") if part.strip()]
+            except ValueError as exc:
+                raise drf_serializers.ValidationError(
+                    {"rooms": "Salon seçimi virgülle ayrılmış tam sayı olmalı."}
+                ) from exc
+        fit = services.session_butterfly_fit(session, room_ids=room_ids)
+        return Response(
+            {
+                "students": fit.students,
+                "seats": fit.seats,
+                "desks": fit.desks,
+                "largest_group": fit.largest_group,
+                "deficit": fit.deficit,
+                "fits": fit.fits,
+                "message": services.butterfly_fit_message(fit),
+            }
+        )
+
     @action(detail=True, methods=["get"])
     def participants(self, request: Request, pk: str | None = None) -> Response:
         """Katılımcı çözümü — ders bazlı liste + çakışma/uyarılar (Adım 2/4)."""

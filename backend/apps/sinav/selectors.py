@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date, datetime
 
 from django.db.models import Max, Prefetch, Q, QuerySet
@@ -87,6 +88,28 @@ def section_rooms_for_levels(levels: set[int]) -> list[ExamRoom]:
             linked_section__isnull=False,
             linked_section__deleted_at__isnull=True,
             linked_section__class_level__in=sorted(levels),
+        )
+        .order_by("linked_section__class_level", "linked_section__class_section")
+    )
+
+
+def rooms_for_sections(section_ids: Iterable[int]) -> list[ExamRoom]:
+    """Verilen ŞUBELERİN derslikleri (aktif salonlar, canlı şube bağı).
+
+    Slot→oturum salon ön-seçimi bunu kullanır: kelebek oturumunda yalnız O SAATTE
+    SINAVI OLAN şubelerin derslikleri boşalır — sınavı olmayan şube derstedir
+    (20.09.2026 kullanıcı kuralı). `section_rooms_for_levels` seviyenin TÜM
+    şubelerini alır ve klasik (kendi dersliğinde) düzen eşlemesi için durur.
+    """
+    ids = sorted({int(sid) for sid in section_ids})
+    if not ids:
+        return []
+    return list(
+        exam_rooms()
+        .filter(
+            linked_section__isnull=False,
+            linked_section__deleted_at__isnull=True,
+            linked_section_id__in=ids,
         )
         .order_by("linked_section__class_level", "linked_section__class_section")
     )

@@ -334,13 +334,82 @@ def test_single_group_tight_capacity_no_checkerboard() -> None:
     assert any("kaçınılmaz" in w for w in result.warnings)
 
 
-def test_dominant_group_warning() -> None:
-    room = _grid_room(1, 3, 2, DeskType.DOUBLE)  # 12 koltuk
+def test_butterfly_fit_ikili_sirada_yarim_kurali() -> None:
+    """İkili sırada kural: hiçbir sınav, sınava girenlerin yarısını geçemez.
+
+    Kullanıcının bildirdiği vaka (20.09.2026): 10. sınıfın tamamı (180) ile 9.
+    sınıfın üç şubesi (90) aynı saatte; sınavı olan dokuz dersliğin 135 sırası
+    koltuk olarak TAM yetiyor ama 45 öğrenci aynı sınavla yan yana kalıyor.
+    """
+    uyum = engine.butterfly_fit([180, 90], {2: 135})
+    assert uyum.students == 270
+    assert uyum.seats == 270  # koltuk tam yetiyor…
+    assert uyum.desks == 135
+    assert uyum.deficit == 45  # …ama sıra yetmiyor
+    assert not uyum.fits
+
+
+def test_butterfly_fit_dengeli_mevcut_sigar() -> None:
+    """10. sınıfın tamamı ↔ 9. sınıfın tamamı: iki seviyenin derslikleri birbirini karşılar."""
+    uyum = engine.butterfly_fit([180, 180], {2: 180})
+    assert uyum.deficit == 0
+    assert uyum.fits
+
+
+def test_butterfly_fit_tek_grup_sira_sayisiyla_sinirli() -> None:
+    """Tek sınav: koltuk değil SIRA sayar (satranç düzeninin matematiği)."""
+    assert engine.butterfly_fit([100], {2: 100}).deficit == 0
+    assert engine.butterfly_fit([100], {2: 60}).deficit == 40
+    assert engine.butterfly_fit([100], {1: 100}).deficit == 0  # tekli sıra = 100 sıra
+
+
+def test_butterfly_fit_ucluk_sirada_grup_sayisiyla_sinirli() -> None:
+    """Üçlü sıra ancak ÜÇ ayrı sınav varsa üç öğrenci alır; iki grupta ikisi dolar."""
+    assert engine.butterfly_fit([2, 2], {3: 1, 1: 1}).deficit == 1  # koltuk 4, yerleşen 3
+    assert engine.butterfly_fit([2, 1, 1], {3: 1, 1: 1}).deficit == 0
+
+
+def test_butterfly_fit_bos_girdi() -> None:
+    """Sınav yoksa açık da yoktur; salon yoksa herkes açıktadır."""
+    assert engine.butterfly_fit([], {2: 10}).deficit == 0
+    assert engine.butterfly_fit([5], {}).deficit == 5
+
+
+def test_sira_butcesi_uyarisi() -> None:
+    """Sıra açığı SAYIYLA söylenir; etiket verilmezse ham anahtara düşülür."""
+    room = _grid_room(1, 3, 2, DeskType.DOUBLE)  # 6 sıra / 12 koltuk
     students = [_participant(i, "1:9") for i in range(1, 9)] + [
         _participant(100 + i, "2:9") for i in range(1, 4)
-    ]  # grup1=8 > 12/2
+    ]  # en kalabalık grup 8 > 6 sıra → 2 öğrenci yan yana kalır
     result = engine.distribute_butterfly(students, [room], seed=11)
-    assert any("Baskın grup" in w for w in result.warnings)
+    uyari = next(w for w in result.warnings if "sıra var" in w)
+    assert "'1:9' grubu" in uyari
+    assert "6 sıra var" in uyari
+    assert "2 öğrenci" in uyari
+
+
+def test_sira_butcesi_uyarisi_etiketli() -> None:
+    """`group_labels` verilince uyarı idareci diliyle konuşur (ham anahtar yok)."""
+    room = _grid_room(1, 3, 2, DeskType.DOUBLE)
+    students = [_participant(i, "1:9") for i in range(1, 9)] + [
+        _participant(100 + i, "2:9") for i in range(1, 4)
+    ]
+    result = engine.distribute_butterfly(
+        students, [room], seed=11, group_labels={"1:9": "Coğrafya — 9. Sınıf"}
+    )
+    uyari = next(w for w in result.warnings if "sıra var" in w)
+    assert uyari.startswith("Coğrafya — 9. Sınıf sınavına 8 öğrenci giriyor")
+    assert "1:9" not in uyari
+
+
+def test_sira_butcesi_yeterse_uyarmaz() -> None:
+    """Dengeli mevcutta uyarı ÇIKMAZ (eski 'kapasite/2' ölçüsü burada da susardı)."""
+    room = _grid_room(1, 3, 2, DeskType.DOUBLE)  # 6 sıra
+    students = [_participant(i, "1:9") for i in range(1, 7)] + [
+        _participant(100 + i, "2:9") for i in range(1, 7)
+    ]  # 6 + 6 → her sıraya bir tane
+    result = engine.distribute_butterfly(students, [room], seed=11)
+    assert not [w for w in result.warnings if "sıra var" in w]
 
 
 def test_capacity_insufficient_raises() -> None:

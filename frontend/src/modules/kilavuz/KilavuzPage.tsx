@@ -595,11 +595,31 @@ export default function KilavuzPage() {
           ihtiyatlı kalır.
         </p>
 
-        <h3 className="pt-1 text-title-small font-semibold text-on-surface">Salon kapasitesi</h3>
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Salon kapasitesi ve sıra sayısı
+        </h3>
         <p>
           Aynı saatte sınava girecek öğrenci sayısı aktif salonlarınızın toplam kapasitesini aşarsa
-          program uyarır (engellemez). Otomatik yerleştirme de böyle saatlerden kaçınmaya çalışır.
-          Salon tanımlamadıysanız bu denetim çalışmaz.
+          program uyarır (engellemez). Salon tanımlamadıysanız bu denetim çalışmaz.
+        </p>
+        <p>
+          Kelebek düzeninde asıl ölçü koltuk değil <strong>sıra</strong>dır: bir sıraya aynı sınava
+          giren iki öğrenci oturamaz, yani her sıra her sınavdan en çok bir öğrenci alır. İkili
+          sıralı 30 koltukluk bir derslik, tek bir sınavın ancak 15 öğrencisini taşır.
+          Kullanılabilen salonlar da o saatte <strong>sınavı olan şubelerin derslikleridir</strong>{" "}
+          — sınavı olmayan şube derstedir. Bu ikisi birleşince kural şuna iner:
+        </p>
+        <p className="rounded-medium bg-surface-container-high p-3">
+          Hiçbir sınav, o saatte sınava giren toplam öğrencinin <strong>yarısını</strong> geçmemeli.
+        </p>
+        <p>
+          Örnek: 10. sınıfların tamamı (180 öğrenci) ile 9. sınıfın üç şubesi (90 öğrenci) aynı
+          saatteyse toplam 270, yarısı 135'tir; 10. sınıf sınavı bunu aştığı için 45 öğrenci aynı
+          sınavla yan yana oturmak zorunda kalır. Koltuk sayısı tam yetse bile böyledir. Çözüm salon
+          eklemek değil, <strong>aynı saate yakın mevcutlu bir sınav koymaktır</strong> (10. sınıfın
+          tamamının karşısına 9. sınıfın tamamı) ya da sınavı bölmektir. Otomatik yerleştirme
+          sınavları bu dengeye göre eşleştirir; açık kalırsa kaç öğrencinin etkilendiğini sayıyla
+          söyler.
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">

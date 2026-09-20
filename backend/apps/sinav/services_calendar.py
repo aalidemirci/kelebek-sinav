@@ -47,6 +47,8 @@ from apps.sinav.official_windows import NationalExam, national_exams, official_w
 
 if TYPE_CHECKING:
     from apps.dersler.selectors import EnrollmentIndex
+    from apps.sinav.engine import ButterflyFit
+    from apps.sinav.models import ExamRoom
 
 # Varsayılan açıklama metni (PDF bunu basar; create sırasında kopyalanır).
 # "AÇIKLAMALAR" başlığı metnin İÇİNDE DEĞİL: şablon bölüm başlığını kendisi basar
@@ -1285,6 +1287,141 @@ def _total_room_capacity() -> int:
     return sum(sinav_services.room_capacity(room) for room in sinav_selectors.exam_rooms())
 
 
+# --------------------------------------------------------------------------- #
+# Kelebek SIRA bütçesi (20.09.2026)
+#
+# Salon yeterliliği bu programda uzun süre KOLTUKLA ölçüldü; kelebek düzeninin
+# sert kısıtı ise SIRADADIR: bir sıraya aynı sınavdan iki öğrenci oturamaz, yani
+# her sıra her sınavdan en çok bir öğrenci alır. İkili sıralarda bu, koltuk
+# ölçüsünün ihtiyacı iki katı göstermesi demektir.
+#
+# Kullanılabilir salonlar o saatte SINAVI OLAN şubelerin dersliklerdir
+# (kullanıcı kuralı): sınavı olmayan şube derstedir, dersliği boş değildir.
+# Şubeye bağlanmamış salon (konferans salonu, laboratuvar) her saat serbesttir.
+# Sonuç, şube dersliği o şubeyi tam aldığında şu basit kurala iner: hiçbir sınav,
+# o saatte sınava girenlerin YARISINI geçemez.
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class _DeskPool:
+    """Sıra ölçüsü histogramları: şube dersliği başına + şubesiz (serbest) salonlar."""
+
+    by_section: dict[int, dict[int, int]]
+    free: dict[int, int]
+
+
+def _merge_sizes(target: dict[int, int], extra: dict[int, int]) -> None:
+    for olcu, adet in extra.items():
+        target[olcu] = target.get(olcu, 0) + adet
+
+
+def _room_desk_sizes(room: ExamRoom) -> dict[int, int]:
+    """Salonun sıra ölçüsü histogramı: {sıra koltuğu: kaç sıra}; bozuk plan {} döner.
+
+    Bozuk plan burada HATA DEĞİLDİR: bu hesap bir uyarı kanalıdır, tek bir
+    salonun bozuk JSON'u takvimi kullanılamaz hâle getirmemeli (kapasite
+    denetimindeki "kapasite 0 ise atla" ihtiyatıyla aynı çizgi).
+    """
+    from apps.sinav import layout
+
+    try:
+        plan = layout.validate_layout_plan(room.layout_plan)
+    except ValidationError:
+        return {}
+    sizes: dict[int, int] = {}
+    for desk in plan.active_desks:
+        sizes[desk.seat_count] = sizes.get(desk.seat_count, 0) + 1
+    return sizes
+
+
+def _desk_pool() -> _DeskPool:
+    """Aktif salonların sıra ölçülerini şube dersliği / serbest diye ayırır.
+
+    `linked_section` İLERİ FK'dır: şube soft-silinse de erişimde geri gelir
+    (CLAUDE.md — soft-delete ileri-FK'da süzmez), bu yüzden `deleted_at` ELLE
+    denetlenir; silinmiş şubenin dersliği serbest salon sayılır.
+    """
+    from apps.sinav import selectors as sinav_selectors
+
+    by_section: dict[int, dict[int, int]] = {}
+    free: dict[int, int] = {}
+    for room in sinav_selectors.exam_rooms():
+        sizes = _room_desk_sizes(room)
+        if not sizes:
+            continue
+        section = room.linked_section
+        if section is not None and section.deleted_at is None:
+            _merge_sizes(by_section.setdefault(int(section.pk), {}), sizes)
+        else:
+            _merge_sizes(free, sizes)
+    return _DeskPool(by_section=by_section, free=free)
+
+
+def _level_section_ids() -> dict[int, list[int]]:
+    """Seviye → canlı şube pk'leri (SEVİYE kapsamlı girdinin şube karşılığı)."""
+    out: dict[int, list[int]] = {}
+    for section in okul_selectors.class_sections():
+        out.setdefault(int(section.class_level), []).append(int(section.pk))
+    return out
+
+
+def _entry_section_ids(entry: ExamCalendarEntry, level_sections: dict[int, list[int]]) -> list[int]:
+    """Girdinin sınava giren şubeleri — dersliği o saatte boşalan şubeler."""
+    if entry.participant_type == ParticipantType.SECTIONS:
+        canli, _kayip = _live_section_ids(entry)
+        return canli
+    return level_sections.get(int(entry.level), [])
+
+
+def _butterfly_fit(
+    entries: Iterable[ExamCalendarEntry],
+    *,
+    pool: _DeskPool,
+    level_sections: dict[int, list[int]],
+    roster_counts: dict[int, int],
+    index: EnrollmentIndex | None = None,
+) -> ButterflyFit:
+    """Bir slotun kelebek sıra bütçesi.
+
+    Yalnız KELEBEK girdiler sayılır: "Kelebek Değil" sınav kendi sınıfında
+    yapılır — ne öğrencisi havuza girer ne dersliği boşalır.
+
+    Çakışma grubu anahtarı takvimde `(ders, seviye)`dir: aynı dersin aynı
+    seviyedeki iki ayrı şube girdisi (ör. Almanca 9/A-9/B ile Almanca 9/C)
+    motorda TEK gruptur, burada da toplanır. `shared_booklet` oturum niteliği
+    olduğu için takvim aşamasında bilinmez — aynı dersin farklı seviyeleri ayrı
+    grup sayılır (motorun varsayılanı).
+    """
+    from apps.sinav import engine
+
+    gruplar: dict[tuple[int, int], int] = {}
+    subeler: set[int] = set()
+    for entry in entries:
+        if not entry.is_butterfly:
+            continue
+        anahtar = (int(entry.course_id), int(entry.level))
+        gruplar[anahtar] = gruplar.get(anahtar, 0) + _entry_student_count(
+            entry, roster_counts, index
+        )
+        subeler.update(_entry_section_ids(entry, level_sections))
+    olculer = dict(pool.free)
+    for sid in subeler:
+        _merge_sizes(olculer, pool.by_section.get(sid, {}))
+    return engine.butterfly_fit(gruplar.values(), olculer)
+
+
+def _butterfly_warning(fit: ButterflyFit, *, prefix: str = "Bu saatte") -> str:
+    """Sıra açığının idareci dilindeki karşılığı (kimlik/ad yok, yalnız sayı)."""
+    return (
+        f"{prefix} {fit.students} öğrenci sınava giriyor; sınavı olan şubelerin "
+        f"dersliklerinde {fit.desks} sıra var. Kelebek düzeninde bir sıraya aynı sınavdan "
+        f"iki öğrenci oturamaz, en kalabalık sınav ise {fit.largest_group} öğrenci — "
+        f"{fit.deficit} öğrenci aynı sınavla yan yana oturmak zorunda kalır. Aynı saate "
+        "yakın mevcutlu başka bir sınav koyun ya da bu sınavı bölün."
+    )
+
+
 def _slot_student_total(
     calendar: ExamCalendar,
     on_date: date,
@@ -1308,12 +1445,23 @@ def _slot_student_total(
 
 @transaction.atomic
 def place_entry(
-    entry: ExamCalendarEntry, *, on_date: date, period_no: int, pin: bool = True
+    entry: ExamCalendarEntry,
+    *,
+    on_date: date,
+    period_no: int,
+    pin: bool = True,
+    report_butterfly: bool = True,
 ) -> PlacementResult:
     """Girdiyi ızgaraya yerleştirir (tarih + ders saati). Doğrulama + uyarılar.
 
     KS kesimi: resmî/idari tatil uyarısı yok (kapalı-gün kaynağı taşınmadı);
     hafta sonu uyarısı durur.
+
+    `report_butterfly=False` yalnız otomatik yerleştirme içindir: kelebek sıra
+    uyarısı slotun O ANKİ hâlini anlatır ve sonraki sınav aynı slota katılınca
+    BAYATLAR (tek başına 84 açık veren sınav, dengi yanına gelince 0'a iner).
+    Otomatik yerleştirici bu yüzden uyarıyı bastırır ve koşu bitince SON
+    durumdan yeniden üretir. Kural motoru değişmez — yalnız raporlama anı kayar.
     """
     _ensure_draft(entry.calendar)
     # OYS Tur 644: CANLI oturuma bağlı girdi başka slota TAŞINAMAZ — aksi hâlde
@@ -1419,6 +1567,29 @@ def place_entry(
                 f"Bu saatte sınava girecek öğrenci sayısı {mevcut}, aktif salon "
                 f"kapasitesi {kapasite} — sınav ikiye bölünmeli ya da salon eklenmeli."
             )
+
+    # Kelebek SIRA bütçesi — yukarıdaki koltuk denetiminden AYRI bir sorudur
+    # (bölüm başlığındaki gerekçe). Koltuk "herkes oturabiliyor mu", sıra "kimse
+    # kendi sınavının yanına düşmeden oturabiliyor mu" diye sorar; ikincisi
+    # ikili sırada iki kat salon ister. UYARIDIR: "zorunlu hâl" takdiri okul
+    # müdürlüğünündür ve idareci sınavı bölmeyi de seçebilir.
+    if entry.is_butterfly and report_butterfly:
+        slot_komsulari = list(
+            ExamCalendarEntry.objects.filter(
+                calendar=entry.calendar, placed_date=on_date, period_no=period_no
+            ).exclude(pk=entry.pk)
+        )
+        uyum = _butterfly_fit(
+            [*slot_komsulari, entry],
+            pool=_desk_pool(),
+            level_sections=_level_section_ids(),
+            roster_counts=okul_selectors.active_student_counts_by_level(),
+            index=kayit_index,
+        )
+        # Sıra 0 ise salon kataloğu henüz girilmemiştir: veri yokluğu uyarıya
+        # dönüşmez (kapasite denetimindeki "kapasite 0 ise atla" ile aynı ihtiyat).
+        if uyum.desks > 0 and uyum.deficit > 0:
+            warnings.append(_butterfly_warning(uyum))
 
     entry.placed_date = on_date
     entry.period_no = period_no
@@ -1584,6 +1755,12 @@ def auto_place_entries(
             mevcut_onbellek[entry.pk] = _entry_student_count(entry, roster_counts, kayit_index)
         return mevcut_onbellek[entry.pk]
 
+    # Kelebek sıra bütçesi için değişmeyen girdiler BİR KEZ okunur (aday × slot
+    # kadar sorulacak); slot başına sonuç önbelleğe alınır, slot değişince düşer.
+    sira_havuzu = _desk_pool()
+    seviye_subeleri = _level_section_ids()
+    uyum_onbellek: dict[tuple[date, int], ButterflyFit] = {}
+
     slot_girdileri: dict[tuple[date, int], list[ExamCalendarEntry]] = {}
     gun_seviye_yuk: dict[tuple[date, int], int] = {}
     gun_toplam: dict[date, int] = {}
@@ -1595,6 +1772,7 @@ def auto_place_entries(
             return
         anahtar = (entry.placed_date, int(entry.period_no))
         slot_girdileri.setdefault(anahtar, []).append(entry)
+        uyum_onbellek.pop(anahtar, None)  # slot değişti, sıra bütçesi bayatladı
         gun_seviye_yuk[(entry.placed_date, int(entry.level))] = (
             gun_seviye_yuk.get((entry.placed_date, int(entry.level)), 0) + 1
         )
@@ -1607,6 +1785,37 @@ def auto_place_entries(
         calendar=calendar, placed_date__isnull=False
     ).select_related("course"):
         durumu_isle(yerlesik)
+
+    def slot_uyumu(anahtar: tuple[date, int], aday: ExamCalendarEntry | None) -> ButterflyFit:
+        """Slotun sıra bütçesi; `aday` verilirse o da eklenmiş gibi hesaplanır."""
+        girdiler = slot_girdileri.get(anahtar, [])
+        if aday is None:
+            if anahtar not in uyum_onbellek:
+                uyum_onbellek[anahtar] = _butterfly_fit(
+                    girdiler,
+                    pool=sira_havuzu,
+                    level_sections=seviye_subeleri,
+                    roster_counts=roster_counts,
+                    index=kayit_index,
+                )
+            return uyum_onbellek[anahtar]
+        return _butterfly_fit(
+            [*girdiler, aday],
+            pool=sira_havuzu,
+            level_sections=seviye_subeleri,
+            roster_counts=roster_counts,
+            index=kayit_index,
+        )
+
+    def kelebek_farki(anahtar: tuple[date, int], aday: ExamCalendarEntry) -> int:
+        """Adayın slota katılmasının sıra açığına etkisi (eksi = iyileştiriyor)."""
+        # "Kelebek Değil" girdi kendi sınıfında yapılır: ne havuza öğrenci
+        # katar ne derslik boşaltır. Salon kataloğu boşsa (sıra yok) denetim
+        # hiç çalışmaz — veri yokluğu tercih üretmez.
+        salon_var = bool(sira_havuzu.by_section or sira_havuzu.free)
+        if not aday.is_butterfly or not salon_var:
+            return 0
+        return slot_uyumu(anahtar, aday).deficit - slot_uyumu(anahtar, None).deficit
 
     # --- Sıra: en yüklü seviye ilk seçimi yapar (en-kısıtlı-önce) ---
     seviye_yuku: dict[int, int] = {}
@@ -1640,19 +1849,39 @@ def auto_place_entries(
             if gunluk >= 3:
                 continue  # 4. sınav sert sınırı (ÖDY md. 5/1-k) — place_entry de reddeder
             asim = int(kapasite > 0 and slot_mevcut.get((gun, saat), 0) + aday_mevcut > kapasite)
+            kelebek = kelebek_farki((gun, saat), aday)
             # Leksikografik ceza demeti (motor `_pair_penalty` deseni): önce
-            # mevzuat esası (günde 2), sonra salon gerçekliği, sonra düzeyin o
-            # günkü yükü; "son günden başla" açıksa GEÇ gün (yazı md. 7), sonra
-            # günlere yayma, sonra erken ders saati; en sonda slot sırası.
+            # mevzuat esası (günde 2), sonra salon gerçekliği, sonra kelebek sıra
+            # bütçesi, sonra düzeyin o günkü yükü; "son günden başla" açıksa GEÇ
+            # gün (yazı md. 7), sonra günlere yayma, erken ders saati; en sonda
+            # slot sırası.
+            #
+            # `kelebek` slotun sıra AÇIĞINDAKİ DEĞİŞİMDİR, açığın kendisi değil —
+            # ve eksi olabilir. Mutlak açık yanlış kararı verirdi: 180 kişilik
+            # sınavın yanına 90 kişilik sınav koymak o slotun açığını 90'dan 45'e
+            # düşürür ama boş bir slota koymak da 45 açık ÜRETİR; ikisi de "45"
+            # görünür. Değişim bakınca birincisi -45, ikincisi +45 olur ve
+            # yerleştirici sınavları MEVCUT DENGESİNE göre eşleştirir (10. sınıfın
+            # tamamı ↔ 9. sınıfın tamamı). Toplam ihlali azaltan yön budur.
             gec_gun = -gun.toordinal() if from_last_day else 0
-            puan = (int(gunluk >= 2), asim, gunluk, gec_gun, gun_toplam.get(gun, 0), saat)
+            puan = (
+                int(gunluk >= 2),
+                asim,
+                kelebek,
+                gunluk,
+                gec_gun,
+                gun_toplam.get(gun, 0),
+                saat,
+            )
             puanli.append((puan, slot_sira, gun, saat))
         puanli.sort(key=lambda t: (t[0], t[1]))
 
         yerlesti = False
         for _puan, _slot_sira, gun, saat in puanli:
             try:
-                yerlestirme = place_entry(aday, on_date=gun, period_no=saat, pin=False)
+                yerlestirme = place_entry(
+                    aday, on_date=gun, period_no=saat, pin=False, report_butterfly=False
+                )
             except ValidationError:
                 continue
             durumu_isle(yerlestirme.entry)
@@ -1677,6 +1906,17 @@ def auto_place_entries(
                     "reason": "Kurallara uyan boş slot kalmadı — takvim aralığını "
                     "genişletin, sınav saati ekleyin ya da elle yerleştirin.",
                 }
+            )
+
+    # Kelebek sıra uyarıları SON durumdan üretilir (yerleştirme anındakiler
+    # bastırıldı): bir sınav tek başınayken açık verir, dengi aynı slota gelince
+    # açık kapanır — rapor ancak koşu bittiğinde doğruyu söyleyebilir.
+    for anahtar in sorted(slot_girdileri):
+        uyum = slot_uyumu(anahtar, None)
+        if uyum.desks > 0 and uyum.deficit > 0:
+            gun, saat = anahtar
+            result.warnings.append(
+                _butterfly_warning(uyum, prefix=f"{_tr_date(gun)} {saat}. derste")
             )
 
     # Aynı uyarı onlarca girdiden gelebilir; sıra korunarak teklenir.
@@ -1783,7 +2023,8 @@ def create_session_from_slot(calendar: ExamCalendar, *, on_date: date, period_no
         start_time=start_time,
         term_id=calendar.semester_id,
     )
-    levels: set[int] = set()
+    seviye_subeleri = _level_section_ids()
+    sinavli_subeler: set[int] = set()
     for entry, sections in usable:
         # Katılımcı KAPSAMI takvimden oturuma AYNEN taşınır (eskiden "LEVEL"
         # sabitti): seçmeli ders havuzda şube şube seçilmişse üretilen oturum
@@ -1797,14 +2038,20 @@ def create_session_from_slot(calendar: ExamCalendar, *, on_date: date, period_no
             level=entry.level,
             section_ids=sections,
         )
-        levels.add(entry.level)
+        if sections is not None:
+            sinavli_subeler.update(int(sid) for sid in sections)
+        else:
+            sinavli_subeler.update(seviye_subeleri.get(int(entry.level), []))
 
-    # Salon ön seçimi: katılımcı seviyelerin şube derslikleri (F3 selector'ı).
-    # ŞUBE kapsamlı girdide de seviyenin TÜM şube derslikleri ön-seçilir —
-    # bilinçli karar (31.08.2026): ön seçim bir kolaylıktır, sihirbazda elle
-    # daraltılır; kapsama göre daraltmak aynı slotta seviye geneli BAŞKA bir
-    # ders varsa onun salonlarını düşürürdü.
-    rooms = selectors.section_rooms_for_levels(levels)
+    # Salon ön seçimi: SINAVA GİREN şubelerin derslikleri (20.09.2026 kullanıcı
+    # kuralı). Sınavı olmayan şube o saatte derstedir — dersliği boş değildir ve
+    # ön seçime giremez. Eski davranış katılımcı SEVİYELERİN tüm dersliklerini
+    # alıyordu (31.08.2026); o kararın gerekçesi "aynı slotta seviye geneli başka
+    # bir ders varsa onun salonları düşmesin" idi ve bu sürümde kapsam
+    # BİRLEŞİMİYLE korunuyor: slottaki her girdinin şubeleri toplanır, hiçbirinin
+    # dersliği düşmez. Seviyeye göre almak ise sınavı olmayan şubenin dersliğini
+    # boş sayıp kelebek sıra bütçesini ŞİŞİRİYORDU.
+    rooms = selectors.rooms_for_sections(sinavli_subeler)
     if rooms:
         services.set_session_rooms(session, [{"room_id": r.pk} for r in rooms])
 
@@ -1888,8 +2135,8 @@ def calendar_validation(calendar: ExamCalendar) -> dict[str, list[str]]:
                     )
 
     kapasite = _total_room_capacity()
+    roster_counts = okul_selectors.active_student_counts_by_level()
     if kapasite > 0:
-        roster_counts = okul_selectors.active_student_counts_by_level()
         for (gun, saat), slot_girdileri in sorted(per_slot.items()):
             mevcut = sum(
                 _entry_student_count(e, roster_counts, kayit_index) for e in slot_girdileri
@@ -1899,6 +2146,23 @@ def calendar_validation(calendar: ExamCalendar) -> dict[str, list[str]]:
                     f"{gun} {saat}. ders: aynı saatte {mevcut} öğrenci sınava giriyor, "
                     f"aktif salon kapasitesi {kapasite}."
                 )
+
+    # Kelebek sıra bütçesi: kural konmadan önce kurulmuş takvimler, elle
+    # yerleştirilmiş slotlar ve sonradan değişen şube/öğrenci listeleri için
+    # kalıcı kanal (aynı-saat çakışmasındaki desen).
+    sira_havuzu = _desk_pool()
+    if sira_havuzu.by_section or sira_havuzu.free:
+        seviye_subeleri = _level_section_ids()
+        for (gun, saat), slot_girdileri in sorted(per_slot.items()):
+            uyum = _butterfly_fit(
+                slot_girdileri,
+                pool=sira_havuzu,
+                level_sections=seviye_subeleri,
+                roster_counts=roster_counts,
+                index=kayit_index,
+            )
+            if uyum.desks > 0 and uyum.deficit > 0:
+                warnings.append(_butterfly_warning(uyum, prefix=f"{_tr_date(gun)} {saat}. derste"))
     for (level, day), makamlar in sorted(
         authorities_per_day.items(), key=lambda kv: (kv[0][1], kv[0][0])
     ):

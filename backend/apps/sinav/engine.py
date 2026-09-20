@@ -23,8 +23,9 @@ Algoritma:
 Kenar durumlar:
 - TEK grup + kapasite ≥ 2×N → satranç modu: sıra başına tek koltuk kullanılır
   (bitişik masa matematiksel olarak imkânsızlaşır).
-- Baskın grup (> toplam kapasitenin yarısı) → uyarı (ihlalsiz çözüm garanti
-  edilemez; en iyi skor + açık ihlal listesi).
+- Sıra bütçesi yetmiyor (`butterfly_fit`: bir sıra her sınavdan en çok bir
+  öğrenci alır) → uyarı, kaç öğrencinin yan yana kalacağı SAYIYLA (ihlalsiz
+  çözüm matematiksel olarak imkânsız; en iyi skor + açık ihlal listesi).
 
 Doğrulama BURADA DEĞİL: bağımsız `validator.validate_seating` motorun her
 çıktısını sıfırdan denetler (test omurgası).
@@ -34,6 +35,7 @@ from __future__ import annotations
 
 import math
 import random
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
 from apps.sinav.layout import Seat, desk_position_label
@@ -104,6 +106,95 @@ class DistributionResult:
     warnings: list[str] = field(default_factory=list)
     checkerboard: bool = False
     seed: int = 0
+
+
+@dataclass(frozen=True)
+class ButterflyFit:
+    """Bir dağıtımın SIRA bütçesi — saf hesap (DB yok, kimlik yok, ad yok).
+
+    Kelebek düzeninin sert kısıtı koltukta değil SIRADADIR: bir sıraya aynı
+    çakışma grubundan iki öğrenci oturamaz (validator.py K8). Yani her sıra,
+    her sınavdan EN ÇOK BİR öğrenci alır — salon yeterliliği koltukla ölçülürse
+    ikili sıralarda sistematik olarak iki kat fazla görünür.
+
+    `deficit` kaçınılmaz ihlal sayısıdır: kurala uyarak yerleştirilemeyen
+    öğrenci. 0 ise ihlalsiz bir yerleşim MATEMATİKSEL OLARAK mümkündür (motorun
+    onu bulacağı ayrı konudur); 0'dan büyükse hiçbir motor kurtaramaz.
+    """
+
+    students: int
+    seats: int
+    desks: int
+    largest_group: int
+    deficit: int
+
+    @property
+    def fits(self) -> bool:
+        return self.deficit == 0
+
+
+def desk_sizes(
+    rooms: Iterable[RoomSeats], occupied: Mapping[int, Iterable[Occupant]] | None = None
+) -> dict[int, int]:
+    """Salonların sıra ölçüsü histogramı: {sıra başına kullanılabilir koltuk: kaç sıra}.
+
+    `occupied` salon kimliğine göre SABİT (kural pinli) yerleşimlerdir; o koltuklar
+    sıranın kullanılabilir ölçüsünden DÜŞÜLÜR — tek koltuğu pinli ikili sıra artık
+    tekli sıra gibi davranır.
+    """
+    olculer: dict[int, int] = {}
+    for room in rooms:
+        dolu = {
+            (seat.desk_row, seat.desk_col, seat.slot)
+            for seat, _grup, _ayrisma in (occupied or {}).get(room.room_id, ())
+        }
+        sira_basi: dict[tuple[int, int], int] = {}
+        for seat in room.seats:
+            if (seat.desk_row, seat.desk_col, seat.slot) in dolu:
+                continue
+            key = (seat.desk_row, seat.desk_col)
+            sira_basi[key] = sira_basi.get(key, 0) + 1
+        for adet in sira_basi.values():
+            olculer[adet] = olculer.get(adet, 0) + 1
+    return olculer
+
+
+def butterfly_fit(group_sizes: Iterable[int], desk_sizes: Mapping[int, int]) -> ButterflyFit:
+    """Kelebek sıra bütçesi — TAM hesap, yaklaşık değil.
+
+    `group_sizes` çakışma grubu mevcutları (sıra önemsiz), `desk_sizes` sıra
+    ölçüsü → o ölçüde kaç sıra var ({2: 135} = 135 ikili sıra). Histogram
+    kullanılır çünkü otomatik yerleştirici bunu aday × slot kombinasyonu kadar
+    çağırır; sıra sıra dolaşmak O(sıra) olurdu, histogram O(grup).
+
+    Hesap (iki-taraflı akış fizibilitesinin Gale-Ryser biçimi): her sıra her
+    gruptan en çok bir öğrenci aldığına göre, EN KALABALIK t grup toplamı
+    Σ min(sıra koltuğu, t) sınırını aşamaz. Açık bu sınırların en büyük
+    aşımıdır.
+
+    İkili sıralarda formül şuna iner: t=1 → en kalabalık sınav ≤ sıra sayısı;
+    t≥2 → toplam ≤ koltuk sayısı. Yani "hiçbir sınav, o saatte sınava girenlerin
+    yarısını geçemez" kuralı bunun özel hâlidir.
+    """
+    gruplar = sorted((int(g) for g in group_sizes if int(g) > 0), reverse=True)
+    olculer = {int(c): int(n) for c, n in desk_sizes.items() if int(c) > 0 and int(n) > 0}
+    sira = sum(olculer.values())
+    koltuk = sum(c * n for c, n in olculer.items())
+    acik = 0
+    onek = 0
+    for t, grup in enumerate(gruplar, start=1):
+        onek += grup
+        # t koltuktan fazlasını alamayan sıra t'de doyar; t ≥ en büyük ölçü
+        # olduğunda sınır koltuk sayısına eşitlenir ve artık büyümez.
+        sinir = sum(min(c, t) * n for c, n in olculer.items())
+        acik = max(acik, onek - sinir)
+    return ButterflyFit(
+        students=sum(gruplar),
+        seats=koltuk,
+        desks=sira,
+        largest_group=gruplar[0] if gruplar else 0,
+        deficit=max(acik, 0),
+    )
 
 
 def _deal_order(participants: list[Participant]) -> list[Participant]:
@@ -517,6 +608,7 @@ def distribute_butterfly(
     strict: bool = False,
     preplaced: list[Placement] | None = None,
     previous_seats: PrevSeats | None = None,
+    group_labels: Mapping[str, str] | None = None,
 ) -> DistributionResult:
     """Kelebek dağıtımı — iki fazlı, seed'li deterministik.
 
@@ -526,6 +618,11 @@ def distribute_butterfly(
     önceki oturumdaki sırası — aynı sıraya dönüş yumuşak cezayla caydırılır.
     Kapasite yetersizse ValueError (Türkçe) fırlatır; çağıran (servis) bunu
     ValidationError'a çevirir.
+
+    `group_labels` çakışma grubu anahtarını idareci diline çevirir ("12:10" →
+    "Coğrafya — 10. Sınıf"); yalnız UYARI METNİNE girer, dağıtıma hiç girmez ve
+    varsayılanlıdır — etiketsiz çağıran ham anahtara düşer (`focus`/`label` ile
+    aynı genişletme deseni, CLAUDE.md §3).
     """
     result = DistributionResult(seed=seed)
     pinned = list(preplaced or [])
@@ -567,11 +664,21 @@ def distribute_butterfly(
                 "Tek çakışma grubu: satranç düzeni uygulandı (sıra başına tek öğrenci)."
             )
 
-    dominant = [g for g, size in group_sizes.items() if size > total_capacity / 2]
-    for g in dominant:
+    # Kelebek yeterliliği KOLTUKLA değil SIRAYLA ölçülür (bkz. `butterfly_fit`):
+    # her sıra her sınavdan en çok bir öğrenci alır. Eski denetim "grup > kapasite/2"
+    # idi — ikili sıralarda doğru cevabı veriyordu ama tekli/üçlü sıra karışınca
+    # sapıyordu ve kaç öğrencinin sığmadığını SÖYLEMİYORDU. Sabit (pinli) yerleşimler
+    # koltuklarını düşürür, gruplarına ise girmez: iyimser taraf, pin birkaç öğrencidir.
+    uyum = butterfly_fit(group_sizes.values(), desk_sizes(rooms, fixed_by_room))
+    if uyum.deficit > 0 and group_sizes:
+        # En kalabalık grup: eşitlikte anahtar sırası (deterministik metin).
+        en_kalabalik = min(group_sizes, key=lambda g: (-group_sizes[g], g))
+        ad = (group_labels or {}).get(en_kalabalik, "") or f"'{en_kalabalik}' grubu"
         result.warnings.append(
-            f"Baskın grup '{g}' ({group_sizes[g]} öğrenci) salon kapasitesinin yarısını "
-            f"aşıyor; ihlalsiz çözüm garanti edilemez."
+            f"{ad} sınavına {group_sizes[en_kalabalik]} öğrenci giriyor; bu salonlarda "
+            f"{uyum.desks} sıra var. Kelebek düzeninde bir sıraya aynı sınavdan iki öğrenci "
+            f"oturamaz — {uyum.deficit} öğrenci aynı sınavla yan yana oturmak zorunda kalır. "
+            "Salon ekleyin ya da bu saate yakın mevcutlu başka bir sınav koyun."
         )
 
     # Faz 0 (Tur 243, talep 6): salon kotaları → grup-salon kotaları →

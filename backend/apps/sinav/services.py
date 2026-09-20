@@ -1063,6 +1063,49 @@ def _session_room_seats(session: ExamSession) -> list[engine.RoomSeats]:
     return [_room_seats_for(row.room, cap=row.capacity_override) for row in rows]
 
 
+def butterfly_fit_message(fit: engine.ButterflyFit) -> str:
+    """Sıra açığının idareci dilindeki karşılığı; açık yoksa boş dizge.
+
+    Kimlik/ad taşımaz, yalnız SAYI söyler (CLAUDE.md §2 — uyarı metninde öğrenci
+    adı ve iç kimlik geçmez).
+    """
+    if fit.fits:
+        return ""
+    return (
+        f"Seçili salonlarda {fit.desks} sıra var; en kalabalık sınav {fit.largest_group} "
+        f"öğrenci. Kelebek düzeninde bir sıraya aynı sınavdan iki öğrenci oturamaz — "
+        f"{fit.deficit} öğrenci aynı sınavla yan yana oturmak zorunda kalır. Salon ekleyin "
+        "ya da bu saate yakın mevcutlu başka bir sınav koyun."
+    )
+
+
+def session_butterfly_fit(
+    session: ExamSession, *, room_ids: Iterable[int] | None = None
+) -> engine.ButterflyFit:
+    """Oturumun kelebek SIRA bütçesi (sihirbaz 3. adım göstergesi + dağıtım öncesi).
+
+    Salon yeterliliği koltukla ölçülemez: bir sıraya aynı sınavdan iki öğrenci
+    oturamaz, yani her sıra her sınavdan en çok BİR öğrenci alır. İkili sıralı
+    bir derslikte 30 koltuk, tek bir sınavın 15 öğrencisini taşır.
+
+    `room_ids` verilmezse oturumun KAYITLI salonları (kapasite sınırı uygulanmış)
+    kullanılır; sihirbaz henüz kaydetmediği seçimi göndererek canlı önizleme alır.
+    Kural motoru TEK: hesap `engine.butterfly_fit`tedir, burada yalnız girdi
+    toplanır (ön yüzde iş kuralı kopyası tutulmaz).
+    """
+    resolution = participants.resolve_session(session)
+    gruplar: dict[str, int] = {}
+    for katilimci in resolution.participants:
+        gruplar[katilimci.conflict_group] = gruplar.get(katilimci.conflict_group, 0) + 1
+    if room_ids is None:
+        rooms = _session_room_seats(session)
+    else:
+        secili = sorted({int(rid) for rid in room_ids})
+        # Sıra DB sırası olabilir; histogram sıradan bağımsızdır.
+        rooms = [_room_seats_for(room) for room in ExamRoom.objects.filter(pk__in=secili)]
+    return engine.butterfly_fit(gruplar.values(), engine.desk_sizes(rooms))
+
+
 def _room_names(room_ids: Iterable[int]) -> dict[int, str]:
     """Salon kimliği → adı (silinmiş salon dahil — ihlal metni adla konuşur)."""
     return dict(ExamRoom.all_objects.filter(pk__in=set(room_ids)).values_list("pk", "name"))
@@ -1340,6 +1383,7 @@ def distribute_session(
                     strict=strict,
                     preplaced=preplaced,
                     previous_seats=previous,
+                    group_labels=conflict_group_labels({p.conflict_group for p in pool}),
                 )
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc

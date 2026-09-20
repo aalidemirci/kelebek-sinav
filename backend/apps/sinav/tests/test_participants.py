@@ -401,3 +401,77 @@ def test_dagitimdan_sonra_liste_degisirse_sapma_bildirilir() -> None:
     assert veri["placement_outdated"] is True
     assert "1 öğrencinin dersi değişti" in veri["warnings"][0]
     assert veri["courses"][0]["listed_sections"] == ["9/A"]
+
+
+# ===========================================================================
+# Kelebek SIRA bütçesi ucu (20.09.2026) — sihirbaz 3. adım göstergesi
+# ===========================================================================
+
+
+def _sira_oturumu() -> tuple[ExamSession, list[int]]:
+    """10. sınıfın tamamı (16) + 9. sınıfın bir şubesi (8); üç derslik (12 sıra)."""
+    for seviye, harf, no in ((10, "A", 1001), (10, "B", 1011), (9, "A", 901)):
+        sube(seviye, harf, students=8, start_no=no)
+    cografya = ders("Coğrafya", levels=[9, 10])
+    tarih = ders("Tarih", levels=[9, 10])
+    session = oturum()
+    for level in (10,):
+        services.add_session_course(
+            session, course_id=cografya.pk, participant_type=ParticipantType.LEVEL, level=level
+        )
+    services.add_session_course(
+        session, course_id=tarih.pk, participant_type=ParticipantType.LEVEL, level=9
+    )
+    salonlar = [salon("D-10A"), salon("D-10B"), salon("D-9A")]  # 4'er ikili sıra
+    return session, [s.pk for s in salonlar]
+
+
+def test_api_sira_butcesi_koltuk_yeterken_acik_bildirir() -> None:
+    """24 öğrenci / 24 koltuk: koltuk tam yeter ama 12 sıra 16 kişilik sınava yetmez."""
+    session, room_ids = _sira_oturumu()
+    services.set_session_rooms(session, [{"room_id": pk} for pk in room_ids])
+
+    resp = APIClient().get(f"/api/v1/exam-sessions/{session.pk}/butterfly-fit/")
+
+    assert resp.status_code == 200
+    assert resp.data["students"] == 24
+    assert resp.data["seats"] == 24  # koltuk TAM yeter…
+    assert resp.data["desks"] == 12  # …sıra yetmez
+    assert resp.data["largest_group"] == 16
+    assert resp.data["deficit"] == 4
+    assert resp.data["fits"] is False
+    assert "4 öğrenci aynı sınavla yan yana" in resp.data["message"]
+
+
+def test_api_sira_butcesi_kaydedilmemis_secimi_sorar() -> None:
+    """`?rooms=` kaydedilmemiş seçimi önizler (salon editörü deseni)."""
+    session, room_ids = _sira_oturumu()
+    services.set_session_rooms(session, [{"room_id": room_ids[0]}])
+
+    hepsi = ",".join(str(pk) for pk in room_ids)
+    resp = APIClient().get(f"/api/v1/exam-sessions/{session.pk}/butterfly-fit/?rooms={hepsi}")
+
+    assert resp.status_code == 200
+    assert resp.data["desks"] == 12  # kayıtlı tek salon (4 sıra) DEĞİL, seçilen üçü
+    assert resp.data["deficit"] == 4
+
+
+def test_api_sira_butcesi_dengeli_secimde_temiz() -> None:
+    """Dört derslik = 16 sıra: 16 kişilik sınav tam oturur, açık kalmaz."""
+    session, room_ids = _sira_oturumu()
+    sube(9, "B", students=8, start_no=911)
+    dorduncu = salon("D-9B")
+
+    hepsi = ",".join(str(pk) for pk in [*room_ids, dorduncu.pk])
+    resp = APIClient().get(f"/api/v1/exam-sessions/{session.pk}/butterfly-fit/?rooms={hepsi}")
+
+    assert resp.data["desks"] == 16
+    assert resp.data["deficit"] == 0
+    assert resp.data["fits"] is True
+    assert resp.data["message"] == ""
+
+
+def test_api_sira_butcesi_bozuk_parametre_400() -> None:
+    session, _ = _sira_oturumu()
+    resp = APIClient().get(f"/api/v1/exam-sessions/{session.pk}/butterfly-fit/?rooms=a,b")
+    assert resp.status_code == 400

@@ -563,6 +563,28 @@
   takvim aralığı dışındaysa YERLEŞTİRMEZ (ızgarada görünmeyen güne konmaz), girdi
   MINISTRY olarak havuzda bekler. Plan okulun AKTİF ÖĞRENCİSİ olan düzeylerden
   kurulur, derslerden değil — aksi hâlde havuzda olmayan ders sessizce kaybolurdu.
+- **Salon yeterliliği KOLTUKLA değil SIRAYLA ölçülür** (20.09.2026, kullanıcı
+  vakası): kelebek sert kısıtı sıra başınadır — bir sıra her sınavdan EN ÇOK BİR
+  öğrenci alır, yani ikili sırada koltuk ölçüsü ihtiyacı İKİ KATI gösterir. Tek
+  hesap `engine.butterfly_fit(grup mevcutları, {sıra koltuğu: kaç sıra})`: en
+  kalabalık t grubun toplamı `Σ min(c, t)` sınırını aşamaz (iki-taraflı akış
+  fizibilitesinin Gale-Ryser biçimi; kaba kuvvetle doğrulandı), `deficit`
+  kaçınılmaz ihlalin SAYISIDIR. Histogram alır çünkü otomatik yerleştirici bunu
+  aday × slot kadar çağırır. Kullanılabilir salonlar o saatte **SINAVI OLAN
+  şubelerin derslikleri** + şubeye bağlanmamış salonlardır (kullanıcı kuralı:
+  sınavı olmayan şube derstedir, dersliği boş değildir) — slot→oturum ön seçimi
+  `selectors.rooms_for_sections`, `section_rooms_for_levels` KLASİK düzen
+  eşlemesine kaldı. Şube dersliği şubesini tam aldığında kural şuna iner: hiçbir
+  sınav, o saatte sınava girenlerin YARISINI geçemez (10. sınıfın tamamı ↔ 9.
+  sınıfın tamamı eşleşmesinin matematiği budur). Dört kanal: `place_entry`
+  uyarısı · `calendar_validation` · `auto_place_entries` ceza demetindeki
+  `kelebek` terimi · sihirbaz 3. adımı (`GET /exam-sessions/{id}/butterfly-fit/`,
+  `?rooms=` ile kaydedilmemiş seçim). Ceza terimi slotun açığındaki DEĞİŞİMDİR
+  (eksi olabilir), açığın kendisi DEĞİL: mutlak açık "180'liğin yanına katıl"
+  (90→45) ile "boş slota git" (0→45) arasını ayırt edemez ve yerleştirici
+  sınavları mevcut dengesine göre eşleştiremezdi. Motorun eski "Baskın grup >
+  kapasite/2" uyarısı bu hesaba bağlandı; grup anahtarını idareci diline çeviren
+  `group_labels` isteğe bağlıdır (etiketsiz çağıran ham anahtara düşer).
 - **Salon kapasitesi UYARIDIR:** aynı slottaki toplam mevcut aktif salon
   kapasitesini aşarsa uyarılır; kapasite 0 iken (salon tanımsız) denetim hiç
   çalışmaz — sert kısıt, kataloğu eksik okulda takvimi kurulamaz hâle getirirdi.

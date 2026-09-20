@@ -2056,3 +2056,230 @@ def test_api_bakanlik_sinavlari_plan_ve_uygulama() -> None:
 
     takvim.submit_calendar(calendar)
     assert client.post(url).status_code == 400  # yalnız taslak
+
+
+# ===========================================================================
+# Kelebek SIRA bütçesi (20.09.2026) — salon yeterliliği KOLTUKLA değil SIRAYLA
+#
+# Kullanıcının bildirdiği vaka: "10. sınıfların tamamının sınavı varken 9'larda
+# sadece 3 şubenin sınavı olunca kelebek dağıtım için yeterli salon olmuyor."
+# Kök neden: bir sıraya aynı sınavdan iki öğrenci oturamaz, yani her sıra her
+# sınavdan en çok BİR öğrenci alır — ikili sırada koltuk ölçüsü ihtiyacı iki
+# katı gösterir. Kullanılabilir salonlar o saatte SINAVI OLAN şubelerin
+# derslikleridir (sınavı olmayan şube derstedir, dersliği boş değildir).
+# ===========================================================================
+
+
+def _sira_kurulumu() -> dict[str, Any]:
+    """10. sınıfın tamamı (iki şube) + 9. sınıfın tek şubesi; her şubeye derslik.
+
+    Şube başına 8 öğrenci, derslik başına 4 ikili sıra (8 koltuk). Koltuk her
+    zaman TAM yeter (24 öğrenci / 24 koltuk); kelebek düzenini kıran şey sıra
+    sayısıdır.
+    """
+    guz, _ = _iki_donem()
+    subeler = {
+        "10A": sube(10, "A", students=8, start_no=1001),
+        "10B": sube(10, "B", students=8, start_no=1011),
+        "9A": sube(9, "A", students=8, start_no=901),
+    }
+    salonlar = {ad: salon(f"D-{ad}", linked_section_id=s.pk) for ad, s in subeler.items()}
+    calendar = takvim.create_exam_calendar(
+        semester_id=guz.pk, round=1, start_date=date(2026, 10, 26), end_date=date(2026, 11, 6)
+    )
+    # Takvim yaratılırken havuz tohumlanır; senaryo girdilerini kendimiz kuralım.
+    ExamCalendarEntry.objects.filter(calendar=calendar).delete()
+    return {"calendar": calendar, "subeler": subeler, "salonlar": salonlar}
+
+
+def test_sira_acigi_koltuk_tam_yeterken_de_uyarir() -> None:
+    """24 öğrenci / 24 koltuk: koltuk tam yeter, sıra yetmez — uyarı SAYIYLA gelir."""
+    kurulum = _sira_kurulumu()
+    calendar = kurulum["calendar"]
+    cografya = ders("Coğrafya", levels=[9, 10])
+    tarih = ders("Tarih", levels=[9, 10])
+    e10 = takvim.add_calendar_entry(calendar=calendar, course_id=cografya.pk, level=10)
+    e9 = takvim.add_calendar_entry(calendar=calendar, course_id=tarih.pk, level=9)
+    gun = date(2026, 10, 27)
+
+    # Tek başına: 16 öğrenci, yalnız 10. sınıfın iki dersliği boşalır (8 sıra).
+    tek = takvim.place_entry(e10, on_date=gun, period_no=1)
+    assert any("8 öğrenci aynı sınavla yan yana" in u for u in tek.warnings)
+
+    # 9. sınıf eklenince 9/A'nın dersliği de boşalır (12 sıra): açık 8'den 4'e iner.
+    birlikte = takvim.place_entry(e9, on_date=gun, period_no=1)
+    uyari = next(u for u in birlikte.warnings if "yan yana" in u)
+    assert "24 öğrenci sınava giriyor" in uyari
+    assert "12 sıra var" in uyari
+    assert "en kalabalık sınav ise 16 öğrenci" in uyari
+    assert "4 öğrenci aynı sınavla yan yana" in uyari
+    # Uyarı İÇ KİMLİK taşımaz (CLAUDE.md §2): ne "id=" ne ders adı/öğrenci adı.
+    assert "id=" not in uyari
+    assert cografya.name not in uyari
+
+
+def test_dengeli_mevcutta_sira_uyarisi_cikmaz() -> None:
+    """10. sınıfın tamamı ↔ 9. sınıfın tamamı: iki seviyenin derslikleri birbirini karşılar."""
+    kurulum = _sira_kurulumu()
+    calendar = kurulum["calendar"]
+    b_sube = sube(9, "B", students=8, start_no=911)
+    salon("D-9B", linked_section_id=b_sube.pk)
+    cografya = ders("Coğrafya", levels=[9, 10])
+    tarih = ders("Tarih", levels=[9, 10])
+    e10 = takvim.add_calendar_entry(calendar=calendar, course_id=cografya.pk, level=10)
+    e9 = takvim.add_calendar_entry(calendar=calendar, course_id=tarih.pk, level=9)
+    gun = date(2026, 10, 27)
+
+    takvim.place_entry(e10, on_date=gun, period_no=1)
+    sonuc = takvim.place_entry(e9, on_date=gun, period_no=1)
+
+    assert not [u for u in sonuc.warnings if "yan yana" in u]
+    assert takvim.calendar_validation(calendar)["warnings"] == []
+
+
+def test_otomatik_yerlestirme_sinavlari_mevcut_dengesine_gore_eslestirir() -> None:
+    """Sıra açığı en çok AZALAN slot seçilir — günlere yayma tercihini yener.
+
+    `from_last_day` kapalıyken eski ceza demeti (…, gun_toplam, saat) sınavları
+    AYRI günlere dağıtırdı: 16 kişilik sınav tek başına 8 sıraya düşer (8 açık),
+    8 kişilik sınav tek başına 4 sıraya düşer (4 açık) — toplam 12. Aynı slotta
+    ise 12 sıra 24 öğrenciyi taşır ve açık 4'e iner. Yeni demetteki `kelebek`
+    terimi slotun açığındaki DEĞİŞİMİ ölçtüğü için ikinci sınav birinciye
+    katılmayı (Δ=0) ayrı güne gitmeye (Δ=+8) tercih eder.
+    """
+    kurulum = _sira_kurulumu()
+    calendar = kurulum["calendar"]
+    calendar.end_date = date(2026, 10, 27)  # iki hafta içi gün
+    calendar.save(update_fields=["end_date", "updated_at"])
+    SchoolConfig.objects.update_or_create(
+        pk=SchoolConfig.SINGLETON_PK, defaults={"exam_period_nos": [1]}
+    )  # gün başına tek sınav saati → toplam iki slot
+    cografya = ders("Coğrafya", levels=[9, 10])
+    tarih = ders("Tarih", levels=[9, 10])
+    e10 = takvim.add_calendar_entry(calendar=calendar, course_id=cografya.pk, level=10)
+    e9 = takvim.add_calendar_entry(calendar=calendar, course_id=tarih.pk, level=9)
+
+    takvim.auto_place_entries(calendar, from_last_day=False)
+
+    e10.refresh_from_db()
+    e9.refresh_from_db()
+    assert e10.placed_date is not None and e9.placed_date is not None
+    assert e10.placed_date == e9.placed_date  # ayrı günlere DAĞITILMADI
+    assert e10.period_no == e9.period_no
+
+
+def test_slot_oturumu_yalniz_sinavi_olan_subenin_dersligini_secer() -> None:
+    """Sınavı olmayan şube derstedir: dersliği ön seçime GİREMEZ (20.09.2026 kuralı).
+
+    Eski davranış katılımcı SEVİYENİN tüm dersliklerini alıyordu; 9/B'nin sınavı
+    olmadığı hâlde dersliği boş sayılıyor ve kelebek sıra bütçesi şişiyordu.
+    """
+    kurulum = _sira_kurulumu()
+    calendar = kurulum["calendar"]
+    b_sube = sube(9, "B", students=8, start_no=911)
+    b_salon = salon("D-9B", linked_section_id=b_sube.pk)
+    tarih = ders("Tarih", levels=[9, 10])
+    entry = takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=tarih.pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[kurulum["subeler"]["9A"].pk],  # yalnız 9/A sınava giriyor
+    )
+    gun = date(2026, 10, 27)
+    takvim.place_entry(entry, on_date=gun, period_no=1)
+    takvim.submit_calendar(calendar)
+    takvim.approve_calendar(calendar)
+
+    session = takvim.create_session_from_slot(calendar, on_date=gun, period_no=1)
+
+    secili = set(session.rooms.values_list("room__name", flat=True))
+    assert secili == {"D-9A"}
+    assert b_salon.name not in secili
+
+
+def test_calendar_validation_sira_acigini_bildirir() -> None:
+    """Elle kurulmuş / kural öncesi takvimlerde açık kalıcı kanaldan da görünür."""
+    kurulum = _sira_kurulumu()
+    calendar = kurulum["calendar"]
+    cografya = ders("Coğrafya", levels=[9, 10])
+    e10 = takvim.add_calendar_entry(calendar=calendar, course_id=cografya.pk, level=10)
+    takvim.place_entry(e10, on_date=date(2026, 10, 27), period_no=1)
+
+    uyarilar = takvim.calendar_validation(calendar)["warnings"]
+
+    assert any("8 öğrenci aynı sınavla yan yana" in u for u in uyarilar)
+    assert any("27 Ekim 2026 Salı 1. derste" in u for u in uyarilar)
+
+
+def test_kelebek_olmayan_sinav_sira_butcesine_girmez() -> None:
+    """Kendi sınıfında yapılan sınav ne havuza öğrenci katar ne derslik boşaltır."""
+    kurulum = _sira_kurulumu()
+    calendar = kurulum["calendar"]
+    cografya = ders("Coğrafya", levels=[9, 10])
+    tarih = ders("Tarih", levels=[9, 10])
+    e10 = takvim.add_calendar_entry(calendar=calendar, course_id=cografya.pk, level=10)
+    e9 = takvim.add_calendar_entry(
+        calendar=calendar, course_id=tarih.pk, level=9, is_butterfly=False
+    )
+    gun = date(2026, 10, 27)
+
+    takvim.place_entry(e10, on_date=gun, period_no=1)
+    sonuc = takvim.place_entry(e9, on_date=gun, period_no=1)
+
+    # "Kelebek Değil" girdinin kendisi için uyarı üretilmez…
+    assert not [u for u in sonuc.warnings if "yan yana" in u]
+    # …ve 9/A'nın dersliğini boşaltmadığı için 10. sınıfın açığı 8'de kalır.
+    uyarilar = takvim.calendar_validation(calendar)["warnings"]
+    assert any("8 öğrenci aynı sınavla yan yana" in u for u in uyarilar)
+
+
+def test_otomatik_yerlestirme_bayat_sira_uyarisi_basmaz() -> None:
+    """Rapor SON durumu anlatır: dengi gelince kapanan açık uyarı olarak kalmaz.
+
+    Yerleştirme sırası gereği 10. sınıf sınavı bir ara tek başına slotta durur ve
+    o anda `place_entry` "8 öğrenci yan yana kalır" der. 9. sınıf aynı slota
+    katılınca açık kapanır; eski davranışta bu bayat cümle raporda kalıyordu.
+    """
+    kurulum = _sira_kurulumu()
+    calendar = kurulum["calendar"]
+    b_sube = sube(9, "B", students=8, start_no=911)
+    salon("D-9B", linked_section_id=b_sube.pk)  # 9. sınıf da iki şube → dengeli eş
+    calendar.end_date = date(2026, 10, 27)
+    calendar.save(update_fields=["end_date", "updated_at"])
+    SchoolConfig.objects.update_or_create(
+        pk=SchoolConfig.SINGLETON_PK, defaults={"exam_period_nos": [1]}
+    )
+    cografya = ders("Coğrafya", levels=[9, 10])
+    tarih = ders("Tarih", levels=[9, 10])
+    e10 = takvim.add_calendar_entry(calendar=calendar, course_id=cografya.pk, level=10)
+    e9 = takvim.add_calendar_entry(calendar=calendar, course_id=tarih.pk, level=9)
+
+    sonuc = takvim.auto_place_entries(calendar, from_last_day=False)
+
+    e10.refresh_from_db()
+    e9.refresh_from_db()
+    assert e10.placed_date == e9.placed_date  # 16 ↔ 16: dengeli eşleşme
+    assert not [u for u in sonuc.warnings if "yan yana" in u]
+    assert takvim.calendar_validation(calendar)["warnings"] == []
+
+
+def test_otomatik_yerlestirme_cozulemeyen_acigi_gunuyle_bildirir() -> None:
+    """Eşi olmayan sınavın açığı SUSTURULMAZ — tarihiyle ve sayısıyla raporlanır."""
+    kurulum = _sira_kurulumu()
+    calendar = kurulum["calendar"]
+    calendar.end_date = date(2026, 10, 26)  # tek gün
+    calendar.save(update_fields=["end_date", "updated_at"])
+    SchoolConfig.objects.update_or_create(
+        pk=SchoolConfig.SINGLETON_PK, defaults={"exam_period_nos": [1]}
+    )
+    cografya = ders("Coğrafya", levels=[9, 10])
+    e10 = takvim.add_calendar_entry(calendar=calendar, course_id=cografya.pk, level=10)
+
+    sonuc = takvim.auto_place_entries(calendar)
+
+    e10.refresh_from_db()
+    assert e10.placed_date == date(2026, 10, 26)
+    uyari = next(u for u in sonuc.warnings if "yan yana" in u)
+    assert uyari.startswith("26 Ekim 2026 Pazartesi 1. derste")
+    assert "8 öğrenci aynı sınavla yan yana" in uyari

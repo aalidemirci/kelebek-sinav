@@ -73,6 +73,62 @@ AppMutex `KelebekSinav`.
 
 ---
 
+
+### 2.4 Kelebek sıra bütçesi (20.09.2026 — kullanıcı vakası)
+
+Kullanıcı bildirdi: *"10. sınıfların tamamının sınavı varken 9'larda sadece 3
+şubenin sınavı olunca kelebek dağıtım için yeterli salon olmuyor."*
+
+**Kök neden — yanlış birim.** Program salon yeterliliğini KOLTUKLA ölçüyordu
+(`_total_room_capacity`, sihirbazın kapasite çubuğu, motorun "baskın grup >
+kapasite/2" uyarısı). Kelebek düzeninin sert kısıtı ise SIRA başınadır (K8): bir
+sıraya aynı çakışma grubundan iki öğrenci oturamaz, yani **her sıra her sınavdan
+en çok bir öğrenci alır**. İkili sırada koltuk ölçüsü ihtiyacı iki katı gösterir —
+30 koltuklu bir derslik tek bir sınavın 15 öğrencisini taşır.
+
+**Kullanıcı kuralı — hangi salonlar kullanılabilir.** "Sadece sınavı olan
+şubelerin derslikleri kullanılabilir, diğer şubeler derse devam eder." Yani salon
+eklemek serbest bir hamle DEĞİLDİR; havuz, o saatte sınava giren şubelerin
+derslikleri (+ şubeye bağlanmamış serbest salonlar) ile sınırlıdır.
+
+**Sonuç kural.** Şube dersliği şubesini tam aldığında (koltuk ≈ mevcut, sıra ≈
+mevcut/2) iki kısıt şuna iner:
+
+> Hiçbir sınav, o saatte sınava giren toplam öğrencinin **yarısını** geçemez.
+
+Kullanıcının vakası: 10. sınıf 180, toplam 270, yarısı 135 → 45 öğrenci
+kaçınılmaz olarak aynı sınavla yan yana. Koltuk (270/270) tam yettiği için ekran
+yeşildi. Çözüm salon eklemek değil **mevcut dengesi**dir: 180'lik sınavın
+karşısına 180'lik bir sınav (10. sınıfın tamamı ↔ 9. sınıfın tamamı) — o zaman
+iki seviyenin derslikleri birbirini tam karşılar.
+
+**Uygulama.** Hesap tek yerde: `engine.butterfly_fit(grup mevcutları, sıra
+histogramı)`. En kalabalık t grubun toplamı `Σ min(sıra koltuğu, t)` sınırını
+aşamaz (iki-taraflı akış fizibilitesinin Gale-Ryser biçimi); `deficit`
+kaçınılmaz ihlalin sayısıdır ve tekli/ikili/üçlü sıra karışımında da doğrudur.
+Dört kanal:
+
+1. `place_entry` — yerleştirmede uyarı (SERT DEĞİL: "zorunlu hâl" takdiri okul
+   müdürlüğünündür, idareci sınavı bölmeyi de seçebilir).
+2. `calendar_validation` — kural öncesi kurulmuş ve elle düzenlenmiş takvimler
+   için kalıcı kanal.
+3. `auto_place_entries` — ceza demetine `kelebek` terimi. Terim slotun
+   açığındaki **değişimdir** (eksi olabilir), açığın kendisi değil: mutlak açık
+   "180'liğin yanına katıl" (90→45) ile "boş slota git" (0→45) arasını ayırt
+   edemez, ikisi de "45" görünürdü. Değişimle birincisi −45, ikincisi +45 olur
+   ve yerleştirici sınavları mevcut dengesine göre eşleştirir.
+4. Sihirbaz 3. adımı — `GET /exam-sessions/{id}/butterfly-fit/` (`?rooms=` ile
+   henüz kaydedilmemiş seçim; salon editöründeki koltuk önizlemesi deseni, iş
+   kuralı ön yüze kopyalanmaz).
+
+**Salon ön seçimi değişti.** `create_session_from_slot` eskiden katılımcı
+SEVİYELERİN tüm dersliklerini ön-seçiyordu (31.08.2026 kararı); sınavı olmayan
+şubenin dersliğini boş sayarak sıra bütçesini şişiriyordu. Yeni davranış slottaki
+her girdinin şubelerinin BİRLEŞİMİ (`selectors.rooms_for_sections`) — eski
+kararın gerekçesi ("aynı slotta seviye geneli başka bir ders varsa onun salonları
+düşmesin") birleşimle korunur. `section_rooms_for_levels` klasik (kendi
+dersliğinde) düzen eşlemesine kaldı.
+
 ## 3. Bağımlılık kesim listesi (OYS → tek kullanıcılı çevrimdışı)
 
 Doğrulanmış kritik gerçek: **hiçbir başka OYS app'i `sinav_islemleri`'nden

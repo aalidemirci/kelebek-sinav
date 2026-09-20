@@ -201,6 +201,27 @@ export interface ParticipantsResponse {
   }[];
 }
 
+/**
+ * Kelebek SIRA bütçesi (`GET /exam-sessions/{id}/butterfly-fit/`).
+ *
+ * Salon yeterliliği KOLTUKLA ölçülemez: bir sıraya aynı sınavdan iki öğrenci
+ * oturamaz, yani her sıra her sınavdan en çok BİR öğrenci alır. Hesap
+ * backend'dedir (`engine.butterfly_fit`) — ön yüz kopyasını TUTMAZ, seçim
+ * değiştikçe ucu çağırır (salon editöründeki koltuk önizlemesi deseni).
+ */
+export interface ButterflyFit {
+  students: number;
+  seats: number;
+  desks: number;
+  /** En kalabalık sınavın mevcudu — sıra ihtiyacının alt sınırı. */
+  largest_group: number;
+  /** Kurala uyarak yerleştirilemeyen öğrenci sayısı; 0 ise düzen kurulabilir. */
+  deficit: number;
+  fits: boolean;
+  /** Açık varsa idareci dilinde tek cümle; yoksa boş dizge. */
+  message: string;
+}
+
 // ---------------------------------------------------------------------------
 // Yerleşim + doğrulama (views._report_payload ile birebir)
 // ---------------------------------------------------------------------------
@@ -482,6 +503,13 @@ export const examSessionApi = {
     ),
 
   participants: (id: number) => api.get<ParticipantsResponse>(`/exam-sessions/${id}/participants/`),
+  /**
+   * Sıra bütçesi; `roomIds` verilirse HENÜZ KAYDEDİLMEMİŞ salon seçimi sorulur.
+   */
+  butterflyFit: (id: number, roomIds?: number[]) =>
+    api.get<ButterflyFit>(
+      `/exam-sessions/${id}/butterfly-fit/${roomIds && roomIds.length > 0 ? `?rooms=${roomIds.join(",")}` : ""}`,
+    ),
   distribute: (id: number, payload: { seed?: number; strict?: boolean } = {}) =>
     api.post<DistributeResult>(`/exam-sessions/${id}/distribute/`, payload),
   seating: (id: number) => api.get<SeatingResponse>(`/exam-sessions/${id}/seating/`),

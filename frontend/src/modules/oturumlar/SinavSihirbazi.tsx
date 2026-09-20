@@ -856,6 +856,14 @@ function RoomsStep({
     .reduce((sum, r) => sum + r.capacity, 0);
   const needed = participants.data?.total_count ?? 0;
   const enough = capacity >= needed;
+  // Kelebek SIRA bütçesi: koltuk yeterken de kırılabilir (bir sıraya aynı
+  // sınavdan iki öğrenci oturamaz). Hesap backend'de — ön yüz kopyasını tutmaz.
+  const siraSecimi = [...selected].sort((a, b) => a - b);
+  const sira = useQuery({
+    queryKey: ["butterfly-fit", session.id, siraSecimi.join(","), session.courses.length],
+    queryFn: () => examSessionApi.butterflyFit(session.id, siraSecimi),
+    enabled: session.courses.length > 0 && siraSecimi.length > 0,
+  });
   const ratio = needed > 0 ? Math.min(capacity / needed, 1) : selected.length > 0 ? 1 : 0;
 
   return (
@@ -883,6 +891,18 @@ function RoomsStep({
         {!enough && needed > 0 && (
           <p role="alert" className="mt-1 text-body-small text-error">
             Kapasite yetersiz — {needed - capacity} koltuk daha gerekli.
+          </p>
+        )}
+        {/* Koltuk yeterliliği tek başına YANILTIR: ikili sırada 30 koltuklu
+            derslik tek bir sınavın 15 öğrencisini taşır. */}
+        {sira.data && (
+          <p className="mt-1 text-body-small text-on-surface-variant">
+            Sıra: {sira.data.desks} · En kalabalık sınav: {sira.data.largest_group} öğrenci
+          </p>
+        )}
+        {sira.data && !sira.data.fits && (
+          <p role="alert" className="mt-1 text-body-small text-error">
+            {sira.data.message}
           </p>
         )}
       </div>

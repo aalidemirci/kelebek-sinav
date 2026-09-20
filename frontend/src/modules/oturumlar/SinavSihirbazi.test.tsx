@@ -25,6 +25,18 @@ const sessionApi = vi.hoisted(() => ({
   removeCourse: vi.fn(),
   setRooms: vi.fn(),
   distribute: vi.fn(),
+  // Sıra bütçesi ucu: varsayılan YETERLİ — mevcut testlerin çıktısını değiştirmez.
+  butterflyFit: vi.fn(() =>
+    Promise.resolve({
+      students: 0,
+      seats: 0,
+      desks: 0,
+      largest_group: 0,
+      deficit: 0,
+      fits: true,
+      message: "",
+    }),
+  ),
 }));
 
 const dersler = vi.hoisted(() => ({
@@ -523,6 +535,88 @@ describe("SinavSihirbazi — adım geçişleri", () => {
 
     unmount();
     expect(onChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("KELEBEK salon adımı: koltuk yeterken de SIRA açığını söyler", async () => {
+    // Kullanıcının bildirdiği vaka: koltuk tam yetiyor ("Kapasite yetersiz"
+    // uyarısı ÇIKMIYOR) ama bir sıraya aynı sınavdan iki öğrenci oturamadığı
+    // için düzen kurulamıyor. Eski ekran bunu yeşil gösteriyordu.
+    const user = userEvent.setup();
+    sessionApi.participants.mockResolvedValue({ ...makeParticipants(), total_count: 24 });
+    salonlar.list.mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [{ id: 1, name: "D-204", capacity: 24, group_id: null }],
+    });
+    sessionApi.butterflyFit.mockResolvedValue({
+      students: 24,
+      seats: 24,
+      desks: 12,
+      largest_group: 16,
+      deficit: 4,
+      fits: false,
+      message:
+        "Seçili salonlarda 12 sıra var; en kalabalık sınav 16 öğrenci. Kelebek düzeninde " +
+        "bir sıraya aynı sınavdan iki öğrenci oturamaz — 4 öğrenci aynı sınavla yan yana " +
+        "oturmak zorunda kalır. Salon ekleyin ya da bu saate yakın mevcutlu başka bir sınav koyun.",
+    });
+    renderWizard(
+      makeSession({
+        transfer_check_confirmed_at: ONAY_ZAMANI,
+        courses: [makeCourseRow()],
+        rooms: [{ id: 91, room_id: 1, room_name: "D-204", order: 0, capacity_override: null }],
+      }),
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Devam" }));
+    await screen.findByRole("heading", { name: "Salon Seçimi" });
+
+    // Koltuk denetimi SUSAR (24 ≥ 24) — yanıltıcı yeşil tam buradaydı.
+    expect(screen.queryByText(/Kapasite yetersiz/)).not.toBeInTheDocument();
+    // Sıra göstergesi + açık uyarısı.
+    expect(
+      await screen.findByText("Sıra: 12 · En kalabalık sınav: 16 öğrenci"),
+    ).toBeInTheDocument();
+    const uyari = await screen.findByText(/4 öğrenci aynı sınavla yan yana/);
+    expect(uyari).toHaveAttribute("role", "alert");
+    // Seçim BACKEND'e sorulur; ön yüz kendi hesabını yapmaz.
+    expect(sessionApi.butterflyFit).toHaveBeenCalledWith(expect.any(Number), [1]);
+  });
+
+  it("KELEBEK salon adımı: sıra yeterken uyarı çıkmaz", async () => {
+    const user = userEvent.setup();
+    sessionApi.participants.mockResolvedValue({ ...makeParticipants(), total_count: 24 });
+    salonlar.list.mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [{ id: 1, name: "D-204", capacity: 32, group_id: null }],
+    });
+    sessionApi.butterflyFit.mockResolvedValue({
+      students: 24,
+      seats: 32,
+      desks: 16,
+      largest_group: 16,
+      deficit: 0,
+      fits: true,
+      message: "",
+    });
+    renderWizard(
+      makeSession({
+        transfer_check_confirmed_at: ONAY_ZAMANI,
+        courses: [makeCourseRow()],
+        rooms: [{ id: 91, room_id: 1, room_name: "D-204", order: 0, capacity_override: null }],
+      }),
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Devam" }));
+    await screen.findByRole("heading", { name: "Salon Seçimi" });
+
+    expect(
+      await screen.findByText("Sıra: 16 · En kalabalık sınav: 16 öğrenci"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/yan yana/)).not.toBeInTheDocument();
   });
 
   /** Kelebek oturumu: Ders (2) → Salonlar (3) → Dağıt (4). Seçili salon oturumda hazır. */
