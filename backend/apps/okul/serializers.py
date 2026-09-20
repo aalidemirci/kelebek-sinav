@@ -20,6 +20,7 @@ from apps.okul.models import (
     SchoolConfig,
     SchoolTerm,
     SchoolYear,
+    Shift,
     Student,
     SubjectDepartment,
 )
@@ -49,6 +50,10 @@ class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
     # — aralık kuralı günlük saat sayısıyla birlikte değerlendirilir, tek alanı
     # tek başına doğrulayan serializer dalı ikisini ayrıştırırdı.
     exam_period_nos = serializers.JSONField(required=False)
+    bell_schedule = serializers.JSONField(required=False)
+    afternoon_bell_schedule = serializers.JSONField(required=False)
+    bell_flow = serializers.JSONField(required=False)
+    afternoon_bell_flow = serializers.JSONField(required=False)
 
     class Meta:
         model = SchoolConfig
@@ -62,6 +67,11 @@ class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
             "level_programs",
             "daily_period_count",
             "exam_period_nos",
+            "education_model",
+            "bell_schedule",
+            "afternoon_bell_schedule",
+            "bell_flow",
+            "afternoon_bell_flow",
             "default_separation_mode",
             "setup_completed",
         ]
@@ -204,6 +214,25 @@ class SectionGroupAssignSerializer(serializers.Serializer[dict[str, Any]]):
     )
 
 
+class SectionShiftAssignSerializer(serializers.Serializer[dict[str, Any]]):
+    """Toplu vardiya ataması (ikili eğitim) — boş `shift` işareti kaldırır."""
+
+    section_ids = serializers.ListField(child=serializers.IntegerField(), allow_empty=True)
+    shift = serializers.ChoiceField(choices=[*Shift.choices, ("", "")], allow_blank=True)
+
+
+class BellPreviewSerializer(serializers.Serializer[dict[str, Any]]):
+    """Ders akışı önizlemesi — saatleri BACKEND hesaplar, ön yüz kopyası yok."""
+
+    first_lesson = serializers.CharField(required=False, allow_blank=True)
+    lesson_count = serializers.IntegerField(required=False)
+    lesson_minutes = serializers.IntegerField(required=False)
+    break_minutes = serializers.IntegerField(required=False)
+    long_break_after = serializers.IntegerField(required=False)
+    long_break_minutes = serializers.IntegerField(required=False)
+    block_sizes = serializers.ListField(child=serializers.IntegerField(), required=False)
+
+
 class ClassSectionSerializer(serializers.ModelSerializer[ClassSection]):
     school_year_name = serializers.CharField(source="school_year.name", read_only=True)
     class_label = serializers.CharField(read_only=True)
@@ -221,6 +250,7 @@ class ClassSectionSerializer(serializers.ModelSerializer[ClassSection]):
             "class_label",
             "group",
             "group_name",
+            "shift",
         ]
 
     def get_group_name(self, obj: ClassSection) -> str:

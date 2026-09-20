@@ -132,7 +132,54 @@ export interface SchoolConfig {
   exam_period_nos: number[];
   /** Kız/erkek ayrışmasının OKUL varsayılanı; yeni oturumlar bununla açılır. */
   default_separation_mode: SeparationMode;
+  /** Eğitim modeli — ikili eğitimde aynı ders saati iki farklı zamana denk gelir. */
+  education_model: EducationModel;
+  /** Ders saati listesi (sabah / tam gün); boşsa backend varsayılanı üretir. */
+  bell_schedule: BellPeriod[];
+  /** İkili eğitimde öğle grubunun çizelgesi; boşsa sabahınki kullanılır. */
+  afternoon_bell_schedule: BellPeriod[];
+  /** Hesaplayıcıyı yeniden doldurmak için akış parametreleri (çizelge elle düzeltilebilir). */
+  bell_flow: LessonFlowBody;
+  afternoon_bell_flow: LessonFlowBody;
   setup_completed: boolean;
+}
+
+export type EducationModel = "FULL_DAY" | "DUAL";
+
+/** Şubenin devam ettiği oturum; boş = belirtilmemiş (tam gün okulun normali). */
+export type Shift = "" | "MORNING" | "AFTERNOON";
+
+export const SHIFT_LABELS: Record<Exclude<Shift, "">, string> = {
+  MORNING: "Sabah",
+  AFTERNOON: "Öğleden sonra",
+};
+
+/** Ders saati listesi öğesi — şekil backend sözleşmesiyle birebir. */
+export interface BellPeriod {
+  no: number;
+  name: string;
+  /** "SS:DD"; boş bırakılabilir (o saat için zaman basılmaz). */
+  start: string;
+}
+
+/** Ders akışı parametreleri — saatleri BACKEND hesaplar (ön yüzde kopya yok). */
+export interface LessonFlowBody {
+  first_lesson?: string;
+  lesson_count?: number;
+  lesson_minutes?: number;
+  break_minutes?: number;
+  long_break_after?: number;
+  long_break_minutes?: number;
+  block_sizes?: number[];
+}
+
+export interface BellPreview {
+  periods: BellPeriod[];
+  /** Son dersin bitiş saati. */
+  end_time: string;
+  /** İkili eğitimde öğleden sonra oturumu için önerilen başlangıç. */
+  next_start: string;
+  flow: Required<LessonFlowBody>;
 }
 
 /**
@@ -310,6 +357,8 @@ export interface ClassSection {
   class_label: string;
   group: number | null;
   group_name: string;
+  /** İkili eğitimde şubenin oturumu — evrakta basılacak saati belirler. */
+  shift: Shift;
 }
 
 export interface ClassSectionWriteBody {
@@ -648,6 +697,20 @@ export const okulApi = {
     group: number | null;
   }): Promise<{ updated: number }> =>
     api.post<{ updated: number }>("/class-section-groups/assign/", body),
+
+  /** Toplu vardiya işareti (ikili eğitim); boş `shift` işareti kaldırır. */
+  assignClassSectionShift: (body: {
+    section_ids: number[];
+    shift: Shift;
+  }): Promise<{ updated: number }> =>
+    api.post<{ updated: number }>("/class-sections/assign-shift/", body),
+
+  /**
+   * Ders akışından zil çizelgesi önizlemesi — HİÇBİR ŞEY kaydedilmez.
+   * Hesap backend'dedir; ekran her değişiklikte bu ucu çağırır.
+   */
+  previewBellSchedule: (body: LessonFlowBody): Promise<BellPreview> =>
+    api.post<BellPreview>("/setup/bell-preview/", body),
 
   // --- Zümreler (takvim imza bloğunun kaynağı) ---
 

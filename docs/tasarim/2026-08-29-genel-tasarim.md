@@ -129,6 +129,50 @@ kararın gerekçesi ("aynı slotta seviye geneli başka bir ders varsa onun salo
 düşmesin") birleşimle korunur. `section_rooms_for_levels` klasik (kendi
 dersliğinde) düzen eşlemesine kaldı.
 
+
+### 2.5 Ders saatleri ve ikili eğitim (20.09.2026 — kullanıcı isteği)
+
+Üç istek birlikte geldi: (1) takvim evrakında saatlerin yazdırılması seçeneğe
+bağlı olsun, (2) ikili eğitimde aynı ders saati sabah ve öğle grubunda farklı
+zamanda başladığı için buna bir çözüm bulunsun, (3) ders saatleri kullanıcı
+tarafından ayarlanabilsin — ki o güne dek hiçbir ekrandan ayarlanamıyordu
+(`SchoolConfig.bell_schedule` alanı vardı, serileştiricide yoktu).
+
+**Hesap tek yerde.** `okul.bell` saf modülü ders akışından (ilk ders, ders ve
+teneffüs süresi, uzun ara konumu + süresi, blok düzeni) çizelgeyi üretir.
+Kardeş depo `okulzili`nin `SessionSchedule` / `suggest_next_session_start`
+mantığından uyarlandı; oradaki zil, tören ve haftalık şema katmanları ALINMADI
+— burada gereken tek şey her ders saatinin başlangıcıdır. Varsayılan akış eski
+sabit listeyi (08:30'dan 50'şer dakika) birebir üretir ve `default_bell_schedule`
+artık onun üzerine kuruludur; regresyon testi bunu kilitler.
+
+Hesaplanan liste **elle düzeltilebilir**; akış parametreleri ayrıca saklanır
+(`bell_flow`) çünkü elle düzeltme akıştan geri türetilemez ve hesaplayıcı bir
+daha açıldığında son girilenlerle dolmalıdır. Ön yüz kendi aritmetiğini tutmaz:
+`POST /setup/bell-preview/` çağrılır (salon editöründeki koltuk önizlemesiyle
+aynı desen).
+
+**İkili eğitim.** `education_model` (Tam gün / İkili eğitim) iki çizelge tutar;
+öğleden sonra oturumunun başlangıcı sabahın GERÇEK bitişinden önerilir (blok
+düzeni ve uzun ara hesaba girdiği için "son ders + süre" kestirmesi yanlış
+olurdu). Şubeler `ClassSection.shift` ile işaretlenir — vardiya küme DEĞİLDİR
+(küme yalnız seçim aracıdır ve hiçbir kayda yazılmaz), evrakın saatini
+belirleyen veridir.
+
+**Kapsam sınırı — bilinçli karar.** Vardiya yalnız BASIMA girer. Çakışma
+denetimi, salon ön seçimi, kelebek sıra bütçesi (§2.4) ve günlük sınav yükü iki
+vardiyayı hâlâ aynı anda sayar. Bu ihtiyatlı taraftır: gerçekte çakışmayan iki
+sınav çakışıyor sayılır, tersi olmaz. Mantığa işlenmesi AÇIK BORÇTUR ve
+dokunacağı yerler bellidir — `_slot_clash` / `_scope_overlaps`,
+`create_session_from_slot` salon ön seçimi, `_butterfly_fit` sıra havuzu ve
+`_daily_exam_load`. İhtiyaç görülmeden yapılmayacak (kullanıcı kararı).
+
+**Saatin basılması takvim başına ayardır** (`ExamCalendar.print_period_times`,
+varsayılan açık): kapalıyken evrakta yalnız "3. Ders" basılır. İkili eğitimde
+satırın zamanı o satırda sınavı olan şubelerin vardiyasına göre yazılır
+("Sabah 10:10", gerekirse iki vardiya birden). Metin `_pdf_day_rows`ta
+hesaplanır — şablon iş kuralı tutmaz.
+
 ## 3. Bağımlılık kesim listesi (OYS → tek kullanıcılı çevrimdışı)
 
 Doğrulanmış kritik gerçek: **hiçbir başka OYS app'i `sinav_islemleri`'nden

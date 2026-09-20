@@ -92,6 +92,8 @@ export interface ExamCalendar {
   status: ExamCalendarStatusCode;
   description_text: string;
   footnote_text: string;
+  /** Evrakta ders saatinin yanına zaman basılsın mı (takvim başına ayar). */
+  print_period_times: boolean;
   signatory_departments: number[];
   signatory_department_names: string[];
   submitted_at: string | null;
@@ -338,6 +340,7 @@ export const examCalendarApi = {
       end_date: string;
       description_text: string;
       footnote_text: string;
+      print_period_times: boolean;
       signatory_departments: number[];
     }>,
   ) => api.patch<ExamCalendar>(`/exam-calendars/${id}/`, payload),

@@ -254,6 +254,7 @@ describe("TakvimHavuzPaneli", () => {
         class_label: "9/A",
         group: null,
         group_name: "",
+        shift: "",
       },
       {
         id: 9,
@@ -264,6 +265,7 @@ describe("TakvimHavuzPaneli", () => {
         class_label: "10/A",
         group: null,
         group_name: "",
+        shift: "",
       },
     ]);
 

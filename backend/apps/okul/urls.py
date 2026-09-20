@@ -48,6 +48,13 @@ urlpatterns = [
         views.ClassSectionDetailView.as_view(),
         name="class-section-detail",
     ),
+    # İkili eğitim: şube vardiyası (evrakın saatini belirler) + ders akışı önizlemesi
+    path(
+        "class-sections/assign-shift/",
+        views.ClassSectionShiftAssignView.as_view(),
+        name="class-section-assign-shift",
+    ),
+    path("setup/bell-preview/", views.BellPreviewView.as_view(), name="setup-bell-preview"),
     # Şube kümeleri (SAY/EA/DİL — sihirbazda toplu şube seçimi)
     path(
         "class-section-groups/",

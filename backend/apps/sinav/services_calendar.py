@@ -11,6 +11,8 @@ KS kesimleri:
   uyarısı durur; `place_entry` imzası değişmedi.
 - Zil çizelgesi köprüsü (B6 SADELEŞTİR): `SchoolConfig.bell_schedule` +
   `default_bell_schedule()` — öğe şekli OYS ile birebir {no, name, start};
+  saatlerin HESABI `okul.bell` saf modülündedir (ders akışı → çizelge),
+  ikili eğitimde vardiya çözümü `_shift_periods`;
   varsayılanın uzunluğu `SchoolConfig.daily_period_count` ayarındadır.
 - `created_by`/`by_user` parametreleri düştü (B17); onay damgası ad-snapshot
   (`approved_by_name` + zaman — B12/risk #10, ExamSession emsali).
@@ -21,7 +23,7 @@ from __future__ import annotations
 import calendar as _calmod
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timedelta
+from datetime import date, time, timedelta
 from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError
@@ -30,7 +32,12 @@ from django.db.models import QuerySet
 from django.utils import timezone
 
 from apps.okul import selectors as okul_selectors
-from apps.okul.models import MAX_DAILY_PERIOD_COUNT, SchoolConfig
+from apps.okul.models import (
+    MAX_DAILY_PERIOD_COUNT,
+    EducationModel,
+    SchoolConfig,
+    Shift,
+)
 from apps.sinav.models import (
     ExamAuthority,
     ExamCalendar,
@@ -103,13 +110,6 @@ _WINDOW_MONTH: dict[tuple[int, int], int] = {
     (2, 2): 5,
 }
 
-#: Varsayılan zil çizelgesinin üretim parametreleri. Bu ikisi eski sabit listeyi
-#: (08:30, 09:20, 10:10, 11:00, 11:50, 12:40, 13:30, 14:20) BİREBİR üretir —
-#: liste sabit olmaktan çıktı çünkü gün uzunluğu artık ayardır (mesleki ve
-#: teknik programlarda 8 saat yetmez, 03.09.2026).
-BELL_FIRST_START = time(8, 30)
-BELL_PERIOD_STEP_MINUTES = 50
-
 
 def default_bell_schedule(period_count: int | None = None) -> list[dict[str, Any]]:
     """B6 — `SchoolConfig.bell_schedule` boşken kullanılan ders saati listesi.
@@ -125,17 +125,11 @@ def default_bell_schedule(period_count: int | None = None) -> list[dict[str, Any
         else int(SchoolConfig.load().daily_period_count)
     )
     count = max(1, min(count, MAX_DAILY_PERIOD_COUNT))
-    base = datetime.combine(date(2000, 1, 1), BELL_FIRST_START)
-    return [
-        {
-            "no": i,
-            "name": f"{i}. Ders",
-            "start": (base + timedelta(minutes=BELL_PERIOD_STEP_MINUTES * (i - 1))).strftime(
-                "%H:%M"
-            ),
-        }
-        for i in range(1, count + 1)
-    ]
+    # Hesap TEK yerde (`okul.bell`): varsayılan akış 08:30'dan 40+10 dakikayla
+    # ilerler ve eski sabit listeyle BİREBİR aynı çizelgeyi üretir.
+    from apps.okul import bell
+
+    return bell.periods_from_flow(bell.LessonFlow(lesson_count=count))
 
 
 # --------------------------------------------------------------------------- #
@@ -532,6 +526,7 @@ def update_exam_calendar(
     end_date: date | None = None,
     description_text: str | None = None,
     footnote_text: str | None = None,
+    print_period_times: bool | None = None,
 ) -> ExamCalendar:
     _ensure_draft(calendar)
     if name is not None:
@@ -551,6 +546,8 @@ def update_exam_calendar(
         calendar.description_text = description_text
     if footnote_text is not None:
         calendar.footnote_text = footnote_text
+    if print_period_times is not None:
+        calendar.print_period_times = bool(print_period_times)
     calendar.save()
     return calendar
 
@@ -1123,6 +1120,74 @@ def _bell_periods() -> list[dict[str, Any]]:
     if isinstance(raw, list) and raw:
         return [dict(p) for p in raw]
     return default_bell_schedule(config.daily_period_count)
+
+
+def _shift_periods(shift: str = "") -> list[dict[str, Any]]:
+    """Bir VARDİYANIN ders saati listesi (ızgara ve PDF saatleri buradan).
+
+    Tam gün okulda ya da öğleden sonra çizelgesi girilmemişse sabah çizelgesi
+    döner — veri yokluğu boş saate değil, görünür varsayılana çevrilir.
+    Öğleden sonra çizelgesi sabahınkinden KISA olabilir: eksik saat için zaman
+    bilgisi yoktur, ad ("5. Ders") yine basılır.
+    """
+    config = SchoolConfig.load()
+    sabah = _bell_periods()
+    if shift != Shift.AFTERNOON or config.education_model != EducationModel.DUAL:
+        return sabah
+    raw = config.afternoon_bell_schedule
+    if not (isinstance(raw, list) and raw):
+        return sabah
+    ogle = {int(p.get("no", 0)): dict(p) for p in raw}
+    return [ogle.get(int(p["no"]), {**p, "start": ""}) for p in sabah]
+
+
+def _section_shifts() -> dict[int, str]:
+    """Şube pk → vardiya; tam gün okulda boş sözlük (hesap hiç çalışmaz)."""
+    config = SchoolConfig.load()
+    if config.education_model != EducationModel.DUAL:
+        return {}
+    return {int(s.pk): (s.shift or Shift.MORNING) for s in okul_selectors.class_sections()}
+
+
+def _entry_shifts(
+    entry: ExamCalendarEntry,
+    *,
+    section_shifts: dict[int, str],
+    level_sections: dict[int, list[int]],
+) -> set[str]:
+    """Girdinin sınava giren şubelerinin vardiyaları (tam günde boş küme)."""
+    if not section_shifts:
+        return set()
+    return {
+        section_shifts.get(sid, Shift.MORNING) for sid in _entry_section_ids(entry, level_sections)
+    }
+
+
+#: Vardiya adları — evrak metni (iç kod kullanıcıya GÖSTERİLMEZ, docs/sozluk.md).
+_SHIFT_LABELS = {Shift.MORNING: "Sabah", Shift.AFTERNOON: "Öğleden sonra"}
+
+
+def _period_time_label(period: dict[str, Any], shifts: set[str], *, print_times: bool) -> str:
+    """Evrakta ders saatinin yanına basılacak ZAMAN metni; basılmayacaksa boş.
+
+    Tam gün okulda tek saat ("10:10"). İkili eğitimde aynı ders saati iki farklı
+    zamana denk geldiği için vardiya ADIYLA basılır ("Sabah 10:10"); satırda iki
+    vardiya birden varsa ikisi de yazılır — tek saat yazmak yanıltıcı olurdu.
+    """
+    if not print_times:
+        return ""
+    no = int(period["no"])
+    if not shifts:
+        return str(period.get("start") or "")
+    parcalar: list[str] = []
+    for shift in (Shift.MORNING, Shift.AFTERNOON):
+        if shift not in shifts:
+            continue
+        satir = next((p for p in _shift_periods(shift) if int(p["no"]) == no), None)
+        saat = str((satir or {}).get("start") or "")
+        if saat:
+            parcalar.append(f"{_SHIFT_LABELS[shift]} {saat}")
+    return " / ".join(parcalar)
 
 
 def exam_period_numbers() -> list[int]:
@@ -1929,9 +1994,13 @@ def auto_place_entries(
 # --------------------------------------------------------------------------- #
 
 
-def _period_start_time(period_no: int) -> time | None:
-    """Ders saati listesinden başlangıç ('SS:DD' → time); yoksa None."""
-    for p in _bell_periods():
+def _period_start_time(period_no: int, shift: str = "") -> time | None:
+    """Ders saati listesinden başlangıç ('SS:DD' → time); yoksa None.
+
+    İkili eğitimde `shift` oturumun vardiyasıdır: aynı ders saati sabah ve öğle
+    gruplarında FARKLI zamanda başlar, oturumun saati de ona göre yazılır.
+    """
+    for p in _shift_periods(shift):
         if int(p["no"]) == period_no:
             raw = str(p.get("start", "")).strip()
             if raw:
@@ -2010,7 +2079,20 @@ def create_session_from_slot(calendar: ExamCalendar, *, on_date: date, period_no
             "taslağa alıp kapsamı düzeltin."
         )
 
-    start_time = _period_start_time(period_no) or time(8, 0)
+    # Vardiya oturumun SAATİNİ belirler (ikili eğitim): sınava giren şubelerin
+    # tamamı öğle grubundaysa oturum öğle çizelgesinden saat alır, karışıksa
+    # sabah kazanır — karışık slot zaten olağan dışıdır ve saatin yanlış tarafa
+    # kayması yerine erken saat yazılır (evrak elle düzeltilebilir).
+    seviye_subeleri = _level_section_ids()
+    sinavli_subeler: set[int] = set()
+    for entry, sections in usable:
+        if sections is not None:
+            sinavli_subeler.update(int(sid) for sid in sections)
+        else:
+            sinavli_subeler.update(seviye_subeleri.get(int(entry.level), []))
+    vardiyalar = {_section_shifts().get(sid, "") for sid in sinavli_subeler}
+    vardiya = Shift.AFTERNOON if vardiyalar == {Shift.AFTERNOON} else ""
+    start_time = _period_start_time(period_no, vardiya) or time(8, 0)
     # OYS Tur 644: birleşik ad model sınırını aşarsa takvim-adı parçası kırpılır.
     suffix = f" — {_tr_date(on_date)} {period_no}. Ders"
     max_len = int(ExamSession._meta.get_field("name").max_length or 120)
@@ -2023,8 +2105,6 @@ def create_session_from_slot(calendar: ExamCalendar, *, on_date: date, period_no
         start_time=start_time,
         term_id=calendar.semester_id,
     )
-    seviye_subeleri = _level_section_ids()
-    sinavli_subeler: set[int] = set()
     for entry, sections in usable:
         # Katılımcı KAPSAMI takvimden oturuma AYNEN taşınır (eskiden "LEVEL"
         # sabitti): seçmeli ders havuzda şube şube seçilmişse üretilen oturum
@@ -2038,10 +2118,6 @@ def create_session_from_slot(calendar: ExamCalendar, *, on_date: date, period_no
             level=entry.level,
             section_ids=sections,
         )
-        if sections is not None:
-            sinavli_subeler.update(int(sid) for sid in sections)
-        else:
-            sinavli_subeler.update(seviye_subeleri.get(int(entry.level), []))
 
     # Salon ön seçimi: SINAVA GİREN şubelerin derslikleri (20.09.2026 kullanıcı
     # kuralı). Sınavı olmayan şube o saatte derstedir — dersliği boş değildir ve
@@ -2531,13 +2607,27 @@ def _calendar_signatures(calendar: ExamCalendar) -> dict[str, Any]:
     return {"chairs": chairs, "school_chair_name": ""}
 
 
-def _pdf_day_rows(grid: dict[str, Any]) -> list[dict[str, Any]]:
+def _pdf_day_rows(grid: dict[str, Any], calendar: ExamCalendar) -> list[dict[str, Any]]:
     """PDF gün satırları: sınav içeren her gün — HAFTA SONU DAHİL (OYS Tur 644).
 
     place_entry hafta sonuna yalnız UYARIYLA izin verir; hafta sonu atlansa
     yerleştirilmiş girdi resmî çıktıdan sessizce kaybolurdu. Boş günler
     (hafta sonu dahil) zaten satır üretmez.
+
+    `time_label` satırın ZAMAN metnidir ve BURADA hesaplanır — şablon iş kuralı
+    tutmaz. Takvimin `print_period_times` ayarı kapalıysa boştur (yalnız "3.
+    Ders" basılır); ikili eğitimde o satırda sınavı olan şubelerin vardiyalarına
+    göre bir ya da iki saat taşır.
     """
+    section_shifts = _section_shifts()
+    level_sections = _level_section_ids() if section_shifts else {}
+    entries_by_id: dict[int, ExamCalendarEntry] = (
+        {e.pk: e for e in ExamCalendarEntry.objects.filter(calendar=calendar)}
+        if section_shifts
+        else {}
+    )
+    print_times = bool(calendar.print_period_times)
+
     day_rows: list[dict[str, Any]] = []
     for day in grid["days"]:
         d = date.fromisoformat(day["date"])
@@ -2548,7 +2638,23 @@ def _pdf_day_rows(grid: dict[str, Any]) -> list[dict[str, Any]]:
                 key = f"{day['date']}|{p['no']}|{level['value']}"
                 slot_cells.append(grid["cells"].get(key, []))
             if any(slot_cells):
-                period_cells.append({"period": p, "level_cells": slot_cells})
+                shifts: set[str] = set()
+                for hucreler in slot_cells:
+                    for hucre in hucreler:
+                        entry = entries_by_id.get(int(hucre["entry_id"]))
+                        if entry is not None:
+                            shifts |= _entry_shifts(
+                                entry,
+                                section_shifts=section_shifts,
+                                level_sections=level_sections,
+                            )
+                period_cells.append(
+                    {
+                        "period": p,
+                        "level_cells": slot_cells,
+                        "time_label": _period_time_label(p, shifts, print_times=print_times),
+                    }
+                )
         if period_cells:
             day_rows.append({"label": _tr_date(d), "period_cells": period_cells})
     return day_rows
@@ -2564,7 +2670,7 @@ def render_calendar_pdf(calendar: ExamCalendar) -> bytes:
 
     config = SchoolConfig.load()
     grid = calendar_grid(calendar)
-    day_rows = _pdf_day_rows(grid)
+    day_rows = _pdf_day_rows(grid, calendar)
     signatures = _calendar_signatures(calendar)
 
     context = {

@@ -43,6 +43,7 @@ function sube(overrides: Partial<ClassSection> = {}): ClassSection {
     class_level: 9,
     class_section: "A",
     class_label: "9/A",
+    shift: "",
     group: 1,
     group_name: "Sayısal",
     ...overrides,

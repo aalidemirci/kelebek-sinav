@@ -24,7 +24,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.okul import selectors
+from apps.okul import bell, selectors
 from apps.okul.excel_ogrenci import ParserError
 from apps.okul.models import (
     ClassSection,
@@ -36,6 +36,7 @@ from apps.okul.models import (
     SubjectDepartment,
 )
 from apps.okul.serializers import (
+    BellPreviewSerializer,
     ClassSectionGroupSerializer,
     ClassSectionSerializer,
     ImportRequestSerializer,
@@ -45,6 +46,7 @@ from apps.okul.serializers import (
     SchoolTermSerializer,
     SchoolYearSerializer,
     SectionGroupAssignSerializer,
+    SectionShiftAssignSerializer,
     StudentSerializer,
     SubjectDepartmentSerializer,
 )
@@ -331,6 +333,52 @@ class ClassSectionGroupAssignView(APIView):
             # (yanıt 500 olurdu) — dönüşüm burada elle yapılır.
             raise serializers.ValidationError(exc.messages) from exc
         return Response({"updated": updated})
+
+
+class ClassSectionShiftAssignView(APIView):
+    """`POST /class-sections/assign-shift/` — şubeleri topluca vardiyaya işaretler.
+
+    Vardiya evrakta basılacak SAATİ belirler (ikili eğitimde aynı ders saati iki
+    farklı zamana denk gelir); küme gibi yalnız seçim kolaylığı DEĞİLDİR.
+    """
+
+    def post(self, request: Request) -> Response:
+        serializer = SectionShiftAssignSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            updated = section_service.assign_section_shift(
+                section_ids=list(serializer.validated_data["section_ids"]),
+                shift=str(serializer.validated_data.get("shift") or ""),
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+        return Response({"updated": updated})
+
+
+class BellPreviewView(APIView):
+    """`POST /setup/bell-preview/` — ders akışından zil çizelgesi önizlemesi.
+
+    Salon editöründeki `preview_room_seats` deseni: iş kuralı backend'de kalır,
+    ekran her değişiklikte ucu çağırır ve HİÇBİR ŞEY kaydedilmez. Dönüş
+    `periods` (kaydedilecek liste), `end_time` (son dersin bitişi) ve
+    `next_start` (ikili eğitimde öğleden sonra oturumu için önerilen saat).
+    """
+
+    def post(self, request: Request) -> Response:
+        serializer = BellPreviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        flow = bell.LessonFlow.from_dict(dict(serializer.validated_data))
+        sorunlar = flow.errors()
+        if sorunlar:
+            raise serializers.ValidationError({"flow": sorunlar})
+        return Response(
+            {
+                "periods": bell.periods_from_flow(flow),
+                "end_time": bell.flow_end_time(flow),
+                "next_start": bell.suggest_next_start(flow),
+                "flow": flow.to_dict(),
+            }
+        )
 
 
 class SubjectDepartmentListCreateView(generics.ListCreateAPIView[SubjectDepartment]):

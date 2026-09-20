@@ -16,7 +16,7 @@ from typing import Any
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from apps.okul.models import ClassSection, ClassSectionGroup
+from apps.okul.models import ClassSection, ClassSectionGroup, Shift
 
 
 @transaction.atomic
@@ -72,3 +72,19 @@ def assign_section_group(*, section_ids: list[int], group_id: int | None) -> int
     if not section_ids:
         return 0
     return int(ClassSection.objects.filter(pk__in=section_ids).update(group_id=group_id))
+
+
+@transaction.atomic
+def assign_section_shift(*, section_ids: list[int], shift: str) -> int:
+    """Verilen şubeleri sabah/öğle oturumuna işaretler (boş dizge = işareti kaldır).
+
+    Vardiya KÜME DEĞİLDİR (küme yalnız seçim kolaylığıdır, hiçbir kayda
+    yazılmaz); evrakta basılacak SAATİ belirlediği için şubenin kendi alanında
+    durur. Toplu iştir: ikili eğitimde onlarca şube tek tek düzenlenmez.
+    Bilinmeyen pk sessizce düşer (`assign_section_group` emsali).
+    """
+    if shift and shift not in Shift.values:
+        raise ValidationError({"shift": "Geçersiz oturum."})
+    if not section_ids:
+        return 0
+    return int(ClassSection.objects.filter(pk__in=section_ids).update(shift=shift))

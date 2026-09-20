@@ -105,6 +105,21 @@ describe("TakvimOnizlemePaneli", () => {
     expect(screen.getByText(/Ayşe ÇELİK/)).toBeInTheDocument();
   });
 
+  it("saat yazdırma anahtarı takvime kaydedilir", async () => {
+    const user = userEvent.setup();
+    okulApiMock.listSubjectDepartments.mockResolvedValue([]);
+    calApi.update.mockResolvedValue(makeCalendar({ print_period_times: false }));
+    renderPanel(makeCalendar());
+
+    const kutu = await screen.findByRole("checkbox", { name: /zamanı da yazdır/ });
+    expect(kutu).toBeChecked(); // varsayilan acik (eski davranis)
+    await user.click(kutu);
+
+    await waitFor(() =>
+      expect(calApi.update).toHaveBeenCalledWith(7, { print_period_times: false }),
+    );
+  });
+
   it("onaylı takvimde dipnot ve zümre seçimi kilitli", async () => {
     okulApiMock.listSubjectDepartments.mockResolvedValue([
       { id: 3, name: "Sosyal Bilimler", head: null, head_name: "", is_board_member: true },

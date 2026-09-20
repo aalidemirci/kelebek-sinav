@@ -35,6 +35,32 @@ from shared.crypto import EncryptedCharField, EncryptedTextField
 from shared.models import BaseModel
 
 
+class EducationModel(models.TextChoices):
+    """Okulun eğitim modeli — ders saatlerinin kaç oturuma bölündüğü.
+
+    İkili eğitimde aynı ders saati iki farklı ZAMANA denk gelir (3. ders sabah
+    grubunda 10:10, öğle grubunda 15:10 başlar). Bu ayrım şimdilik yalnız
+    BASIMA girer: çakışma denetimi, salon ön seçimi ve kelebek sıra bütçesi iki
+    vardiyayı hâlâ aynı anda sayar (20.09.2026 kullanıcı kararı — ihtiyatlı
+    taraf; tasarım §2.5 "açık borç").
+    """
+
+    FULL_DAY = "FULL_DAY", "Tam gün"
+    DUAL = "DUAL", "İkili eğitim"
+
+
+class Shift(models.TextChoices):
+    """Şubenin devam ettiği oturum (yalnız ikili eğitimde anlamlıdır).
+
+    Boş değer "belirtilmemiş"tir ve tam gün okulun normalidir; ikili eğitimde
+    işaretlenmemiş şube SABAH çizelgesine düşer (veri yokluğu sessiz hataya
+    değil, görünür varsayılana çevrilir — evrak yine de basılır).
+    """
+
+    MORNING = "MORNING", "Sabah"
+    AFTERNOON = "AFTERNOON", "Öğleden sonra"
+
+
 class SeparationMode(models.TextChoices):
     """Kız/erkek ayrışması kuralı (20.09.2026 kullanıcı isteği).
 
@@ -188,6 +214,29 @@ class SchoolConfig(BaseModel):
         blank=True,
         help_text="[1, 2, 3] — sınav yapılabilecek ders saatleri; boşsa tümü.",
     )
+    # Eğitim modeli + öğleden sonra çizelgesi (20.09.2026): ikili eğitimde aynı
+    # ders saati iki farklı zamana denk gelir. `bell_schedule` SABAH (ya da tam
+    # gün) oturumudur; ikinci oturum ayrı alanda durur — tek listeye "shift"
+    # kolonu eklemek `{no, name, start}` sözleşmesini ve saat no'suna göre
+    # çalışan ızgara anahtarını kırardı.
+    education_model = models.CharField(
+        "eğitim modeli",
+        max_length=10,
+        choices=EducationModel.choices,
+        default=EducationModel.FULL_DAY,
+    )
+    afternoon_bell_schedule = models.JSONField(
+        "öğleden sonra ders saatleri",
+        default=list,
+        blank=True,
+        help_text="İkili eğitimde öğle grubunun çizelgesi; boşsa sabahınki kullanılır.",
+    )
+    # Ders akışı PARAMETRELERİ (ilk ders, süre, teneffüs, uzun ara, blok düzeni).
+    # Çizelgenin kendisi yukarıdaki listelerdir — bu alanlar yalnız hesaplayıcıyı
+    # yeniden doldurmak içindir, çünkü idareci hesaptan sonra satırları ELLE
+    # düzeltebilir ve o düzeltme akıştan türetilemez.
+    bell_flow = models.JSONField("ders akışı", default=dict, blank=True)
+    afternoon_bell_flow = models.JSONField("öğleden sonra ders akışı", default=dict, blank=True)
 
     class Meta:
         verbose_name = "kurum yapılandırması"
@@ -379,6 +428,16 @@ class ClassSection(BaseModel):
         related_name="sections",
         verbose_name="şube kümesi",
         help_text="Yalnız seçim kolaylığı; oturum kaydına küme kimliği YAZILMAZ.",
+    )
+    # Vardiya KÜME DEĞİLDİR: küme yalnız seçim kolaylığıdır ve hiçbir kayda
+    # yazılmaz (CLAUDE.md §3), vardiya ise evrakın saatini belirleyen VERİDİR.
+    shift = models.CharField(
+        "oturum",
+        max_length=10,
+        choices=Shift.choices,
+        blank=True,
+        default="",
+        help_text="İkili eğitimde şubenin oturumu; tam gün okulda boş bırakılır.",
     )
 
     class Meta:

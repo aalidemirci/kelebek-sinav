@@ -14,7 +14,12 @@ from typing import Any
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from apps.okul.models import MAX_DAILY_PERIOD_COUNT, SchoolConfig
+from apps.okul import bell
+from apps.okul.models import (
+    MAX_DAILY_PERIOD_COUNT,
+    EducationModel,
+    SchoolConfig,
+)
 
 # Ayar/sihirbaz ekranından güncellenebilir alanlar (whitelist — başka alan yazılamaz).
 UPDATABLE_FIELDS: tuple[str, ...] = (
@@ -28,6 +33,11 @@ UPDATABLE_FIELDS: tuple[str, ...] = (
     "daily_period_count",
     "exam_period_nos",
     "default_separation_mode",
+    "education_model",
+    "bell_schedule",
+    "afternoon_bell_schedule",
+    "bell_flow",
+    "afternoon_bell_flow",
 )
 
 #: Değişince ders kataloğunun çizelgeye yeniden çekilmesini gerektiren alanlar.
@@ -55,6 +65,35 @@ def _clean_daily_period_count(value: Any) -> int:
             }
         )
     return count
+
+
+def _clean_education_model(value: Any) -> str:
+    """Eğitim modeli → geçerli seçenek."""
+    metin = str(value or "").strip().upper()
+    if metin not in EducationModel.values:
+        raise ValidationError({"education_model": "Geçersiz eğitim modeli."})
+    return metin
+
+
+def _clean_bell_schedule(value: Any, *, field: str, label: str) -> list[dict[str, Any]]:
+    """Ders saati listesini doğrular (saf hesap `okul.bell`de)."""
+    try:
+        return bell.normalize_periods(value, label=label)
+    except ValueError as exc:
+        raise ValidationError({field: str(exc)}) from exc
+
+
+def _clean_bell_flow(value: Any, *, field: str, label: str) -> dict[str, Any]:
+    """Ders akışı parametrelerini doğrular; boş sözlük "akış tanımlı değil"dir."""
+    if value in (None, "", {}):
+        return {}
+    if not isinstance(value, dict):
+        raise ValidationError({field: f"{label} sözlük olmalı."})
+    akis = bell.LessonFlow.from_dict(value)
+    sorunlar = akis.errors(prefix=f"{label}: ")
+    if sorunlar:
+        raise ValidationError({field: " ".join(sorunlar)})
+    return akis.to_dict()
 
 
 def _clean_exam_period_nos(value: Any, daily_period_count: int, *, strict: bool) -> list[int]:
@@ -122,7 +161,30 @@ def update_school_config(*, fields: dict[str, Any]) -> SchoolConfig:
     # saati sayısına bağlıdır ve ikisi aynı istekte gelebilir (sihirbazın tek
     # adımı). Sıra önemlidir — önce sayı yerine oturur, sınav saatleri ona göre
     # kırpılır; aksi hâlde 10 → 8'e düşen okulda 9. saat sınav listesinde kalırdı.
-    if "daily_period_count" in fields or "exam_period_nos" in fields:
+    if "education_model" in fields:
+        config.education_model = _clean_education_model(config.education_model)
+    for alan, etiket in (
+        ("bell_schedule", "Ders saati listesi"),
+        ("afternoon_bell_schedule", "Öğleden sonra ders saati listesi"),
+    ):
+        if alan in fields:
+            setattr(
+                config, alan, _clean_bell_schedule(getattr(config, alan), field=alan, label=etiket)
+            )
+    for alan, etiket in (
+        ("bell_flow", "Ders akışı"),
+        ("afternoon_bell_flow", "Öğleden sonra ders akışı"),
+    ):
+        if alan in fields:
+            setattr(config, alan, _clean_bell_flow(getattr(config, alan), field=alan, label=etiket))
+    # Elle girilmiş çizelge günlük ders saati sayısını BELİRLER (CLAUDE.md: iki
+    # alan çelişirse elle girilen kazanır). Sayı çizelgeden geride kalırsa
+    # `exam_period_nos` kırpması olmayan saatleri sınava açık bırakırdı.
+    if fields.get("bell_schedule"):
+        config.daily_period_count = len(config.bell_schedule)
+        if "daily_period_count" not in update_fields:
+            update_fields.append("daily_period_count")
+    if "daily_period_count" in fields or "exam_period_nos" in fields or fields.get("bell_schedule"):
         config.daily_period_count = _clean_daily_period_count(config.daily_period_count)
         config.exam_period_nos = _clean_exam_period_nos(
             config.exam_period_nos,

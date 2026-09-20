@@ -76,6 +76,7 @@ const SUBE: ClassSection = {
   class_label: "10/A",
   group: null,
   group_name: "",
+  shift: "",
 };
 
 function renderPage() {

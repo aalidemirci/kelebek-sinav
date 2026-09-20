@@ -84,6 +84,16 @@ export default function TakvimOnizlemePaneli({
       snackbar.error(e instanceof ApiError ? e.message : "İmza zümreleri kaydedilemedi."),
   });
 
+  // Saatin BASILMASI takvim başına ayardır: ikili eğitimde aynı ders saati iki
+  // farklı zamana denk geldiği için bazı okullar evrakta yalnız "3. Ders"
+  // görmek ister. Kutucuk anında kaydedilir (zümre seçimiyle aynı desen).
+  const timeMutation = useMutation({
+    mutationFn: (deger: boolean) =>
+      examCalendarApi.update(calendar.id, { print_period_times: deger }),
+    onSuccess: () => onSaved(),
+    onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Ayar kaydedilemedi."),
+  });
+
   const revertToDefault = async () => {
     setLoadingDefault(true);
     try {
@@ -280,6 +290,24 @@ export default function TakvimOnizlemePaneli({
               <Icon name="lock" size="sm" /> İmza zümreleri yalnız taslak durumda değiştirilir.
             </p>
           ) : null}
+        </div>
+
+        <div>
+          <p className="mb-2 text-title-small text-on-surface">Evrakta ders saati</p>
+          <label className="flex min-h-9 items-center gap-2 text-body-medium text-on-surface">
+            <input
+              type="checkbox"
+              className="h-5 w-5 accent-primary"
+              checked={calendar.print_period_times}
+              disabled={!editable || timeMutation.isPending}
+              onChange={(e) => timeMutation.mutate(e.target.checked)}
+            />
+            <span>Ders saatinin yanına zamanı da yazdır (ör. “3. Ders · 10:10”)</span>
+          </label>
+          <p className="mt-1 text-body-small text-on-surface-variant">
+            Kapalıyken evrakta yalnız ders saati adı basılır. Zamanlar Ayarlar → Ders Saatleri
+            ekranından gelir; ikili eğitimde sınava giren şubenin oturumuna göre yazılır.
+          </p>
         </div>
       </section>
 

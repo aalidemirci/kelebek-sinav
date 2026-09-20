@@ -602,6 +602,7 @@ class ExamCalendarSerializer(serializers.ModelSerializer[ExamCalendar]):
             "status",
             "description_text",
             "footnote_text",
+            "print_period_times",
             "signatory_departments",
             "signatory_department_names",
             "submitted_at",

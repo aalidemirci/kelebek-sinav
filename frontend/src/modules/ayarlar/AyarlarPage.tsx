@@ -1,4 +1,4 @@
-// Ayarlar sayfası (DD kalıbından KS'ye) — yedi sekme: ders yılları (dönemlerle),
+// Ayarlar sayfası (DD kalıbından KS'ye) — sekiz sekme: ders yılları (dönemlerle),
 // şube kataloğu (salon-şube eşlemesi ve şube sınav duyurusu bu katalogdan okur;
 // R2k şube yoklama listesi kaldırılmıştı), şube kümeleri (SAY/EA/DİL —
 // sihirbazda toplu şube seçimi), zümreler (okul zümre başkanları kurulu — sınav
@@ -27,6 +27,7 @@ import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import type { TabItem } from "../../ui/Tabs";
 import TextField from "../../ui/TextField";
 import UpdatePanel from "../guncelleme/UpdatePanel";
+import DersSaatleriPaneli from "./DersSaatleriPaneli";
 import SubeKumeleriPaneli from "./SubeKumeleriPaneli";
 import ZumrelerPaneli from "./ZumrelerPaneli";
 import GuvenlikAyarlari from "../guvenlik/GuvenlikAyarlari";
@@ -57,6 +58,7 @@ const TABS = [
   "subeler",
   "sube-kumeleri",
   "zumreler",
+  "ders-saatleri",
   "okul",
   "guvenlik",
   "guncelleme",
@@ -68,6 +70,7 @@ const TAB_ITEMS: TabItem[] = [
   { key: "subeler", label: "Şubeler", icon: "meeting_room" },
   { key: "sube-kumeleri", label: "Şube Kümeleri", icon: "category" },
   { key: "zumreler", label: "Zümreler", icon: "groups" },
+  { key: "ders-saatleri", label: "Ders Saatleri", icon: "schedule" },
   { key: "okul", label: "Okul Bilgileri", icon: "apartment" },
   { key: "guvenlik", label: "Güvenlik", icon: "lock" },
   { key: "guncelleme", label: "Güncelleme", icon: "system_update" },
@@ -173,6 +176,7 @@ export default function AyarlarPage() {
         {tab === "subeler" && <SubelerPanel years={years} yearsLoading={yearsLoading} />}
         {tab === "sube-kumeleri" && <SubeKumeleriPaneli />}
         {tab === "zumreler" && <ZumrelerPaneli />}
+        {tab === "ders-saatleri" && <DersSaatleriPaneli />}
         {tab === "okul" && <OkulBilgileriPanel />}
         {tab === "guvenlik" && <GuvenlikAyarlari okulAdi={okulAdi} />}
         {tab === "guncelleme" && <UpdatePanel />}

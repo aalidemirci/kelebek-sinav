@@ -34,6 +34,7 @@ from apps.okul.models import (
     SubjectDepartment,
 )
 from apps.okul.services import sections
+from apps.okul.services import setup as setup_service
 from apps.sinav import services as sinav_services
 from apps.sinav import services_calendar as takvim
 from apps.sinav.models import (
@@ -2283,3 +2284,159 @@ def test_otomatik_yerlestirme_cozulemeyen_acigi_gunuyle_bildirir() -> None:
     uyari = next(u for u in sonuc.warnings if "yan yana" in u)
     assert uyari.startswith("26 Ekim 2026 Pazartesi 1. derste")
     assert "8 öğrenci aynı sınavla yan yana" in uyari
+
+
+# ===========================================================================
+# Ders saatinin ZAMANI: seçime bağlı basım + ikili eğitim vardiyası (20.09.2026)
+# ===========================================================================
+
+
+def _vardiya_takvimi(*, education_model: str = "FULL_DAY") -> tuple[ExamCalendar, dict[str, Any]]:
+    """9. sınıfta iki şube, her birinin sınavı; ders saatleri 08:30'dan itibaren."""
+    guz, _ = _iki_donem()
+    subeler = {
+        "9A": sube(9, "A", students=4, start_no=901),
+        "9B": sube(9, "B", students=4, start_no=911),
+    }
+    SchoolConfig.objects.update_or_create(
+        pk=SchoolConfig.SINGLETON_PK,
+        defaults={
+            "school_name": "Test Anadolu Lisesi",
+            "education_model": education_model,
+            "afternoon_bell_schedule": [
+                {"no": i, "name": f"{i}. Ders", "start": f"{12 + i:02d}:00"} for i in range(1, 9)
+            ],
+        },
+    )
+    calendar = takvim.create_exam_calendar(
+        semester_id=guz.pk, round=1, start_date=date(2026, 10, 26), end_date=date(2026, 11, 6)
+    )
+    ExamCalendarEntry.objects.filter(calendar=calendar).delete()
+    return calendar, subeler
+
+
+def _pdf_metni(calendar: ExamCalendar) -> str:
+    ham = takvim.render_calendar_pdf(calendar)
+    return "\n".join(p.extract_text() or "" for p in PdfReader(io.BytesIO(ham)).pages)
+
+
+def test_takvim_pdf_saatleri_secime_bagli_basar() -> None:
+    """`print_period_times` kapalıyken evrakta yalnız ders saati ADI kalır."""
+    calendar, _ = _vardiya_takvimi()
+    kurs = ders("Coğrafya", levels=[9])
+    entry = takvim.add_calendar_entry(calendar=calendar, course_id=kurs.pk, level=9)
+    takvim.place_entry(entry, on_date=date(2026, 10, 27), period_no=3)
+
+    acik = _pdf_metni(calendar)
+    assert "3. Ders" in acik and "10:10" in acik  # varsayılan: saatli (eski davranış)
+
+    takvim.update_exam_calendar(calendar, print_period_times=False)
+    kapali = _pdf_metni(calendar)
+    assert "3. Ders" in kapali
+    assert "10:10" not in kapali
+
+
+def test_ikili_egitimde_saat_vardiyaya_gore_basilir() -> None:
+    """Aynı ders saati sabah ve öğle grubunda FARKLI zamana denk gelir."""
+    calendar, subeler = _vardiya_takvimi(education_model="DUAL")
+    sections.assign_section_shift(section_ids=[subeler["9B"].pk], shift="AFTERNOON")
+    kurs = ders("Coğrafya", levels=[9])
+    entry = takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=kurs.pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[subeler["9B"].pk],  # yalnız öğle grubunun sınavı
+    )
+    takvim.place_entry(entry, on_date=date(2026, 10, 27), period_no=3)
+
+    metin = _pdf_metni(calendar)
+
+    assert "Öğleden sonra 15:00" in metin  # öğle çizelgesinin 3. dersi
+    assert "Sabah 10:10" not in metin  # sabah grubunun o saatte sınavı yok
+
+
+def test_ikili_egitimde_iki_vardiya_varsa_iki_saat_de_basilir() -> None:
+    """Satırda her iki grubun sınavı varsa tek saat yazmak yanıltıcı olurdu."""
+    calendar, subeler = _vardiya_takvimi(education_model="DUAL")
+    sections.assign_section_shift(section_ids=[subeler["9B"].pk], shift="AFTERNOON")
+    cog = ders("Coğrafya", levels=[9])
+    tar = ders("Tarih", levels=[9])
+    e_sabah = takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=cog.pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[subeler["9A"].pk],
+    )
+    e_ogle = takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=tar.pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[subeler["9B"].pk],
+    )
+    gun = date(2026, 10, 27)
+    takvim.place_entry(e_sabah, on_date=gun, period_no=3)
+    takvim.place_entry(e_ogle, on_date=gun, period_no=3)
+
+    metin = _pdf_metni(calendar)
+
+    assert "Sabah 10:10" in metin
+    assert "Öğleden sonra 15:00" in metin
+
+
+def test_tam_gun_okulda_vardiya_adi_basilmaz() -> None:
+    """Tek oturumlu okulda "Sabah" sözcüğü evraka girmez — gereksiz gürültü."""
+    calendar, _ = _vardiya_takvimi()
+    kurs = ders("Coğrafya", levels=[9])
+    entry = takvim.add_calendar_entry(calendar=calendar, course_id=kurs.pk, level=9)
+    takvim.place_entry(entry, on_date=date(2026, 10, 27), period_no=3)
+
+    metin = _pdf_metni(calendar)
+
+    assert "10:10" in metin
+    assert "Sabah" not in metin
+
+
+def test_slot_oturumunun_saati_vardiyadan_gelir() -> None:
+    """Öğle grubunun sınavından üretilen oturum ÖĞLE çizelgesinden saat alır."""
+    calendar, subeler = _vardiya_takvimi(education_model="DUAL")
+    sections.assign_section_shift(section_ids=[subeler["9B"].pk], shift="AFTERNOON")
+    kurs = ders("Coğrafya", levels=[9])
+    entry = takvim.add_calendar_entry(
+        calendar=calendar,
+        course_id=kurs.pk,
+        level=9,
+        participant_type="SECTIONS",
+        section_ids=[subeler["9B"].pk],
+    )
+    gun = date(2026, 10, 27)
+    takvim.place_entry(entry, on_date=gun, period_no=3)
+    takvim.submit_calendar(calendar)
+    takvim.approve_calendar(calendar)
+
+    session = takvim.create_session_from_slot(calendar, on_date=gun, period_no=3)
+
+    assert session.start_time == time(15, 0)
+
+
+def test_ayarlanan_ders_saatleri_takvime_yansir() -> None:
+    """Ders saatleri artık ayarlanabilir: girilen çizelge evrakta görünür."""
+    calendar, _ = _vardiya_takvimi()
+    setup_service.update_school_config(
+        fields={
+            "bell_schedule": [
+                {"no": 1, "name": "1. Ders", "start": "09:15"},
+                {"no": 2, "name": "2. Ders", "start": "10:05"},
+            ]
+        }
+    )
+    kurs = ders("Coğrafya", levels=[9])
+    entry = takvim.add_calendar_entry(calendar=calendar, course_id=kurs.pk, level=9)
+    takvim.place_entry(entry, on_date=date(2026, 10, 27), period_no=2)
+
+    metin = _pdf_metni(calendar)
+
+    assert "10:05" in metin
+    assert "09:20" not in metin  # varsayılan çizelgenin 2. dersi artık geçerli değil

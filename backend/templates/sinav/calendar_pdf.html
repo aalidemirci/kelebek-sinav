@@ -56,7 +56,7 @@ seçilen zümreler, seçim yoksa takvimdeki dersler.{% endcomment %}
               {% comment %}`period.name` zaten "1. Ders" biçimindedir (zil çizelgesi
               sözleşmesi, DEFAULT_BELL_SCHEDULE); ayrıca ". Ders" eklenince
               "1. Ders. Ders" basılıyordu.{% endcomment %}
-              {{ pc.period.name }}{% if pc.period.start %} · {{ pc.period.start }}{% endif %}
+              {{ pc.period.name }}{% if pc.time_label %} · {{ pc.time_label }}{% endif %}
             </td>
             {% for cell_list in pc.level_cells %}
               <td style="text-align: center;">

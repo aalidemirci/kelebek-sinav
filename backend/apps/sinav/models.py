@@ -1017,6 +1017,16 @@ class ExamCalendar(BaseModel):
             "makam sınavlarının kılavuz tarihleri). Create sırasında varsayılandan kopyalanır."
         ),
     )
+    # Saatin BASILMASI takvim başına ayardır (20.09.2026 kullanıcı kararı):
+    # bazı okullar evrakta yalnız ders saatini ("3. Ders") göstermek ister —
+    # özellikle ikili eğitimde aynı ders saati iki farklı zamana denk geldiği
+    # için tek bir saat yazmak yanıltıcı olur. Varsayılan AÇIK: bugünkü çıktı
+    # saatleri basıyor, mevcut takvimler değişmeden aynı kalsın.
+    print_period_times = models.BooleanField(
+        "saatleri yazdır",
+        default=True,
+        help_text="Kapalıyken evrakta yalnız ders saati adı basılır (ör. '3. Ders').",
+    )
     signatory_departments = models.ManyToManyField(
         "okul.SubjectDepartment",
         related_name="exam_calendars",

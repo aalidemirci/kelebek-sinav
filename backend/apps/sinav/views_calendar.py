@@ -78,6 +78,7 @@ class ExamCalendarViewSet(viewsets.ModelViewSet[ExamCalendar]):
                 end_date=data.get("end_date"),
                 description_text=data.get("description_text"),
                 footnote_text=data.get("footnote_text"),
+                print_period_times=data.get("print_period_times"),
             )
         except DjangoValidationError as exc:
             _raise_drf(exc)

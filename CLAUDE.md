@@ -534,6 +534,40 @@
   `pin=False`. `REDISTRIBUTE` kipi yalnız sabitsizleri havuza alır; `unplace`
   bayrağı DÜŞÜRÜR (havuzdaki girdinin korunacak slotu yok) ve yerleşmemiş girdi
   sabitlenemez — aksi hâlde otomatik yerleştirmeyi sessizce engellerdi.
+- **Ders saatleri AYARDIR, hesap TEK yerdedir** (20.09.2026): zil çizelgesi
+  (`SchoolConfig.bell_schedule`) alanı vardı ama serileştiricide olmadığı için
+  hiçbir ekrandan düzenlenemiyordu — okul varsayılana mahkûmdu. Saatler artık
+  `okul.bell` saf modülünde DERS AKIŞINDAN hesaplanır (`LessonFlow`: ilk ders,
+  ders/teneffüs süresi, uzun ara konumu+süresi, blok düzeni → `periods_from_flow`;
+  kardeş depo `okulzili`nin `SessionSchedule` mantığından uyarlandı, zil/tören
+  katmanı ALINMADI). Varsayılan akış eski sabit listeyi (08:30'dan 50'şer dakika)
+  BİREBİR üretir — `default_bell_schedule` artık onun üzerine kuruludur ve
+  regresyon testi bunu kilitler. Hesaplanan liste ELLE düzeltilebilir; akış
+  parametreleri (`bell_flow`) ayrıca saklanır çünkü elle düzeltme akıştan
+  türetilemez. Ön yüz kendi aritmetiğini TUTMAZ: `POST /setup/bell-preview/`
+  (salon editöründeki koltuk önizlemesi deseni). Elle girilen çizelge
+  `daily_period_count`ı BELİRLER (çizelge kazanır) ve `exam_period_nos` ona göre
+  kırpılır — aksi hâlde olmayan bir saate takvim kurulurdu.
+- **İkili eğitimde aynı ders saati İKİ ZAMANA denk gelir** (20.09.2026 kullanıcı
+  isteği): `SchoolConfig.education_model` (Tam gün / İkili eğitim) +
+  `afternoon_bell_schedule` + şube alanı `ClassSection.shift`. Vardiya KÜME
+  DEĞİLDİR (küme yalnız seçim kolaylığıdır ve hiçbir kayda yazılmaz) — evrakın
+  SAATİNİ belirlediği için şubenin kendi alanındadır; toplu işaret
+  `sections.assign_section_shift`. İşaretlenmemiş şube SABAH sayılır (veri
+  yokluğu görünür varsayılana çevrilir, evrak yine basılır).
+  **Kapsam sınırı (kullanıcı kararı):** vardiya yalnız BASIMA girer — çakışma
+  denetimi, salon ön seçimi, kelebek sıra bütçesi ve günlük sınav yükü iki
+  vardiyayı hâlâ AYNI ANDA sayar. İhtiyatlı taraftır (gerçekte çakışmayan iki
+  sınavı çakışıyor sayar, tersi değil); mantığa işlenmesi açık borçtur
+  (tasarım §2.5). Evrakta satırın zamanı `_period_time_label`dan gelir: tam günde
+  tek saat, ikili eğitimde vardiya adıyla ("Sabah 10:10"), satırda iki vardiya
+  varsa ikisi de. Oturumun `start_time`ı da vardiyadan gelir
+  (`_period_start_time(no, shift)`); şubelerin TAMAMI öğle grubundaysa öğle
+  çizelgesi, karışıksa sabah kazanır.
+- **Evrakta saatin BASILMASI takvim başına ayardır:** `ExamCalendar
+  .print_period_times` (varsayılan AÇIK — mevcut takvimlerin çıktısı değişmez).
+  Kapalıyken yalnız ders saati adı basılır ("3. Ders"). Zaman metni
+  `_pdf_day_rows`ta HESAPLANIR, şablon iş kuralı tutmaz (`pc.time_label`).
 - **Ders saati ayarı ikilidir** (`SchoolConfig.daily_period_count` +
   `exam_period_nos`): gün uzunluğu genel liselerde 8'dir ama mesleki/teknik
   programlarda değişir, bu yüzden AYARDIR; `bell_schedule` boşken varsayılan

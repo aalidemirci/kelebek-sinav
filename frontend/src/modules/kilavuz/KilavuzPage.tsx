@@ -623,6 +623,28 @@ export default function KilavuzPage() {
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Ders saatleri ve ikili eğitim
+        </h3>
+        <p>
+          <Ekran to="/ayarlar?tab=ders-saatleri">Ayarlar → Ders Saatleri</Ekran> ekranında zil
+          çizelgenizi tanımlarsınız. İlk ders saatini, ders ve teneffüs süresini, varsa uzun arayı
+          ve blok düzenini (ör. <strong>2+2+2+2</strong>) girip <strong>Saatleri hesapla</strong>{" "}
+          deyin; program saatleri çıkarır, gerekirse tek tek düzeltirsiniz. Takvim ve slottan
+          üretilen oturumlar saatini buradan alır.
+        </p>
+        <p>
+          <strong>İkili eğitim</strong> seçerseniz iki ayrı çizelge tutulur: aynı ders saati sabah
+          ve öğle grubunda farklı zamanda başlar. Öğleden sonra oturumu için{" "}
+          <strong>Sabaha göre hesapla</strong> düğmesi başlangıcı sabahın gerçek bitişinden türetir.
+          Ardından aynı ekrandan şubeleri sabah/öğleden sonra diye işaretlersiniz; evrakta saat,
+          sınava giren şubenin oturumuna göre basılır. İşaretlenmeyen şube sabah sayılır.
+        </p>
+        <p>
+          Saatin evrakta görünmesini istemiyorsanız takvimin Önizleme sekmesindeki{" "}
+          <strong>Evrakta ders saati</strong> kutusunu kapatın — o zaman yalnız “3. Ders” basılır.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
           Günlük sınav sayısı sınırı
         </h3>
         <p>

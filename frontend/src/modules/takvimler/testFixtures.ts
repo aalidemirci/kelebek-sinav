@@ -32,6 +32,7 @@ export function makeCalendar(overrides: Partial<ExamCalendar> = {}): ExamCalenda
     status: "DRAFT",
     description_text: "AÇIKLAMALAR\n1. Örnek madde.",
     footnote_text: "Mazeret sınavları izleyen hafta yapılır.",
+    print_period_times: true,
     signatory_departments: [],
     signatory_department_names: [],
     submitted_at: null,
