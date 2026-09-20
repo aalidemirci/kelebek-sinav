@@ -90,6 +90,17 @@ def live_makeup_course(record: ExamAttendanceRecord) -> ExamSessionCourse | None
     return sc
 
 
+def live_plan_item(record: ExamAttendanceRecord) -> Any:
+    """Kaydın bağlı olduğu mazeret TAKVİMİ kalemi — kalem ya da takvimi silinmişse None.
+
+    `live_makeup_course` ile aynı gerekçe: ileri FK soft-delete'i süzmez.
+    """
+    kalem = record.makeup_plan_item
+    if kalem is None or kalem.deleted_at is not None or kalem.plan.deleted_at is not None:
+        return None
+    return kalem
+
+
 def _group_key(conflict_group: str, class_label: str) -> tuple[int, int] | None:
     """'<ders>:<düzey>' / '<ders>:*' → (ders, düzey). Joker düzey şube etiketinden."""
     ders, _, duzey = conflict_group.partition(":")
@@ -166,7 +177,14 @@ def absence_rows(semester_id: int) -> list[dict[str, Any]]:
             session__semester_id=semester_id,
             session__deleted_at__isnull=True,
             student__isnull=False,
-        ).select_related("session", "room", "makeup_course", "makeup_course__session")
+        ).select_related(
+            "session",
+            "room",
+            "makeup_course",
+            "makeup_course__session",
+            "makeup_plan_item",
+            "makeup_plan_item__plan",
+        )
     )
     gruplar = _seat_groups(records)
     ders_adlari = ders_selectors.course_names_by_ids({cid for cid, _ in gruplar.values()})
@@ -188,12 +206,22 @@ def absence_rows(semester_id: int) -> list[dict[str, Any]]:
         info = _MakeupInfo(session=sc.session, course=sc) if sc is not None else None
         son_gun = notice_deadline(oturum.exam_date)
         sonuc = _makeup_result(info, r.student_id, girmeyen_mazeret)
+        kalem = live_plan_item(r)
+        # Mazereti kabul edilmiş, henüz bir mazeret OTURUMUNA alınmamış kayıt.
+        bekliyor = (
+            not oturum.is_makeup
+            and r.excuse_status == ExcuseStatus.EXCUSED
+            and info is None
+            and grup is not None
+        )
         satirlar.append(
             {
                 "record_id": r.pk,
                 "session_id": oturum.pk,
                 "session_name": oturum.name,
                 "exam_date": oturum.exam_date.isoformat(),
+                # Asıl sınavın saati — mazeret takviminin sıra anahtarı (tarih + saat).
+                "exam_time": oturum.start_time.isoformat(),
                 "session_is_makeup": oturum.is_makeup,
                 "session_type": oturum.session_type,
                 "session_type_label": oturum.get_session_type_display(),
@@ -219,12 +247,16 @@ def absence_rows(semester_id: int) -> list[dict[str, Any]]:
                 "makeup_date": info.session.exam_date.isoformat() if info else None,
                 "makeup_result": sonuc,
                 "makeup_result_label": _RESULT_LABELS.get(sonuc or "", ""),
-                "can_makeup": (
-                    not oturum.is_makeup
-                    and r.excuse_status == ExcuseStatus.EXCUSED
-                    and info is None
-                    and grup is not None
+                "awaiting_makeup": bekliyor,
+                # Mazeret TAKVİMİNE alınmış kayıt (20.09.2026): oturumu takvimden üretilir;
+                # elle mazeret sınavına SEÇİLEMEZ (aynı öğrenci iki plana düşmesin).
+                "plan_id": kalem.plan_id if kalem else None,
+                "plan_name": kalem.plan.name if kalem else "",
+                "plan_date": (
+                    kalem.placed_date.isoformat() if kalem and kalem.placed_date else None
                 ),
+                "plan_period_no": kalem.period_no if kalem else None,
+                "can_makeup": bekliyor and kalem is None,
             }
         )
     satirlar.sort(key=lambda s: (s["exam_date"], s["course_label"], s["student_number"]))
@@ -239,7 +271,7 @@ def absence_summary(rows: list[dict[str, Any]]) -> dict[str, int]:
         "excused": sum(1 for r in rows if r["excuse_status"] == ExcuseStatus.EXCUSED),
         "unexcused": sum(1 for r in rows if r["excuse_status"] == ExcuseStatus.UNEXCUSED),
         "overdue": sum(1 for r in rows if r["notice_overdue"]),
-        "awaiting_makeup": sum(1 for r in rows if r["can_makeup"]),
+        "awaiting_makeup": sum(1 for r in rows if r["awaiting_makeup"]),
         "in_makeup": sum(1 for r in rows if r["makeup_session_id"] is not None),
     }
 
@@ -266,8 +298,13 @@ def create_makeup_session(
     exam_date: date,
     start_time: Any,
     duration_minutes: int = 40,
+    from_plan: bool = False,
 ) -> ExamSession:
     """Seçilen "Mazeretli" kayıtlarla TASLAK mazeret sınavı oturumu açar.
+
+    `from_plan` yalnız mazeret takviminin oturum üretiminde True'dur: takvime alınmış
+    kayıt ELLE ayrı bir mazeret sınavına alınamaz — aksi hâlde takvimin "aynı öğrenci
+    aynı saatte iki sınavda olamaz" güvencesi takvim dışından delinirdi.
 
     Her (ders, sınıf düzeyi) için bir "Mazeretli öğrenciler" satırı oluşur ve
     kayıt o satıra bağlanır; salon, dağıtım ve evrak normal oturum akışıdır
@@ -308,6 +345,12 @@ def create_makeup_session(
         if mevcut is not None:
             raise ValidationError(
                 f"{etiket}: zaten '{mevcut.session.name}' mazeret sınavına alınmış."
+            )
+        kalem = live_plan_item(r)
+        if kalem is not None and not from_plan:
+            raise ValidationError(
+                f"{etiket}: '{kalem.plan.name}' mazeret takvimine alınmış; oturumu takvimden "
+                "üretin ya da önce sınavı takvimden çıkarın."
             )
     donemler = {r.session.semester_id for r in records}
     if len(donemler) > 1:
@@ -388,7 +431,11 @@ def remove_from_makeup(*, record_ids: list[int]) -> int:
             )
     for r in records:
         r.makeup_course = None
-        r.save(update_fields=["makeup_course", "updated_at"])
+        # Takvimden üretilmiş oturumdan çıkarılan kayıt takvim kaleminden de kopar: kalemde
+        # kalsaydı elle seçilemez, onaylı takvim de yeniden açılamadığı için hiçbir mazeret
+        # sınavına alınamaz hâle gelirdi. Kayıt yeniden "mazeret sınavı bekleyen" olur.
+        r.makeup_plan_item = None
+        r.save(update_fields=["makeup_course", "makeup_plan_item", "updated_at"])
     return len(records)
 
 
@@ -438,7 +485,7 @@ def makeup_report_context(semester_id: int) -> dict[str, Any]:
         "summary": absence_summary(rows),
         "rows": rows,
         "g_rows": [r for r in rows if r["excuse_status"] == ExcuseStatus.UNEXCUSED],
-        "waiting_rows": [r for r in rows if r["can_makeup"]],
+        "waiting_rows": [r for r in rows if r["awaiting_makeup"]],
         "external_rows": [
             r for r in rows if r["external"] and r["excuse_status"] == ExcuseStatus.EXCUSED
         ],

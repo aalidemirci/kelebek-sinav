@@ -25,6 +25,8 @@ etiketler: [yazili-sinav, mazeret, kopya, disiplin, sinav-sonucu, ozur-belgesi]
 > | R1 dayanağı | md. 86/4 | Öğretmenin sınav iş ve işlemlerini yürütme görevi |
 > | Takvim açıklaması md. 4 | md. 48/1 | Mazeret sınavı zümrenin belirleyeceği zamanda, bir defaya mahsus |
 > | Mazeret sınavı kuralları (`services_makeup` — ikinci mazeret sınavı reddi, tek dönem) · Mazeret Takip Çizelgesi dayanağı (`mazeret_takip.html`) · kılavuz "Mazeret takibi ve mazeret sınavı" alıntısı | md. 48/1 | Özrünü belgelendirene bir defaya mahsus; süre dönemi aşamaz |
+> | Mazeret sınav takvimi (`services_makeup_plan` — "önceden duyurularak", dönem dışı gün uyarısı) · ilan ve öğrenci listeli nüshaların dayanağı (`mazeret_takvimi.html`, `mazeret_takvimi_liste.html`) | md. 48/1 | Mazeret sınavı önceden duyurularak yapılır; süre dönemi aşamaz |
+> | Mazeret sınav takvimi — öğrenci başına günlük sınır (1-3) ve ilan nüshası dayanağı | md. 45/1-g | Günde iki sınav esası, zorunlu hâlde bir sınav daha |
 > | Mazeret Takip Çizelgesi "e-Okul'a G" bölümü ve dayanağı | md. 48/4 | Geçerli özrü olmadan katılmayan "G" |
 > | Mazeret Takip Çizelgesi açıklama 1 (20 iş günü uzatma) ve dayanağı | md. 36/7 | Özür belgesi 5 iş günü; zorunlu hâlde 20 iş gününü aşmamak üzere uzatma |
 > | Takvim açıklaması md. 7 | md. 49/2 | Sonuçlar 10 iş günü içinde duyurulur ve sisteme işlenir |

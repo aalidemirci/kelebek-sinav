@@ -281,6 +281,20 @@ describe("KilavuzPage", () => {
     expect(screen.getByText("yalnız Mazeretli öğrenciler")).toBeInTheDocument();
   });
 
+  it("mazeret sınav takvimini ve ilan nüshasının adsız olduğunu anlatır (20.09.2026)", () => {
+    renderPage();
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Mazeret sınav takvimi" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Mazeret Takvimi" })).toHaveAttribute(
+      "href",
+      "/mazeret?tab=takvim",
+    );
+    expect(screen.getByText("yalnız mazeret sınavları")).toBeInTheDocument();
+    expect(screen.getByText("bir günde en çok kaç sınava gireceğini")).toBeInTheDocument();
+    expect(screen.getByText(/öğrenci adı ya da numarası taşımaz/)).toBeInTheDocument();
+  });
+
   it("öğrenci fotoğraflarını ve fotoğraflı oturma planını anlatır (19.09.2026)", () => {
     renderPage();
     expect(

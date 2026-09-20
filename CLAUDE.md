@@ -280,6 +280,28 @@
   5 iş günü süresi UYARIDIR (kullanıcı kararı; hafta sonu düşülür, tatil verisi
   yok). Rapor ucu biçimi `?kind=pdf|xlsx` alır — `?format=` DRF içerik
   müzakeresine ayrılmıştır, "pdf" verilince uç 404 döner.
+- **Mazeret TAKVİMİ öğrenci öğrenci hesaplar, olağan takvimle KARIŞMAZ** (20.09.2026,
+  `makeup_schedule` saf modül + `services_makeup_plan`, ekran `/mazeret?tab=takvim`):
+  kapsam sınıf düzeyi/şube değil, takvime AÇIKÇA bağlanmış yoklama kayıtlarıdır
+  (`ExamAttendanceRecord.makeup_plan_item` → `MakeupPlanItem` = ders + düzey). Bağ
+  anlık türetilmez: sonradan "Mazeretli" olan kayıt kendiliğinden bir saate düşseydi
+  çakışma güvencesi sessizce delinirdi — taslakta "Kayıtları güncelle" ile eklenir.
+  SERT: aynı öğrenci aynı saatte iki sınavda olamaz (elle taşımada ret, onayı engeller)
+  ve otomatik yerleştirmede öğrenci başına günlük sınır (1-3; Yönerge md. 5/1-s gereği
+  4 yok). SIRA kullanıcı kararıdır: `strict_order` açıkken bir sınav, asıl takvimde
+  kendinden önceki hiçbir sınavdan önceye konmaz; asıl takvimde AYNI saatteki sınavlar
+  küme sayılır, birbirini itmez. Kapalıyken yalnız her öğrencinin kendi sırası korunur.
+  Sıra anahtarı kalemin EN ERKEN asıl oturumunun tarih+saatidir. Sabit (`is_pinned`) ve
+  oturumu üretilmiş kalem yerinde kalır, yalnız doluluk sayılır, sıra kuralının dışındadır.
+  Ülke/il/ilçe geneli sınav (`external`) OTOMATİK YERLEŞMEZ — tarihini il/ilçe MEM ilan
+  eder (Yönerge md. 5/1-aa, bb), idareci elle sabitler. Sığmayan kalemin gerekçesi
+  kalemde SAKLANIR (`note`; sonradan hesaplanan gerekçe o anki dolulukla çelişirdi),
+  "en az gün" ise her istekte aynı girdiyle yeniden hesaplanır. Tarih sınırları (dönem
+  dışı, hafta sonu, olağan sınav haftasıyla çakışma, üst makam günü) UYARIDIR. Takvime
+  alınmış kayıt elle mazeret sınavına alınamaz (`create_makeup_session(from_plan=…)`);
+  onaylı takvimin her saati TEK mazeret oturumu olur (`create_sessions`, idempotent) ve
+  oturumu üretilmiş takvim yeniden açılamaz. İlan PDF'i ADSIZDIR (öğrenci adı/numarası
+  yok); öğrenci listeli nüsha ayrı belgedir ve adlar gizlenebilir.
 - **Karma seviyeli oturumda evrak ders adı:** `_seat_course_names` aynı ders
   ≥2 seviyedeyse adı seviyeyle basar ("Coğrafya — 9. Sınıf"; R1/R5/R7 ve kitapçık
   bandı); şube duyurusunda (R4) `SeatRow.course_plain` ile SEVİYESİZ basılır

@@ -530,6 +530,18 @@ class ExamAttendanceRecord(BaseModel):
         related_name="makeup_records",
         verbose_name="mazeret sınavı dersi",
     )
+    # Mazeret TAKVİMİNE alındığı kalem (20.09.2026). Takvim kapsamı açıkça bağlanır,
+    # anlık türetilmez: sonradan "Mazeretli" olan bir kayıt kendiliğinden bir saate
+    # düşseydi "aynı öğrenci aynı saatte iki sınavda olamaz" güvencesi sessizce
+    # delinirdi. Canlılık `services_makeup_plan.live_plan_item` ile sorulur.
+    makeup_plan_item = models.ForeignKey(
+        "sinav.MakeupPlanItem",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="records",
+        verbose_name="mazeret takvimi sınavı",
+    )
 
     class Meta:
         verbose_name = "sınav yoklama kaydı"
@@ -1259,3 +1271,129 @@ class ProctorExemption(BaseModel):
 
     def __str__(self) -> str:
         return f"Muafiyet — personel {self.teacher_id} ({self.get_scope_display()})"
+
+
+# ===========================================================================
+# Mazeret sınav takvimi (20.09.2026, kullanıcı isteği ve kararları)
+# ===========================================================================
+
+
+class MakeupPlanStatus(models.TextChoices):
+    DRAFT = "DRAFT", "Taslak"
+    APPROVED = "APPROVED", "Onaylandı"
+
+
+#: Bir öğrencinin bir günde girebileceği mazeret sınavı üst sınırı. "Bir günde
+#: yapılacak sınav sayısının ikiyi geçmemesi esastır. Ancak zorunlu hâllerde bir
+#: sınav daha yapılabilir" (Yönerge md. 5/1-s; OKY md. 45/1-g) → 3'ten fazlası yok.
+MAKEUP_MAX_PER_DAY = 3
+MAKEUP_MAX_DAY_COUNT = 20
+
+
+class MakeupPlan(BaseModel):
+    """Mazeret sınav takvimi — YALNIZ mazeret sınavları, öğrenci bazında kesin hesap.
+
+    OKY md. 48/1 mazeret sınavının "önceden duyurularak" yapılmasını ister; bu
+    takvim o duyurudur. Olağan takvimden (`ExamCalendar`) AYRIDIR: kapsamı sınıf
+    düzeyi/şube değil, mazereti kabul edilmiş yoklama KAYITLARIDIR
+    (`ExamAttendanceRecord.makeup_plan_item`) — bu yüzden "aynı öğrenci aynı saatte
+    iki sınavda olamaz" ve "öğrenci başına günde en çok N sınav" kuralları kesin
+    denetlenir (`makeup_schedule`). Parametreler idarecinindir: başlangıç günü,
+    kaç güne sığacağı, günlük sınır, sınav saatleri ve sıra kipi.
+    """
+
+    semester = models.ForeignKey(
+        "okul.SchoolTerm",
+        on_delete=models.PROTECT,
+        related_name="makeup_plans",
+        verbose_name="dönem",
+    )
+    name = models.CharField("takvim adı", max_length=120)
+    start_date = models.DateField("başlangıç tarihi")
+    day_count = models.PositiveSmallIntegerField(
+        "gün sayısı", help_text="Hafta içi gün olarak sayılır; hafta sonu atlanır."
+    )
+    max_per_day = models.PositiveSmallIntegerField(
+        "öğrenci başına günlük en çok sınav",
+        default=2,
+        help_text="2 esastır; 3 yalnız zorunlu hâlde (Yönerge md. 5/1-s).",
+    )
+    period_nos = models.JSONField(
+        "sınav ders saatleri",
+        default=list,
+        blank=True,
+        help_text="Boş = okulun sınav saatleri (Ayarlar → Ders saatleri).",
+    )
+    # Kesin sıra: bir ders, asıl takvimde kendinden önce gelen hiçbir dersten önceye
+    # konmaz. Kapalıyken yalnız her ÖĞRENCİNİN kendi sırası korunur (daha az gün).
+    strict_order = models.BooleanField("asıl takvim sırası kesin korunur", default=True)
+    status = models.CharField(
+        "durum",
+        max_length=12,
+        choices=MakeupPlanStatus.choices,
+        default=MakeupPlanStatus.DRAFT,
+        db_index=True,
+    )
+    approved_by_name = models.CharField("onaylayan", max_length=128, blank=True, default="")
+    approved_at = models.DateTimeField("onay zamanı", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "mazeret sınav takvimi"
+        verbose_name_plural = "mazeret sınav takvimleri"
+        ordering = ["-start_date", "-id"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class MakeupPlanItem(BaseModel):
+    """Mazeret takviminin tek sınavı: (ders, sınıf düzeyi) + yerleştiği gün/saat.
+
+    `source_date`/`source_time` asıl sınavın (bu kaleme bağlı kayıtların EN ERKEN
+    oturumunun) zamanıdır — takvim sırası bu anahtardan türer. `external` ülke/il/
+    ilçe geneli sınavdır: tarihi il/ilçe MEM ilan eder (Yönerge md. 5/1-aa, bb),
+    OTOMATİK yerleştirilmez; idareci elle sabitler. `is_pinned` elle konan kalemi
+    "yeniden yerleştir"den korur. `session` üretilen mazeret oturumudur — soft-delete
+    SET_NULL'ı tetiklemez, canlılık `services_makeup_plan.live_item_session` ile sorulur.
+    """
+
+    plan = models.ForeignKey(
+        MakeupPlan, on_delete=models.CASCADE, related_name="items", verbose_name="takvim"
+    )
+    course = models.ForeignKey(
+        "dersler.Course", on_delete=models.PROTECT, related_name="+", verbose_name="ders"
+    )
+    level = models.PositiveSmallIntegerField("sınıf düzeyi")
+    source_date = models.DateField("asıl sınav tarihi")
+    source_time = models.TimeField("asıl sınav saati")
+    external = models.BooleanField("üst makam sınavı", default=False)
+    placed_date = models.DateField("mazeret sınavı tarihi", null=True, blank=True)
+    period_no = models.PositiveSmallIntegerField("ders saati", null=True, blank=True)
+    is_pinned = models.BooleanField("sabit", default=False)
+    # Otomatik yerleştirme kalemi bir saate koyamadıysa GEREKÇESİ (idareci diliyle,
+    # okul numarasıyla — ad yazılmaz). Yerleşince boşalır. Saklanır, yeniden
+    # hesaplanmaz: sonradan hesaplanan gerekçe o anki dolulukla çelişebilirdi.
+    note = models.CharField("yerleşmeme gerekçesi", max_length=400, blank=True, default="")
+    session = models.ForeignKey(
+        ExamSession,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="makeup_plan_items",
+        verbose_name="mazeret oturumu",
+    )
+
+    class Meta:
+        verbose_name = "mazeret takvimi sınavı"
+        verbose_name_plural = "mazeret takvimi sınavları"
+        ordering = ["source_date", "source_time", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["plan", "course", "level"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_makeupplanitem_plan_course_level_alive",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.plan_id}: ders {self.course_id} / {self.level}"

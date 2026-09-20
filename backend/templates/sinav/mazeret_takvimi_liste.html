@@ -1,0 +1,62 @@
+{% extends "documents/base.html" %}
+{% comment %}Mazeret sınav takvimi — ÖĞRENCİ LİSTELİ nüsha (20.09.2026): her öğrencinin gireceği
+mazeret sınavları. `show_names` kapalıysa ad sütunu BASILMAZ (yalnız okul no + şube) — sınıf
+panosuna asılacak kopya böyle alınır. Kişisel veri içerir: KVKK dipnotu taşır; atıf haritası
+docs/mevzuat/kvkk-6698.md. Bağlam: services_makeup_plan._pdf_context.{% endcomment %}
+{% block extra_style %}
+<style>
+  .doc-table { font-size: 8.8pt; }
+  .doc-table th { font-size: 8.6pt; padding: 4pt 6pt; }
+  .doc-table td { padding: 3.5pt 6pt; }
+  .doc-table tr { break-inside: avoid; page-break-inside: avoid; }
+  .doc-table td.num { text-align: center; white-space: nowrap; }
+  .sinav { display: block; }
+  .dayanak { margin-top: 8pt; font-size: 7pt; color: var(--pr-muted); line-height: 1.25;
+             break-inside: avoid; page-break-inside: avoid; }
+</style>
+{% endblock %}
+{% block content %}
+  {% if is_draft %}
+    <div style="position: fixed; top: 40%; left: 0; width: 100%; text-align: center;
+                font-size: 60pt; color: #e2e8f0; font-weight: bold; letter-spacing: 8pt;
+                transform: rotate(-20deg); z-index: -1;">TASLAK</div>
+  {% endif %}
+
+  <div class="doc-title">{{ year_label }} EĞİTİM VE ÖĞRETİM YILI {{ term_sequence }}. DÖNEM</div>
+  <div class="doc-title" style="margin-top: 0;">{{ plan_title }}</div>
+  <div class="doc-subtitle">Mazeret sınavına girecek öğrenciler{% if not show_names %} (okul numarasıyla){% endif %}</div>
+
+  <table class="doc-table">
+    <thead>
+      <tr>
+        <th style="width: 6%;">S.No</th>
+        <th style="width: 11%;">Sınıf/Şube</th>
+        <th style="width: 11%;">Okul No</th>
+        {% if show_names %}<th style="width: 26%;">Adı Soyadı</th>{% endif %}
+        <th>Gireceği mazeret sınavları (tarih · saat · sınav)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in student_rows %}
+        <tr>
+          <td class="num">{{ forloop.counter }}</td>
+          <td class="num">{{ row.class_label }}</td>
+          <td class="num">{{ row.student_number }}</td>
+          {% if show_names %}<td>{{ row.full_name }}</td>{% endif %}
+          <td>{% for sinav in row.exams %}<span class="sinav">{{ sinav }}</span>{% endfor %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="{% if show_names %}5{% else %}4{% endif %}" style="text-align: center;">Henüz mazeret sınavı yerleştirilmedi.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="dayanak">
+    <b>DAYANAK:</b> MEB Ortaöğretim Kurumları Yönetmeliği md. 48/1 · MEB Yazılı ve Uygulamalı
+    Sınavlar Yönergesi md. 5/1-aa, çç.
+    &nbsp;<b>KVKK:</b> Bu belgedeki kişisel veriler, ölçme-değerlendirme mevzuatının uygulanması
+    amacıyla 6698 sayılı Kanunun 5/2-ç maddesi uyarınca işlenir; yalnızca yetkili okul personeli
+    ve denetim mercileriyle paylaşılır.{% if show_names %} Herkese açık ilan için adsız takvim
+    nüshası ya da bu belgenin okul numaralı (adsız) baskısı kullanılır.{% endif %}
+  </div>
+{% endblock %}

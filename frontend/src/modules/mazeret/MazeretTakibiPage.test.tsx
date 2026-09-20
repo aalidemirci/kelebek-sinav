@@ -64,6 +64,11 @@ function satir(overrides: Partial<AbsenceRow> = {}): AbsenceRow {
     makeup_date: null,
     makeup_result: null,
     makeup_result_label: "",
+    awaiting_makeup: overrides.can_makeup ?? false,
+    plan_id: null,
+    plan_name: "",
+    plan_date: null,
+    plan_period_no: null,
     can_makeup: false,
     ...overrides,
   };
@@ -341,6 +346,35 @@ describe("MazeretTakibiPage", () => {
     );
     await user.click(screen.getByRole("button", { name: "Rapor (Excel)" }));
     await waitFor(() => expect(makeup.reportBlob).toHaveBeenLastCalledWith(3, "xlsx"));
+  });
+
+  it("takvime alınmış kayıt elle seçilemez; takvimdeki yeri satırda yazar", async () => {
+    makeup.absences.mockResolvedValue(
+      yanit([
+        satir({
+          ...MAZERETLI,
+          can_makeup: false,
+          awaiting_makeup: true,
+          plan_id: 4,
+          plan_name: "Kasım Mazeret Takvimi",
+          plan_date: "2026-11-23",
+          plan_period_no: 2,
+        }),
+      ]),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByText(
+        "Mazeret takviminde: Kasım Mazeret Takvimi · 23.11.2026 · 2. ders saati",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "102 mazeret sınavına seç" })).toBeDisabled();
+    // Seçilebilir kayıt yok → toplu seçim çubuğu hiç çizilmez.
+    expect(
+      screen.queryByRole("button", { name: "Mazeret sınavı oluştur" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Mazeret Takvimi" })).toBeInTheDocument();
   });
 
   it("dönem değişince o dönemin listesi istenir", async () => {

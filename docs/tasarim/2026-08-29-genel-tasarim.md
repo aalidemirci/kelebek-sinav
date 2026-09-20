@@ -798,6 +798,23 @@ varsayılan, ayarla değiştirilebilir" ilkesi.
   MEM'e bildirim (Yönerge md. 5/1-z; oturum türü "Okul" dışı + Mazeretli).
   Ülke/il geneli sınavların mazeret TARİHİ il MEM'ce ilan edilir (md. 5/1-aa) —
   ekran uyarır, tarih idarecinin girdisidir.
+- **Mazeret sınav takvimi** (20.09.2026, kullanıcı isteği ve kararları —
+  `makeup_schedule`, `services_makeup_plan`): son sınav yapılıp yoklamalar
+  girildikten sonra YALNIZ mazeret sınavlarını içeren ayrı takvim. OKY md. 48/1
+  mazeret sınavının "önceden duyurularak" yapılmasını ister — takvim o duyurudur.
+  Parametreler idarecinin: ilk gün, kaç güne sığacağı (hafta içi sayılır), öğrenci
+  başına günlük en çok sınav (1-3; 2 esas, 3 zorunlu hâl — Yönerge md. 5/1-s,
+  OKY md. 45/1-g), ders saatleri, sıra kipi. Kapsam öğrenci öğrenci bilindiği için
+  çakışma ve günlük sınır KESİN denetlenir (olağan takvimin düzey/şube yaklaşıklığı
+  burada yok). Kararlar: (1) sıra kesin korunur, "boş saatlere öne çek" seçeneğiyle
+  öğrenci bazına gevşetilir; (2) sığmayan reddedilmez — gerekçesiyle listelenir ve
+  "en az N gün gerekir" söylenir; (3) ülke/il/ilçe geneli sınavlar otomatik
+  yerleşmez, idareci il/ilçe MEM'in ilan ettiği gün ve saate sabitler (Yönerge md.
+  5/1-aa, bb); (4) ilan nüshası ADSIZDIR (tarih, saat, ders, öğrenci sayısı), öğrenci
+  listeli nüsha ayrı belgedir ve adlar gizlenip yalnız okul numarasıyla basılabilir;
+  (5) onaylı takvimin oturumları tek tıkla üretilir, aynı saatteki sınavlar tek
+  oturumda toplanır. Dönem sınırı (OKY md. 48/1 "dönemi aşamaz"), hafta sonu, olağan
+  sınav haftasıyla çakışma ve üst makam günü UYARIDIR ("katı bir kısıtlama olmasın").
 - **Kümeler YALNIZ seçim aracıdır** (31.08.2026): küme kimliği hiçbir oturum
   kaydına yazılmaz; sihirbaz kümeyi yazma anında somut şube/salon pk'lerine
   açar. **Aynı kural takvim girdisine de uygulanır** (31.08.2026 eki):

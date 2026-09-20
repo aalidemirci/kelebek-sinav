@@ -12,6 +12,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 
+import { useTabParam } from "../../hooks/useTabParam";
 import { ApiError } from "../../lib/api";
 import { dosyaAdi, saveBlob } from "../../lib/download";
 import { formatDate } from "../../lib/format";
@@ -23,16 +24,21 @@ import EmptyState from "../../ui/EmptyState";
 import Icon from "../../ui/Icon";
 import Select from "../../ui/Select";
 import { SkeletonList } from "../../ui/Skeleton";
+import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import TextField from "../../ui/TextField";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import type { ExcuseStatusCode } from "../oturumlar/api";
 import { attendanceApi, EXCUSE_STATUS_TR } from "../oturumlar/api";
 import type { AbsenceRow, AbsenceSummary, MakeupReportKind } from "./api";
 import { makeupApi } from "./api";
+import MazeretTakvimi from "./MazeretTakvimi";
 
 /** İndirilen raporun belge adı (docs/sozluk.md §3 — belge adı + dönem). */
 export const REPORT_FILE_TITLE = "Mazeret Takip Çizelgesi";
 const DEFAULT_MAKEUP_NAME = "Mazeret Sınavı";
+
+const TABS = ["kayitlar", "takvim"] as const;
+type TabKey = (typeof TABS)[number];
 
 type Filtre = "ALL" | "PENDING" | "AWAITING" | "UNEXCUSED";
 
@@ -165,6 +171,16 @@ function MazeretSinaviBilgisi({
   }
   if (row.excuse_status === "UNEXCUSED") {
     return <span className="text-body-small text-error">{"e-Okul'a “G” işlenir"}</span>;
+  }
+  if (row.plan_id !== null) {
+    // Takvime alınmış kayıt elle seçilemez: oturumu mazeret takviminden üretilir.
+    return (
+      <span className="text-body-small text-on-surface-variant">
+        Mazeret takviminde: {row.plan_name}
+        {row.plan_date !== null &&
+          ` · ${formatDate(row.plan_date)} · ${row.plan_period_no}. ders saati`}
+      </span>
+    );
   }
   if (row.can_makeup) {
     return <span className="text-body-small text-on-surface-variant">Mazeret sınavı bekliyor</span>;
@@ -390,6 +406,8 @@ export default function MazeretTakibiPage() {
   const [semester, setSemester] = useState<number | undefined>(undefined);
   const [filtre, setFiltre] = useState<Filtre>("ALL");
   const [secili, setSecili] = useState<Set<number>>(new Set());
+  // Sekme adreste durur (`/mazeret?tab=takvim`): kılavuz ve oturum sayfası doğrudan bağlanır.
+  const [tab, setTab] = useTabParam<TabKey>("tab", TABS, "kayitlar");
   const [dialogOpen, setDialogOpen] = useState(false);
   // Dialog odak efekti onClose kimliğine bağlı — inline arrow her render'da yenilenir
   // ve yazarken odağı geri çalar; sabit referans şart (OturumlarPage emsali).
@@ -461,58 +479,19 @@ export default function MazeretTakibiPage() {
     }
   };
 
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-headline-medium text-on-surface">Mazeret Takibi</h1>
-        <span className="ml-auto" />
-        <Button
-          variant="tonal"
-          icon="picture_as_pdf"
-          onClick={() => void indir("pdf")}
-          disabled={busy !== null || donemId === undefined}
-        >
-          {busy === "pdf" ? "Hazırlanıyor…" : "Rapor (PDF)"}
-        </Button>
-        <Button
-          variant="tonal"
-          icon="table_view"
-          onClick={() => void indir("xlsx")}
-          disabled={busy !== null || donemId === undefined}
-        >
-          {busy === "xlsx" ? "Hazırlanıyor…" : "Rapor (Excel)"}
-        </Button>
-      </div>
-      <p className="text-body-medium text-on-surface-variant">
-        Dönemin sınavlarına girmeyen öğrenciler (oturumların Yoklama sekmesinde işaretlenenler).
-        Mazeret belgesi sınav tarihinden itibaren en geç {data?.notice_business_days ?? 5} iş günü
-        içinde okul müdürlüğüne bildirilir; süresi geçmiş kararsız kayıtlar işaretlenir — karar okul
-        müdürlüğünündür. Mazereti kabul edilenleri seçip mazeret sınavı oluşturun; mazeret sınavı
-        bir defaya mahsus yapılır.
-      </p>
-
-      <div className="flex flex-wrap items-end gap-3">
-        <Select
-          label="Dönem"
-          options={(data?.semesters ?? []).map((s) => ({ value: String(s.id), label: s.label }))}
-          value={donemId === undefined ? "" : String(donemId)}
-          onChange={(e) => {
-            setSemester(Number(e.target.value));
-            setSecili(new Set());
-          }}
-          className="w-64"
-        />
-        <Select
-          label="Göster"
-          options={(Object.keys(FILTRE_TR) as Filtre[]).map((value) => ({
-            value,
-            label: FILTRE_TR[value],
-          }))}
-          value={filtre}
-          onChange={(e) => setFiltre(e.target.value as Filtre)}
-          className="w-72"
-        />
-      </div>
+  // Kayıtlar sekmesinin içeriği (takvim sekmesi ayrı bileşendir: MazeretTakvimi).
+  const kayitlar = (
+    <>
+      <Select
+        label="Göster"
+        options={(Object.keys(FILTRE_TR) as Filtre[]).map((value) => ({
+          value,
+          label: FILTRE_TR[value],
+        }))}
+        value={filtre}
+        onChange={(e) => setFiltre(e.target.value as Filtre)}
+        className="w-72"
+      />
 
       {absences.isPending && <SkeletonList rows={4} />}
       {absences.isError && (
@@ -526,7 +505,7 @@ export default function MazeretTakibiPage() {
 
       {data && <OzetCipleri summary={data.summary} />}
 
-      {data && data.summary.awaiting_makeup > 0 && (
+      {rows.some((r) => r.can_makeup) && (
         <Card
           elevation={1}
           className="sticky top-20 z-20 flex flex-wrap items-center gap-3 bg-surface-container-lowest p-3"
@@ -627,6 +606,65 @@ export default function MazeretTakibiPage() {
           }}
         />
       )}
+    </>
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-headline-medium text-on-surface">Mazeret Takibi</h1>
+        <span className="ml-auto" />
+        <Button
+          variant="tonal"
+          icon="picture_as_pdf"
+          onClick={() => void indir("pdf")}
+          disabled={busy !== null || donemId === undefined}
+        >
+          {busy === "pdf" ? "Hazırlanıyor…" : "Rapor (PDF)"}
+        </Button>
+        <Button
+          variant="tonal"
+          icon="table_view"
+          onClick={() => void indir("xlsx")}
+          disabled={busy !== null || donemId === undefined}
+        >
+          {busy === "xlsx" ? "Hazırlanıyor…" : "Rapor (Excel)"}
+        </Button>
+      </div>
+      <p className="text-body-medium text-on-surface-variant">
+        Dönemin sınavlarına girmeyen öğrenciler (oturumların Yoklama sekmesinde işaretlenenler).
+        Mazeret belgesi sınav tarihinden itibaren en geç {data?.notice_business_days ?? 5} iş günü
+        içinde okul müdürlüğüne bildirilir; süresi geçmiş kararsız kayıtlar işaretlenir — karar okul
+        müdürlüğünündür. Mazereti kabul edilenleri seçip mazeret sınavı oluşturun ya da hepsi için
+        “Mazeret Takvimi” sekmesinden takvim kurun; mazeret sınavı bir defaya mahsus yapılır.
+      </p>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <Select
+          label="Dönem"
+          options={(data?.semesters ?? []).map((s) => ({ value: String(s.id), label: s.label }))}
+          value={donemId === undefined ? "" : String(donemId)}
+          onChange={(e) => {
+            setSemester(Number(e.target.value));
+            setSecili(new Set());
+          }}
+          className="w-64"
+        />
+      </div>
+
+      <Tabs
+        items={[
+          { key: "kayitlar", label: "Kayıtlar", icon: "person_off" },
+          { key: "takvim", label: "Mazeret Takvimi", icon: "event_note" },
+        ]}
+        active={tab}
+        onChange={(key) => setTab(key as TabKey)}
+        idBase="mazeret"
+        ariaLabel="Mazeret takibi bölümleri"
+      />
+      <div {...tabPanelProps("mazeret", tab)} className="flex flex-col gap-4">
+        {tab === "takvim" ? <MazeretTakvimi semesterId={donemId} /> : kayitlar}
+      </div>
     </div>
   );
 }

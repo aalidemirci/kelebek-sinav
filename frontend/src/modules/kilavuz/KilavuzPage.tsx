@@ -982,6 +982,39 @@ export default function KilavuzPage() {
           müdürlüklerince mazeret sınavına katılmasına karar verilen öğrenciler resmî yazı ile
           il/ilçe millî eğitim müdürlüklerine bildirilir.
         </Mevzuat>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Mazeret sınav takvimi
+        </h3>
+        <p>
+          Son sınav yapılıp yoklamalar girildikten sonra mazeret sınavlarını tek tek açmak yerine{" "}
+          <Ekran to="/mazeret?tab=takvim">Mazeret Takvimi</Ekran> sekmesinden bir takvim
+          kurabilirsiniz. Bu takvimde <strong>yalnız mazeret sınavları</strong> yer alır; herkesin
+          girdiği sınavlar görünmez. İlk günü, sınavların <strong>kaç güne sığacağını</strong>, bir
+          öğrencinin <strong>bir günde en çok kaç sınava gireceğini</strong> ve kullanılacak ders
+          saatlerini siz belirlersiniz. Program sınavları asıl sınav takvimindeki sırayla
+          yerleştirir: önce yapılan sınavın mazereti de önce yapılır. Aynı öğrenci aynı saatte iki
+          sınava konmaz; farklı öğrencilerin sınavları aynı saate düşerse tek mazeret oturumunda
+          toplanır.
+        </p>
+        <p>
+          Sığmayan sınav olursa program gerekçesini (hangi okul numarası için yer kalmadığını) ve bu
+          kurallarla en az kaç gün gerektiğini söyler; gün sayısını artırabilir ya da “Asıl takvim
+          sırasını kesin koru” seçeneğini kapatabilirsiniz — o zaman sınavlar boş saatlere öne
+          çekilir, yalnız her öğrencinin kendi sırası korunur. Bir sınavı elle başka gün ve saate
+          taşıyıp sabitleyebilirsiniz; aynı saatte başka sınavı olan öğrenci varsa taşıma
+          reddedilir. Ülke, il ve ilçe geneli sınavların mazereti kendiliğinden yerleşmez: tarihini
+          il/ilçe millî eğitim müdürlüğü ilan eder, ilan edilen gün ve saati elle girersiniz.
+        </p>
+        <p>
+          Takvimi onayladıktan sonra <strong>“Oturumları oluştur”</strong> her sınav saati için
+          mazeret oturumunu açar; salon, dağıtım ve evrak normal oturumdaki gibidir.{" "}
+          <strong>“Takvim (PDF)”</strong> ilan nüshasıdır: öğrenci adı ya da numarası taşımaz,
+          panoya asılabilir. <strong>“Öğrenci listesi (PDF)”</strong> hangi öğrencinin hangi sınava
+          gireceğini gösterir; isterseniz adları gizleyip yalnız okul numarasıyla alırsınız. Takvim
+          kurulduktan sonra mazereti kabul edilen öğrenci için <strong>“Kayıtları güncelle”</strong>{" "}
+          düğmesi çıkar.
+        </p>
       </Adim>
 
       <Adim no={10} icon="shield_lock" title="Bakım: yedek, parola ve güncelleme">

@@ -27,6 +27,7 @@ kavramları (faz/karar/evrak kodları, motor ölçütleri) yüzeye çıkmaz.
 | katı mod | **Katı dağıtım** — "yan, ön ve arka komşuluk da kesinlikle yasak" | "Katı mod (1. halka…)" | |
 | `ExcuseStatus` | **Beklemede / Mazeretli / Mazeretsiz** | Özürlü / Özürsüz | Mevzuat "mazeret" der |
 | `ParticipantType.MAKEUP` | **"Mazeretli öğrenciler"** (ders satırında) | "mazeret grubu", "üçüncü tip" | "Katılımcılar" SEÇENEĞİ değildir — satırı yalnız Mazeret Takibi ekranı kurar |
+| `MakeupPlan` | **mazeret sınav takvimi** (sekme: **Mazeret Takvimi**); belgeleri **"Takvim (PDF)"** = adsız ilan nüshası, **"Öğrenci listesi (PDF)"** | mazeret planı, telafi takvimi | Çizelgesi de "yerleştirme çizelgesi"dir; sıra kipi kullanıcıya "Asıl takvim sırasını kesin koru" diye sorulur |
 | `ExamSession.is_makeup` | rozet **"Mazeret sınavı"**; ekran **Mazeret Takibi**; rapor **Mazeret Takip Çizelgesi** | telafi sınavı, bütünleme | Mevzuat "mazeret sınavı" der (OKY md. 48/1) |
 | Oturum durumu | **Taslak / Dağıtıldı / Onaylandı / Arşivlendi** | Arşiv | |
 | Kitapçık üretim kaydı | **"Üretim"** + tarih-saat | Koşu #n | |

@@ -454,6 +454,31 @@ class MakeupRecordsSerializer(serializers.Serializer[dict[str, Any]]):
     )
 
 
+class MakeupPlanParamsSerializer(serializers.Serializer[dict[str, Any]]):
+    """Mazeret takvimi parametreleri — oluşturma (tamamı) ve yeniden yerleştirme (kısmi).
+
+    Aralık denetimi serviste (`_clean_params`): ret metni mevzuat gerekçesini taşır.
+    """
+
+    semester_id = serializers.IntegerField(min_value=1, required=False)
+    name = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    start_date = serializers.DateField(required=False)
+    day_count = serializers.IntegerField(required=False)
+    max_per_day = serializers.IntegerField(required=False)
+    period_nos = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), required=False, allow_empty=True
+    )
+    strict_order = serializers.BooleanField(required=False)
+
+
+class MakeupPlanItemMoveSerializer(serializers.Serializer[dict[str, Any]]):
+    """Takvim sınavını elle taşıma/sabitleme girdisi (`placed_date` boş = takvim dışına al)."""
+
+    placed_date = serializers.DateField(required=False, allow_null=True)
+    period_no = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+    is_pinned = serializers.BooleanField(required=False)
+
+
 class QuestionUploadSerializer(serializers.Serializer[Any]):
     """`POST /exam-session-courses/<id>/question/` girdisi (multipart)."""
 

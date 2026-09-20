@@ -1,0 +1,106 @@
+{% extends "documents/base.html" %}
+{% comment %}Mazeret sınav takvimi — İLAN nüshası (20.09.2026, kullanıcı kararı): öğrenci ADI ve
+NUMARASI YOKTUR; panoya ya da siteye asılabilir. Yalnız tarih, saat, sınav ve öğrenci
+sayısı basılır. Öğrenci listeli nüsha ayrı şablondur (mazeret_takvimi_liste.html).
+documents/base.html anteti + .sig-grid imza deseni; text-transform YOK (WeasyPrint TR
+"i" tuzağı); onaysız takvimde TASLAK filigranı. Bağlam: services_makeup_plan._pdf_context.{% endcomment %}
+{% block extra_style %}
+<style>
+  /* documents/base.html .doc-table için satır bölünmesini YASAKLAMAZ (CLAUDE.md §2). */
+  .doc-table tr { break-inside: avoid; page-break-inside: avoid; }
+  .doc-table td.num { text-align: center; white-space: nowrap; }
+  .ust-makam { font-size: 7.5pt; color: var(--pr-secondary); }
+  .notes { margin-top: 10pt; font-size: 8.4pt; line-height: 1.4; color: var(--pr-label);
+           break-inside: avoid; page-break-inside: avoid; }
+  .notes ol { margin: 2pt 0 0 14pt; padding: 0; }
+  .dayanak { margin-top: 6pt; font-size: 7pt; color: var(--pr-muted); line-height: 1.25;
+             break-inside: avoid; page-break-inside: avoid; }
+</style>
+{% endblock %}
+{% block content %}
+  {% if is_draft %}
+    <div style="position: fixed; top: 40%; left: 0; width: 100%; text-align: center;
+                font-size: 60pt; color: #e2e8f0; font-weight: bold; letter-spacing: 8pt;
+                transform: rotate(-20deg); z-index: -1;">TASLAK</div>
+  {% endif %}
+
+  <div class="doc-title">{{ year_label }} EĞİTİM VE ÖĞRETİM YILI {{ term_sequence }}. DÖNEM</div>
+  <div class="doc-title" style="margin-top: 0;">{{ plan_title }}</div>
+  <div class="doc-subtitle">Bu takvimde yalnız mazeret sınavları yer alır.</div>
+
+  <table class="doc-table">
+    <thead>
+      <tr>
+        <th style="width: 24%;">Tarih</th>
+        <th style="width: 17%;">Ders saati</th>
+        <th style="width: 35%;">Sınav</th>
+        <th style="width: 11%; text-align: center;">Öğrenci sayısı</th>
+        <th style="width: 13%; text-align: center;">Asıl sınav tarihi</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in day_rows %}
+        <tr>
+          <td>{% if row.show_date %}<strong>{{ row.date_label }}</strong>{% endif %}</td>
+          <td>{{ row.period_label }}</td>
+          <td>{{ row.course_label }}{% if row.external %}<br><span class="ust-makam">Ülke / il / ilçe geneli sınav</span>{% endif %}</td>
+          <td class="num">{{ row.student_count }}</td>
+          <td class="num">{{ row.source_date }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" style="text-align: center;">Henüz mazeret sınavı yerleştirilmedi.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="notes">
+    <b>AÇIKLAMALAR</b>
+    <ol>
+      <li>Bu takvim, sınavlara katılamayan ve mazereti okul müdürlüğünce kabul edilen öğrenciler
+        içindir. Hangi öğrencinin hangi sınava gireceği öğrenciye okul idaresince ayrıca
+        bildirilir.</li>
+      <li>Mazeret sınavı bir defaya mahsus yapılır; mazeret sınavına da katılmayan öğrenci için
+        ayrıca sınav yapılmaz ve öğrenci sınava katılmamış sayılır.</li>
+      <li>Bir öğrenci bir günde en çok {{ max_per_day }} mazeret sınavına girecek biçimde
+        planlanmıştır.</li>
+    </ol>
+  </div>
+
+  <table class="sig-grid">
+    {% if chairs %}
+    <tr>
+      {% for chair in chairs %}
+        <td>
+          <div class="space"></div>
+          <div class="line"></div>
+          <div class="name">{{ chair.name|default:"…………………" }}</div>
+          <div class="role">{{ chair.role }}</div>
+        </td>
+        {% if forloop.counter|divisibleby:3 and not forloop.last %}</tr><tr>{% endif %}
+      {% endfor %}
+    </tr>
+    {% endif %}
+    <tr>
+      <td>
+        <div class="space"></div>
+        <div class="line"></div>
+        <div class="name">…………………</div>
+        <div class="role">Düzenleyen — Müdür Yardımcısı</div>
+      </td>
+      <td></td>
+      <td>
+        <div style="font-size: 9.5pt; color: var(--pr-label);">UYGUNDUR</div>
+        <div style="font-size: 9pt;">{% if approved_on %}{{ approved_on }}{% else %}…… / …… / 20……{% endif %}</div>
+        <div class="space"></div>
+        <div class="line"></div>
+        <div class="name">{{ principal_name|default:"…………………" }}</div>
+        <div class="role">Okul Müdürü</div>
+      </td>
+    </tr>
+  </table>
+
+  <div class="dayanak">
+    <b>DAYANAK:</b> MEB Ortaöğretim Kurumları Yönetmeliği md. 45/1-g, 48/1 · MEB Yazılı ve
+    Uygulamalı Sınavlar Yönergesi md. 5/1-s, aa, bb, çç.
+  </div>
+{% endblock %}

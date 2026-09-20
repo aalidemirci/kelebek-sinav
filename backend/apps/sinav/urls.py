@@ -21,6 +21,7 @@ from apps.sinav.views_calendar import (
     ExamTrackItemViewSet,
 )
 from apps.sinav.views_makeup import MakeupViewSet
+from apps.sinav.views_makeup_plan import MakeupPlanItemViewSet, MakeupPlanViewSet
 
 router = DefaultRouter()
 router.register("exam-rooms", ExamRoomViewSet, basename="exam-room")
@@ -38,5 +39,7 @@ router.register(
     "exam-attendance-records", ExamAttendanceRecordViewSet, basename="exam-attendance-record"
 )
 router.register("makeup", MakeupViewSet, basename="makeup")
+router.register("makeup-plans", MakeupPlanViewSet, basename="makeup-plan")
+router.register("makeup-plan-items", MakeupPlanItemViewSet, basename="makeup-plan-item")
 
 urlpatterns = router.urls
