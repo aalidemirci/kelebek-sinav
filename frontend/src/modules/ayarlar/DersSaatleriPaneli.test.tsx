@@ -188,6 +188,60 @@ describe("DersSaatleriPaneli", () => {
     );
   });
 
+  it("şube çipleri sınıf düzeyine göre gruplanır; düzey etiketi tümünü seçer", async () => {
+    const user = userEvent.setup();
+    okulApiMock.getSchoolConfig.mockResolvedValue(config({ education_model: "DUAL" }));
+    okulApiMock.listClassSections.mockResolvedValue([
+      sube(1, "9/A"),
+      sube(2, "9/B"),
+      sube(3, "10/A"),
+      sube(4, "10/B"),
+    ]);
+    okulApiMock.assignClassSectionShift.mockResolvedValue({ updated: 2 });
+
+    renderPanel();
+
+    // Düzey etiketi backend'le AYNI yazımda (docs/sozluk.md: "9. Sınıf").
+    const dokuz = await screen.findByRole("button", { name: "9. Sınıf" });
+    expect(screen.getByRole("button", { name: "10. Sınıf" })).toBeInTheDocument();
+    // Her düzey kendi satırında: 9. Sınıf satırı yalnız 9/A ve 9/B taşır.
+    const satir = dokuz.parentElement as HTMLElement;
+    expect(satir).toHaveTextContent("9/A");
+    expect(satir).toHaveTextContent("9/B");
+    expect(satir).not.toHaveTextContent("10/A");
+
+    // Etikete basmak o düzeyin TAMAMINI seçer — işaret düzey düzey verilir.
+    await user.click(dokuz);
+    await user.click(screen.getByRole("button", { name: "Sabah yap" }));
+
+    await waitFor(() =>
+      expect(okulApiMock.assignClassSectionShift).toHaveBeenCalledWith({
+        section_ids: [1, 2],
+        shift: "MORNING",
+      }),
+    );
+  });
+
+  it("düzey etiketine yeniden basmak seçimi kaldırır", async () => {
+    const user = userEvent.setup();
+    okulApiMock.getSchoolConfig.mockResolvedValue(config({ education_model: "DUAL" }));
+    okulApiMock.listClassSections.mockResolvedValue([sube(1, "9/A"), sube(2, "9/B")]);
+
+    renderPanel();
+
+    const dokuz = await screen.findByRole("button", { name: "9. Sınıf" });
+    await user.click(dokuz);
+    expect(screen.getAllByRole("checkbox").every((c) => (c as HTMLInputElement).checked)).toBe(
+      true,
+    );
+
+    await user.click(dokuz);
+    expect(screen.getAllByRole("checkbox").some((c) => (c as HTMLInputElement).checked)).toBe(
+      false,
+    );
+    expect(screen.getByRole("button", { name: "Sabah yap" })).toBeDisabled();
+  });
+
   it("öğle oturumu sabahın bitişinden türetilir", async () => {
     const user = userEvent.setup();
     okulApiMock.getSchoolConfig.mockResolvedValue(config({ education_model: "DUAL" }));

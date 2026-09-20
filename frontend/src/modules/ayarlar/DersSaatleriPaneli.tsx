@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError } from "../../lib/api";
+import { gradeLevelLabel } from "../../lib/gradeLevels";
 import Button from "../../ui/Button";
 import Card from "../../ui/Card";
 import Icon from "../../ui/Icon";
@@ -38,6 +39,21 @@ function blokCoz(metin: string): number[] {
 
 function blokYaz(bloklar: number[] | undefined): string {
   return (bloklar ?? []).join("+");
+}
+
+/**
+ * Şubeleri sınıf düzeyine göre gruplar (artan düzey, düzey içinde şube sırası).
+ * Liste zaten backend'den `class_level, class_section` sıralı gelir — burada
+ * yalnız bölünür, yeniden sıralanmaz (TR sıralaması backend'in işi).
+ */
+function seviyeyeGore(subeler: ClassSection[]): { level: number; rows: ClassSection[] }[] {
+  const gruplar = new Map<number, ClassSection[]>();
+  for (const s of subeler) {
+    const mevcut = gruplar.get(s.class_level);
+    if (mevcut) mevcut.push(s);
+    else gruplar.set(s.class_level, [s]);
+  }
+  return [...gruplar.entries()].sort(([a], [b]) => a - b).map(([level, rows]) => ({ level, rows }));
 }
 
 type OturumKey = "morning" | "afternoon";
@@ -364,27 +380,51 @@ export default function DersSaatleriPaneli() {
             Hangi şubenin sabah, hangisinin öğleden sonra okuduğunu işaretleyin. Sınav takvimi
             evrakında saat bu işarete göre basılır; işaretlenmeyen şube sabah sayılır.
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {subeler.map((s) => (
-              <label
-                key={s.id}
-                className="flex cursor-pointer items-center gap-2 rounded-shape-sm border border-outline-variant px-3 py-2 text-body-medium"
-              >
-                <input
-                  type="checkbox"
-                  checked={secili.includes(s.id)}
-                  onChange={() =>
-                    setSecili((prev) =>
-                      prev.includes(s.id) ? prev.filter((x) => x !== s.id) : [...prev, s.id],
-                    )
-                  }
-                />
-                <span>{s.class_label}</span>
-                <span className="text-body-small text-on-surface-variant">
-                  {s.shift ? SHIFT_LABELS[s.shift] : "—"}
-                </span>
-              </label>
-            ))}
+          <div className="mt-4 space-y-3">
+            {seviyeyeGore(subeler).map(({ level, rows }) => {
+              const ids = rows.map((r) => r.id);
+              const tumuSecili = ids.every((id) => secili.includes(id));
+              return (
+                <div key={level} className="flex flex-wrap items-center gap-2">
+                  {/* Düzey etiketi TEK KAYNAKTAN (docs/sozluk.md): backend'in
+                      "9. Sınıf" yazımıyla aynı. Etiket aynı zamanda düzeyin
+                      tamamını seçer — ikili eğitimde işaret düzey düzey verilir. */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSecili((prev) =>
+                        tumuSecili
+                          ? prev.filter((id) => !ids.includes(id))
+                          : [...new Set([...prev, ...ids])],
+                      )
+                    }
+                    className="min-w-24 rounded-shape-sm px-2 py-1 text-left text-label-large text-on-surface-variant hover:bg-surface-container-high"
+                  >
+                    {gradeLevelLabel(level)}
+                  </button>
+                  {rows.map((s) => (
+                    <label
+                      key={s.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-shape-sm border border-outline-variant px-3 py-2 text-body-medium"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={secili.includes(s.id)}
+                        onChange={() =>
+                          setSecili((prev) =>
+                            prev.includes(s.id) ? prev.filter((x) => x !== s.id) : [...prev, s.id],
+                          )
+                        }
+                      />
+                      <span>{s.class_label}</span>
+                      <span className="text-body-small text-on-surface-variant">
+                        {s.shift ? SHIFT_LABELS[s.shift] : "—"}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              );
+            })}
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button onClick={() => vardiyaAta("MORNING")} disabled={busy || secili.length === 0}>
