@@ -116,9 +116,43 @@ okul no, `class_level`, `class_section` — **veli ve TCKN alanları yok**) ·
 `ImportRun` (source_type, sha256, koşullu unique) · `ClassSectionGroup`
 (şube kümesi SAY/EA/DİL — `ClassSection.group` FK, TEK üyelik) · `SubjectDepartment`
 (zümre adı, başkan→`Personnel`, `is_board_member` — okul zümre başkanları
-kurulu; sınav takvimi imza bloğunun kaynağı, B7 revizyonu) · `StudentPhoto`
+kurulu; sınav takvimi imza bloğunun kaynağı, B7 revizyonu; **`branches`** JSON —
+zümrenin öğretmen sicilindeki branşları, 20.09.2026: zümreler branşlardan ÜRETİLİR
+ve başkan adayları bu branşların öğretmenleridir, aşağıdaki not) · `StudentPhoto`
 (öğrenci başına tek fotoğraf: `image`* base64 JPEG + sha256 + ölçü — 19.09.2026,
 §6; öğrenci aktif olmaktan çıkınca ya da silinince KATI silinir).
+
+**Zümrelerin branştan üretimi (20.09.2026, kullanıcı isteği —
+`okul/services/departments.py`).** İstek: "zümreleri e-Okul'dan yüklenen öğretmen
+listesindeki branş bilgisinden otomatik üret; sonradan ekleme çıkarma yapılabilsin;
+zümre başkanı seçerken ilgili branştaki öğretmenler listelensin." Kararlar:
+
+* **Branş ayrı katalog DEĞİLDİR**, e-Okul'dan gelen serbest metindir
+  (`Personnel.branch`). Zümre branşlarını METİN listesi olarak taşır
+  (`SubjectDepartment.branches`); eşleşme yazıma değil ANAHTARA göredir
+  (`departments.branch_key` — harf büyüklüğü, Türkçe harf, şapka ve boşluk katlanır:
+  "COĞRAFYA" = "Coğrafya", "Ahlâk" = "Ahlak"). Anahtar backend'de üretilir ve iki
+  serileştiricide döner (`Personnel.branch_key`, `SubjectDepartment.branch_keys`) —
+  arayüz normalizasyon KOPYALAMAZ, yalnız eşitlik sorar.
+* **Bir branş en çok bir zümrededir** (`_ensure_branches_free`); bir zümre birden
+  çok branş taşıyabilir (Tarih + Coğrafya + Felsefe → "Sosyal Bilimler"). Branşı boş
+  zümrede başkan adayı bütün aktif öğretmenlerdir (eski davranış); arayüzdeki
+  "tüm öğretmenleri göster" kutusu istisnalar içindir. Kayıtlı başkan listede
+  yoksa seçenek olarak korunur ("başka branş" / "listede yok").
+* **Üretim idempotenttir ve ad tekliğini çiğnemez:** branşı bir zümrede olan aday
+  atlanır (COVERED), adı branşla aynı olan zümre yeniden yaratılmaz — branş ona
+  bağlanır (LINKABLE), kalanı için zümre açılır (NEW). Zümre adı imza bloğuna
+  "<ad> Zümre Başkanı" diye basıldığından tamamı büyük/küçük yazım başlık biçimine
+  çevrilir (`shared.text.tr_title` — ders adlarıyla TEK uygulama).
+* **Kendiliğinden üretim YALNIZ katalog boşken** (öğretmen aktarımının commit ucu —
+  `generate_if_catalog_empty`; sonuç yanıtta `departments_created`). Katalogda tek
+  zümre bile varsa idarecinin düzeni sayılır: kaldırılan zümre sonraki aktarımda
+  sessizce geri gelmez. O durumda üretim Ayarlar → Zümreler'deki "Branşlardan zümre
+  üret" penceresinden, adaylar görülüp seçilerek yapılır. Önizleme ucu üretmez;
+  içe aktarma servisine (`imports.py`) dokunulmadı — tetik view katmanındadır.
+* Adaylar AKTİF öğretmenlerden okunur; branşı boş kayıt (memur, hizmetli) aday
+  üretmez. Veri göçü yok: eski kurulumdaki elle açılmış zümreler üretim penceresinde
+  aynı adlı branşa bağlanır.
 
 **Ders havuzu (OYS ders_yapisi'ndan):** `Course` (name, `levels` JSON,
 course_type ORTAK/SECMELI, source MEB/MANUAL, `is_active`, **`exam_mode`
@@ -157,7 +191,12 @@ hazırlayan makam; teklik kısıtına GİRMEZ) · `ExamCalendar.footnote_text`
 31.08.2026 K19). Girdinin `level`'ı zorunlu ve teklik anahtarının parçası
 olduğundan yön oturum tarafının TERSİDİR: seviye verilir, şubeler ona karşı
 denetlenir. Şube kümesi kimliği girdiye YAZILMAZ — seçim anında somut şube
-pk listesine açılır (§10 kümeler invariantı).
+pk listesine açılır (§10 kümeler invariantı). `IepStudent` (BEP kapsamındaki
+öğrenciler — YALNIZ üyelik: `student_ref`*) · `IndividualQuestionDocument`
+(oturumda bireysel soru dosyası: `session` + `student_ref`* + dosya + puan
+bölümü; satırın varlığı seçimdir) · `ExamSession.individual_changed_at`
+(kitapçık bayatlık damgası) — 20.09.2026, §9 "BEP…"; ikisinde de öğrenci bağı
+FK DEĞİL şifreli metindir ve satırlar KATI silinir.
 
 (*) işaretli alanlar şifrelenir — bkz. §5.
 
@@ -194,6 +233,15 @@ DD'nin kanıtlı katmanı taşınır: `shared/crypto.py` (Fernet + Argon2id) +
   Fotoğrafın snapshot'ı YOKTUR: evrak basılırken canlı kayıttan okunur;
   arşiv evrakının yeniden basımında silinmiş fotoğraf yerine boş kutu çıkar
   (KVKK: ayrılan öğrencinin fotoğrafı saklanmaz).
+- **Şifreli ÖĞRENCİ BAĞI (20.09.2026 — BEP):** `IepStudent.student_ref` ve
+  `IndividualQuestionDocument.student_ref` FK değil, öğrenci pk'sini taşıyan
+  `EncryptedCharField`'dır. Gerekçe aşağıdaki "açık kalanlar" satırının ters
+  yüzüdür: okul no ve şube açık olduğu için düz FK, ad şifreli olsa bile "şu
+  numaralı öğrenci BEP kapsamında" bilgisini açıkta bırakırdı. Bedeli: teklik,
+  süzme ve öksüz kayıt temizliği Python'dadır (`services_individual`), FK
+  bütünlüğü yoktur; çözülemeyen bağ (kilitli kasa, yarım geçiş) ATLANIR ve asla
+  silinmez. Kullanıcı kararı: parola bu özellik için zorunlu değildir — kapalıyken
+  bağ düz saklanır ve arayüz uyarır (§9 "BEP…" paragrafı, KVKK md. 6/4).
 - **Açık kalanlar:** okul no, sınıf/şube, koltuk/salon/grup düzeni (ad
   olmadan takma-adlıdır; motor, sıralama ve teklik bunlara dayanır).
 - **Bedeller (bilinçli kabul):** ad temelli arama/sıralama/teklik DB'de
@@ -608,7 +656,9 @@ başına bir kâğıt**.
 | R8 | Dağıtım Doğrulama Raporu (seed basılır) — idare nüshası | oturum | 1 |
 
 Ayrıca: R10 kişiselleştirilmiş kitapçık ZIP · oturumsuz boş salon yerleşim
-planı · resmî takvim PDF (A4 yatay) · Word soru şablonu · tümü-ZIP.
+planı · resmî takvim PDF (A4 yatay) · Word soru şablonu · tümü-ZIP · BEP
+kapsamındaki öğrenciler idare özeti (20.09.2026 — yalnız idare nüshası, tümü-ZIP'e
+GİRMEZ; aşağıdaki "BEP…" paragrafı).
 
 **Takvim PDF'i (30.08.2026 eklentileri):** okul dışı makam sınavları (Bakanlık /
 İl MEM / İlçe MEM) hücrede nötr dolgu + sol kenar çizgisi + makam etiketiyle
@@ -719,9 +769,61 @@ yığın bozulmasıyla (0xC0000374) düştü. Gömülü sunucu altı iş parçac
 * **Ertelenen:** PDF üretimini ayrı alt süreçte koşmak (teknik borç TB15) — kayıt
   yeni bir çöküş gösterirse.
 
+**20.09.2026 — BEP kapsamındaki öğrenciler + bireysel soru dosyası (kullanıcı
+isteği).** İstek: "BEP kapsamındaki öğrencilerin sınavlarını da sisteme yükleyip
+sınav evrakını isimlerine basalım; hangi öğrenciye ayrı sınav yapılacağını
+kullanıcı seçsin; öğrenciyi ayrıştıracak bir işaret ne yoklama kâğıdına ne sınav
+kâğıdına basılsın." Dayanak: ÖDY md. 4/1-ç, 5/1-n, 6/1-d · Yönerge md. 5/1-u ·
+OKY md. 45/1-ğ · ÖDSHGM 10.09.2026 yazısı md. 8 · kanun düzeyinde 573 sayılı KHK
+md. 16/1 ("sınavlarda gerekli önlemler alınır ve düzenlemeler yapılır"). OYS'de
+karşılığı yoktur (yalnız `RuleReason.IEP` kategorisi vardı) — KS'ye özgü iştir.
+
+* **İki kayıt** (`sinav/services_individual.py`): `IepStudent` kalıcı listedir ve
+  YALNIZ üyelik tutar; `IndividualQuestionDocument` bir oturumda bir öğrenciye
+  dersin soru dosyası yerine basılacak PDF'tir — satırın VARLIĞI seçimdir, dosya
+  sonra yüklenir. Kullanıcı kararları: liste kalıcı + seçim oturumda; parola
+  zorunlu değil, uyarı var; basılı bilgi yalnız idare özeti.
+* **Öğrenci aynı ders grubunda kalır.** `conflict_group` değişmez: yerleşim, "aynı
+  seed → aynı dağıtım", salon evrakı, ders kodu rozeti ve sayım tablosu bireysel
+  dosyadan HABERSİZDİR. Bireysel dosya yalnız `booklet.build_room_package`in
+  doküman sözlüğünde kendi anahtarıyla yaşar (`"<grup anahtarı>#<satır pk>"`);
+  bant ders adı grubun adıyla AYNI yardımcıdan gelir (`services._band_course_name`).
+* **İşaret yok — iki dolaylı iz kabul edildi.** Program kâğıdın KENDİSİNİ
+  gizleyemez: sayfa sayısı ("Sayfa 1/2") ve soru bazlı puan tablosunun kutu sayısı
+  farklı olabilir. Kelebek düzeninde komşular zaten farklı sınav çözdüğü için göze
+  batmaz; "kendi dersliğinde" düzeninde batabilir — panel "aynı sayfa sayısı ve tek
+  puan kutusu" önerir, PDF'in içine ad yazılmamasını söyler.
+* **İsimsiz yedek bireysel dosyadan basılmaz** (`booklet.CourseDoc.backup`, §11
+  sapma notu): aksi hâlde salona tek öğrenciye özgü sınavın adsız kopyası düşerdi.
+* **Seçili ama dosyasız öğrenci kitapçık üretimini DURDURUR** ("soru dosyası
+  eksik dersler" kuralının eşi). Ret metni öğrenci kimliği taşımaz, yalnız sayı
+  söyler; kim olduğu panelde görünür. Kitapçığı bireysel dosyadan basılacak
+  öğrenci, grubunun ders dosyasını gerektirmez (tek öğrencili mazeret oturumu).
+* **Bayatlık.** Satırlar KATI silindiği için "bireysel dosyaya dokunuldu" damgası
+  oturumda durur (`ExamSession.individual_changed_at`); üretimden sonra seçim,
+  değiştirme ya da kaldırma üretimi `is_stale` yapar.
+* **İdare özeti** (`bep_idare_ozeti.html`): oturuma giren BEP'li öğrenciler — salon,
+  koltuk, okul no, ad, şube, ders, "basılacak kitapçık". `REPORT_CODES`te DEĞİLDİR:
+  "Tümünü indir" paketine girmez, ayrı uçtan bilerek indirilir. Gözetmen/salon
+  nüshası ÜRETİLMEZ (kullanıcı kararı — bilgiyi idareci kendisi aktarır). Dipnot
+  md. 6/3 bendi göstermez (açık karar — `docs/mevzuat/kvkk-6698.md` "Değerlendirme
+  notları — BEP").
+* **KVKK (md. 6'ya işaret eden veri).** Şifreli öğrenci bağı (§5); tanı/açıklama/
+  serbest metin alanı YOK; satırlar KATI silinir — öğrenci pasifleşince/silinince
+  anında (`persons.register_student_forget_hook` → `forget_student`; bağımlılık
+  yönü sinav → okul korunur), kancaya uğramayan yollar için okumada
+  (`purge_stale`), arşiv anonimleştirmesinde, oturum silinince ve "Tüm BEP
+  kayıtlarını sil" düğmesiyle; listeden çıkarma yalnız ONAYLANMAMIŞ oturumların
+  dosyalarını düşürür (onaylı/arşiv oturumun kaydı o sınavın yapıldığı hâlin
+  parçasıdır). Bireysel PDF diske `soru_b_<uuid>.pdf` adıyla yazılır; hata, günlük
+  ve uç YOLU öğrenci kimliği taşımaz (öğrenci pk'si gövdede, satır kimliği opak).
+* **Bilinçli olarak yapılmayanlar.** Ek süre / öğrenciye özgü süre (salon evrakına
+  basılsa işaret olurdu); "bu derste hep ayrı kâğıt" gibi ders bazlı kalıcı tercih
+  (hangi derslerin uyarlandığı da veridir); e-Okul'dan BEP aktarımı.
+
 Şablonlar: `templates/sinav/reports/` (base · _head · _kroki · _kroki_style ·
 _foto_plan · _foto_plan_style · r1_salon_evraki · r4_announcement ·
-r6_assignment · r7_tutanak · r8_validation · room_layout) + `booklet_overlay` + `calendar_pdf` +
+r6_assignment · r7_tutanak · r8_validation · room_layout · bep_idare_ozeti) + `booklet_overlay` + `calendar_pdf` +
 **`print/_design.css` ("Kurumsal Sade": `--pr-*` token'ları, DejaVu,
 `text-transform` YASAK — WeasyPrint TR i→I tuzağı, `|unlocalize` zorunlu)**
 birlikte kopyalanır. Hesaplanan CSS kuralları **`<head>` içinde** basılmalıdır:
@@ -815,6 +917,13 @@ varsayılan, ayarla değiştirilebilir" ilkesi.
   (5) onaylı takvimin oturumları tek tıkla üretilir, aynı saatteki sınavlar tek
   oturumda toplanır. Dönem sınırı (OKY md. 48/1 "dönemi aşamaz"), hafta sonu, olağan
   sınav haftasıyla çakışma ve üst makam günü UYARIDIR ("katı bir kısıtlama olmasın").
+- **BEP kapsamındaki öğrenci** (20.09.2026): ölçme ve değerlendirmede BEP esas
+  alınır (ÖDY md. 4/1-ç, 5/1-n, 6/1-d; Yönerge md. 5/1-u; OKY md. 45/1-ğ) ve sınavı
+  BEP'i doğrultusunda ders öğretmenince hazırlanır (ÖDSHGM 10.09.2026 yazısı
+  md. 8) → oturumda "bireysel soru dosyası". Invariantlar: çakışma grubu DEĞİŞMEZ;
+  salonlara giden evrakta ve kitapçık bandında ayıran işaret YOKTUR; seçili ama
+  dosyasız öğrenci üretimi durdurur; idare özeti pakete girmez; ret/günlük/uç yolu
+  öğrenci kimliği taşımaz (§9).
 - **Kümeler YALNIZ seçim aracıdır** (31.08.2026): küme kimliği hiçbir oturum
   kaydına yazılmaz; sihirbaz kümeyi yazma anında somut şube/salon pk'lerine
   açar. **Aynı kural takvim girdisine de uygulanır** (31.08.2026 eki):
@@ -861,6 +970,15 @@ disiplini, App.test.tsx M3 token bütünlüğü) · updates.py · `shared/crypto
 > `layout._reference_cell` public `reference_cell` oldu (ikinci doğruluk
 > kaynağı doğmasın diye). Sert kısıt, determinizm ve doğrulayıcı sözleşmesi
 > DEĞİŞMEDİ — bkz. §4 ceza demeti.
+>
+> **20.09.2026 sapması (`booklet.py` — AYNEN sınıfında KALIR):** `CourseDoc`'a
+> VARSAYILANLI tek alan eklendi (`backup: bool = True`) ve isimsiz yedek döngüsü
+> `backup=False` dokümanı atlar. İmzalar, varsayılan davranış ve çıktı DEĞİŞMEDİ;
+> alan yalnız bireysel soru dosyası için `False` verilir (§9). Emsal:
+> `validator.PlacedStudent` etiket alanları — aynı "varsayılanlı genişletme" deseni.
+> Soru PDF'i doğrulaması (`question_pdf.validate_question_pdf`) `services
+> .upload_question_document`ten AYNEN taşındı; ders dosyası ve bireysel dosya
+> ortak kullanır, kurallar ve ret metinleri aynıdır.
 
 ### UYARLA
 `models.py` (created_by düşer; soft-delete + koşullu unique + SNAPSHOT kalır;

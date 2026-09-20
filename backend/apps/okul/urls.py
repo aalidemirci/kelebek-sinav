@@ -66,6 +66,16 @@ urlpatterns = [
         name="subject-department-list",
     ),
     path(
+        "subject-departments/branch-candidates/",
+        views.DepartmentBranchCandidatesView.as_view(),
+        name="subject-department-branch-candidates",
+    ),
+    path(
+        "subject-departments/generate/",
+        views.DepartmentGenerateView.as_view(),
+        name="subject-department-generate",
+    ),
+    path(
         "subject-departments/<int:pk>/",
         views.SubjectDepartmentDetailView.as_view(),
         name="subject-department-detail",

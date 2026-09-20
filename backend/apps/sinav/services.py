@@ -31,7 +31,16 @@ from apps.dersler import services as ders_services
 from apps.okul import normalize as okul_normalize
 from apps.okul import selectors as okul_selectors
 from apps.okul.models import ClassSection, Personnel, SchoolConfig
-from apps.sinav import booklet, engine, layout, participants, reports, validator
+from apps.sinav import (
+    booklet,
+    engine,
+    layout,
+    participants,
+    question_pdf,
+    reports,
+    services_individual,
+    validator,
+)
 from apps.sinav.models import (
     BookletRun,
     BookletRunStatus,
@@ -569,6 +578,9 @@ def remove_exam_session(session: ExamSession) -> None:
     ExamSessionRoom.objects.filter(session=session).update(deleted_at=now)
     PlacementRule.objects.filter(session=session).update(deleted_at=now)
     ProctorExemption.objects.filter(session=session).update(deleted_at=now)
+    # Bireysel soru dosyaları KATI silinir (satır + dosya): özel nitelikli veriye
+    # işaret eden kayıt silinmiş oturumun altında artık bırakmaz.
+    services_individual.purge_session(session)
     session.delete()
 
 
@@ -1933,7 +1945,8 @@ def anonymize_exam_session(session: ExamSession) -> dict[str, int]:
     KS eki (OYS `kvkk_media_scope.PURGE_PENDING`de beyan edilen açık kalemin
     kapanışı): kitapçık ZIP'leri başlıklarında ad/no taşır, soru PDF'lerinin
     saklanması sınav güvenliği gereği istenmez — iki modelin dosyaları silinir,
-    satırlar (durum/manifest/sayım) kalır.
+    satırlar (durum/manifest/sayım) kalır. Bireysel soru dosyaları (20.09.2026)
+    satırıyla birlikte KATI silinir — satır öğrenci bağından ibarettir.
     """
     if session.status != ExamSessionStatus.ARCHIVED:
         raise ValidationError("Yalnız ARŞİV oturum anonimleştirilebilir.")
@@ -1960,6 +1973,9 @@ def anonymize_exam_session(session: ExamSession) -> dict[str, int]:
             teacher_name=ANONYMIZED_MARK, teacher=None
         ),
         "placement_rules": PlacementRule.all_objects.filter(session=session).update(student=None),
+        # Bireysel soru dosyası satırının TEK içeriği öğrenci bağıdır: bağı koparmak
+        # yerine satır + dosya KATI silinir (dosya silme yine commit sonrasına kalır).
+        "individual_questions": services_individual.purge_session(session),
         "deleted_files": len(files),
     }
     BookletRun.all_objects.filter(session=session).update(file="")
@@ -2382,13 +2398,6 @@ def render_session_reports_zip(session: ExamSession) -> ReportFile:
 # F5 — soru dosyası + kitapçık üretimi (R10; OYS T7'den UYARLA, senkron)
 # ===========================================================================
 
-_PDF_MAGIC = b"%PDF-"
-_MAX_QUESTION_PDF_MB = 20
-#: A4 nokta ölçüleri + tolerans (OYS Tur 646): Word'ün PDF ihracı 595.32×841.92
-#: gibi küsurat üretir — ±6pt tolerans bunu kapsar, Letter'ı (612×792) reddeder.
-_A4_W_PT, _A4_H_PT = 595.28, 841.89
-_A4_TOL_PT = 6.0
-
 
 def upload_question_document(
     sc: ExamSessionCourse,
@@ -2400,10 +2409,10 @@ def upload_question_document(
     """Oturum dersine soru PDF'i yükler; mevcut canlı dosya kapatılır (iz kalır).
 
     Doğrulama: PDF magic bytes + boyut + sayfa sayısı (pypdf açabilmeli) +
-    her sayfa A4 DİKEY ±6pt. Oturum ONAYLANDI/ARŞİV ise yükleme reddedilir.
+    her sayfa A4 DİKEY ±6pt (`question_pdf.validate_question_pdf`). Oturum
+    ONAYLANDI/ARŞİV ise yükleme reddedilir.
     """
     import hashlib
-    import io as _io
 
     from django.core.files.base import ContentFile
 
@@ -2435,51 +2444,10 @@ def upload_question_document(
                 "yüklü. Seviyeler farklı sorular çözecekse oturumu taslağa alıp Ders ve "
                 "Katılımcılar adımında bu işareti kaldırın, sonra yeniden dağıtın."
             )
-    if not file_bytes:
-        raise ValidationError("Boş dosya yüklenemez.")
-    if not file_bytes.startswith(_PDF_MAGIC):
-        raise ValidationError("Yalnız PDF kabul edilir (dosya imzası PDF değil).")
-    if len(file_bytes) > _MAX_QUESTION_PDF_MB * 1024 * 1024:
-        raise ValidationError(f"Dosya çok büyük (üst sınır {_MAX_QUESTION_PDF_MB} MB).")
-    if score_mode == ScoreMode.QUESTION_TABLE and not question_count:
-        raise ValidationError("Soru bazlı puan tablosu için soru sayısı girin.")
-
-    from pypdf import PdfReader
-
-    try:
-        reader = PdfReader(_io.BytesIO(file_bytes))
-        page_count = len(reader.pages)
-    except Exception as exc:  # pypdf çeşitli hatalar fırlatabilir
-        raise ValidationError("PDF okunamadı; dosya bozuk olabilir.") from exc
-    if page_count == 0:
-        raise ValidationError("PDF sayfa içermiyor.")
-
-    # Sayfa boyutu/yönü doğrulaması — bant üst 4 cm sözleşmesi yalnız A4 DİKEY
-    # sayfada tutar. /Rotate normalize edilir (90/270 taşıyan dikey mediabox
-    # fiilen YATAYdır). NOT: üst bant içerik tespiti BİLİNÇLE yapılmaz —
-    # metin katmanı taranmış PDF'te kördür, güvenilir sinyal değil.
-    for page_no, page in enumerate(reader.pages, start=1):
-        try:
-            rotation = int(page.get("/Rotate") or 0) % 360
-            box = page.mediabox
-            width, height = float(box.width), float(box.height)
-        except Exception as exc:
-            raise ValidationError(f"PDF sayfa {page_no} okunamadı; dosya bozuk olabilir.") from exc
-        if rotation in (90, 270):
-            width, height = height, width
-        if abs(width - _A4_W_PT) <= _A4_TOL_PT and abs(height - _A4_H_PT) <= _A4_TOL_PT:
-            continue
-        if abs(width - _A4_H_PT) <= _A4_TOL_PT and abs(height - _A4_W_PT) <= _A4_TOL_PT:
-            raise ValidationError(
-                f"Sayfa {page_no} YATAY (A4 yatay) — başlık bandı üst 4 cm sözleşmesi "
-                "bozulur. Sayfaları A4 DİKEY yapın; panelden indirilen Word şablonunu "
-                "kullanmanız önerilir."
-            )
-        raise ValidationError(
-            f"Sayfa {page_no} A4 boyutunda değil ({width:.0f}×{height:.0f} pt; beklenen "
-            "595×842). Belgeyi A4 dikey sayfa boyutuyla PDF'e aktarın; panelden "
-            "indirilen Word şablonunu kullanmanız önerilir."
-        )
+    # PDF imzası + boyut + A4 dikey denetimi bireysel soru dosyasıyla ORTAKTIR.
+    page_count = question_pdf.validate_question_pdf(
+        file_bytes, score_mode=score_mode, question_count=question_count
+    )
 
     with transaction.atomic():
         _retire_question_documents(sc)
@@ -2579,14 +2547,67 @@ def _course_docs(session: ExamSession) -> dict[str, booklet.CourseDoc]:
             pdf_bytes = fh.read()
         docs[key] = booklet.CourseDoc(
             group_key=key,
-            course_name=session_course_label(
-                sc.course.name, sc.level, shared_booklet=sc.shared_booklet
-            ),
+            course_name=_band_course_name(sc),
             pdf_bytes=pdf_bytes,
             score_mode=qd.score_mode,
             question_count=qd.question_count,
         )
     return docs
+
+
+def _band_course_name(sc: ExamSessionCourse) -> str:
+    """Kitapçık bandındaki ders adı — ders dosyası ve bireysel dosya AYNI kaynaktan.
+
+    Tek yardımcı bilinçli: bireysel soru dosyasının bandı öğrencinin grubundaki
+    öteki kitapçıklarla HARFİ HARFİNE aynı adı taşımalıdır (ayrıştıran işaret yok).
+    """
+    return session_course_label(sc.course.name, sc.level, shared_booklet=sc.shared_booklet)
+
+
+def _band_course_names(session: ExamSession) -> dict[str, str]:
+    """Çakışma grubu anahtarı → bant ders adı (soru dosyası yüklenmemiş gruplar DAHİL)."""
+    names: dict[str, str] = {}
+    for sc in ExamSessionCourse.objects.filter(session=session).select_related("course"):
+        if sc.level is None and not sc.shared_booklet:
+            continue  # bozuk satır; anahtarı üretilemez
+        names.setdefault(_session_course_group_key(sc), _band_course_name(sc))
+    return names
+
+
+def _individual_docs(
+    session: ExamSession, assignments: Iterable[SeatAssignment]
+) -> tuple[dict[int, str], dict[str, booklet.CourseDoc]]:
+    """Bireysel soru dosyaları: (öğrenci pk → doküman anahtarı, anahtar → CourseDoc).
+
+    Öğrencinin çakışma grubu DEĞİŞMEZ; yalnız kitapçığının basılacağı doküman
+    değişir. Bant adı grubun adıdır, isimsiz yedek döngüsüne girmez (`backup=False`).
+    Dosyası henüz yüklenmemiş seçim burada ATLANIR — `request_booklet_run` onu
+    üretimden önce reddeder.
+    """
+    rows = services_individual.booklet_rows(session)
+    if not rows:
+        return {}, {}
+    names = _band_course_names(session)
+    keys: dict[int, str] = {}
+    docs: dict[str, booklet.CourseDoc] = {}
+    for a in assignments:
+        student_id = a.student_id
+        row = rows.get(student_id) if student_id is not None else None
+        if student_id is None or row is None or not row.file:
+            continue
+        key = services_individual.document_key(a.conflict_group, row)
+        with row.file.open("rb") as fh:
+            pdf_bytes = fh.read()
+        keys[student_id] = key
+        docs[key] = booklet.CourseDoc(
+            group_key=key,
+            course_name=names.get(a.conflict_group, ""),
+            pdf_bytes=pdf_bytes,
+            score_mode=row.score_mode,
+            question_count=row.question_count,
+            backup=False,
+        )
+    return keys, docs
 
 
 def _course_docs_keys(session: ExamSession) -> set[str]:
@@ -2622,8 +2643,24 @@ def request_booklet_run(session: ExamSession, *, backup_copies: int = 0) -> Book
     if not assignments.exists():
         raise ValidationError("Oturumda yerleşim yok.")
 
-    # Eksik kontrolü grup anahtarı bazında — seviye başına ayrı dosya.
-    needed_groups = set(assignments.values_list("conflict_group", flat=True).distinct())
+    # Bireysel soru dosyası SEÇİLMİŞ ama yüklenmemişse üretim reddedilir: sessizce
+    # dersin kitapçığına düşmek bu özelliğin önlemek istediği hatadır. Metinde
+    # öğrenci kimliği YOKTUR (sayı yeter; kim olduğu panelde görünür — KVKK md. 6).
+    placed = list(assignments.values_list("student_id", "conflict_group"))
+    individual = services_individual.booklet_rows(session)
+    placed_ids = {student_id for student_id, _ in placed}
+    pending = sum(1 for sid, row in individual.items() if sid in placed_ids and not row.file)
+    if pending:
+        raise ValidationError(
+            f"Bireysel soru dosyası seçilen {pending} öğrencinin dosyası yüklenmemiş. "
+            "Sorular sekmesindeki “BEP kapsamındaki öğrenciler” bölümünden dosyayı "
+            "yükleyin ya da seçimi kaldırın."
+        )
+
+    # Eksik kontrolü grup anahtarı bazında — seviye başına ayrı dosya. Kitapçığı
+    # bireysel dosyadan basılacak öğrenci, grubunun dosyasını GEREKTİRMEZ (tek
+    # öğrencili mazeret oturumunda ders dosyası hiç yüklenmeyebilir).
+    needed_groups = {group for student_id, group in placed if student_id not in individual}
     have = set(_course_docs_keys(session))
     missing = needed_groups - have
     if missing:
@@ -2659,6 +2696,10 @@ def generate_booklets_for_run(run: BookletRun) -> BookletRun:
         .select_related("room")
         .order_by("room_id", "seat_no")
     )
+    # Bireysel soru dosyası: öğrencinin kitapçığı kendi dokümanından basılır; sıra,
+    # bant ve ders adı ötekilerle AYNIDIR (ayrıştıran işaret yok — CLAUDE.md §3).
+    individual_keys, individual_docs = _individual_docs(session, assignments)
+    docs.update(individual_docs)
     by_room: dict[int, tuple[str, list[booklet.BookletSpec]]] = {}
     for a in assignments:
         name, specs = by_room.setdefault(a.room_id, (a.room.name, []))
@@ -2667,7 +2708,11 @@ def generate_booklets_for_run(run: BookletRun) -> BookletRun:
                 full_name=a.full_name,
                 class_label=a.class_label,
                 student_number=a.student_number,
-                group_key=a.conflict_group,
+                group_key=(
+                    individual_keys.get(a.student_id, a.conflict_group)
+                    if a.student_id is not None
+                    else a.conflict_group
+                ),
             )
         )
 
@@ -2689,6 +2734,9 @@ def generate_booklets_for_run(run: BookletRun) -> BookletRun:
         ],
         "total_booklets": sum(p.booklet_count for p in packages),
         "total_pages": sum(p.page_count for p in packages),
+        # Yalnız SAYI (oturum geneli): idareci bireysel dosyaların bu üretime
+        # girdiğini görür; salon kırılımı ve kimlik BİLİNÇLE yok.
+        "individual_booklets": len(individual_keys),
     }
     run.file.save(
         f"kitapcik_oturum_{session.pk}_kosu_{run.pk}.zip", ContentFile(zip_bytes), save=False

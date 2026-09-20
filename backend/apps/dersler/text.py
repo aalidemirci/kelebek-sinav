@@ -11,6 +11,8 @@ from __future__ import annotations
 from django.core.exceptions import ValidationError
 
 from apps.dersler.models import PREP_COURSE_LEVEL
+from shared.text import tr_lower as _shared_tr_lower
+from shared.text import tr_title as _shared_tr_title
 from shared.text import tr_upper as _shared_tr_upper
 
 
@@ -68,20 +70,8 @@ def canon_course_key(name: str) -> str:
 tr_upper = _shared_tr_upper
 
 
-def tr_lower(value: str) -> str:
-    """Türkçe-duyarlı küçük harf (I→ı, İ→i)."""
-    return value.translate(str.maketrans("Iİ", "ıi")).lower()
-
-
-# Başlık biçiminde küçük kalan bağlaçlar (kelime başındaysa yine büyür).
-_TITLE_LOWER_WORDS = frozenset({"ve", "ile", "veya", "ya"})
-
-
-def _tr_title_token(token: str) -> str:
-    """Tek kelimeyi başlıklaştır; '/' parçalarını ayrı ayrı ('SPOR/GÖRSEL' → 'Spor/Görsel')."""
-    return "/".join(
-        tr_upper(part[0]) + tr_lower(part[1:]) if part else part for part in token.split("/")
-    )
+#: Türkçe-duyarlı küçük harf (I→ı, İ→i) — tek uygulama `shared/text.py`'dedir.
+tr_lower = _shared_tr_lower
 
 
 def titlecase_tr(name: str) -> str:
@@ -89,14 +79,10 @@ def titlecase_tr(name: str) -> str:
 
     Listeler seçmelileri TAMAMEN BÜYÜK HARFLE yazar ('SEÇMELİ SANAT EĞİTİMİ');
     katalog düzeni başlık biçimidir ('Seçmeli Sanat Eğitimi'). Bağlaçlar kelime
-    başında değilse küçük kalır.
+    başında değilse küçük kalır. Kural `shared.text.tr_title`dadır (20.09.2026 —
+    zümre adları da aynı kuralı kullanır); burada yalnız boş ad reddi eklenir.
     """
-    tokens = normalize_course_name(name).split()
-    out: list[str] = []
-    for i, tok in enumerate(tokens):
-        low = tr_lower(tok)
-        out.append(low if i > 0 and low in _TITLE_LOWER_WORDS else _tr_title_token(tok))
-    return " ".join(out)
+    return _shared_tr_title(normalize_course_name(name))
 
 
 def normalize_course_name(name: str) -> str:

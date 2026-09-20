@@ -189,6 +189,12 @@ export interface Personnel {
   last_name: string;
   title: string;
   branch: string;
+  /**
+   * Branşın EŞLEŞTİRME anahtarı (backend `departments.branch_key`): harf büyüklüğü,
+   * şapka ve boşluk farkları katlanmıştır. Zümre başkanı seçicisi öğretmeni zümrenin
+   * `branch_keys`iyle bu alan üzerinden eşler — arayüz yalnız eşitlik karşılaştırır.
+   */
+  branch_key: string;
   is_active: boolean;
   full_name: string;
 }
@@ -212,12 +218,42 @@ export interface SubjectDepartment {
   /** Başkanın ad-soyadı — backend şifreli alandan çözer (yazma tarafı yalnız `head`). */
   head_name: string;
   is_board_member: boolean;
+  /**
+   * Zümrenin branşları (öğretmen sicilindeki branş adları). Boşsa zümrenin branşı
+   * tanımsızdır: başkan adayı bütün aktif öğretmenlerdir. Bir branş en çok bir zümrededir.
+   */
+  branches: string[];
+  /** `branches`in eşleştirme anahtarları — `Personnel.branch_key` ile karşılaştırılır. */
+  branch_keys: string[];
 }
 
 export interface SubjectDepartmentWriteBody {
   name: string;
   head?: number | null;
   is_board_member?: boolean;
+  branches?: string[];
+}
+
+/**
+ * Öğretmen sicilindeki bir branş ve zümre kataloğundaki durumu
+ * (`GET /subject-departments/branch-candidates/`).
+ * NEW → zümresi yok, üretilebilir · LINKABLE → aynı adlı zümre var, üretim branşı
+ * ona bağlar · COVERED → branş zaten bir zümrede (`department_name`).
+ */
+export interface BranchCandidate {
+  key: string;
+  name: string;
+  teacher_count: number;
+  status: "NEW" | "LINKABLE" | "COVERED";
+  department_id: number | null;
+  department_name: string;
+}
+
+/** `POST /subject-departments/generate/` yanıtı — zümre ADLARI. */
+export interface DepartmentGenerateResult {
+  created: string[];
+  linked: string[];
+  skipped: string[];
 }
 
 /**
@@ -301,6 +337,11 @@ export interface PersonnelImportReport extends ImportReportBase {
   created_personnel: number;
   updated_personnel: number;
   unchanged_personnel: number;
+  /**
+   * Yalnız COMMIT yanıtında: zümre kataloğu BOŞKEN branşlardan kendiliğinden üretilen
+   * zümrelerin adları (katalogda zümre varsa boş liste — elle kurulan düzene dokunulmaz).
+   */
+  departments_created?: string[];
 }
 
 export type ImportReport = StudentImportReport | PersonnelImportReport;
@@ -591,6 +632,18 @@ export const okulApi = {
 
   deleteSubjectDepartment: (id: number): Promise<void> =>
     api.del<void>(`/subject-departments/${id}/`),
+
+  /** Öğretmen sicilindeki branşlar + katalogdaki durumları (üretim penceresinin adayları). */
+  listBranchCandidates: async (): Promise<BranchCandidate[]> =>
+    (await api.get<{ candidates: BranchCandidate[] }>("/subject-departments/branch-candidates/"))
+      .candidates,
+
+  /** Branşlardan zümre üretir (idempotent). `keys` verilmezse bütün adaylar işlenir. */
+  generateDepartments: (keys?: string[]): Promise<DepartmentGenerateResult> =>
+    api.post<DepartmentGenerateResult>(
+      "/subject-departments/generate/",
+      keys === undefined ? {} : { keys },
+    ),
 
   // --- İçe aktarma (önizleme hiçbir şey yazmaz; commit gerçek yazar) ---
 

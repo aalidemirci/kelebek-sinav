@@ -366,3 +366,45 @@ def test_api_personel_aramasi_ad_unvan_ve_bransta_turkce_katlar(client: APIClien
     assert adlar("mudur") == ["ÇAĞLA"]
     assert adlar("cografya") == ["DENEME"]
     assert adlar("olmayan") == []
+
+
+# ---------------------------------------------------------------------------
+# Unutma kancaları (20.09.2026) — okul DIŞI uygulamaların kişisel veri temizliği
+# ---------------------------------------------------------------------------
+
+
+def test_unutma_kancasi_pasiflesen_ve_silinen_ogrencide_calisir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bağımlılık yönü sinav → okul'dur: okul kancayı ÇAĞIRIR, kimin dinlediğini bilmez."""
+    cagrilar: list[int] = []
+    monkeypatch.setattr(persons, "_forget_hooks", [])
+    persons.register_student_forget_hook(cagrilar.append)
+    persons.register_student_forget_hook(cagrilar.append)  # idempotent kayıt
+
+    aktif = _ogrenci(student_number="901")
+    persons.update_student(aktif, class_section="B")
+    assert cagrilar == [], "aktif öğrencinin düzeltmesi veri sildirmez"
+
+    persons.update_student(aktif, status=StudentStatus.LEFT)
+    assert cagrilar == [aktif.pk]
+
+    silinecek = _ogrenci(student_number="902")
+    persons.delete_student(silinecek)
+    assert cagrilar == [aktif.pk, silinecek.pk]
+
+
+def test_unutma_kancasi_hata_verirse_durum_degisikligi_geri_sarilir(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Kanca AYNI işlemde koşar: temizlik başarısızsa öğrenci de pasifleşmiş sayılmaz."""
+
+    def _patla(_student_id: int) -> None:
+        raise RuntimeError("temizlik başarısız")
+
+    monkeypatch.setattr(persons, "_forget_hooks", [_patla])
+    ogrenci = _ogrenci(student_number="903")
+    with pytest.raises(RuntimeError):
+        persons.update_student(ogrenci, status=StudentStatus.LEFT)
+    ogrenci.refresh_from_db()
+    assert ogrenci.status == StudentStatus.ACTIVE

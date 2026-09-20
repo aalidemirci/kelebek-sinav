@@ -414,6 +414,20 @@ class SubjectDepartment(BaseModel):
         default=True,
         help_text="Okul zümre başkanları kuruluna katılan zümre.",
     )
+    # Zümrenin BRANŞLARI (20.09.2026, kullanıcı isteği): öğretmen sicilindeki
+    # `Personnel.branch` değerleri. İki işe yarar — zümreler branşlardan ÜRETİLİR
+    # (`services.departments.generate_from_branches`) ve başkan seçicisi yalnız bu
+    # branşların öğretmenlerini listeler. Liste metindir, FK değil: branş ayrı bir
+    # katalog değildir, e-Okul listesinden gelen serbest metindir; eşleşme yazıma
+    # değil ANAHTARA göredir (`branch_key` — büyük/küçük harf, şapka ve boşluk
+    # farkları aynı branştır). Boş liste = branşı tanımsız zümre: başkan adayı bütün
+    # aktif öğretmenlerdir (eski davranış). Bir branş EN ÇOK bir zümrededir.
+    branches = models.JSONField(
+        "branşlar",
+        default=list,
+        blank=True,
+        help_text="Zümrenin öğretmen sicilindeki branşları; başkan adayları bunlardan listelenir.",
+    )
 
     class Meta:
         verbose_name = "zümre"

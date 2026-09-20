@@ -41,13 +41,21 @@ class BookletSpec:
 
 @dataclass(frozen=True)
 class CourseDoc:
-    """Bir grubun (ders+seviye) soru dosyası + başlık ayarları."""
+    """Bir grubun (ders+seviye) soru dosyası + başlık ayarları.
+
+    `backup` (20.09.2026 — AYNEN sınıfından bilinçli, VARSAYILANLI sapma; eski
+    çağıranlar ve çıktı değişmez): bireysel soru dosyası (`services_individual`)
+    doküman sözlüğüne kendi anahtarıyla girer ve isimsiz yedek döngüsüne
+    KATILMAZ — aksi hâlde salona tek öğrenciye özgü sınavın adsız bir kopyası
+    basılır ve o salonda "farklı sınav çözen biri var" bilgisi açığa çıkardı.
+    """
 
     group_key: str
     course_name: str  # başlıkta görünen ad (seviye etiketi dahil edilebilir)
     pdf_bytes: bytes
     score_mode: str  # ScoreMode değeri
     question_count: int | None
+    backup: bool = True
 
 
 @dataclass(frozen=True)
@@ -170,9 +178,9 @@ def build_room_package(
     available = [s for s in specs if s.group_key in docs]
     missing = sorted({s.group_key for s in specs} - set(docs))
 
-    # İsimsiz yedekler: salonda görülen gruplardan sırayla.
+    # İsimsiz yedekler: salonda görülen gruplardan sırayla (bireysel dosya hariç).
     backup_specs: list[BookletSpec] = []
-    seen_groups = list(dict.fromkeys(s.group_key for s in available))
+    seen_groups = list(dict.fromkeys(s.group_key for s in available if docs[s.group_key].backup))
     for i in range(backup_copies):
         if not seen_groups:
             break

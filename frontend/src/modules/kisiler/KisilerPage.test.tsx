@@ -1,11 +1,16 @@
-// Kişiler sayfası testi (F4-D4): iki sekmeli liste, KVKK gereği TCKN'nin listede
+// Kişiler sayfası testi (F4-D4): sekmeli liste, KVKK gereği TCKN'nin listede
 // GÖRÜNMEMESİ, gecikmeli arama, elle ekleme/düzenleme/silme akışı (alan hataları
 // backend `fields`'tan), boş/hata durumları ve içe aktarma paneli (önizle → aktar,
 // already_imported uyarısı, şablon indirme).
+//
+// 20.09.2026: üçüncü sekme "BEP" (BEP kapsamındaki öğrenciler — ayrıntısı
+// bep/BepListesiPaneli.test.tsx'te). Sekme URL'de tutulur (`?tab=bep`), bu yüzden
+// sayfa yönlendirici içinde kurulur.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../lib/api";
@@ -46,6 +51,24 @@ vi.mock("../okul/api", async (importOriginal) => {
 
 vi.mock("../../lib/download", () => ({ saveBlob: vi.fn() }));
 
+// BEP sekmesi (20.09.2026): liste ucu + parola uyarısının sorduğu güvenlik durumu.
+const iepApiMock = vi.hoisted(() => ({
+  list: vi.fn(),
+  add: vi.fn(),
+  remove: vi.fn(),
+  deleteAll: vi.fn(),
+}));
+const guvenlikApiMock = vi.hoisted(() => ({ durum: vi.fn() }));
+
+vi.mock("../bep/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../bep/api")>();
+  return { ...actual, iepApi: iepApiMock };
+});
+vi.mock("../guvenlik/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../guvenlik/api")>();
+  return { ...actual, guvenlikApi: { ...actual.guvenlikApi, ...guvenlikApiMock } };
+});
+
 import KisilerPage from "./KisilerPage";
 
 const STUDENT: Student = {
@@ -66,6 +89,7 @@ const PERSONNEL: Personnel = {
   last_name: "Demirci",
   title: "Öğretmen",
   branch: "Coğrafya",
+  branch_key: "cografya",
   is_active: true,
   full_name: "Mehmet Demirci",
 };
@@ -88,16 +112,19 @@ function page<T>(results: T[], count = results.length) {
   return { count, next: null, previous: null, results };
 }
 
-function renderPage() {
+/** `route` derin bağlantıyı sınar: sekme URL'deki `tab` parametresinden okunur. */
+function renderPage(route = "/kisiler") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={qc}>
-      <SnackbarProvider>
-        <ConfirmProvider>
-          <KisilerPage />
-        </ConfirmProvider>
-      </SnackbarProvider>
-    </QueryClientProvider>,
+    <MemoryRouter initialEntries={[route]}>
+      <QueryClientProvider client={qc}>
+        <SnackbarProvider>
+          <ConfirmProvider>
+            <KisilerPage />
+          </ConfirmProvider>
+        </SnackbarProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -111,6 +138,24 @@ beforeEach(() => {
   });
   okulApiMock.listStudents.mockResolvedValue(page([STUDENT]));
   okulApiMock.listPersonnel.mockResolvedValue(page([PERSONNEL]));
+  iepApiMock.list.mockResolvedValue({
+    results: [
+      {
+        id: 7,
+        student_id: 1,
+        student_number: "123",
+        full_name: "Ayşe Yılmaz",
+        class_label: "10/A",
+      },
+    ],
+  });
+  guvenlikApiMock.durum.mockResolvedValue({
+    password_set: true,
+    locked: false,
+    transition_pending: false,
+    transition: "",
+    protected_fields: [],
+  });
 });
 
 afterEach(() => {
@@ -364,6 +409,46 @@ describe("KisilerPage — öğretmen sekmesi", () => {
   });
 });
 
+describe("KisilerPage — BEP sekmesi", () => {
+  it("üçüncü sekme BEP'tir; liste yalnız sekme açılınca istenir ve tam başlığıyla çizilir", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("Ayşe Yılmaz");
+
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
+    // BEP verisi sekme açılmadan istenmez (özel nitelikli veri — gereksiz okuma yok).
+    expect(iepApiMock.list).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("tab", { name: /BEP/ }));
+
+    // Sekme etiketi kısa ("BEP"), panel başlığı tam addır.
+    expect(await screen.findByText("BEP kapsamındaki öğrenciler")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Çıkar" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /BEP/ })).toHaveAttribute("aria-selected", "true");
+    expect(iepApiMock.list).toHaveBeenCalledTimes(1);
+    // Sicil sekmesinin parçaları kalktı.
+    expect(screen.queryByText("Öğrenci sicili")).not.toBeInTheDocument();
+  });
+
+  it("derin bağlantı: /kisiler?tab=bep doğrudan BEP sekmesini açar (kılavuz buraya bağlanır)", async () => {
+    renderPage("/kisiler?tab=bep");
+
+    expect(await screen.findByText("BEP kapsamındaki öğrenciler")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /BEP/ })).toHaveAttribute("aria-selected", "true");
+    expect(okulApiMock.listStudents).not.toHaveBeenCalled();
+  });
+
+  it("geçersiz sekme parametresi sessizce Öğrenciler sekmesine düşer", async () => {
+    renderPage("/kisiler?tab=yok-boyle-sekme");
+
+    expect(await screen.findByText("Öğrenci sicili")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Öğrenciler/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+});
+
 describe("KisilerPage — içe aktarma paneli", () => {
   it("yapıştırılan metin: önizleme raporu gösterilir, Aktar önizlemeden önce kapalıdır", async () => {
     okulApiMock.previewStudentImport.mockResolvedValue(PREVIEW_REPORT);
@@ -410,6 +495,45 @@ describe("KisilerPage — içe aktarma paneli", () => {
     expect(await screen.findByText(/daha önce aktarılmış/)).toBeInTheDocument();
     await waitFor(() =>
       expect(okulApiMock.listStudents.mock.calls.length).toBeGreaterThan(callsBefore),
+    );
+  });
+
+  it("öğretmen aktarımı: branşlardan üretilen zümreler sonuçta bildirilir ve Ayarlar'a bağlanır", async () => {
+    const rapor = {
+      file_hash: "xyz",
+      file_name: "",
+      total_rows: 2,
+      processed: 2,
+      created_personnel: 2,
+      updated_personnel: 0,
+      unchanged_personnel: 0,
+      already_imported: false,
+      dry_run: true,
+      warnings: [],
+      skipped: [],
+    };
+    okulApiMock.previewPersonnelImport.mockResolvedValue(rapor);
+    okulApiMock.commitPersonnelImport.mockResolvedValue({
+      ...rapor,
+      dry_run: false,
+      departments_created: ["Coğrafya", "Fizik"],
+    });
+    const user = userEvent.setup();
+    renderPage("/kisiler?tab=personel");
+
+    await user.type(await screen.findByLabelText("Ya da tabloyu yapıştırın"), "ad\tsoyad");
+    await user.click(screen.getByRole("button", { name: /Önizle/ }));
+    // Önizleme zümre ÜRETMEZ — bant yalnız aktarım sonucunda görünür.
+    await screen.findByText("Önizleme — hiçbir kayıt yazılmadı");
+    expect(screen.queryByText(/zümre oluşturuldu/)).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Aktar" }));
+    expect(
+      await screen.findByText(/Öğretmenlerin branşlarından 2 zümre oluşturuldu: Coğrafya, Fizik/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ayarlar → Zümreler" })).toHaveAttribute(
+      "href",
+      "/ayarlar?tab=zumreler",
     );
   });
 

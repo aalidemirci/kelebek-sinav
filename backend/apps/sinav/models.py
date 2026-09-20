@@ -265,6 +265,13 @@ class ExamSession(BaseModel):
     # (Ortaöğretim Kurumları Yön. md. 48/1 "bir defaya mahsus"; ülke/il/ilçe
     # geneli sınavlarda ayrıca Yönerge md. 5/1-çç).
     is_makeup = models.BooleanField("mazeret sınavı", default=False)
+    # Bireysel soru dosyası seçimi/yüklemesi/kaldırması bu damgayı ilerletir
+    # (20.09.2026). Satırlar KATI silindiği için kendi `updated_at`'leri kaldırmayı
+    # anlatamaz; kitapçık üretiminin bayatlığı bu damgaya karşı da ölçülür. Kimlik
+    # taşımaz: yalnız "bu oturumda bireysel dosyaya dokunuldu" der.
+    individual_changed_at = models.DateTimeField(
+        "bireysel soru dosyası değişim zamanı", null=True, blank=True
+    )
 
     class Meta:
         verbose_name = "sınav oturumu"
@@ -815,6 +822,87 @@ class BookletRun(BaseModel):
 
     def __str__(self) -> str:
         return f"Kitapçık koşusu #{self.pk} — oturum {self.session_id} ({self.status})"
+
+
+# ===========================================================================
+# BEP kapsamındaki öğrenciler + bireysel soru dosyası (20.09.2026)
+# ===========================================================================
+
+
+class IepStudent(BaseModel):
+    """BEP kapsamındaki öğrenci — YALNIZ ÜYELİK (kullanıcı kararı 20.09.2026).
+
+    Dayanak: kaynaştırma/bütünleştirme yoluyla eğitim gören öğrencinin ölçme ve
+    değerlendirmesinde BEP esas alınır (ÖDY md. 4/1-ç, 5/1-n, 6/1-d; Yönerge
+    md. 5/1-u; OKY md. 45/1-ğ) ve sınavı BEP'i doğrultusunda ders öğretmenince
+    hazırlanır (ÖDSHGM 10.09.2026 yazısı md. 8). Liste iki işe yarar: oturumda
+    "bu sınava BEP kapsamında şu öğrenciler giriyor" hatırlatması ve idare özeti.
+
+    ÖZEL NİTELİKLİ VERİYE İŞARET EDER (KVKK md. 6 — `PlacementRule` emsali, bir
+    adım ötesi: burada kayıt bir kuralın gerekçesi değil, listenin kendisidir):
+
+    - Tanı, rapor, engel türü, açıklama, tarih alanı YOKTUR ve EKLENMEZ.
+    - Öğrenci bağı FK DEĞİL şifreli metindir (`student_ref` = öğrenci pk'si):
+      okul numarası ve şube açık alan olduğundan düz FK, çalınmış bir veri
+      klasöründe "şu numaralı öğrenci BEP kapsamında" demek olurdu. Bedeli:
+      teklik ve süzme Python'dadır (`services_individual`), FK bütünlüğü yoktur —
+      ayrılan/silinen öğrencinin kaydı serviste KATI silinir (fotoğraf emsali).
+    - Soft-delete KULLANILMAZ: kaldırılan kayıt iz bırakmaz (`hard_delete`).
+    - Uygulama parolası kapalıyken alan DÜZ saklanır; arayüz bunu uyarır
+      (kullanıcı kararı: parola zorunlu değil, uyarı var — KVKK md. 6/4).
+    """
+
+    student_ref = EncryptedCharField("BEP kapsamındaki öğrenci", max_length=20)
+
+    class Meta:
+        verbose_name = "BEP kapsamındaki öğrenci"
+        verbose_name_plural = "BEP kapsamındaki öğrenciler"
+        ordering = ["pk"]
+
+    def __str__(self) -> str:
+        # Öğrenci kimliği BİLİNÇLE yok: __str__ günlüğe ve hata metnine sızar.
+        return f"BEP kaydı #{self.pk}"
+
+
+class IndividualQuestionDocument(BaseModel):
+    """Bir öğrenciye o oturumda dersin soru dosyası YERİNE basılacak PDF.
+
+    Satırın VARLIĞI seçimdir ("bu öğrenciye bireysel soru dosyası uygulanacak");
+    `file` boşsa dosya henüz yüklenmemiştir ve kitapçık üretimi reddedilir —
+    sessizce ortak kitapçığa düşmek, bu özelliğin önlemek istediği hatanın
+    kendisidir. Öğrenci aynı ders grubunda (`conflict_group`) KALIR: yerleşim,
+    salon evrakı, ders kodu ve sayım değişmez; fark yalnız kitapçığın içeriğidir.
+    Hiçbir evrakta ve kitapçık bandında bu öğrenciyi ayıran işaret BASILMAZ
+    (koruma testi `test_individual_questions.py`).
+
+    KVKK: `IepStudent` ile aynı kurallar — şifreli öğrenci bağı, soft-delete yok,
+    serbest metin yok. Dosya diske öğrenciyle İLİŞKİSİZ adla yazılır; yedek medya
+    dosyalarını kapsamaz (soru dosyası emsali). Arşiv anonimleştirmesinde ve
+    oturum silinince satır + dosya KATI silinir.
+    """
+
+    session = models.ForeignKey(
+        ExamSession,
+        on_delete=models.CASCADE,
+        related_name="individual_questions",
+        verbose_name="oturum",
+    )
+    student_ref = EncryptedCharField("bireysel soru dosyası öğrencisi", max_length=20)
+    file = models.FileField("bireysel soru PDF'i", upload_to="exam_questions/%Y/%m/", blank=True)
+    page_count = models.PositiveSmallIntegerField("sayfa sayısı", null=True, blank=True)
+    sha256 = models.CharField("içerik özeti", max_length=64, blank=True, default="")
+    score_mode = models.CharField(
+        "puan bölümü", max_length=14, choices=ScoreMode.choices, default=ScoreMode.SINGLE_BOX
+    )
+    question_count = models.PositiveSmallIntegerField("soru sayısı", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "bireysel soru dosyası"
+        verbose_name_plural = "bireysel soru dosyaları"
+        ordering = ["pk"]
+
+    def __str__(self) -> str:
+        return f"Bireysel soru dosyası #{self.pk} — oturum {self.session_id}"
 
 
 # ===========================================================================

@@ -363,6 +363,36 @@ class SubjectDepartmentDetailView(generics.RetrieveUpdateDestroyAPIView[SubjectD
         department_service.delete_subject_department(instance)
 
 
+class DepartmentBranchCandidatesView(APIView):
+    """`GET /subject-departments/branch-candidates/` — öğretmen sicilindeki branşlar.
+
+    Her branşın katalogdaki durumu döner (NEW · LINKABLE · COVERED); "Branşlardan
+    zümre üret" penceresi adayları bu listeden gösterir (`departments.branch_candidates`).
+    """
+
+    def get(self, request: Request) -> Response:
+        return Response(
+            {"candidates": [c.to_dict() for c in department_service.branch_candidates()]}
+        )
+
+
+class DepartmentGenerateView(APIView):
+    """`POST /subject-departments/generate/` — branşlardan zümre üretir (idempotent).
+
+    Gövde `{"keys": [...]}` verilirse YALNIZ o branşlar; verilmezse bütün adaylar.
+    """
+
+    def post(self, request: Request) -> Response:
+        keys = request.data.get("keys")
+        if keys is not None and (
+            not isinstance(keys, list) or not all(isinstance(key, str) for key in keys)
+        ):
+            raise serializers.ValidationError(
+                {"keys": "Branş anahtarları metin listesi olmalıdır."}
+            )
+        return Response(department_service.generate_from_branches(keys))
+
+
 # ---------------------------------------------------------------------------
 # İçe aktarma (dosya VEYA pano metni — aynı boru hattı)
 # ---------------------------------------------------------------------------
@@ -404,8 +434,22 @@ class PersonnelImportPreviewView(_BaseImportView):
 
 
 class PersonnelImportCommitView(_BaseImportView):
+    """Öğretmen aktarımı. Zümre kataloğu BOŞSA branşlardan zümreler de üretilir.
+
+    20.09.2026 (kullanıcı isteği): ilk kurulumda öğretmen listesi yüklenince
+    zümreler hazır gelir. Katalogda zümre varken hiçbir şey eklenmez — idarecinin
+    kaldırdığı zümre sonraki aktarımda sessizce geri gelmesin; o durumda üretim
+    Ayarlar → Zümreler'deki düğmeyle yapılır. Önizleme ucu üretim YAPMAZ.
+    """
+
     file_handler = "commit_personnel_file"
     text_handler = "commit_personnel_text"
+
+    def post(self, request: Request) -> Response:
+        response = super().post(request)
+        generated = department_service.generate_if_catalog_empty()
+        response.data["departments_created"] = generated["created"] if generated else []
+        return response
 
 
 # ---------------------------------------------------------------------------

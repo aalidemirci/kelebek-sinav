@@ -1,12 +1,18 @@
 // Kişiler sayfası (DD kalıbından KS'ye) — öğrenci ve öğretmen sicillerinin tek
-// ekranı. İki sekme; her sekmede arama/filtre + sayfalama, Dialog içinde elle
+// ekranı. Sicil sekmelerinde arama/filtre + sayfalama, Dialog içinde elle
 // ekleme-düzenleme-silme ve "e-Okul listesinden aktar" paneli (önizle → aktar).
 // KVKK (tasarım §5): TCKN, veli ve demografi alanları bu programda HİÇ YOKTUR —
 // kelebek dağıtımı ad-soyad + okul no + sınıf/şube üçlüsüyle çalışır.
+//
+// Üçüncü sekme (20.09.2026) BEP kapsamındaki öğrenciler listesidir
+// (`bep/BepListesiPaneli` — yalnız üyelik; tanı/açıklama alanı yoktur). Sekme
+// URL'de tutulur (`?tab=bep`): kılavuz doğrudan o sekmeye bağlanır.
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { useFormErrors } from "../../hooks/useFormErrors";
+import { useTabParam } from "../../hooks/useTabParam";
 import { ApiError } from "../../lib/api";
 import { saveBlob } from "../../lib/download";
 import { formatNumber } from "../../lib/format";
@@ -26,6 +32,7 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import type { TabItem } from "../../ui/Tabs";
 import TextField from "../../ui/TextField";
+import BepListesiPaneli from "../bep/BepListesiPaneli";
 import {
   importCounts,
   okulApi,
@@ -48,9 +55,15 @@ import FotografPaneli from "./FotografPaneli";
 /** Sayfa başına kayıt (CLAUDE.md §7 — liste uçları limit/offset, varsayılan 25). */
 const PAGE_SIZE = 25;
 
+// TAB_KEYS[0] varsayılan sekmedir (useTabParam fallback) — başa yeni anahtar EKLEME.
+const TAB_KEYS = ["ogrenciler", "personel", "bep"] as const;
+type TabKey = (typeof TAB_KEYS)[number];
+
 const TABS: TabItem[] = [
   { key: "ogrenciler", label: "Öğrenciler", icon: "school" },
   { key: "personel", label: "Öğretmenler", icon: "badge" },
+  // Sekme etiketi kısa, panel başlığı tam addır: "BEP kapsamındaki öğrenciler".
+  { key: "bep", label: "BEP", icon: "assignment_ind" },
 ];
 
 function emptyPage<T>(): Paginated<T> {
@@ -78,7 +91,7 @@ function useDebounced(value: string, delay = 300): string {
 }
 
 export default function KisilerPage() {
-  const [active, setActive] = useState("ogrenciler");
+  const [active, setActive] = useTabParam<TabKey>("tab", TAB_KEYS, "ogrenciler");
 
   return (
     <div className="space-y-[var(--ks-page-gap)]">
@@ -95,13 +108,15 @@ export default function KisilerPage() {
       <Tabs
         items={TABS}
         active={active}
-        onChange={setActive}
+        onChange={(key) => setActive(key as TabKey)}
         ariaLabel="Kişiler bölümleri"
         idBase="kisiler"
       />
 
       <div {...tabPanelProps("kisiler", active)}>
-        {active === "ogrenciler" ? <OgrencilerSekmesi /> : <PersonelSekmesi />}
+        {active === "ogrenciler" && <OgrencilerSekmesi />}
+        {active === "personel" && <PersonelSekmesi />}
+        {active === "bep" && <BepListesiPaneli />}
       </div>
     </div>
   );
@@ -931,11 +946,32 @@ function ImportReportView({ report }: { report: ImportReport }) {
     { label: "Değişmeyen", value: counts.unchanged },
   ];
 
+  // Öğretmen aktarımı zümre kataloğu BOŞKEN branşlardan zümreleri de üretir
+  // (yalnız commit yanıtında gelir; katalog doluyken liste boştur).
+  const zumreler = "departments_created" in report ? (report.departments_created ?? []) : [];
+
   return (
     <div className="space-y-3 rounded-shape-md bg-surface-container-low p-4">
       <p className="text-title-small text-on-surface">
         {report.dry_run ? "Önizleme — hiçbir kayıt yazılmadı" : "İçe aktarma sonucu"}
       </p>
+
+      {zumreler.length > 0 && (
+        <div className="flex items-start gap-2 rounded-shape-sm bg-secondary-container px-4 py-3 text-body-medium text-on-secondary-container">
+          <Icon name="groups" size="lg" />
+          <span>
+            Öğretmenlerin branşlarından {formatNumber(zumreler.length)} zümre oluşturuldu:{" "}
+            {zumreler.join(", ")}. Zümre başkanlarını{" "}
+            <Link
+              to="/ayarlar?tab=zumreler"
+              className="font-medium underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              Ayarlar → Zümreler
+            </Link>{" "}
+            ekranından seçin; zümreleri orada birleştirebilir ya da kaldırabilirsiniz.
+          </span>
+        </div>
+      )}
 
       {report.already_imported && (
         <div className="flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-4 py-3 text-body-medium text-on-tertiary-container">

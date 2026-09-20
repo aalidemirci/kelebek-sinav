@@ -192,17 +192,39 @@ def seating_changed_at(session_id: int) -> datetime | None:
     return latest
 
 
-def booklet_run_is_stale(run: BookletRun, changed_at: datetime | None) -> bool:
-    """Üretim GÜNCEL yerleşimi yansıtmıyor mu?
+def individual_changed_at(session_id: int) -> datetime | None:
+    """Oturumun bireysel soru dosyalarına son dokunulan an (seçim/yükleme/kaldırma).
+
+    Satırlar KATI silindiği için damga oturumda durur (`ExamSession
+    .individual_changed_at`); hiç dokunulmadıysa `None`.
+    """
+    stamp: datetime | None = (
+        ExamSession.objects.filter(pk=session_id)
+        .values_list("individual_changed_at", flat=True)
+        .first()
+    )
+    return stamp
+
+
+def booklet_run_is_stale(
+    run: BookletRun, changed_at: datetime | None, individual_at: datetime | None = None
+) -> bool:
+    """Üretim GÜNCEL yerleşimi (ve bireysel soru dosyalarını) yansıtmıyor mu?
 
     Kitapçık her öğrencinin salonunu, koltuğunu ve adını taşır; üretimden sonra
     oturum yeniden dağıtıldıysa, taslağa alındıysa ya da koltuk takası yapıldıysa
     eski ZIP yanlış salona/koltuğa kitapçık demektir. Dosya silinmez (arşiv izi),
     ama arayüz uyarmak ZORUNDADIR. Yalnız tamamlanmış üretim için anlamlıdır.
+
+    `individual_at` (20.09.2026): üretimden SONRA bir bireysel soru dosyası
+    seçildi, değişti ya da kaldırıldıysa eski ZIP o öğrenciye yanlış kitapçığı
+    taşır — aynı uyarı. Verilmezse eski davranış (yalnız yerleşim) geçerlidir.
     """
     if run.status != BookletRunStatus.COMPLETED:
         return False
-    return changed_at is None or changed_at > run.created_at
+    if changed_at is None or changed_at > run.created_at:
+        return True
+    return individual_at is not None and individual_at > run.created_at
 
 
 # ---------------------------------------------------------------------------

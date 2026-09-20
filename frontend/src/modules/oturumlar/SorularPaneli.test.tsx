@@ -2,15 +2,21 @@
 // soru dosyası yükleme/silme, kilit (onaylı/arşiv), Word şablonu indirme ve
 // SENKRON kitapçık üretimi (polling yok — tek istekte tamamlanmış koşu)
 // doğrulanır. Ortak kurucular testFixtures.ts'ten.
+//
+// 20.09.2026: panel BEP kapsamındaki öğrencilerin bireysel soru dosyaları
+// bölümünü de barındırır (`bep/BireyselSorularBolumu` — ayrıntısı kendi test
+// dosyasında). Burada uç sahtelenir; varsayılan yanıt BOŞTUR (bölüm çizilmez),
+// böylece eski testler bölümden etkilenmez.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../lib/api";
 import { ConfirmProvider } from "../../ui/ConfirmProvider";
 import { SnackbarProvider } from "../../ui/SnackbarProvider";
+import type { IndividualQuestionRow } from "../bep/api";
 import type { ExamSession } from "./api";
 import {
   makeBookletRun,
@@ -31,10 +37,21 @@ const sessionApi = vi.hoisted(() => ({
   bookletRunZipBlob: vi.fn(),
 }));
 const download = vi.hoisted(() => ({ saveBlob: vi.fn() }));
+const bireysel = vi.hoisted(() => ({ list: vi.fn() }));
+const guvenlik = vi.hoisted(() => ({ durum: vi.fn() }));
 
 vi.mock("./api", async (importActual) => {
   const actual = await importActual<typeof import("./api")>();
   return { ...actual, examSessionApi: { ...actual.examSessionApi, ...sessionApi } };
+});
+vi.mock("../bep/api", async (importActual) => {
+  const actual = await importActual<typeof import("../bep/api")>();
+  return { ...actual, individualQuestionApi: { ...actual.individualQuestionApi, ...bireysel } };
+});
+// Bireysel bölümün parola uyarısı güvenlik durumunu sorar (parola açık → bant yok).
+vi.mock("../guvenlik/api", async (importActual) => {
+  const actual = await importActual<typeof import("../guvenlik/api")>();
+  return { ...actual, guvenlikApi: { ...actual.guvenlikApi, ...guvenlik } };
 });
 // Yalnız saveBlob sahtelenir; dosya adını kuran `dosyaAdi` GERÇEK kalır ki
 // indirilen adın biçimi de sınansın.
@@ -68,6 +85,31 @@ function dagitilmisOturum(overrides: Partial<ExamSession> = {}): ExamSession {
     ...overrides,
   });
 }
+
+/** Oturuma giren BEP kapsamındaki öğrenci — ad ve numara UYDURMADIR (KVKK). */
+const BEP_SATIRI: IndividualQuestionRow = {
+  student_id: 303,
+  student_number: "103",
+  full_name: "Zeynep Kaya",
+  class_label: "10/C",
+  room_name: "D-203",
+  seat_no: 3,
+  course_label: "Fizik — 10. Sınıf",
+  on_iep_list: true,
+  document: null,
+};
+
+beforeEach(() => {
+  // Varsayılan: oturuma giren BEP kapsamında öğrenci yok → bölüm hiç çizilmez.
+  bireysel.list.mockResolvedValue({ rows: [] });
+  guvenlik.durum.mockResolvedValue({
+    password_set: true,
+    locked: false,
+    transition_pending: false,
+    transition: "",
+    protected_fields: [],
+  });
+});
 
 afterEach(() => vi.clearAllMocks());
 
@@ -225,7 +267,7 @@ describe("SorularPaneli", () => {
     await waitFor(() => expect(download.saveBlob).toHaveBeenCalledWith(blob, "Soru-Şablonu.docx"));
   });
 
-  it("yerleşimden ESKİ kitapçık üretimi uyarıyla işaretlenir; güncel üretim işaretlenmez", async () => {
+  it("GÜNCEL OLMAYAN kitapçık üretimi uyarıyla işaretlenir; güncel üretim işaretlenmez", async () => {
     sessionApi.question.mockRejectedValue(
       new ApiError(404, "not_found", "Soru dosyası yüklenmemiş."),
     );
@@ -238,10 +280,85 @@ describe("SorularPaneli", () => {
     renderPanel(dagitilmisOturum());
 
     // Yalnız eski üretimin satırında uyarı var; ZIP yine indirilebilir (arşiv izi).
-    const uyari = await screen.findByText("Eski yerleşime göre — yeniden üretin");
-    expect(screen.getAllByText("Eski yerleşime göre — yeniden üretin")).toHaveLength(1);
+    // Metin iki nedeni de kapsar: yerleşim YA DA bir bireysel soru dosyası değişmiştir
+    // (eski "Eski yerleşime göre" ikincisinde yanlış bilgi olurdu).
+    const uyari = await screen.findByText("Güncel değil — yeniden üretin");
+    expect(screen.getAllByText("Güncel değil — yeniden üretin")).toHaveLength(1);
+    expect(screen.queryByText(/Eski yerleşime göre/)).not.toBeInTheDocument();
     expect(uyari.closest("li")).toHaveTextContent(/Üretim · 01\.06\.2026/);
     expect(screen.getAllByRole("button", { name: "ZIP indir" })).toHaveLength(2);
+  });
+
+  it("üretime giren bireysel soru dosyası sayısı satırda yalnız SAYI olarak görünür", async () => {
+    sessionApi.question.mockRejectedValue(
+      new ApiError(404, "not_found", "Soru dosyası yüklenmemiş."),
+    );
+    sessionApi.bookletRuns.mockResolvedValue(
+      paginated([
+        makeBookletRun({
+          id: 42,
+          created_at: "2026-06-02T10:00:00+03:00",
+          manifest: { total_booklets: 8, total_pages: 16, individual_booklets: 2 },
+        }),
+        // Eski üretimin manifestinde alan yoktur; 0 da satır çizdirmez.
+        makeBookletRun({ id: 41 }),
+        makeBookletRun({ id: 40, manifest: { total_booklets: 8, individual_booklets: 0 } }),
+      ]),
+    );
+    renderPanel(dagitilmisOturum());
+
+    const bilgi = await screen.findByText("2 bireysel soru dosyası dahil");
+    expect(bilgi.closest("li")).toHaveTextContent(/Üretim · 02\.06\.2026/);
+    expect(screen.getAllByText(/bireysel soru dosyası dahil/)).toHaveLength(1);
+  });
+
+  it("oturuma giren BEP kapsamında öğrenci yoksa bireysel soru dosyaları bölümü çizilmez", async () => {
+    sessionApi.question.mockRejectedValue(
+      new ApiError(404, "not_found", "Soru dosyası yüklenmemiş."),
+    );
+    sessionApi.bookletRuns.mockResolvedValue(paginated([]));
+    renderPanel(dagitilmisOturum());
+
+    await waitFor(() => expect(bireysel.list).toHaveBeenCalledWith(5));
+    expect(await screen.findByText("Matematik — 9. Sınıf")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /BEP kapsamındaki öğrenciler/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "İdare özeti (PDF)" })).toBeNull();
+  });
+
+  it("BEP kapsamında öğrenci varsa bölüm ders satırlarıyla kitapçık üretimi ARASINDA çizilir", async () => {
+    sessionApi.question.mockRejectedValue(
+      new ApiError(404, "not_found", "Soru dosyası yüklenmemiş."),
+    );
+    sessionApi.bookletRuns.mockResolvedValue(paginated([]));
+    bireysel.list.mockResolvedValue({ rows: [BEP_SATIRI] });
+    renderPanel(dagitilmisOturum());
+
+    const baslik = await screen.findByRole("heading", {
+      name: "BEP kapsamındaki öğrenciler — bireysel soru dosyaları",
+    });
+    const dersSatiri = screen.getByText("Matematik — 9. Sınıf");
+    const uretim = screen.getByRole("heading", { name: "Kişiselleştirilmiş kitapçıklar" });
+    // Belge sırası: ders satırı → bireysel bölüm → kitapçık üretim kutusu.
+    const sonraGelir = (once: Node, sonra: Node) =>
+      (once.compareDocumentPosition(sonra) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    expect(sonraGelir(dersSatiri, baslik)).toBe(true);
+    expect(sonraGelir(baslik, uretim)).toBe(true);
+    // DAĞITILDI oturumda seçim açıktır.
+    expect(
+      screen.getByRole("button", { name: "Bireysel soru dosyası uygula" }),
+    ).toBeInTheDocument();
+  });
+
+  it("onaylı oturumda bireysel soru dosyası seçimi de kilitlidir", async () => {
+    sessionApi.question.mockResolvedValue(makeQuestionMeta());
+    sessionApi.bookletRuns.mockResolvedValue(paginated([]));
+    bireysel.list.mockResolvedValue({ rows: [BEP_SATIRI] });
+    renderPanel(dagitilmisOturum({ status: "APPROVED" }));
+
+    expect(await screen.findByText("Dersin soru dosyası")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Bireysel soru dosyası uygula" }),
+    ).not.toBeInTheDocument();
   });
 
   it("kitapçık üretimi SENKRON: başarıda 'üretildi' + liste tazelenir, ZIP indirilebilir", async () => {

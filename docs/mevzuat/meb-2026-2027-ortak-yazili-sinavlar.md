@@ -18,6 +18,12 @@ etiketler: [ortak-yazili-sinav, sinav-takvimi, sinav-haftasi, gunluk-sinav-sayis
 >   4. sınav ret (`services_calendar._daily_exam_load`).
 > - Madde 7 (son günden başlanarak planlama) → otomatik yerleştirmenin "Son
 >   günden başlayarak yerleştir" tercihi (varsayılan açık, kapatılabilir).
+> - Madde 8 (BEP'li öğrencinin sınavı BEP'i doğrultusunda ders öğretmenince
+>   hazırlanır) → "BEP kapsamındaki öğrenciler" listesi + oturumda "bireysel soru
+>   dosyası" (20.09.2026 — `services_individual`): seçilen öğrencinin kitapçığı
+>   kendi PDF'inden ADINA basılır, salona giden hiçbir evrakta ayıran işaret yoktur;
+>   basılı bilgi yalnız idare özetidir. KVKK değerlendirmesi: `kvkk-6698.md`
+>   "Değerlendirme notları — BEP".
 > - Madde 11 (merkezî sınav haftası) → Kullanım Kılavuzu notu.
 > - Ek (Ülke Geneli Ortak Yazılı Sınav Takvimi) → `official_windows.NATIONAL_EXAMS`.
 >   Takvim oluşturulurken okulun sınıf düzeylerindeki sınavlar Bakanlık sınavı

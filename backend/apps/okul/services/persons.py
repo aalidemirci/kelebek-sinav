@@ -6,12 +6,33 @@ biçimi), yazma burada. View ORM çağırmaz (katman disiplini).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from django.db import transaction
 
 from apps.okul.models import Personnel, Student, StudentStatus
 from apps.okul.services import photos
+
+#: Ayrılan/silinen öğrencinin OKUL DIŞI uygulamalardaki kişisel verisini silen
+#: kancalar (20.09.2026). Bağımlılık yönü sinav → okul'dur; okul sinav'ı import
+#: etmez — sinav kendi temizliğini `AppConfig.ready` içinde buraya kaydeder
+#: (BEP kaydı + bireysel soru dosyaları: `sinav.services_individual.forget_student`).
+#: Kanca AYNI işlemde koşar: hata verirse durum değişikliği de geri sarılır.
+_forget_hooks: list[Callable[[int], None]] = []
+
+
+def register_student_forget_hook(hook: Callable[[int], None]) -> None:
+    """Öğrenci pasifleşince/silinince `hook(student_id)` çağrılsın (idempotent kayıt)."""
+    if hook not in _forget_hooks:
+        _forget_hooks.append(hook)
+
+
+def _forget_student_data(student_id: int) -> None:
+    """KVKK: ayrılan öğrencinin fotoğrafı ve kancalı verileri KATI silinir."""
+    photos.delete_student_photo(student_id)
+    for hook in _forget_hooks:
+        hook(student_id)
 
 
 @transaction.atomic
@@ -29,7 +50,7 @@ def update_student(student: Student, **fields: Any) -> Student:
         student.save(update_fields=[*changed, "updated_at"])
     if student.status != StudentStatus.ACTIVE:
         # KVKK: ayrılan öğrencinin fotoğrafı tutulmaz (StudentPhoto docstring'i).
-        photos.delete_student_photo(student.pk)
+        _forget_student_data(student.pk)
     return student
 
 
@@ -37,7 +58,7 @@ def update_student(student: Student, **fields: Any) -> Student:
 def delete_student(student: Student) -> None:
     student.delete()  # soft delete (BaseModel)
     # Kayıt gizlenir ama fotoğraf KATI silinir — kişisel veri artığı kalmasın.
-    photos.delete_student_photo(student.pk)
+    _forget_student_data(student.pk)
 
 
 @transaction.atomic

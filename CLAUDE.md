@@ -110,6 +110,40 @@
   çözülemeyen değeri atlar (evrak fotoğrafsız basılır, çökmez). Paket
   sigortası: `--pdf-duman` JPEG'in PDF'e gerçekten gömüldüğünü sınar —
   WeasyPrint çözemediği görseli yalnız UYARIYLA atlar.
+- **BEP verisi KVKK md. 6'ya işaret eder (20.09.2026, tasarım §9 + `docs/mevzuat/
+  kvkk-6698.md` "Değerlendirme notları — BEP"):** `sinav.IepStudent` kalıcı listedir
+  ve YALNIZ üyelik tutar; `sinav.IndividualQuestionDocument` oturumdaki bireysel soru
+  dosyasıdır (satırın varlığı seçimdir). Öğrenci bağı FK DEĞİL `EncryptedCharField`'dır
+  — okul no açık alan olduğundan düz FK "şu numaralı öğrenci BEP kapsamında" derdi.
+  Bedeli: teklik, süzme ve öksüz temizliği `services_individual`'da Python'la;
+  çözülemeyen bağ (kilitli kasa) ATLANIR, asla silinmez. Satırlar KATI silinir
+  (soft-delete yok): öğrenci pasifleşince/silinince anında — okul sinav'ı import
+  ETMEZ, temizlik `persons.register_student_forget_hook` kancasıyla
+  (`SinavConfig.ready`) gelir — ayrıca okumada (`purge_stale`), arşiv
+  anonimleştirmesinde, oturum silinince. EKLENMEYECEKLER: tanı/rapor/engel türü/
+  açıklama alanı; salon evrakına, duyuruya, tutanağa, kitapçık bandına öğrenciyi
+  ayıran işaret; gözetmene/salona giden BEP belgesi (kullanıcı kararı: basılı bilgi
+  yalnız idare özeti, o da `REPORT_CODES`e ve "Tümünü indir"e GİRMEZ); ek süre
+  gibi salon evrakına basılacak öğrenciye özgü düzenleme. Hata, günlük ve uç YOLU
+  öğrenci kimliği taşımaz (Django 4xx yanıtını yoluyla günlüğe yazar): öğrenci
+  pk'si gövdede gelir, yoldaki kimlik opak satır kimliğidir; ret metni yalnız SAYI
+  söyler. Parola bu özellik için zorunlu DEĞİL (kullanıcı kararı) — kapalıyken
+  arayüz uyarır. İdare özetinin dipnotu md. 6/3 bendi GÖSTERMEZ (açık karar; aday
+  573 KHK md. 16/1 + 6/3-b) — bent yazılacaksa önce KVKK notundaki gerekçe okunur.
+- **Zümreler branştan ÜRETİLİR, branş katalog değildir (20.09.2026, tasarım §4):**
+  `SubjectDepartment.branches` öğretmen sicilindeki serbest metindir (`Personnel
+  .branch`); eşleşme yazıma değil ANAHTARA göredir (`okul.services.departments
+  .branch_key` — "COĞRAFYA" = "Coğrafya", "Ahlâk" = "Ahlak"). Anahtar backend'de
+  üretilir ve serileştiricide döner (`branch_key` / `branch_keys`) — arayüzde
+  normalizasyon KOPYASI yazmayın, yalnız eşitlik sorun. Bir branş en çok bir
+  zümrededir. Kendiliğinden üretim YALNIZ katalog boşken olur (öğretmen aktarımının
+  commit VIEW'ı; `imports.py`ye dokunulmadı, önizleme üretmez): katalogda zümre
+  varken sessizce eklemek idarecinin kaldırdığı zümreyi geri getirirdi — o durumda
+  üretim Ayarlar → Zümreler'deki pencereden, seçilerek yapılır. Üretim adı branşla
+  aynı zümreyi yeniden yaratmaz, branşı ona BAĞLAR (ad tekliği). Zümre adı imza
+  bloğuna "<ad> Zümre Başkanı" basıldığı için tamamı büyük yazım başlık biçimine
+  çevrilir — `shared.text.tr_title` ders adlarıyla TEK uygulamadır (okul, dersler'i
+  import etmez).
 - **Salon planında ÖN CEPHE bandı:** ızgaranın 0. satırı öğretmen masası/tahta/
   kapı içindir ve arayüzdeki "Sıra satırı" sayımına GİRMEZ (`planEdit
   .FRONT_BAND_ROWS`). `layout.DEFAULT_LAYOUT_PLAN` (6×4) ile `planEdit
@@ -341,6 +375,19 @@
   `updated_at`'i üretimden yeniyse). Dosya silinmez; arayüz satırı uyarıyla
   işaretler. Yerleşime dokunan yeni bir işlem `updated_at`'i İLERLETMELİDİR
   (`QuerySet.update()` ilerletmez).
+- **Bireysel soru dosyası çakışma grubunu DEĞİŞTİRMEZ** (20.09.2026): öğrenci aynı
+  `conflict_group`ta kalır — yerleşim, "aynı seed → aynı dağıtım", salon evrakı, ders
+  kodu ve sayım bireysel dosyadan habersizdir. Dosya yalnız `booklet
+  .build_room_package`in doküman sözlüğünde kendi anahtarıyla yaşar
+  (`"<grup anahtarı>#<satır pk>"` — `services_individual.document_key`); bant ders
+  adı grubunkiyle AYNI yardımcıdan gelir (`services._band_course_name`) ve
+  `CourseDoc.backup=False` isimsiz yedek döngüsünü kapatır (salona tek öğrenciye
+  özgü sınavın adsız kopyası düşmesin). Seçili ama dosyası yüklenmemiş öğrenci
+  kitapçık üretimini REDDETTİRİR (sessizce dersin dosyasına düşmek bu özelliğin
+  önlediği hatadır); kitapçığı bireysel dosyadan basılacak öğrenci grubunun ders
+  dosyasını gerektirmez. Satırlar katı silindiği için bayatlık damgası oturumdadır
+  (`ExamSession.individual_changed_at`): bireysel dosyaya dokunan her yeni işlem
+  `services_individual._touch` çağırmalıdır.
 - **Uygulama içi güncelleme yalnız Windows'tadır:** `updates.installer_supported`;
   Linux'ta `can_download` false + `platform: "linux"` döner, arayüz paketle
   güncellemeye yönlendirir. Testler Linux kabında koştuğu için güncelleme

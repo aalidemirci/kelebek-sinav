@@ -72,6 +72,10 @@ export default function OturumDetayPage() {
     void qc.invalidateQueries({ queryKey: ["exam-proctors", sessionId] });
     void qc.invalidateQueries({ queryKey: ["exam-proctor-candidates", sessionId] });
     void qc.invalidateQueries({ queryKey: ["exam-participants", sessionId] });
+    // Sorular ve Kitapçıklar sekmesi açıkken yeniden dağıtılırsa: bireysel soru
+    // dosyası satırları salon/koltuk taşır, üretilmiş kitapçıklar "güncel değil"e döner.
+    void qc.invalidateQueries({ queryKey: ["individual-questions", sessionId] });
+    void qc.invalidateQueries({ queryKey: ["booklet-runs", sessionId] });
   };
 
   const TRANSITIONS = {

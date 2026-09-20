@@ -14,3 +14,14 @@ class SinavConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.sinav"
     verbose_name = "Sınav işlemleri"
+
+    def ready(self) -> None:
+        """Ayrılan/silinen öğrencinin BEP verisi KATI silinsin (KVKK — fotoğraf emsali).
+
+        Bağımlılık yönü sinav → okul'dur: okul bu uygulamayı import etmez,
+        temizlik kancası buradan kaydedilir (`persons.register_student_forget_hook`).
+        """
+        from apps.okul.services import persons
+        from apps.sinav import services_individual
+
+        persons.register_student_forget_hook(services_individual.forget_student)

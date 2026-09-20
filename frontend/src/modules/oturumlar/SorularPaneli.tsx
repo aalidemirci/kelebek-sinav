@@ -5,6 +5,10 @@
 // OYS'deki 4 sn'lik koşu polling'i kalktı. Soru dosyaları sınav öncesi
 // gizlilik sınıfındadır; dosyalar yalnız yerel API'den (X-KS-Token) sunulur.
 // Bant sabit 4 cm üst alana basılır (ölçekleme yok — OYS Tur 236).
+//
+// 20.09.2026: ders satırlarıyla kitapçık üretimi arasına BEP kapsamındaki
+// öğrencilerin bireysel soru dosyaları bölümü girdi (`bep/BireyselSorularBolumu`);
+// yükleme diyaloğu iki yerde aynı olduğundan `SoruYuklemeDialog` bileşenine çıkarıldı.
 
 import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -16,11 +20,12 @@ import Button from "../../ui/Button";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import Dialog from "../../ui/Dialog";
 import Icon from "../../ui/Icon";
-import Select from "../../ui/Select";
 import TextField from "../../ui/TextField";
 import { useSnackbar } from "../../ui/SnackbarProvider";
-import type { ExamSession, ExamSessionCourseRow, ScoreModeCode } from "./api";
+import BireyselSorularBolumu from "../bep/BireyselSorularBolumu";
+import type { BookletRun, ExamSession, ExamSessionCourseRow } from "./api";
 import { BOOKLETS_ZIP_FILE_TITLE, examSessionApi } from "./api";
+import SoruYuklemeDialog from "./SoruYuklemeDialog";
 
 /**
  * Soru dosyası satırı: olağan durumda bir oturum dersi satırı; "aynı kitapçık"
@@ -81,9 +86,6 @@ function CourseQuestionRow({ group, locked }: { group: QuestionGroup; locked: bo
   const qc = useQueryClient();
   const [uploadOpen, setUploadOpen] = useState(false);
   const closeUpload = useCallback(() => setUploadOpen(false), []);
-  const [file, setFile] = useState<File | null>(null);
-  const [scoreMode, setScoreMode] = useState<ScoreModeCode>("SINGLE_BOX");
-  const [questionCount, setQuestionCount] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   // Grubun her satırı sorgulanır; dosya hangi satırdaysa o satır "taşıyıcı"dır
@@ -106,18 +108,10 @@ function CourseQuestionRow({ group, locked }: { group: QuestionGroup; locked: bo
   };
 
   const upload = useMutation({
-    mutationFn: () => {
-      const form = new FormData();
-      if (file) form.append("file", file);
-      form.append("score_mode", scoreMode);
-      if (scoreMode === "QUESTION_TABLE" && questionCount) {
-        form.append("question_count", questionCount);
-      }
-      return examSessionApi.uploadQuestion(carrier.id, form);
-    },
+    // Form (dosya + puan bölümü) ortak diyalogda kurulur — `SoruYuklemeDialog`.
+    mutationFn: (form: FormData) => examSessionApi.uploadQuestion(carrier.id, form),
     onSuccess: () => {
       setUploadOpen(false);
-      setFile(null);
       snackbar.success("Soru dosyası yüklendi.");
       invalidateGroup();
     },
@@ -197,53 +191,16 @@ function CourseQuestionRow({ group, locked }: { group: QuestionGroup; locked: bo
         </Button>
       )}
 
-      <Dialog
-        open={uploadOpen}
-        onClose={closeUpload}
-        title={`Soru PDF'i — ${group.label}`}
-        actions={
-          <>
-            <Button variant="text" onClick={closeUpload}>
-              Vazgeç
-            </Button>
-            <Button onClick={() => upload.mutate()} disabled={upload.isPending || !file}>
-              {upload.isPending ? "Yükleniyor…" : "Yükle"}
-            </Button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-label-large text-on-surface-variant">
-            Soru PDF dosyası
-            <input
-              type="file"
-              accept="application/pdf"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="min-h-9 rounded-shape-xs border border-outline bg-surface px-3 py-1.5 text-body-medium text-on-surface file:mr-3 file:rounded-shape-sm file:border-0 file:bg-secondary-container file:px-3 file:py-1 file:text-label-large file:text-on-secondary-container"
-            />
-          </label>
-          <Select
-            label="Puan bölümü"
-            options={[
-              { value: "SINGLE_BOX", label: "Tek puan kutusu" },
-              { value: "QUESTION_TABLE", label: "Soru bazlı puan tablosu" },
-            ]}
-            value={scoreMode}
-            onChange={(e) => setScoreMode(e.target.value as ScoreModeCode)}
-          />
-          {scoreMode === "QUESTION_TABLE" && (
-            <TextField
-              label="Soru sayısı"
-              type="number"
-              min={1}
-              max={60}
-              value={questionCount}
-              onChange={(e) => setQuestionCount(e.target.value)}
-              required
-            />
-          )}
-        </div>
-      </Dialog>
+      {uploadOpen && (
+        <SoruYuklemeDialog
+          title={`Soru PDF'i — ${group.label}`}
+          initialScoreMode={meta?.score_mode}
+          initialQuestionCount={meta?.question_count}
+          pending={upload.isPending}
+          onClose={closeUpload}
+          onSubmit={(form) => upload.mutate(form)}
+        />
+      )}
 
       <Dialog
         open={previewUrl !== null}
@@ -275,6 +232,15 @@ const RUN_LABELS: Record<string, string> = {
   COMPLETED: "Tamamlandı",
   FAILED: "Başarısız",
 };
+
+/**
+ * Üretime giren bireysel soru dosyası sayısı (`manifest.individual_booklets`).
+ * Alan yenidir: eski üretimlerin manifestinde yoktur → 0 sayılır, satır çizilmez.
+ */
+function individualBookletCount(run: BookletRun): number {
+  const count = run.manifest.individual_booklets;
+  return typeof count === "number" && count > 0 ? count : 0;
+}
 
 export default function SorularPaneli({ session }: { session: ExamSession }) {
   const snackbar = useSnackbar();
@@ -377,6 +343,10 @@ export default function SorularPaneli({ session }: { session: ExamSession }) {
         ))}
       </ul>
 
+      {/* BEP kapsamındaki öğrenciler — bireysel soru dosyaları (20.09.2026). Oturuma
+          giren BEP kapsamında öğrenci yoksa bölüm hiç çizilmez. */}
+      <BireyselSorularBolumu session={session} locked={locked} />
+
       <div className="flex flex-wrap items-end gap-3 rounded-shape-md border border-outline-variant p-3">
         <h3 className="w-full text-title-small text-on-surface">Kişiselleştirilmiş kitapçıklar</h3>
         <TextField
@@ -403,12 +373,24 @@ export default function SorularPaneli({ session }: { session: ExamSession }) {
                 {RUN_LABELS[run.status] ?? run.status}
                 {run.error_message && ` — ${run.error_message}`}
               </span>
+              {/* Yalnız SAYI: üretim kaydı hangi öğrencinin bireysel soru dosyası
+                  aldığını taşımaz (o bilgi yalnız idare özetindedir). */}
+              {individualBookletCount(run) > 0 && (
+                <span className="text-body-small text-on-surface-variant">
+                  {individualBookletCount(run)} bireysel soru dosyası dahil
+                </span>
+              )}
               {/* Kitapçık salon/koltuk/ad taşır: yerleşim sonradan değiştiyse bu ZIP
-                  basılırsa kitapçıklar yanlış koltuğa gider. */}
+                  basılırsa kitapçıklar yanlış koltuğa gider. Bireysel soru dosyası
+                  seçimi/PDF'i değişince de üretim bayatlar (backend hesaplar) — metin
+                  bu yüzden iki nedeni de kapsar. */}
               {run.is_stale && (
-                <span className="flex items-center gap-1 rounded-shape-sm bg-error-container px-2 py-0.5 text-body-small text-on-error-container">
+                <span
+                  title="Üretimden sonra yerleşim ya da bir bireysel soru dosyası değişti."
+                  className="flex items-center gap-1 rounded-shape-sm bg-error-container px-2 py-0.5 text-body-small text-on-error-container"
+                >
                   <Icon name="warning" size="sm" />
-                  Eski yerleşime göre — yeniden üretin
+                  Güncel değil — yeniden üretin
                 </span>
               )}
               <span className="ml-auto" />

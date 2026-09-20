@@ -23,6 +23,7 @@ from apps.okul.models import (
     Student,
     SubjectDepartment,
 )
+from apps.okul.services import departments as department_service
 
 
 def _validate_level(value: int) -> int:
@@ -134,10 +135,26 @@ class SchoolTermConfigurationSerializer(serializers.Serializer[dict[str, Any]]):
 
 class PersonnelSerializer(serializers.ModelSerializer[Personnel]):
     full_name = serializers.CharField(read_only=True)
+    # Branş EŞLEŞTİRME anahtarı (20.09.2026): zümre başkanı seçicisi öğretmeni zümrenin
+    # `branch_keys`iyle bu anahtar üzerinden eşler — harf büyüklüğü/şapka/boşluk
+    # katlaması TEK yerde (backend) kalır, arayüz yalnız eşitlik karşılaştırır.
+    branch_key = serializers.SerializerMethodField()
 
     class Meta:
         model = Personnel
-        fields = ["id", "first_name", "last_name", "title", "branch", "is_active", "full_name"]
+        fields = [
+            "id",
+            "first_name",
+            "last_name",
+            "title",
+            "branch",
+            "branch_key",
+            "is_active",
+            "full_name",
+        ]
+
+    def get_branch_key(self, obj: Personnel) -> str:
+        return department_service.branch_key(obj.branch)
 
 
 class ClassSectionGroupSerializer(serializers.ModelSerializer[ClassSectionGroup]):
@@ -250,6 +267,12 @@ class SubjectDepartmentSerializer(serializers.ModelSerializer[SubjectDepartment]
     # (unique_together) siler. Alan burada elle tanımlanır ki teklik mesajı
     # depo üslubunda Türkçe olsun (`validate` içinde) — ham DRF çevirisi değil.
     name = serializers.CharField(max_length=80, validators=[])
+    # Zümrenin branşları (20.09.2026): öğretmen sicilindeki branş adları. Doğrulama
+    # ve "bir branş tek zümrede" kuralı serviste (`departments.clean_branches`).
+    branches = serializers.ListField(
+        child=serializers.CharField(max_length=64, allow_blank=True), required=False
+    )
+    branch_keys = serializers.SerializerMethodField()
     # `CharField(source="head.full_name", default="")` DEĞİL: `head` boşken DRF
     # `get_default()`e düşer ve partial (PATCH) serializer'da SkipField fırlatır —
     # anahtar yanıttan tamamen kaybolurdu. Method alanı her durumda dizge döner.
@@ -258,10 +281,21 @@ class SubjectDepartmentSerializer(serializers.ModelSerializer[SubjectDepartment]
     class Meta:
         model = SubjectDepartment
         validators: list[Any] = []
-        fields = ["id", "name", "head", "head_name", "is_board_member"]
+        fields = [
+            "id",
+            "name",
+            "head",
+            "head_name",
+            "is_board_member",
+            "branches",
+            "branch_keys",
+        ]
 
     def get_head_name(self, obj: SubjectDepartment) -> str:
         return obj.head.full_name if obj.head is not None else ""
+
+    def get_branch_keys(self, obj: SubjectDepartment) -> list[str]:
+        return department_service.department_branch_keys(obj)
 
     def validate_name(self, value: str) -> str:
         cleaned = " ".join(value.split())

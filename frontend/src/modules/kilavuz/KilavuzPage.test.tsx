@@ -14,6 +14,10 @@
 // öğretmenler, Ayarlar → Şubeler, süreç takip kalemleri, parola/kilit/kurtarma
 // anahtarı, güncelleme, Pardus geri yükleme) ve sözlük turu yapıldı.
 //
+// 20.09.2026: "BEP kapsamındaki öğrenciler ve bireysel soru dosyası" başlığı
+// (8. adım) — adımlar, işaret yok güvencesi, idare özeti, veri ve dayanak atıfları
+// kilitlidir; kitapçık uyarısının yeni metni ("Güncel değil") de burada denetlenir.
+//
 // NOT: `getByText` yalnız elemanın DOĞRUDAN metin çocuklarına bakar; bu yüzden
 // aranan ifade tek bir elemanın (çoğu yerde <strong>) içinde kalacak şekilde
 // seçilmiştir — <strong> sınırını aşan bir regex hiç eşleşmez.
@@ -222,6 +226,70 @@ describe("KilavuzPage", () => {
     expect(
       screen.getByText(/Aynı dağıtım\s+numarası \(seed\) aynı dağıtımı üretir/),
     ).toBeInTheDocument();
+  });
+
+  it("zümrelerin branşlardan üretildiğini ve başkan adaylarının branşa göre geldiğini anlatır (20.09.2026)", () => {
+    renderPage();
+    expect(screen.getByText("zümreler öğretmenlerin branşlarından üretilir")).toBeInTheDocument();
+    expect(screen.getByText("öğretmen listesindeki branşlardan üretilir")).toBeInTheDocument();
+    expect(screen.getByText("“Branşlardan zümre üret”")).toBeInTheDocument();
+    expect(screen.getByText("“Branşları düzenle”")).toBeInTheDocument();
+    expect(screen.getByText("o zümrenin branşlarındaki")).toBeInTheDocument();
+  });
+
+  it("BEP kapsamındaki öğrencileri ve bireysel soru dosyasını anlatır (20.09.2026)", () => {
+    const { container } = renderPage();
+    expect(
+      screen.getByRole("heading", {
+        level: 3,
+        name: "BEP kapsamındaki öğrenciler ve bireysel soru dosyası",
+      }),
+    ).toBeInTheDocument();
+    // (a) Adımlar: liste (derin bağlantıyla) → oturumda seçim + PDF → kitapçık üretimi.
+    expect(screen.getByRole("link", { name: "Kişiler → BEP" })).toHaveAttribute(
+      "href",
+      "/kisiler?tab=bep",
+    );
+    expect(screen.getByText("“Bireysel soru dosyası uygula”")).toBeInTheDocument();
+    expect(screen.getByText("“Kitapçıkları üret”")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Seçmediğiniz öğrenci, dersin soru dosyasından basılan kitapçığı alır/),
+    ).toBeInTheDocument();
+    // (b) İşaret yok güvencesi.
+    expect(screen.getByText("Öğrenciyi ayıran hiçbir işaret basılmaz.")).toBeInTheDocument();
+    expect(screen.getByText(/PDF'in içine öğrencinin adını yazmayın/)).toBeInTheDocument();
+    // (c) İdare özeti yalnız idarede kalır.
+    expect(screen.getByText("“İdare özeti (PDF)”")).toBeInTheDocument();
+    expect(screen.getByText("Yalnız idarede kalır")).toBeInTheDocument();
+    expect(screen.getByText(/“Tümünü\s+indir” paketine girmez/)).toBeInTheDocument();
+    // (d) Dosyası yüklenmemiş seçim varken kitapçık üretilmez.
+    expect(screen.getByText("kitapçık üretilmez")).toBeInTheDocument();
+    // (e) Veri: yalnız üyelik; tanı/açıklama yok; ayrılan öğrencinin kaydı silinir; parola önerilir.
+    expect(screen.getByText("yalnız üyelik bilgisini")).toBeInTheDocument();
+    expect(screen.getByText(/Tanı, rapor ya da açıklama kaydedilmez/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/okuldan ayrıldığında ya da sicilden silindiğinde liste kaydı/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("“Tüm BEP kayıtlarını sil”")).toBeInTheDocument();
+    expect(screen.getByText(/uygulama parolası\s+koymanız önerilir/)).toBeInTheDocument();
+    // Dayanak atıfları docs/mevzuat atıf haritalarıyla ve idare özetiyle BİREBİR —
+    // başka madde numarası uydurulmaz.
+    expect(
+      screen.getByText(
+        /Dayanak: Ölçme ve Değerlendirme Yönetmeliği md\. 4\/1-ç, 5\/1-n, 6\/1-d; Yazılı ve Uygulamalı\s+Sınavlar Yönergesi md\. 5\/1-u; Ortaöğretim Kurumları Yönetmeliği md\. 45\/1-ğ; ÖDSHGM'nin\s+10\.09\.2026 tarihli yazısı md\. 8\./,
+      ),
+    ).toBeInTheDocument();
+    // "Ortak" yalnız MEB anlamında geçer: bireysel soru dosyasının karşıtı "dersin
+    // soru dosyası"dır — "ortak kitapçık/ortak kâğıt" denmez (docs/sozluk.md).
+    expect(container.textContent ?? "").not.toMatch(/ortak (kitapçık|kâğıt|kağıt)/i);
+    // Yerleştirme kuralı bölümü buraya yönlendirir: kuralın "BEP" gerekçesi ile BEP
+    // listesi ayrı şeylerdir (kural öğrenciyi listeye eklemez).
+    expect(
+      screen.getByText(/gerekçesi BEP olan bir kural\s+öğrenciyi BEP listesine eklemez/),
+    ).toBeInTheDocument();
+    // Eski uyarı metni iki nedeni kapsamıyordu; kılavuz panelle aynı metni anar.
+    expect(screen.getByText("“Güncel değil — yeniden üretin”")).toBeInTheDocument();
+    expect(screen.queryByText(/Eski yerleşime göre/)).not.toBeInTheDocument();
   });
 
   it("takvim onayını tek “Onayla” adımıyla anlatır", () => {

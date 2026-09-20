@@ -1,0 +1,97 @@
+{% extends "sinav/reports/base.html" %}
+{% load l10n %}
+{% comment %}BEP Kapsamındaki Öğrenciler — İdare Özeti (20.09.2026, kullanıcı kararı).
+
+YALNIZ İDARE NÜSHASIDIR: salonlara dağıtılan hiçbir belge (salon evrakı, şube
+duyurusu, tutanak) ve hiçbir kitapçık bu bilgiyi taşımaz; gözetmene bilgiyi
+idareci kendisi aktarır. Belge "Tümünü indir" paketine GİRMEZ, ayrı düğmeyle
+bilerek indirilir (`services_individual.render_iep_summary`).
+
+KVKK dipnotu BİLİNÇLE madde 6/3 bendi GÖSTERMEZ: öteki evraktaki md. 5/2-ç
+("hukuki yükümlülük") özel nitelikli veride karşılıksızdır ve hangi 6/3 bendinin
+tuttuğu depodaki metinden henüz doğrulanmadı (docs/mevzuat/kvkk-6698.md
+"Değerlendirme notları" — BEP). Dipnot yalnız verinin niteliğini ve kullanım
+kuralını söyler; bent eklenecekse önce metin depoya alınır.
+
+Tanı, engel türü, açıklama sütunu YOKTUR ve EKLENMEZ (yalnız üyelik tutulur).{% endcomment %}
+{% block extra_style %}
+<style>
+  .lead { margin: 5pt 0 0; font-size: 8.5pt; color: var(--pr-text); }
+  .warnbox { margin-top: 6pt; border: 1.2pt solid var(--pr-ink); padding: 5pt 7pt;
+             font-size: 8pt; color: var(--pr-ink); break-inside: avoid;
+             page-break-inside: avoid; }
+  .warnbox b { letter-spacing: 0.3pt; }
+  .iep td { height: 15pt; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="sheet">
+  {% with scope_note="İdare nüshası · salonlara dağıtılmaz" %}
+    {% include "sinav/reports/_head.html" %}
+  {% endwith %}
+
+  <div class="warnbox">
+    <b>ÖZEL NİTELİKLİ KİŞİSEL VERİ İÇERİR.</b> Bu belge yalnız okul idaresinde tutulur;
+    çoğaltılmaz, panoya asılmaz, salonlara ve sınav zarflarına konmaz. Salon sınav evrakında,
+    şube duyurusunda ve soru kitapçıklarında bu öğrencileri ayıran hiçbir işaret yoktur;
+    kitapçıklar bütün öğrencilerde olduğu gibi ada basılıdır ve ada göre dağıtılır.
+  </div>
+
+  <div class="sec">BEP KAPSAMINDAKİ ÖĞRENCİLER
+    <span class="hint">{{ total|unlocalize }} öğrenci · bireysel soru dosyası uygulanan: {{ individual_total|unlocalize }}</span>
+  </div>
+  <table class="rpt-table iep">
+    <thead>
+      <tr>
+        <th style="width: 12%;">Salon</th>
+        <th class="num" style="width: 8%;">Koltuk</th>
+        <th class="num" style="width: 10%;">Okul No</th>
+        <th>Adı Soyadı</th>
+        <th class="num" style="width: 7%;">Şube</th>
+        <th style="width: 21%;">Ders</th>
+        <th style="width: 22%;">Basılacak kitapçık</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.room_name }}</td>
+        <td class="num">{{ row.seat_no|unlocalize }}</td>
+        <td class="num">{{ row.student_number }}</td>
+        <td>{{ row.full_name }}</td>
+        <td class="num">{{ row.class_label }}</td>
+        <td>{{ row.course_label }}</td>
+        <td>{{ row.paper }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p class="lead">“Dersin soru dosyası”: öğrenci, dersinin öteki öğrencileriyle aynı kitapçığı alır.
+    “Bireysel soru dosyası”: kitapçığı, ders öğretmeninin BEP doğrultusunda hazırladığı sorulardan
+    basılır. “Dosya bekleniyor” yazan öğrencinin dosyası yüklenmeden kitapçık üretilemez.</p>
+
+  <table class="signs">
+    <tr><td class="date">…… / …… / 20……</td></tr>
+    <tr><td class="space"></td></tr>
+    <tr>
+      <td><div class="line" style="width: 40%; margin-left: auto; margin-right: auto;"></div>
+          <span class="who">Düzenleyen — Müdür Yardımcısı</span><br>
+          <span class="role">Ad Soyad / İmza</span></td>
+    </tr>
+  </table>
+
+  <div class="dayanak">
+    <b>DAYANAK:</b> MEB Ölçme ve Değerlendirme Yönetmeliği md. 4/1-ç, 5/1-n, 6/1-d · MEB Yazılı ve
+    Uygulamalı Sınavlar Yönergesi md. 5/1-u · MEB Ortaöğretim Kurumları Yönetmeliği md. 45/1-ğ ·
+    MEB Ölçme, Değerlendirme ve Sınav Hizmetleri Genel Müdürlüğünün 10.09.2026 tarihli ve
+    E-26614336-480.99-168561496 sayılı yazısı md. 8 (kaynaştırma/bütünleştirme yoluyla eğitim gören
+    öğrencilerin ölçme ve değerlendirmesinde BEP esas alınır; sınavları BEP'leri doğrultusunda ilgili
+    ders öğretmenlerince hazırlanır).
+    <br><b>KVKK:</b> Bu belgedeki bilgi öğrencinin özel eğitim ihtiyacına işaret ettiğinden 6698 sayılı
+    Kanunun 6 ncı maddesindeki özel nitelikli kişisel veri olarak korunur; yalnız sınavın BEP'e uygun
+    yürütülmesi için işlenir. Belge okul idaresi dışında kimseye verilmez ve sınav işlemleri
+    tamamlanınca imha edilir. Tanı, rapor ya da engel türü bilgisi bu belgede ve programda tutulmaz.
+  </div>
+</div>
+{% endblock %}

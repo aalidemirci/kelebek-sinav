@@ -20,6 +20,7 @@ from apps.sinav.views_calendar import (
     ExamCalendarViewSet,
     ExamTrackItemViewSet,
 )
+from apps.sinav.views_individual import IepStudentViewSet, IndividualQuestionViewSet
 from apps.sinav.views_makeup import MakeupViewSet
 from apps.sinav.views_makeup_plan import MakeupPlanItemViewSet, MakeupPlanViewSet
 
@@ -38,6 +39,8 @@ router.register("proctor-exemptions", ProctorExemptionViewSet, basename="proctor
 router.register(
     "exam-attendance-records", ExamAttendanceRecordViewSet, basename="exam-attendance-record"
 )
+router.register("iep-students", IepStudentViewSet, basename="iep-student")
+router.register("individual-questions", IndividualQuestionViewSet, basename="individual-question")
 router.register("makeup", MakeupViewSet, basename="makeup")
 router.register("makeup-plans", MakeupPlanViewSet, basename="makeup-plan")
 router.register("makeup-plan-items", MakeupPlanItemViewSet, basename="makeup-plan-item")

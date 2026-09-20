@@ -493,6 +493,19 @@ class QuestionUploadSerializer(serializers.Serializer[Any]):
     # anahtar DRF tarafından sessizce yutulur.
 
 
+class IepStudentAddSerializer(serializers.Serializer[dict[str, Any]]):
+    """`POST /iep-students/` girdisi — öğrenci pk'si GÖVDEDE gelir (yolda değil; KVKK md. 6)."""
+
+    student_id = serializers.IntegerField(min_value=1)
+
+
+class IndividualSelectSerializer(serializers.Serializer[dict[str, Any]]):
+    """`POST /individual-questions/` girdisi — "bu öğrenciye bireysel soru dosyası"."""
+
+    session_id = serializers.IntegerField(min_value=1)
+    student_id = serializers.IntegerField(min_value=1)
+
+
 class QuestionDocumentSerializer(serializers.ModelSerializer[QuestionDocument]):
     """Soru dosyası özeti (dosya içeriği ayrı uçtan indirilir)."""
 
@@ -516,7 +529,8 @@ class BookletRunSerializer(serializers.ModelSerializer[BookletRun]):
     """Kitapçık koşusu durumu (manifest PII içermez).
 
     `is_stale`: üretimden sonra yerleşim değişti (yeniden dağıtım, taslağa alma,
-    koltuk takası) — ZIP eski salon/koltuklara göredir, yeniden üretilmelidir.
+    koltuk takası) ya da bir bireysel soru dosyası seçildi/değişti/kaldırıldı —
+    ZIP eski duruma göredir, yeniden üretilmelidir.
     """
 
     is_stale = serializers.SerializerMethodField()
@@ -540,8 +554,12 @@ class BookletRunSerializer(serializers.ModelSerializer[BookletRun]):
         # başına BİR kez sorulur (context kök serializer'da paylaşılır).
         cache: dict[int, Any] = self.context.setdefault("_seating_changed_at", {})
         if obj.session_id not in cache:
-            cache[obj.session_id] = selectors.seating_changed_at(obj.session_id)
-        return selectors.booklet_run_is_stale(obj, cache[obj.session_id])
+            cache[obj.session_id] = (
+                selectors.seating_changed_at(obj.session_id),
+                selectors.individual_changed_at(obj.session_id),
+            )
+        seating_at, individual_at = cache[obj.session_id]
+        return selectors.booklet_run_is_stale(obj, seating_at, individual_at)
 
 
 # --------------------------------------------------------------------------- #

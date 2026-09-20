@@ -32,6 +32,7 @@ etiketler: [yazili-sinav, mazeret, kopya, disiplin, sinav-sonucu, ozur-belgesi]
 > | Takvim açıklaması md. 7 | md. 49/2 | Sonuçlar 10 iş günü içinde duyurulur ve sisteme işlenir |
 > | İhlal ve Kopya Tutanağı (R7) | md. 164/1-h, ı, l, o · 164/2-j · 164/3-ı, j | Kopya ve bilişim aracı fiilleri ile yaptırımları |
 > | Günlük sınav sınırı | md. 45/1-g | Günde iki sınav esası (aynı hüküm: ÖDY md. 5/1-k, Yönerge md. 5/1-s) |
+> | BEP Kapsamındaki Öğrenciler — İdare Özeti dayanağı (`bep_idare_ozeti.html`) · kılavuz "BEP kapsamındaki öğrenciler ve bireysel soru dosyası" · `IepStudent` model açıklaması (20.09.2026) | md. 45/1-ğ | Kaynaştırma/bütünleştirme öğrencisinin başarısının değerlendirilmesinde BEP'teki amaçlar esas alınır (aynı hüküm: ÖDY md. 4/1-ç, 5/1-n, 6/1-d; Yönerge md. 5/1-u) |
 > | Özür belgesi süresi | md. 36/7 | 5 iş günü (ortak sınavlarda ayrıca Yönerge md. 5/1-y) |
 
 ## İKİNCİ KISIM — Devam-devamsızlık

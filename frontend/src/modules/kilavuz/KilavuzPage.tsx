@@ -7,7 +7,11 @@
 // docs/mevzuat/meb-yazili-ve-uygulamali-sinavlar-yonergesi.md). Madde numarası
 // UYDURULMAZ: evrak şablonlarındaki kural burada da geçerli — numara kayarsa
 // metin yanlışlar, bu yüzden yalnız kanıtlı maddeler anılır ve bent harfi
-// verilmez.
+// verilmez. İstisna "BEP kapsamındaki öğrenciler ve bireysel soru dosyası"
+// başlığının dayanak cümlesidir (20.09.2026): atıflar docs/mevzuat atıf
+// haritalarındaki bentlerle BİREBİR yazılır (ÖDY md. 4/1-ç, 5/1-n, 6/1-d ·
+// Yönerge md. 5/1-u · OKY md. 45/1-ğ · ÖDSHGM 10.09.2026 yazısı md. 8) — idare
+// özetinin dayanak satırıyla aynı liste; biri değişirse öteki de değişir.
 
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -178,9 +182,10 @@ export default function KilavuzPage() {
           gösterir; onaylayınca kayıt işlenir. Aktarım sonrası şubeler kataloğa kendiliğinden düşer.
         </p>
         <Ipucu>
-          Öğretmen listesi iki yerde işinize yarar: gözetmen görevlendirmesinde aday havuzu ve zümre
-          başkanı seçiminde seçenek listesi buradan gelir. Bu yüzden öğretmenleri zümrelerden önce
-          girin.
+          Öğretmen listesi üç yerde işinize yarar: gözetmen görevlendirmesinde aday havuzu buradan
+          gelir, <strong>zümreler öğretmenlerin branşlarından üretilir</strong> ve zümre başkanı
+          seçiminde o branşın öğretmenleri listelenir. Bu yüzden öğretmenleri, branş sütunu dolu
+          olarak, zümrelerden önce aktarın.
         </Ipucu>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
@@ -340,9 +345,21 @@ export default function KilavuzPage() {
 
       <Adim no={5} icon="groups" title="Zümreler ve zümre başkanları kurulu">
         <p>
-          <Ekran to="/ayarlar?tab=zumreler">Ayarlar → Zümreler</Ekran> ekranında okul zümre
-          başkanları kurulunu oluşturan zümreleri girin (örneğin “Sosyal Bilimler”, “Matematik”,
-          “Yabancı Dil”) ve her zümrenin başkanını öğretmen listesinden seçin.
+          Zümreler <strong>öğretmen listesindeki branşlardan üretilir</strong>. Zümre listeniz
+          boşken öğretmenleri aktardığınızda her branş için bir zümre kendiliğinden açılır; aktarım
+          sonucu hangi zümrelerin oluştuğunu söyler. Listeniz doluysa program ona dokunmaz:{" "}
+          <Ekran to="/ayarlar?tab=zumreler">Ayarlar → Zümreler</Ekran> ekranındaki{" "}
+          <strong>“Branşlardan zümre üret”</strong> düğmesi zümresi olmayan branşları gösterir,
+          istemediklerinizin işaretini kaldırıp üretirsiniz.
+        </p>
+        <p>
+          Sonrası serbesttir: zümre ekleyebilir, kaldırabilir ya da{" "}
+          <strong>“Branşları düzenle”</strong> ile birkaç branşı tek zümrede toplayabilirsiniz
+          (örneğin Tarih, Coğrafya ve Felsefe için “Sosyal Bilimler”). Bir branş yalnız bir zümrede
+          olabilir. Zümre başkanını seçerken listede <strong>o zümrenin branşlarındaki</strong>{" "}
+          aktif öğretmenler görünür; başka branştan bir öğretmeni seçmeniz gerekiyorsa “Başkan
+          adaylarında tüm öğretmenleri göster” kutusunu işaretleyin. Branşı tanımlı olmayan zümrede
+          aday bütün öğretmenlerdir.
         </p>
         <p>
           Bu liste sınav takvimi PDF'inin <strong>imza bölümünü</strong> besler: takvimi hazırlarken
@@ -807,6 +824,13 @@ export default function KilavuzPage() {
           listesinde öğrenci diğerleri gibi görünür, dağıtım doğrulama raporunda ise yalnız{" "}
           <em>kaç</em> öğrencinin sabit kuralla yerleştiği sayı olarak yazar.
         </p>
+        <p>
+          Yerleştirme kuralı yalnız öğrencinin <em>yerini</em> belirler. Öğrencinin sınavı da BEP'i
+          doğrultusunda ayrıca hazırlanıyorsa aşağıdaki “BEP kapsamındaki öğrenciler ve bireysel
+          soru dosyası” başlığına bakın. İkisi birbirinden bağımsızdır: gerekçesi BEP olan bir kural
+          öğrenciyi BEP listesine eklemez, listedeki öğrenci de kendiliğinden sabit bir yere
+          oturtulmaz.
+        </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
           Başka oturumdan kopyalama
@@ -850,6 +874,76 @@ export default function KilavuzPage() {
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          BEP kapsamındaki öğrenciler ve bireysel soru dosyası
+        </h3>
+        <p>
+          Kaynaştırma/bütünleştirme yoluyla eğitimine devam eden ve bireyselleştirilmiş eğitim
+          programı (BEP) bulunan öğrencinin sınavı, BEP'i doğrultusunda ilgili dersin öğretmenince
+          ayrıca hazırlanır. Program bu soruları <strong>bireysel soru dosyası</strong> olarak alır
+          ve öğrencinin kitapçığını öteki kitapçıklarla birlikte, <strong>onun adına</strong> basar.
+          Yapılacaklar sırasıyla şunlardır:
+        </p>
+        <ol className="list-decimal space-y-1 pl-5">
+          <li>
+            <Ekran to="/kisiler?tab=bep">Kişiler → BEP</Ekran> sekmesinde BEP kapsamındaki
+            öğrencileri listeye ekleyin. Bu bir kez yapılır; liste bütün sınav oturumlarında
+            kullanılır.
+          </li>
+          <li>
+            Oturumu dağıttıktan sonra <strong>Sorular ve Kitapçıklar</strong> sekmesine geçin. “BEP
+            kapsamındaki öğrenciler — bireysel soru dosyaları” bölümü, listedeki öğrencilerden o
+            oturuma girenleri salonu ve koltuğuyla gösterir. Ayrı sınav uygulanacak öğrencinin
+            satırında <strong>“Bireysel soru dosyası uygula”</strong> deyin ve öğrencinin soru
+            PDF'ini yükleyin. Seçmediğiniz öğrenci, dersin soru dosyasından basılan kitapçığı alır.
+          </li>
+          <li>
+            <strong>“Kitapçıkları üret”</strong> düğmesine basın: seçtiğiniz öğrencinin kitapçığı
+            kendi PDF'inden, öteki öğrencilerinki dersin soru dosyasından basılır.
+          </li>
+        </ol>
+        <p>
+          <strong>Öğrenciyi ayıran hiçbir işaret basılmaz.</strong> Kitapçık bandı, ders adı ve
+          dağıtım sırası öteki öğrencilerle aynıdır; salon sınav evrakında ve kitapçıkta bu
+          öğrenciyi gösteren bir işaret yoktur. Program kitapçığın içeriğini gizleyemez: sayfa
+          sayısı ya da puan tablosu farklıysa bu görülebilir — özellikle komşuların aynı soruları
+          çözdüğü “Kendi dersliğinde” düzeninde. Bu yüzden PDF'in içine öğrencinin adını yazmayın
+          (ad kitapçık bandına basılır) ve dersin soru dosyasıyla aynı sayfa sayısını, tek puan
+          kutusunu tercih edin. Salon başına eklenen isimsiz yedek kitapçıklar yalnız dersin soru
+          dosyasından basılır; bireysel soru dosyasının isimsiz kopyası salona gitmez.
+        </p>
+        <p>
+          Bu bilgiyi taşıyan tek basılı belge, aynı bölümden indirilen{" "}
+          <strong>“İdare özeti (PDF)”</strong> belgesidir: oturuma giren BEP kapsamındaki
+          öğrencileri ve hangisine bireysel soru dosyası uygulandığını gösterir.{" "}
+          <strong>Yalnız idarede kalır</strong>: salonlara dağıtılmaz ve Evrak sekmesindeki “Tümünü
+          indir” paketine girmez. Gözetmene verilmesi gereken bilgiyi idare kendisi aktarır.
+        </p>
+        <Ipucu>
+          Bir öğrenciyi seçip PDF'ini yüklemediyseniz <strong>kitapçık üretilmez</strong>: program
+          kaç öğrencinin dosyasının eksik olduğunu söyler. Dosyayı yükleyin ya da o öğrencideki
+          seçimi kaldırın. Kitapçıkları ürettikten sonra bir bireysel soru dosyasını değiştirirseniz
+          eski paket uyarıyla işaretlenir; kitapçıkları yeniden üretin. Onaylanmış oturumda seçim ve
+          dosya değişmez — önce “Yeniden aç” ile onayı geri alın.
+        </Ipucu>
+        <p>
+          Program bu konuda <strong>yalnız üyelik bilgisini</strong> tutar: öğrencinin listede olup
+          olmadığını ve oturumdaki soru dosyasını. Tanı, rapor ya da açıklama kaydedilmez; böyle bir
+          alan yoktur. Öğrenci okuldan ayrıldığında ya da sicilden silindiğinde liste kaydı ve
+          bireysel soru dosyaları kendiliğinden silinir. Öğrenciyi listeden çıkarırsanız
+          onaylanmamış oturumlardaki bireysel soru dosyaları da silinir; BEP sekmesindeki{" "}
+          <strong>“Tüm BEP kayıtlarını sil”</strong> düğmesi bütün kayıtları kalıcı olarak kaldırır.
+          Bu bilgi özel nitelikli kişisel veridir (KVKK md. 6):{" "}
+          <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran> bölümünden uygulama parolası
+          koymanız önerilir. Parola kapalıyken program bunu BEP sekmesinde ve oturumdaki bölümde
+          hatırlatır.
+        </p>
+        <p className="text-body-small">
+          Dayanak: Ölçme ve Değerlendirme Yönetmeliği md. 4/1-ç, 5/1-n, 6/1-d; Yazılı ve Uygulamalı
+          Sınavlar Yönergesi md. 5/1-u; Ortaöğretim Kurumları Yönetmeliği md. 45/1-ğ; ÖDSHGM'nin
+          10.09.2026 tarihli yazısı md. 8.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
           Dağıtımdan sonra fark edilen hata: “Yeniden dağıt” ve “Taslağa al”
         </h3>
         <p>
@@ -859,8 +953,8 @@ export default function KilavuzPage() {
           numarayla). Elle yaptığınız koltuk takasları ve gözetmen görevlendirmeleri sıfırlanır;
           daha önce bastığınız evrakı ve ürettiğiniz kitapçıkları yeniden üretmeniz gerekir. Eski
           kitapçık paketleri Sorular ve Kitapçıklar sekmesinde{" "}
-          <strong>“Eski yerleşime göre — yeniden üretin”</strong> uyarısıyla işaretlenir; koltuk
-          takasından sonra da aynı uyarı çıkar.
+          <strong>“Güncel değil — yeniden üretin”</strong> uyarısıyla işaretlenir; koltuk takasından
+          ve bireysel soru dosyası değişikliğinden sonra da aynı uyarı çıkar.
         </p>
         <p>
           Yanlış sınıf düzeyi, eksik şube ya da yanlış işaretlenmiş kitapçık kutusu gibi{" "}

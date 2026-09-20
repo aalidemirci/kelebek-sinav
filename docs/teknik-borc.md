@@ -94,6 +94,21 @@ yeniden raporlanmaz (gerekçenin kendisi çürütülmedikçe).
   Windows paketinde fontconfig önbelleği (`cache/fontconfig`) hiç yazılmıyor;
   paylaşılan `FontConfiguration` etkisini süreç başına tek taramaya indiriyor.
 
+- **TB16 — BEP verisinin KVKK md. 6/3 dayanağı açık karar (20.09.2026):**
+  "BEP kapsamındaki öğrenciler" listesi ve bireysel soru dosyası özel nitelikli
+  veriye işaret eder; idare özetinin dipnotu BİLİNÇLE bent göstermez. Aday: md.
+  6/3-b + 573 sayılı KHK md. 16/1 (metin depoda, birebir doğrulandı); karar veri
+  sorumlusunundur — gerekçe `docs/mevzuat/kvkk-6698.md` "Değerlendirme notları —
+  BEP". Yan kalemler: (a) Kurulun 2018/10 sayılı "yeterli önlemler" kararının
+  metni depoda yok (özetleyici araçla okundu; atıf verilecekse usulünce alınmalı);
+  (b) parola bu özellik için zorunlu değil — kapalıyken öğrenci–BEP bağı düz
+  saklanır, arayüz yalnız uyarır (kullanıcı kararı); (c) bireysel soru PDF'i de
+  öteki soru dosyaları gibi diskte ŞİFRESİZ durur ve yedeğe girmez (TB11); (d) ek
+  süre gibi öğrenciye özgü sınav düzenlemesi yok — salon evrakına basılırsa
+  işaret olur, basılmadan çözülecek bir tasarım gerekir; (e) liste yıl geçişinde
+  kendiliğinden gözden geçirilmez (ayrılan öğrenci silinir, BEP'i sona eren
+  öğrenciyi idareci çıkarır).
+
 ## Kapanan
 
 - **TB7 — GROUPS katılımcı tipi (19.09.2026'da kapandı — başka yoldan):**
