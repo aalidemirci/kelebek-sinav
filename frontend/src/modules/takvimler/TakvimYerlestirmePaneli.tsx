@@ -148,7 +148,13 @@ export default function TakvimYerlestirmePaneli({
     mutationFn: (p: { date: string; periodNo: number }) =>
       examCalendarApi.createSession(calendarId, { date: p.date, period_no: p.periodNo }),
     onSuccess: (data) => {
-      snackbar.success(`Oturum üretildi: ${data.name}`);
+      // İkili eğitimde slot iki oturum üretir (sabah + öğleden sonra).
+      const adlar = (data.sessions ?? [{ name: data.name }]).map((o) => o.name);
+      snackbar.success(
+        adlar.length > 1
+          ? `${adlar.length} oturum üretildi: ${adlar.join(" · ")}`
+          : `Oturum üretildi: ${adlar[0]}`,
+      );
       invalidate();
     },
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Oturum üretilemedi."),

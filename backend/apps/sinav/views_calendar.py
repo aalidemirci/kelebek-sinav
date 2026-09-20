@@ -289,13 +289,21 @@ class ExamCalendarViewSet(viewsets.ModelViewSet[ExamCalendar]):
         if on_date is None or period_no is None:
             raise drf_serializers.ValidationError({"date": "Tarih ve ders saati gerekli."})
         try:
-            session = services_calendar.create_session_from_slot(
+            sessions = services_calendar.create_sessions_from_slot(
                 self.get_object(), on_date=on_date, period_no=period_no
             )
         except DjangoValidationError as exc:
             _raise_drf(exc)
         return Response(
-            {"session_id": session.pk, "name": session.name}, status=status.HTTP_201_CREATED
+            {
+                # İkili eğitimde bir slot İKİ oturum üretir (sabah + öğleden sonra);
+                # tam günde liste tek elemanlıdır. `session_id`/`name` eski
+                # sözleşmedir ve ilk oturumu gösterir.
+                "sessions": [{"session_id": s.pk, "name": s.name} for s in sessions],
+                "session_id": sessions[0].pk,
+                "name": sessions[0].name,
+            },
+            status=status.HTTP_201_CREATED,
         )
 
     @action(detail=True, methods=["post"])

@@ -555,15 +555,27 @@
   SAATİNİ belirlediği için şubenin kendi alanındadır; toplu işaret
   `sections.assign_section_shift`. İşaretlenmemiş şube SABAH sayılır (veri
   yokluğu görünür varsayılana çevrilir, evrak yine basılır).
-  **Kapsam sınırı (kullanıcı kararı):** vardiya yalnız BASIMA girer — çakışma
-  denetimi, salon ön seçimi, kelebek sıra bütçesi ve günlük sınav yükü iki
-  vardiyayı hâlâ AYNI ANDA sayar. İhtiyatlı taraftır (gerçekte çakışmayan iki
-  sınavı çakışıyor sayar, tersi değil); mantığa işlenmesi açık borçtur
-  (tasarım §2.5). Evrakta satırın zamanı `_period_time_label`dan gelir: tam günde
-  tek saat, ikili eğitimde vardiya adıyla ("Sabah 10:10"), satırda iki vardiya
-  varsa ikisi de. Oturumun `start_time`ı da vardiyadan gelir
-  (`_period_start_time(no, shift)`); şubelerin TAMAMI öğle grubundaysa öğle
-  çizelgesi, karışıksa sabah kazanır.
+  **Oturtma birimi `(gün, ders saati, VARDİYA)`dır** (21.09.2026): ilk sürümde
+  vardiya yalnız basıma giriyordu ve bu "ihtiyatlı taraf" diye savunulmuştu —
+  kullanıcının itirazı üzerine ölçüldü, gerekçe TERSİNE döndü. Çakışma
+  denetiminde sorun yoktu (`_scope_overlaps` seviye farklıysa zaten `False`
+  döner, vardiyalar farklı seviyelerdir); sıra bütçesinde ise İYİMSERDİ: sabah
+  grubunun gerçek açığı, aynı ders saatine öğle grubunun sınavı konunca
+  KAYBOLUYORDU (ölçüm: 9. sınıf 60 öğrenci / 32 sıra → "28 öğrenci yan yana"
+  uyarısı, 11. sınıf eklenince uyarı yok). Slottan üretilen oturum da tek oturum,
+  tek saat, iki vardiyanın derslikleriyle çıkıyordu.
+  Şimdi: `_butterfly_fits` vardiya başına sözlük döner (tam günde tek anahtar
+  `""` ve hesap birebir eskisi — ayrım YALNIZ `education_model=DUAL` iken açılır),
+  uyarı hangi oturum olduğunu söyler, otomatik yerleştirici ceza terimi
+  vardiyaların açık TOPLAMINI kullanır, `create_sessions_from_slot` vardiya başına
+  AYRI oturum üretir (kendi saati + kendi dersliği; `create_session_from_slot`
+  ilkini döndüren ince sarmalayıcıdır). Şubeleri iki vardiyaya YAYILAN sınav
+  reddedilir (aynı soru kâğıdı iki farklı saatte kullanılamaz) ve
+  `calendar_validation` bunu onaydan önce uyarır. Evrakta satırın zamanı
+  `_period_time_label`dan gelir: tam günde tek saat, ikili eğitimde vardiya adıyla
+  ("Sabah 10:10"), satırda iki vardiya varsa ikisi de. Vardiya ayrımı `ExamSession`
+  ALANI DEĞİLDİR — oturum zaten tek vardiyanın şubelerini taşır; `_daily_exam_load`
+  da seviye bazlı olduğu için dokunulmadı.
 - **Evrakta saatin BASILMASI takvim başına ayardır:** `ExamCalendar
   .print_period_times` (varsayılan AÇIK — mevcut takvimlerin çıktısı değişmez).
   Kapalıyken yalnız ders saati adı basılır ("3. Ders"). Zaman metni

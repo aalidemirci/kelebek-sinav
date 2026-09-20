@@ -159,13 +159,29 @@ olurdu). Şubeler `ClassSection.shift` ile işaretlenir — vardiya küme DEĞİ
 (küme yalnız seçim aracıdır ve hiçbir kayda yazılmaz), evrakın saatini
 belirleyen veridir.
 
-**Kapsam sınırı — bilinçli karar.** Vardiya yalnız BASIMA girer. Çakışma
-denetimi, salon ön seçimi, kelebek sıra bütçesi (§2.4) ve günlük sınav yükü iki
-vardiyayı hâlâ aynı anda sayar. Bu ihtiyatlı taraftır: gerçekte çakışmayan iki
-sınav çakışıyor sayılır, tersi olmaz. Mantığa işlenmesi AÇIK BORÇTUR ve
-dokunacağı yerler bellidir — `_slot_clash` / `_scope_overlaps`,
-`create_session_from_slot` salon ön seçimi, `_butterfly_fit` sıra havuzu ve
-`_daily_exam_load`. İhtiyaç görülmeden yapılmayacak (kullanıcı kararı).
+**Oturtma birimi `(gün, ders saati, VARDİYA)`dır.** İlk sürümde vardiya yalnız
+basıma giriyordu ve bu YANLIŞ bir "ihtiyatlı taraf" gerekçesiyle savunulmuştu;
+kullanıcının itirazı üzerine ölçüldü (20.09.2026) ve gerekçenin tersine döndüğü
+görüldü:
+
+- **Çakışma denetiminde sorun YOKTU** — `_scope_overlaps` seviye farklıysa zaten
+  `False` döner, sabah ve öğle grupları farklı seviyeler olduğundan denetim hiç
+  yanlış tetiklenmiyordu.
+- **Sıra bütçesinde sorun VARDI ve iyimser yöndeydi.** Ölçülen vaka: 9. sınıf
+  (sabah, 60 öğrenci, 32 sıra) tek başına "28 öğrenci yan yana kalır" uyarısı
+  veriyor; aynı saate 11. sınıfın (öğle) sınavı konunca uyarı KAYBOLUYORDU —
+  program iki sınavın birbirini dengelediğini sanıyor, oysa biri 10:10'da öbürü
+  14:40'ta. Gerçek sorun duruyor, program susuyordu.
+- **Slottan üretilen oturum da tutarsızdı:** tek oturum, tek saat, iki vardiyanın
+  dersliklerini birden içeriyordu (sabah dolu olan derslikler dahil).
+
+Bu yüzden sıra bütçesi, uyarılar, otomatik yerleştirme ceza terimi ve slot→oturum
+üretimi vardiya başına ayrıldı. Tam gün okulda hesap TEK anahtarla (`""`) koşar ve
+davranış birebir eskisidir — ayrım yalnız `education_model = DUAL` iken açılır.
+Bir girdinin şubeleri iki vardiyaya yayılmışsa (kalabalık okulda bir seviyenin
+bölünmesi) o sınav her vardiyada AYRI oturur: üretilen oturumda kapsam o
+vardiyanın şubelerine daraltılır — "kapsam aynen taşınır" kuralının tek
+istisnasıdır ve gerekçesi fizikseldir.
 
 **Saatin basılması takvim başına ayardır** (`ExamCalendar.print_period_times`,
 varsayılan açık): kapalıyken evrakta yalnız "3. Ders" basılır. İkili eğitimde

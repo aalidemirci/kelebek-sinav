@@ -1164,7 +1164,15 @@ def _entry_shifts(
 
 
 #: Vardiya adları — evrak metni (iç kod kullanıcıya GÖSTERİLMEZ, docs/sozluk.md).
-_SHIFT_LABELS = {Shift.MORNING: "Sabah", Shift.AFTERNOON: "Öğleden sonra"}
+_SHIFT_LABELS: dict[str, str] = {Shift.MORNING: "Sabah", Shift.AFTERNOON: "Öğleden sonra"}
+
+#: Uyarı/rapor sırası: önce sabah, sonra öğleden sonra (alfabetik sıra tersini verirdi).
+_SHIFT_ORDER: dict[str, int] = {Shift.MORNING: 0, Shift.AFTERNOON: 1}
+
+
+def _by_shift(fits: dict[str, ButterflyFit]) -> list[tuple[str, ButterflyFit]]:
+    """Vardiya sözlüğünü GÜN SIRASINDA dolaşılabilir listeye çevirir."""
+    return sorted(fits.items(), key=lambda kv: (_SHIFT_ORDER.get(kv[0], 9), kv[0]))
 
 
 def _period_time_label(period: dict[str, Any], shifts: set[str], *, print_times: bool) -> str:
@@ -1439,15 +1447,89 @@ def _entry_section_ids(entry: ExamCalendarEntry, level_sections: dict[int, list[
     return level_sections.get(int(entry.level), [])
 
 
-def _butterfly_fit(
+@dataclass(frozen=True)
+class _SectionIndex:
+    """Şube pk → mevcut + (seviye, şube harfi). İKİ sorgu, N+1 YOK.
+
+    Vardiya ayrımı öğrenciyi şube şube saymayı gerektirir: bir sınav seviyenin
+    tamamını kapsasa bile o seviyenin şubeleri iki oturuma yayılmış olabilir.
+    Yalnız `education_model = DUAL` iken kurulur — tam gün okulda seviye toplamı
+    (`roster_counts`) yeter ve bu sorgular hiç koşmaz.
+    """
+
+    counts: dict[int, int]
+    keys: dict[int, tuple[int, str]]
+
+
+_EMPTY_SECTION_INDEX = _SectionIndex(counts={}, keys={})
+
+
+def _section_index() -> _SectionIndex:
+    """Şube sayımları + anahtarları (toplu COUNT + tek şube sorgusu)."""
+    from django.db.models import Count
+
+    from apps.okul.models import Student, StudentStatus
+
+    sayim: dict[tuple[int, str], int] = {}
+    rows = (
+        Student.objects.filter(status=StudentStatus.ACTIVE)
+        .values("class_level", "class_section")
+        .annotate(adet=Count("pk"))
+    )
+    for row in rows:
+        sayim[(int(row["class_level"]), str(row["class_section"]))] = int(row["adet"])
+    counts: dict[int, int] = {}
+    keys: dict[int, tuple[int, str]] = {}
+    for section in okul_selectors.class_sections():
+        anahtar = (int(section.class_level), str(section.class_section))
+        counts[int(section.pk)] = sayim.get(anahtar, 0)
+        keys[int(section.pk)] = anahtar
+    return _SectionIndex(counts=counts, keys=keys)
+
+
+def _entry_section_counts(
+    entry: ExamCalendarEntry,
+    *,
+    level_sections: dict[int, list[int]],
+    sections: _SectionIndex,
+    index: EnrollmentIndex | None = None,
+) -> dict[int, int]:
+    """Girdinin şube başına öğrenci sayısı ({şube pk: sayı}).
+
+    Seçmeli ders öğrenci listesi YALNIZ şube kapsamlı girdide uygulanır (LEVEL
+    satırı listeyi uygulamaz — `participants` sözleşmesi); listesiz şube
+    tamamıyla sayılır. Şube bilgisi DİZİNDEN okunur: otomatik yerleştirici bunu
+    aday × slot kadar çağırır, şube başına sorgu N+1 olurdu.
+    """
+    out: dict[int, int] = {}
+    sections_scoped = entry.participant_type == ParticipantType.SECTIONS
+    for sid in _entry_section_ids(entry, level_sections):
+        sayi = sections.counts.get(sid, 0)
+        anahtar = sections.keys.get(sid)
+        if sections_scoped and index is not None and anahtar is not None:
+            uyeler = index.members(entry.course_id, sid)
+            if uyeler is not None:
+                sayi = _listed_student_count(uyeler, anahtar[0], anahtar[1])
+        out[sid] = sayi
+    return out
+
+
+def _butterfly_fits(
     entries: Iterable[ExamCalendarEntry],
     *,
     pool: _DeskPool,
     level_sections: dict[int, list[int]],
     roster_counts: dict[int, int],
+    section_shifts: dict[int, str],
+    sections: _SectionIndex | None = None,
     index: EnrollmentIndex | None = None,
-) -> ButterflyFit:
-    """Bir slotun kelebek sıra bütçesi.
+) -> dict[str, ButterflyFit]:
+    """Slotun kelebek sıra bütçesi — VARDİYA BAŞINA (tam günde tek anahtar "").
+
+    Oturtma birimi `(gün, ders saati, vardiya)`dır: ikili eğitimde aynı ders
+    saatindeki iki sınav farklı ZAMANDA yapılır, birbirinin yanına oturamaz ve
+    birbirinin dersliğini kullanamaz. Tek sepette toplamak açığı GİZLİYORDU
+    (20.09.2026 ölçümü, tasarım §2.5).
 
     Yalnız KELEBEK girdiler sayılır: "Kelebek Değil" sınav kendi sınıfında
     yapılır — ne öğrencisi havuza girer ne dersliği boşalır.
@@ -1460,26 +1542,56 @@ def _butterfly_fit(
     """
     from apps.sinav import engine
 
-    gruplar: dict[tuple[int, int], int] = {}
-    subeler: set[int] = set()
-    for entry in entries:
-        if not entry.is_butterfly:
-            continue
+    kelebekler = [e for e in entries if e.is_butterfly]
+
+    if not section_shifts:
+        # TAM GÜN — tek sepet. Hesap vardiya ayrımından ÖNCEKİYLE birebir aynı
+        # kalır (seviye toplamı kullanılır, şube şube sayım hiç koşmaz).
+        gruplar: dict[tuple[int, int], int] = {}
+        subeler: set[int] = set()
+        for entry in kelebekler:
+            anahtar = (int(entry.course_id), int(entry.level))
+            gruplar[anahtar] = gruplar.get(anahtar, 0) + _entry_student_count(
+                entry, roster_counts, index
+            )
+            subeler.update(_entry_section_ids(entry, level_sections))
+        olculer = dict(pool.free)
+        for sid in subeler:
+            _merge_sizes(olculer, pool.by_section.get(sid, {}))
+        return {"": engine.butterfly_fit(gruplar.values(), olculer)}
+
+    dizin = sections if sections is not None else _section_index()
+    vardiya_gruplari: dict[str, dict[tuple[int, int], int]] = {}
+    vardiya_subeleri: dict[str, set[int]] = {}
+    for entry in kelebekler:
         anahtar = (int(entry.course_id), int(entry.level))
-        gruplar[anahtar] = gruplar.get(anahtar, 0) + _entry_student_count(
-            entry, roster_counts, index
-        )
-        subeler.update(_entry_section_ids(entry, level_sections))
-    olculer = dict(pool.free)
-    for sid in subeler:
-        _merge_sizes(olculer, pool.by_section.get(sid, {}))
-    return engine.butterfly_fit(gruplar.values(), olculer)
+        for sid, sayi in _entry_section_counts(
+            entry, level_sections=level_sections, sections=dizin, index=index
+        ).items():
+            vardiya = section_shifts.get(sid, Shift.MORNING)
+            gruplar_v = vardiya_gruplari.setdefault(vardiya, {})
+            gruplar_v[anahtar] = gruplar_v.get(anahtar, 0) + sayi
+            vardiya_subeleri.setdefault(vardiya, set()).add(sid)
+
+    out: dict[str, ButterflyFit] = {}
+    for vardiya, gruplar_v in vardiya_gruplari.items():
+        # Şubesiz (serbest) salon her oturumda boştur: iki vardiyaya da girer.
+        olculer_v = dict(pool.free)
+        for sid in vardiya_subeleri.get(vardiya, set()):
+            _merge_sizes(olculer_v, pool.by_section.get(sid, {}))
+        out[vardiya] = engine.butterfly_fit(gruplar_v.values(), olculer_v)
+    return out
 
 
-def _butterfly_warning(fit: ButterflyFit, *, prefix: str = "Bu saatte") -> str:
-    """Sıra açığının idareci dilindeki karşılığı (kimlik/ad yok, yalnız sayı)."""
+def _butterfly_warning(fit: ButterflyFit, *, prefix: str = "Bu saatte", shift: str = "") -> str:
+    """Sıra açığının idareci dilindeki karşılığı (kimlik/ad yok, yalnız sayı).
+
+    `shift` ikili eğitimde hangi oturumun anlatıldığını söyler; tam günde boştur
+    ve cümle eskisiyle birebir aynı kalır.
+    """
+    oturum = f" {_SHIFT_LABELS[shift].lower()} oturumunda" if shift in _SHIFT_LABELS else ""
     return (
-        f"{prefix} {fit.students} öğrenci sınava giriyor; sınavı olan şubelerin "
+        f"{prefix}{oturum} {fit.students} öğrenci sınava giriyor; sınavı olan şubelerin "
         f"dersliklerinde {fit.desks} sıra var. Kelebek düzeninde bir sıraya aynı sınavdan "
         f"iki öğrenci oturamaz, en kalabalık sınav ise {fit.largest_group} öğrenci — "
         f"{fit.deficit} öğrenci aynı sınavla yan yana oturmak zorunda kalır. Aynı saate "
@@ -1644,17 +1756,19 @@ def place_entry(
                 calendar=entry.calendar, placed_date=on_date, period_no=period_no
             ).exclude(pk=entry.pk)
         )
-        uyum = _butterfly_fit(
+        uyumlar = _butterfly_fits(
             [*slot_komsulari, entry],
             pool=_desk_pool(),
             level_sections=_level_section_ids(),
             roster_counts=okul_selectors.active_student_counts_by_level(),
+            section_shifts=_section_shifts(),
             index=kayit_index,
         )
         # Sıra 0 ise salon kataloğu henüz girilmemiştir: veri yokluğu uyarıya
         # dönüşmez (kapasite denetimindeki "kapasite 0 ise atla" ile aynı ihtiyat).
-        if uyum.desks > 0 and uyum.deficit > 0:
-            warnings.append(_butterfly_warning(uyum))
+        for vardiya, uyum in _by_shift(uyumlar):
+            if uyum.desks > 0 and uyum.deficit > 0:
+                warnings.append(_butterfly_warning(uyum, shift=vardiya))
 
     entry.placed_date = on_date
     entry.period_no = period_no
@@ -1824,7 +1938,10 @@ def auto_place_entries(
     # kadar sorulacak); slot başına sonuç önbelleğe alınır, slot değişince düşer.
     sira_havuzu = _desk_pool()
     seviye_subeleri = _level_section_ids()
-    uyum_onbellek: dict[tuple[date, int], ButterflyFit] = {}
+    uyum_onbellek: dict[tuple[date, int], dict[str, ButterflyFit]] = {}
+    vardiyalar = _section_shifts()
+    # Şube başına sayım YALNIZ ikili eğitimde gerekir (ve orada bir kez okunur).
+    sube_dizini = _section_index() if vardiyalar else _EMPTY_SECTION_INDEX
 
     slot_girdileri: dict[tuple[date, int], list[ExamCalendarEntry]] = {}
     gun_seviye_yuk: dict[tuple[date, int], int] = {}
@@ -1851,26 +1968,36 @@ def auto_place_entries(
     ).select_related("course"):
         durumu_isle(yerlesik)
 
-    def slot_uyumu(anahtar: tuple[date, int], aday: ExamCalendarEntry | None) -> ButterflyFit:
-        """Slotun sıra bütçesi; `aday` verilirse o da eklenmiş gibi hesaplanır."""
+    def slot_uyumu(
+        anahtar: tuple[date, int], aday: ExamCalendarEntry | None
+    ) -> dict[str, ButterflyFit]:
+        """Slotun VARDİYA BAŞINA sıra bütçesi; `aday` verilirse eklenmiş gibi."""
         girdiler = slot_girdileri.get(anahtar, [])
         if aday is None:
             if anahtar not in uyum_onbellek:
-                uyum_onbellek[anahtar] = _butterfly_fit(
+                uyum_onbellek[anahtar] = _butterfly_fits(
                     girdiler,
                     pool=sira_havuzu,
                     level_sections=seviye_subeleri,
                     roster_counts=roster_counts,
+                    section_shifts=vardiyalar,
+                    sections=sube_dizini,
                     index=kayit_index,
                 )
             return uyum_onbellek[anahtar]
-        return _butterfly_fit(
+        return _butterfly_fits(
             [*girdiler, aday],
             pool=sira_havuzu,
             level_sections=seviye_subeleri,
             roster_counts=roster_counts,
+            section_shifts=vardiyalar,
+            sections=sube_dizini,
             index=kayit_index,
         )
+
+    def toplam_acik(uyumlar: dict[str, ButterflyFit]) -> int:
+        """Slotun TÜM oturumlarındaki açığın toplamı (ikili eğitimde iki sepet)."""
+        return sum(u.deficit for u in uyumlar.values())
 
     def kelebek_farki(anahtar: tuple[date, int], aday: ExamCalendarEntry) -> int:
         """Adayın slota katılmasının sıra açığına etkisi (eksi = iyileştiriyor)."""
@@ -1880,7 +2007,7 @@ def auto_place_entries(
         salon_var = bool(sira_havuzu.by_section or sira_havuzu.free)
         if not aday.is_butterfly or not salon_var:
             return 0
-        return slot_uyumu(anahtar, aday).deficit - slot_uyumu(anahtar, None).deficit
+        return toplam_acik(slot_uyumu(anahtar, aday)) - toplam_acik(slot_uyumu(anahtar, None))
 
     # --- Sıra: en yüklü seviye ilk seçimi yapar (en-kısıtlı-önce) ---
     seviye_yuku: dict[int, int] = {}
@@ -1977,12 +2104,14 @@ def auto_place_entries(
     # bastırıldı): bir sınav tek başınayken açık verir, dengi aynı slota gelince
     # açık kapanır — rapor ancak koşu bittiğinde doğruyu söyleyebilir.
     for anahtar in sorted(slot_girdileri):
-        uyum = slot_uyumu(anahtar, None)
-        if uyum.desks > 0 and uyum.deficit > 0:
-            gun, saat = anahtar
-            result.warnings.append(
-                _butterfly_warning(uyum, prefix=f"{_tr_date(gun)} {saat}. derste")
-            )
+        gun, saat = anahtar
+        for vardiya, uyum in _by_shift(slot_uyumu(anahtar, None)):
+            if uyum.desks > 0 and uyum.deficit > 0:
+                result.warnings.append(
+                    _butterfly_warning(
+                        uyum, prefix=f"{_tr_date(gun)} {saat}. derste", shift=vardiya
+                    )
+                )
 
     # Aynı uyarı onlarca girdiden gelebilir; sıra korunarak teklenir.
     result.warnings = list(dict.fromkeys(result.warnings))
@@ -2029,13 +2158,20 @@ def _live_section_ids(entry: ExamCalendarEntry) -> tuple[list[int], list[int]]:
 
 
 @transaction.atomic
-def create_session_from_slot(calendar: ExamCalendar, *, on_date: date, period_no: int) -> Any:
-    """Onaylı takvim slotundan (tarih+ders saati) TASLAK kelebek ExamSession üretir.
+def create_sessions_from_slot(
+    calendar: ExamCalendar, *, on_date: date, period_no: int
+) -> list[Any]:
+    """Onaylı takvim slotundan TASLAK kelebek ExamSession üretir — VARDİYA BAŞINA.
 
     Adaylar = o slottaki is_butterfly=True girdilerden `session` bağı boş VEYA
-    bağlı oturumu soft-silinmiş olanlar (yeniden üretilebilir). Oturum saati
-    ders saati listesinden, dönem takvimden gelir; katılımcı seviyelerin şube
-    derslikleri ön-seçilir. 'Kelebek Değil' girdiler DAHİL EDİLMEZ.
+    bağlı oturumu soft-silinmiş olanlar (yeniden üretilebilir). 'Kelebek Değil'
+    girdiler DAHİL EDİLMEZ.
+
+    Oturtma birimi `(gün, ders saati, vardiya)`dır (tasarım §2.5): ikili eğitimde
+    aynı ders saatindeki sabah ve öğle sınavları farklı ZAMANDA yapılır, aynı
+    salonları kullanamaz ve birbirinin yanına oturamaz — bu yüzden AYRI oturum
+    olurlar, her biri kendi çizelgesinden saat ve kendi şubelerinin dersliklerini
+    alır. Tam gün okulda tek oturum üretilir ve davranış eskisiyle birebir aynıdır.
     """
     from apps.sinav import selectors, services
 
@@ -2079,62 +2215,98 @@ def create_session_from_slot(calendar: ExamCalendar, *, on_date: date, period_no
             "taslağa alıp kapsamı düzeltin."
         )
 
-    # Vardiya oturumun SAATİNİ belirler (ikili eğitim): sınava giren şubelerin
-    # tamamı öğle grubundaysa oturum öğle çizelgesinden saat alır, karışıksa
-    # sabah kazanır — karışık slot zaten olağan dışıdır ve saatin yanlış tarafa
-    # kayması yerine erken saat yazılır (evrak elle düzeltilebilir).
     seviye_subeleri = _level_section_ids()
-    sinavli_subeler: set[int] = set()
+    vardiyalar = _section_shifts()
+
+    # Girdileri VARDİYAYA böl. Bir girdinin şubeleri iki oturuma yayılmışsa o
+    # sınav iki farklı saatte yapılacak demektir: aynı soru kâğıdı sabah ve
+    # öğleden sonra kullanılamaz (ilk grup ikinciye söyler). Bölmek yerine
+    # REDDEDİLİR — idareci ya sınavı iki ayrı girdiye ayırır (şube kapsamıyla)
+    # ya da iki grubun birlikte olduğu bir saate alır.
+    vardiya_girdileri: dict[str, list[tuple[ExamCalendarEntry, list[int] | None]]] = {}
+    vardiya_subeleri: dict[str, set[int]] = {}
+    yayilan: list[str] = []
     for entry, sections in usable:
-        if sections is not None:
-            sinavli_subeler.update(int(sid) for sid in sections)
-        else:
-            sinavli_subeler.update(seviye_subeleri.get(int(entry.level), []))
-    vardiyalar = {_section_shifts().get(sid, "") for sid in sinavli_subeler}
-    vardiya = Shift.AFTERNOON if vardiyalar == {Shift.AFTERNOON} else ""
-    start_time = _period_start_time(period_no, vardiya) or time(8, 0)
-    # OYS Tur 644: birleşik ad model sınırını aşarsa takvim-adı parçası kırpılır.
-    suffix = f" — {_tr_date(on_date)} {period_no}. Ders"
-    max_len = int(ExamSession._meta.get_field("name").max_length or 120)
-    base_name = calendar.name
-    if len(base_name) + len(suffix) > max_len:
-        base_name = base_name[: max_len - len(suffix) - 1].rstrip() + "…"
-    session = services.create_exam_session(
-        name=f"{base_name}{suffix}",
-        exam_date=on_date,
-        start_time=start_time,
-        term_id=calendar.semester_id,
-    )
-    for entry, sections in usable:
-        # Katılımcı KAPSAMI takvimden oturuma AYNEN taşınır (eskiden "LEVEL"
-        # sabitti): seçmeli ders havuzda şube şube seçilmişse üretilen oturum
-        # dersi de yalnız o şubeleri kapsar, yoksa idareci aynı seçimi her slot
-        # üretiminde yeniden yapardı. `sections` LEVEL kapsamda None'dır —
-        # `add_session_course` o dalda zaten [] yazar.
-        services.add_session_course(
-            session,
-            course_id=entry.course_id,
-            participant_type=entry.participant_type,
-            level=entry.level,
-            section_ids=sections,
+        sids = (
+            [int(x) for x in sections]
+            if sections is not None
+            else seviye_subeleri.get(int(entry.level), [])
+        )
+        kumeler: dict[str, list[int]] = {}
+        for sid in sids:
+            kumeler.setdefault(vardiyalar.get(sid, ""), []).append(sid)
+        if len(kumeler) > 1:
+            yayilan.append(f"{entry.course.name} — {_level_display(entry.level)}")
+            continue
+        vardiya = next(iter(kumeler), "")
+        vardiya_girdileri.setdefault(vardiya, []).append((entry, sections))
+        vardiya_subeleri.setdefault(vardiya, set()).update(sids)
+    if yayilan:
+        raise ValidationError(
+            f"Şu sınavın şubeleri sabah ve öğleden sonra oturumlarına yayılmış: "
+            f"{', '.join(yayilan)}. Aynı ders saati iki grupta farklı zamana denk "
+            "geldiği için tek oturum üretilemez — sınavı şube kapsamıyla iki ayrı "
+            "girdiye ayırın ya da iki grubun da okulda olduğu bir saate alın."
         )
 
-    # Salon ön seçimi: SINAVA GİREN şubelerin derslikleri (20.09.2026 kullanıcı
-    # kuralı). Sınavı olmayan şube o saatte derstedir — dersliği boş değildir ve
-    # ön seçime giremez. Eski davranış katılımcı SEVİYELERİN tüm dersliklerini
-    # alıyordu (31.08.2026); o kararın gerekçesi "aynı slotta seviye geneli başka
-    # bir ders varsa onun salonları düşmesin" idi ve bu sürümde kapsam
-    # BİRLEŞİMİYLE korunuyor: slottaki her girdinin şubeleri toplanır, hiçbirinin
-    # dersliği düşmez. Seviyeye göre almak ise sınavı olmayan şubenin dersliğini
-    # boş sayıp kelebek sıra bütçesini ŞİŞİRİYORDU.
-    rooms = selectors.rooms_for_sections(sinavli_subeler)
-    if rooms:
-        services.set_session_rooms(session, [{"room_id": r.pk} for r in rooms])
+    max_len = int(ExamSession._meta.get_field("name").max_length or 120)
+    sessions: list[Any] = []
+    for vardiya, girdiler in sorted(
+        vardiya_girdileri.items(), key=lambda kv: (_SHIFT_ORDER.get(kv[0], 9), kv[0])
+    ):
+        start_time = _period_start_time(period_no, vardiya) or time(8, 0)
+        # OYS Tur 644: birleşik ad model sınırını aşarsa takvim-adı parçası kırpılır.
+        oturum_eki = f" ({_SHIFT_LABELS[vardiya]})" if vardiya in _SHIFT_LABELS else ""
+        suffix = f" — {_tr_date(on_date)} {period_no}. Ders{oturum_eki}"
+        base_name = calendar.name
+        if len(base_name) + len(suffix) > max_len:
+            base_name = base_name[: max_len - len(suffix) - 1].rstrip() + "…"
+        session = services.create_exam_session(
+            name=f"{base_name}{suffix}",
+            exam_date=on_date,
+            start_time=start_time,
+            term_id=calendar.semester_id,
+        )
+        for entry, sections in girdiler:
+            # Katılımcı KAPSAMI takvimden oturuma AYNEN taşınır (eskiden "LEVEL"
+            # sabitti): seçmeli ders havuzda şube şube seçilmişse üretilen oturum
+            # dersi de yalnız o şubeleri kapsar, yoksa idareci aynı seçimi her slot
+            # üretiminde yeniden yapardı. `sections` LEVEL kapsamda None'dır —
+            # `add_session_course` o dalda zaten [] yazar.
+            services.add_session_course(
+                session,
+                course_id=entry.course_id,
+                participant_type=entry.participant_type,
+                level=entry.level,
+                section_ids=sections,
+            )
 
-    # Girdileri oturuma bağla (kapsamı silinmiş girdi BAĞLANMAZ — düzeltilince
-    # aynı slottan yeniden üretilebilsin).
-    ExamCalendarEntry.objects.filter(pk__in=[e.pk for e, _ in usable]).update(session=session)
-    return session
+        # Salon ön seçimi: SINAVA GİREN şubelerin derslikleri (20.09.2026 kullanıcı
+        # kuralı). Sınavı olmayan şube o saatte derstedir — dersliği boş değildir ve
+        # ön seçime giremez. Eski davranış katılımcı SEVİYELERİN tüm dersliklerini
+        # alıyordu (31.08.2026); o kararın gerekçesi "aynı slotta seviye geneli başka
+        # bir ders varsa onun salonları düşmesin" idi ve bu sürümde kapsam
+        # BİRLEŞİMİYLE korunuyor: o oturumdaki her girdinin şubeleri toplanır.
+        # İkili eğitimde birleşim VARDİYA İÇİNDEDİR: öbür oturumun derslikleri o
+        # saatte doludur.
+        rooms = selectors.rooms_for_sections(vardiya_subeleri.get(vardiya, set()))
+        if rooms:
+            services.set_session_rooms(session, [{"room_id": r.pk} for r in rooms])
+
+        # Girdileri oturuma bağla (kapsamı silinmiş girdi BAĞLANMAZ — düzeltilince
+        # aynı slottan yeniden üretilebilsin).
+        ExamCalendarEntry.objects.filter(pk__in=[e.pk for e, _ in girdiler]).update(session=session)
+        sessions.append(session)
+    return sessions
+
+
+def create_session_from_slot(calendar: ExamCalendar, *, on_date: date, period_no: int) -> Any:
+    """Slottan TEK oturum üretir — `create_sessions_from_slot`un ilk oturumu.
+
+    İkili eğitimde slot iki oturum üretebilir; tek oturum bekleyen eski çağıranlar
+    (ve tam gün okulun tamamı) için ilk oturum döner.
+    """
+    return create_sessions_from_slot(calendar, on_date=on_date, period_no=period_no)[0]
 
 
 # --------------------------------------------------------------------------- #
@@ -2229,16 +2401,43 @@ def calendar_validation(calendar: ExamCalendar) -> dict[str, list[str]]:
     sira_havuzu = _desk_pool()
     if sira_havuzu.by_section or sira_havuzu.free:
         seviye_subeleri = _level_section_ids()
+        vardiyalar = _section_shifts()
+        sube_dizini = _section_index() if vardiyalar else _EMPTY_SECTION_INDEX
         for (gun, saat), slot_girdileri in sorted(per_slot.items()):
-            uyum = _butterfly_fit(
+            uyumlar = _butterfly_fits(
                 slot_girdileri,
                 pool=sira_havuzu,
                 level_sections=seviye_subeleri,
                 roster_counts=roster_counts,
+                section_shifts=vardiyalar,
+                sections=sube_dizini,
                 index=kayit_index,
             )
-            if uyum.desks > 0 and uyum.deficit > 0:
-                warnings.append(_butterfly_warning(uyum, prefix=f"{_tr_date(gun)} {saat}. derste"))
+            for vardiya, uyum in _by_shift(uyumlar):
+                if uyum.desks > 0 and uyum.deficit > 0:
+                    warnings.append(
+                        _butterfly_warning(
+                            uyum, prefix=f"{_tr_date(gun)} {saat}. derste", shift=vardiya
+                        )
+                    )
+
+        # Şubeleri iki oturuma yayılmış sınav: o slottan oturum ÜRETİLEMEZ (aynı
+        # soru kâğıdı sabah ve öğleden sonra kullanılamaz). Onay öncesinde
+        # görünsün — `create_sessions_from_slot` bunu reddediyor ve idareci
+        # hatayı ancak oturum üretirken görürdü.
+        for entry in placed:
+            if not entry.is_butterfly:
+                continue
+            kumeler = {
+                vardiyalar.get(sid, "") for sid in _entry_section_ids(entry, seviye_subeleri)
+            }
+            if len(kumeler) > 1:
+                warnings.append(
+                    f"{entry.course.name} — {_level_display(entry.level)}: şubeleri sabah "
+                    "ve öğleden sonra oturumlarına yayılmış; aynı ders saati iki grupta "
+                    "farklı zamana denk geldiği için bu sınavdan oturum üretilemez. Şube "
+                    "kapsamıyla iki ayrı girdiye ayırın."
+                )
     for (level, day), makamlar in sorted(
         authorities_per_day.items(), key=lambda kv: (kv[0][1], kv[0][0])
     ):

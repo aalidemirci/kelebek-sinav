@@ -398,11 +398,17 @@ export const examCalendarApi = {
   approve: (id: number) => api.post<ExamCalendar>(`/exam-calendars/${id}/approve/`, {}),
   reopen: (id: number) => api.post<ExamCalendar>(`/exam-calendars/${id}/reopen/`, {}),
   pdfBlob: (id: number) => api.getBlob(`/exam-calendars/${id}/pdf/`),
+  /**
+   * Slottan oturum üretir. İkili eğitimde bir slot İKİ oturum verir (sabah +
+   * öğleden sonra aynı ders saatinde farklı zamandır); `sessions` tümünü,
+   * `session_id`/`name` ilkini taşır.
+   */
   createSession: (id: number, payload: { date: string; period_no: number }) =>
-    api.post<{ session_id: number; name: string }>(
-      `/exam-calendars/${id}/create-session/`,
-      payload,
-    ),
+    api.post<{
+      sessions: { session_id: number; name: string }[];
+      session_id: number;
+      name: string;
+    }>(`/exam-calendars/${id}/create-session/`, payload),
   track: (id: number) => api.get<ExamTrackMatrix>(`/exam-calendars/${id}/track/`),
   setTrackMark: (
     id: number,

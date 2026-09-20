@@ -2071,6 +2071,19 @@ def test_api_bakanlik_sinavlari_plan_ve_uygulama() -> None:
 # ===========================================================================
 
 
+def _ikili_plan(satir: int, sutun: int) -> dict[str, Any]:
+    """satir x sutun ikili sıralı salon planı (kapasite = 2 x sıra sayısı)."""
+    return {
+        "grid": {"rows": satir + 1, "cols": sutun},
+        "desks": [
+            {"row": r, "col": c, "type": "DOUBLE"}
+            for r in range(1, satir + 1)
+            for c in range(sutun)
+        ],
+        "furniture": [{"kind": "TEACHER_DESK", "row": 0, "col": 0}],
+    }
+
+
 def _sira_kurulumu() -> dict[str, Any]:
     """10. sınıfın tamamı (iki şube) + 9. sınıfın tek şubesi; her şubeye derslik.
 
@@ -2440,3 +2453,166 @@ def test_ayarlanan_ders_saatleri_takvime_yansir() -> None:
 
     assert "10:05" in metin
     assert "09:20" not in metin  # varsayılan çizelgenin 2. dersi artık geçerli değil
+
+
+# ===========================================================================
+# Vardiya AYRIMI (21.09.2026) — oturtma birimi (gün, ders saati, VARDİYA)
+#
+# İlk sürümde vardiya yalnız basıma giriyordu; ölçüldüğünde iyimser olduğu
+# görüldü: sabah grubunun gerçek sıra açığı, aynı ders saatine öğle grubunun
+# sınavı konunca KAYBOLUYORDU (tasarım §2.5). Aşağıdaki testler o vakayı ve
+# oturum üretiminin vardiya başına bölünmesini kilitler.
+# ===========================================================================
+
+
+def _vardiya_ayrimi_kurulumu() -> dict[str, Any]:
+    """9. sınıf sabah, 11. sınıf öğleden sonra; şube başına 30 öğrenci / 16 sıra."""
+    guz, _ = _iki_donem()
+    subeler: dict[str, Any] = {}
+    no = 5000
+    for seviye in (9, 11):
+        for harf in "AB":
+            s = sube(seviye, harf, students=30, start_no=no)
+            no += 40
+            subeler[f"{seviye}{harf}"] = s
+            salon(f"D-{seviye}{harf}", plan=_ikili_plan(8, 2), linked_section_id=s.pk)
+    SchoolConfig.objects.update_or_create(
+        pk=SchoolConfig.SINGLETON_PK,
+        defaults={"education_model": "DUAL", "exam_period_nos": [1, 2, 3]},
+    )
+    sections.assign_section_shift(section_ids=[subeler["9A"].pk, subeler["9B"].pk], shift="MORNING")
+    sections.assign_section_shift(
+        section_ids=[subeler["11A"].pk, subeler["11B"].pk], shift="AFTERNOON"
+    )
+    calendar = takvim.create_exam_calendar(
+        semester_id=guz.pk, round=1, start_date=date(2026, 10, 26), end_date=date(2026, 11, 6)
+    )
+    ExamCalendarEntry.objects.filter(calendar=calendar).delete()
+    return {"calendar": calendar, "subeler": subeler}
+
+
+def test_obur_vardiyanin_sinavi_siradaki_acigi_kapatmaz() -> None:
+    """ÖLÇÜLEN KUSUR: öğle sınavı eklenince sabahın açığı kaybolmamalı.
+
+    9. sınıf (sabah): 60 öğrenci, iki derslik = 32 sıra → 28 öğrenci yan yana.
+    Aynı ders saatine 11. sınıfın (öğle) sınavı konsa bile bu değişmez —
+    biri 10:10'da, öbürü öğle çizelgesinde sınava girer.
+    """
+    kurulum = _vardiya_ayrimi_kurulumu()
+    calendar = kurulum["calendar"]
+    cog = ders("Coğrafya", levels=[9, 10, 11])
+    tar = ders("Tarih", levels=[9, 10, 11])
+    gun = date(2026, 10, 27)
+
+    e9 = takvim.add_calendar_entry(calendar=calendar, course_id=cog.pk, level=9)
+    tek = takvim.place_entry(e9, on_date=gun, period_no=3)
+    assert any("28 öğrenci aynı sınavla yan yana" in u for u in tek.warnings)
+
+    e11 = takvim.add_calendar_entry(calendar=calendar, course_id=tar.pk, level=11)
+    birlikte = takvim.place_entry(e11, on_date=gun, period_no=3)
+
+    # Sabahın açığı DURUYOR ve hangi oturum olduğu söyleniyor.
+    sabah = [u for u in birlikte.warnings if "sabah oturumunda" in u]
+    assert sabah and "28 öğrenci aynı sınavla yan yana" in sabah[0]
+    # Öğle oturumu da kendi hesabını taşır (o da 60 öğrenci / 32 sıra).
+    ogle = [u for u in birlikte.warnings if "öğleden sonra oturumunda" in u]
+    assert ogle and "28 öğrenci aynı sınavla yan yana" in ogle[0]
+    # Takvim doğrulaması da iki oturumu ayrı ayrı bildirir.
+    uyarilar = takvim.calendar_validation(calendar)["warnings"]
+    assert len([u for u in uyarilar if "yan yana" in u]) == 2
+
+
+def test_slottan_vardiya_basina_ayri_oturum_uretilir() -> None:
+    """İkili eğitimde bir slot İKİ oturum verir: kendi saati, kendi derslikleri."""
+    kurulum = _vardiya_ayrimi_kurulumu()
+    calendar = kurulum["calendar"]
+    SchoolConfig.objects.filter(pk=SchoolConfig.SINGLETON_PK).update(
+        afternoon_bell_schedule=[
+            {"no": i, "name": f"{i}. Ders", "start": f"{12 + i:02d}:00"} for i in range(1, 9)
+        ]
+    )
+    cog = ders("Coğrafya", levels=[9, 10, 11])
+    tar = ders("Tarih", levels=[9, 10, 11])
+    gun = date(2026, 10, 27)
+    takvim.place_entry(
+        takvim.add_calendar_entry(calendar=calendar, course_id=cog.pk, level=9),
+        on_date=gun,
+        period_no=3,
+    )
+    takvim.place_entry(
+        takvim.add_calendar_entry(calendar=calendar, course_id=tar.pk, level=11),
+        on_date=gun,
+        period_no=3,
+    )
+    takvim.submit_calendar(calendar)
+    takvim.approve_calendar(calendar)
+
+    oturumlar = takvim.create_sessions_from_slot(calendar, on_date=gun, period_no=3)
+
+    assert len(oturumlar) == 2
+    sabah, ogle = oturumlar  # sıra: önce sabah
+    assert sabah.start_time == time(10, 10) and ogle.start_time == time(15, 0)
+    assert "(Sabah)" in sabah.name and "(Öğleden sonra)" in ogle.name
+    # Her oturum YALNIZ kendi vardiyasının derslikleri ve dersleriyle kurulur.
+    assert set(sabah.rooms.values_list("room__name", flat=True)) == {"D-9A", "D-9B"}
+    assert set(ogle.rooms.values_list("room__name", flat=True)) == {"D-11A", "D-11B"}
+    assert list(sabah.courses.values_list("level", flat=True)) == [9]
+    assert list(ogle.courses.values_list("level", flat=True)) == [11]
+
+
+def test_tam_gun_okulda_slot_tek_oturum_verir() -> None:
+    """Tam günde davranış birebir eskisi: tek oturum, tek saat."""
+    kurulum = _vardiya_ayrimi_kurulumu()
+    calendar = kurulum["calendar"]
+    SchoolConfig.objects.filter(pk=SchoolConfig.SINGLETON_PK).update(education_model="FULL_DAY")
+    cog = ders("Coğrafya", levels=[9, 10, 11])
+    tar = ders("Tarih", levels=[9, 10, 11])
+    gun = date(2026, 10, 27)
+    takvim.place_entry(
+        takvim.add_calendar_entry(calendar=calendar, course_id=cog.pk, level=9),
+        on_date=gun,
+        period_no=3,
+    )
+    takvim.place_entry(
+        takvim.add_calendar_entry(calendar=calendar, course_id=tar.pk, level=11),
+        on_date=gun,
+        period_no=3,
+    )
+    takvim.submit_calendar(calendar)
+    takvim.approve_calendar(calendar)
+
+    oturumlar = takvim.create_sessions_from_slot(calendar, on_date=gun, period_no=3)
+
+    assert len(oturumlar) == 1
+    assert "(Sabah)" not in oturumlar[0].name  # vardiya eki YOK
+    assert set(oturumlar[0].rooms.values_list("room__name", flat=True)) == {
+        "D-9A",
+        "D-9B",
+        "D-11A",
+        "D-11B",
+    }
+
+
+def test_subeleri_iki_vardiyaya_yayilan_sinav_reddedilir() -> None:
+    """Aynı soru kâğıdı iki farklı saatte kullanılamaz — bölmek yerine REDDEDİLİR."""
+    kurulum = _vardiya_ayrimi_kurulumu()
+    calendar = kurulum["calendar"]
+    subeler = kurulum["subeler"]
+    # 9/B öğleden sonraya alınırsa 9. sınıf iki oturuma yayılır.
+    sections.assign_section_shift(section_ids=[subeler["9B"].pk], shift="AFTERNOON")
+    cog = ders("Coğrafya", levels=[9, 10, 11])
+    gun = date(2026, 10, 27)
+    takvim.place_entry(
+        takvim.add_calendar_entry(calendar=calendar, course_id=cog.pk, level=9),
+        on_date=gun,
+        period_no=3,
+    )
+
+    # Onaydan ÖNCE uyarı: idareci oturum üretirken sürprizle karşılaşmasın.
+    uyarilar = takvim.calendar_validation(calendar)["warnings"]
+    assert any("şubeleri sabah ve öğleden sonra oturumlarına yayılmış" in u for u in uyarilar)
+
+    takvim.submit_calendar(calendar)
+    takvim.approve_calendar(calendar)
+    with pytest.raises(ValidationError, match="yayılmış"):
+        takvim.create_sessions_from_slot(calendar, on_date=gun, period_no=3)
