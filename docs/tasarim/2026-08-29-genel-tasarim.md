@@ -251,6 +251,19 @@ DD'nin kanıtlı katmanı taşınır: `shared/crypto.py` (Fernet + Argon2id) +
   kilit yok, kilitleme = kapatma veya "Kilitle".
 - **Yedek:** parola etkinken X25519 şifreli `.ksbak`; parolasızken düz
   `.ksbak`. Her iki kipte de günlük yedek **alınır** (K9 düzeltmesi).
+- **Cinsiyet (20.09.2026 kullanıcı kararı — bu maddenin TEK istisnası).**
+  `Student.gender` ("K"/"E"/boş) e-Okul sınıf listesindeki "Cinsiyeti"
+  sütunundan KENDİLİĞİNDEN okunur ve YALNIZ kız/erkek ayrışması yerleştirme
+  kuralının girdisidir. Kullanıcının gerekçesi: veri zaten okulun e-Okul'da
+  işlediği veridir, hiçbir yerde yayınlanmaz, yalnız yerel cihazda ve hizmet
+  gereği işlenir. Veri minimizasyonu için önerilen ŞUBE bazlı işaretleme
+  "kullanıcıya ek iş çıkarmayalım" gerekçesiyle REDDEDİLDİ. Ölçülülük (KVKK
+  md. 4/2-ç) şu kısıtlarla sağlanır ve hepsi KORUMA TESTİYLE sabittir: alan
+  adlar gibi ŞİFRELİ (`EncryptedCharField`), hiçbir evraka / dışa aktarıma /
+  kitapçığa basılmaz, öğrenci listesinde sütun yoktur, ekranda rozet yoktur,
+  R8'e yalnız KURALIN ADI girer, uyarı metinleri yalnız SAYI söyler, öğrenci
+  ayrılınca/silinince kayıtla birlikte gider. Motor ve doğrulayıcı cinsiyeti
+  BİLMEZ: soyut `separation_key` görürler.
 - TCKN, veli, sağlık serbest metni **hiç toplanmaz** — en iyi KVKK önlemi
   veriyi hiç edinmemektir; şifreleme buna ek katmandır.
 

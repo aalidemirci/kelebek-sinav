@@ -28,7 +28,8 @@ import TextField from "../../ui/TextField";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import type { Course } from "../dersler/api";
 import { derslerApi } from "../dersler/api";
-import { okulApi } from "../okul/api";
+import { SEPARATION_HINTS, SEPARATION_LABELS, okulApi } from "../okul/api";
+import type { SeparationMode } from "../okul/api";
 import { examRoomApi, examRoomGroupApi } from "../salonlar/api";
 import DagitimSecenekleri, {
   BOS_DAGITIM_SECENEKLERI,
@@ -272,6 +273,7 @@ function InfoStep({
     start_time: session.start_time.slice(0, 5),
     duration_minutes: String(session.duration_minutes),
     layout_mode: session.layout_mode as LayoutModeCode,
+    separation_mode: session.separation_mode,
     proctors_enabled: session.proctors_enabled,
   });
 
@@ -283,6 +285,7 @@ function InfoStep({
         start_time: form.start_time,
         duration_minutes: Number(form.duration_minutes),
         layout_mode: form.layout_mode,
+        separation_mode: form.separation_mode,
         proctors_enabled: form.proctors_enabled,
       }),
     onSuccess: () => {
@@ -291,6 +294,21 @@ function InfoStep({
     },
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Kaydedilemedi."),
   });
+
+  const ayrismaSecimi = (
+    <Select
+      label="Kız/erkek ayrışması"
+      options={(Object.keys(SEPARATION_LABELS) as SeparationMode[]).map((kip) => ({
+        value: kip,
+        label: SEPARATION_LABELS[kip],
+      }))}
+      value={form.separation_mode}
+      onChange={(e) =>
+        setForm((f) => ({ ...f, separation_mode: e.target.value as SeparationMode }))
+      }
+      helperText={`${SEPARATION_HINTS[form.separation_mode]} Varsayılanı Ayarlar → Okul Bilgileri'nden değiştirebilirsiniz.`}
+    />
+  );
 
   return (
     <Card elevation={1} className="flex flex-col gap-3 p-5">
@@ -330,6 +348,21 @@ function InfoStep({
         onChange={(e) => setForm((f) => ({ ...f, layout_mode: e.target.value as LayoutModeCode }))}
         helperText="“Kendi dersliğinde” düzeninde salon seçilmez; her şube kendi şube dersliğine yerleşir."
       />
+      {/* Kız/erkek ayrışması (K2): kural OKUL ayarından gelir, burada oturuma
+          özel değiştirilebilir. Okul varsayılanı kapalıysa seçim "Ayrıntılı
+          ayarlar" içinde durur — ihtiyacı olmayan okulda göze batmasın. Klasik
+          düzende hiç gösterilmez: orada kural UYGULANMAZ (K6). */}
+      {form.layout_mode !== "HOME_CLASSROOM" &&
+        (session.separation_mode === "NONE" ? (
+          <details className="rounded-shape-sm border border-outline-variant p-3">
+            <summary className="cursor-pointer text-label-large text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              Ayrıntılı ayarlar
+            </summary>
+            <div className="mt-3">{ayrismaSecimi}</div>
+          </details>
+        ) : (
+          ayrismaSecimi
+        ))}
       <label className="flex min-h-9 items-center gap-2 text-body-medium text-on-surface">
         <input
           type="checkbox"

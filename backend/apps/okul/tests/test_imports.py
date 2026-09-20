@@ -70,6 +70,50 @@ class TestStudentCommit:
         assert rapor.unchanged_students == 1
         assert rapor.already_imported is True  # aynı hash — uyarı, engel değil
 
+    def test_cinsiyet_sutunlu_aktarim_yazar(self, aktif_yil: SchoolYear) -> None:
+        """Cinsiyet (20.09.2026) yalnız kız/erkek ayrışması kuralı için okunur."""
+        rapor = import_service.commit_students_text(
+            text="\n".join(
+                [
+                    "Sınıf\tOkul No\tAdı Soyadı\tCinsiyeti",
+                    "10/A\t101\tEMRE CAN YILMAZ\tErkek",
+                    "10/B\t102\tZEYNEP KAYA\tKız",
+                ]
+            )
+        )
+        assert rapor.created_students == 2
+        assert Student.objects.get(student_number="101").gender == "E"
+        assert Student.objects.get(student_number="102").gender == "K"
+
+    def test_cinsiyetsiz_aktarim_kayitli_cinsiyeti_silmez(self, aktif_yil: SchoolYear) -> None:
+        """Uygulama şablonunda cinsiyet sütunu yoktur — kayıtlı değer korunur."""
+        import_service.commit_students_text(
+            text="\n".join(
+                ["Sınıf\tOkul No\tAdı Soyadı\tCinsiyeti", "10/A\t101\tEMRE CAN YILMAZ\tErkek"]
+            )
+        )
+        # Sınıfı değişmiş, cinsiyet sütunu olmayan ikinci aktarım.
+        rapor = import_service.commit_students_text(text=_metin("11/A\t101\tEMRE CAN YILMAZ"))
+        assert rapor.updated_students == 1
+        ogrenci = Student.objects.get(student_number="101")
+        assert ogrenci.class_level == 11
+        assert ogrenci.gender == "E"
+
+    def test_cinsiyet_degisikligi_guncellenen_sayilir(self, aktif_yil: SchoolYear) -> None:
+        """Sayaçlara yeni kategori eklenmedi: cinsiyet farkı da 'güncellenen'dir."""
+        import_service.commit_students_text(
+            text="\n".join(
+                ["Sınıf\tOkul No\tAdı Soyadı\tCinsiyeti", "10/A\t101\tEMRE CAN YILMAZ\tErkek"]
+            )
+        )
+        rapor = import_service.commit_students_text(
+            text="\n".join(
+                ["Sınıf\tOkul No\tAdı Soyadı\tCinsiyeti", "10/A\t101\tEMRE CAN YILMAZ\tKız"]
+            )
+        )
+        assert rapor.updated_students == 1 and rapor.unchanged_students == 0
+        assert Student.objects.get(student_number="101").gender == "K"
+
     def test_numarasiz_satir_atlanir(self, aktif_yil: SchoolYear) -> None:
         rapor = import_service.commit_students_text(text=_metin("10/A\t\tADSIZ ÖĞRENCİ"))
         assert rapor.created_students == 0
@@ -195,6 +239,15 @@ class TestEokulDosyasi:
         assert rapor.skipped == []
         assert Student.objects.count() == 6
         assert any("şube bloğu" in u.issue for u in rapor.warnings)
+
+    def test_cinsiyet_sutunu_eokul_dosyasindan_okunur(self, aktif_yil: SchoolYear) -> None:
+        """Sınıf listesindeki "Cinsiyeti" sütunu şube bloklarından da taşınır."""
+        import_service.commit_students_file(
+            file_bytes=EOKUL_SINIF_LISTESI.read_bytes(), file_name="OOG01001R020_827.XLS"
+        )
+        # Alan ŞİFRELİ: sayım DB'de değil Python'da yapılır (tasarım §5).
+        cinsiyetler = [o.gender for o in Student.objects.all()]
+        assert sorted(cinsiyetler) == ["E", "E", "E", "K", "K", "K"]
 
     def test_i_ve_noktali_i_subeleri_ayri_kaydedilir(self, aktif_yil: SchoolYear) -> None:
         """KORUMA TESTİ: iki ayrı şube tek şubeye çökmez (öğrenciler karışmaz)."""

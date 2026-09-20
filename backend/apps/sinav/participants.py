@@ -47,6 +47,11 @@ class Participant:
     course_id: int
     course_name: str
     conflict_group: str  # "<course_id>:<level>" veya "<course_id>:*"
+    #: AYRIŞMA ANAHTARI (20.09.2026) — motor cinsiyet BİLMEZ, soyut anahtar görür.
+    #: Servis katmanı doldurur (kız/erkek ayrışması kuralı açıkken "K"/"E");
+    #: boş değer JOKER'dir: kurala hiç girmez. Varsayılanlıdır — eski çağıranlar
+    #: ve motor testleri değişmeden çalışır (emsal: `focus` ve etiket alanları).
+    separation_key: str = ""
 
 
 @dataclass

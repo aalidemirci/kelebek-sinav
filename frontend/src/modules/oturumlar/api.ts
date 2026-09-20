@@ -11,6 +11,7 @@
 
 import { api } from "../../lib/api";
 import type { Paginated } from "../../lib/pagination";
+import type { SeparationMode } from "../okul/api";
 
 export type { Paginated };
 
@@ -123,6 +124,11 @@ export interface ExamSession {
   duration_minutes: number;
   session_type: ExamSessionTypeCode;
   layout_mode: LayoutModeCode;
+  /**
+   * Kız/erkek ayrışması (20.09.2026). Yeni oturum okul varsayılanıyla açılır,
+   * yalnız TASLAKken değiştirilir; "Kendi dersliğinde" düzeninde uygulanmaz.
+   */
+  separation_mode: SeparationMode;
   /** Gözetmen ayarı (K2) — R6 yalnız açıkken kataloglanır; atama F7'de. */
   proctors_enabled: boolean;
   term_id: number;
@@ -146,6 +152,7 @@ export interface ExamSessionPayload {
   duration_minutes?: number;
   session_type?: ExamSessionTypeCode;
   layout_mode?: LayoutModeCode;
+  separation_mode?: SeparationMode;
   term_id?: number;
 }
 

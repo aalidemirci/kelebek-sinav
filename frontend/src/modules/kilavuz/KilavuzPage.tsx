@@ -833,6 +833,41 @@ export default function KilavuzPage() {
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Kız ve erkek öğrencileri ayrı oturtma
+        </h3>
+        <p>
+          Bazı okullarda kız ve erkek öğrencilerin aynı sırada oturmaması ya da ayrı salonlarda
+          sınava girmesi istenir. Bunun için{" "}
+          <Ekran to="/ayarlar?tab=okul">Ayarlar → Okul Bilgileri</Ekran> sayfasındaki{" "}
+          <strong>“Kız/erkek ayrışması”</strong> seçeneğini bir kez ayarlamanız yeterlidir:{" "}
+          <strong>Kapalı</strong> (varsayılan), <strong>Aynı sıraya oturtma</strong> (salonlar
+          karışıktır, yalnız aynı sıra paylaşılmaz) ya da <strong>Ayrı salonlar</strong>. Yeni
+          açtığınız her sınav oturumu bu seçimle gelir; tek bir sınav için sihirbazın 1. adımından
+          değiştirebilirsiniz.
+        </p>
+        <p>
+          Kural açıkken dağıtım bunu <em>kesin</em> uygular: sağlanamazsa ihlal olarak listelenir ve{" "}
+          <strong>oturum onaylanamaz</strong>. “Ayrı salonlar” seçiliyken program salonları ikiye
+          böler; salonlar yetmezse kaç koltuk eksik kaldığını söyleyerek dağıtımı yapmaz — salon
+          ekleyebilir ya da kuralı “Aynı sıraya oturtma”ya çevirebilirsiniz.{" "}
+          <strong>“Kendi dersliğinde”</strong> düzeninde kural uygulanmaz (herkes zaten kendi
+          şubesinde, okul numarası sırasıyla oturur) ve seçenek gösterilmez.
+        </p>
+        <p>
+          Cinsiyet bilgisi <strong>e-Okul sınıf listesinden kendiliğinden okunur</strong> (raporun
+          “Cinsiyeti” sütunu); ayrıca bir işaretleme yapmanız gerekmez. Programı daha önce
+          kullanıyorsanız listeyi bir kez yeniden aktarmanız yeterlidir — eksik kalan öğrenci varsa
+          program sayısını söyler ve o öğrencilere kural uygulanmaz, dağıtım yine yapılır. Tek tek
+          düzeltmek için Kişiler ekranındaki öğrenci kartında “Cinsiyet” alanı vardır.
+        </p>
+        <p>
+          Bu bilgi <strong>yalnız bu kural için</strong> kullanılır: öğrenci listelerinde sütun
+          olarak gösterilmez, oturma planına, yoklama listesine, şube duyurusuna, kitapçığa ve Excel
+          çıktılarına <strong>basılmaz</strong>. Dağıtım doğrulama raporunda yalnız kuralın adı
+          yazar. Uygulama parolası açıkken bu alan da adlar gibi şifrelenir.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
           Başka oturumdan kopyalama
         </h3>
         <p>

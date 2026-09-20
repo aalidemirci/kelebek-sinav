@@ -9,6 +9,7 @@ ve şube düz alanlardır; süzgeçleri DB tarafında kalır.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from django.db.models import QuerySet
@@ -57,6 +58,43 @@ def active_student_counts_by_level() -> dict[int, int]:
     for level in qs:
         counts[int(level)] = counts.get(int(level), 0) + 1
     return dict(sorted(counts.items()))
+
+
+def student_genders(student_ids: Iterable[int]) -> dict[int, str]:
+    """Öğrenci pk → cinsiyet ("K"/"E"); bilinmeyen/çözülemeyen kayıt SÖZLÜKTE YOK.
+
+    Kız/erkek ayrışması yerleştirme kuralının TEK okuma yoludur (20.09.2026).
+    Alan ŞİFRELİ olduğundan DB'de süzülemez/gruplanamaz — tek sorgu çekilir,
+    ayıklama Python'da yapılır (tasarım §5 deseni). Kilitli kasada (parola
+    açıkken kilit kapalı) değer çözülemez; o öğrenci JOKER olur, dağıtım
+    durmaz — K4 kullanıcı kararı.
+
+    Sayım/süzme İÇİN de burası kullanılır; cinsiyet hiçbir listeye, evraka ya
+    da dışa aktarıma BASILMAZ.
+    """
+    ids = list(student_ids)
+    if not ids:
+        return {}
+    out: dict[int, str] = {}
+    for pk, gender in Student.objects.filter(pk__in=ids).values_list("pk", "gender"):
+        if gender in ("K", "E"):
+            out[int(pk)] = str(gender)
+    return out
+
+
+def students_missing_gender_count() -> int:
+    """Cinsiyeti bilinmeyen AKTİF öğrenci sayısı (kural açıkken uyarı sayacı).
+
+    Şifreli alan: sayım Python'da. Sayı KİMLİK içermez — arayüzde "N öğrencinin
+    cinsiyet bilgisi yok" uyarısında kullanılır.
+    """
+    eksik = 0
+    for gender in Student.objects.filter(status=StudentStatus.ACTIVE).values_list(
+        "gender", flat=True
+    ):
+        if gender not in ("K", "E"):
+            eksik += 1
+    return eksik
 
 
 def last_student_import() -> ImportRun | None:

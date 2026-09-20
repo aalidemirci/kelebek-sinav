@@ -468,6 +468,24 @@
   ön-dolar, gönderilmişse gönderilen kazanır (tek sınava mahsus istisna).
   Fark `scope_differs_from_catalog` ile rozetlenir (`entries` ucunda küme
   context'ten gelir — satır başına sorgu yok).
+- **Kız/erkek ayrışması: motor cinsiyet BİLMEZ** (20.09.2026, tasarım §5 +
+  `docs/mevzuat/kvkk-6698.md` "Değerlendirme notları — cinsiyet"): kip
+  `okul.SeparationMode` (Kapalı / Aynı sıraya oturtma / Ayrı salonlar), okul
+  varsayılanı `SchoolConfig.default_separation_mode`, oturum alanı
+  `ExamSession.separation_mode`. Motor ve doğrulayıcı yalnız VARSAYILANLI
+  `separation_key` görür ("K"/"E"/boş=joker); anahtarı SERVİS üretir
+  (`_with_separation_keys`), etiketi ("kız"/"erkek") yalnız METNE girer.
+  Cinsiyet kaynağı e-Okul sınıf listesidir (`Student.gender`,
+  `EncryptedCharField`) ve HİÇBİR evraka, kitapçığa, dışa aktarıma, listeye ya
+  da rozete BASILMAZ — R8'e yalnız kuralın ADI girer; koruma testi
+  `test_ayrisma.py::test_evrakta_cinsiyet_izi_yok`. Kural SERTTİR (sağlanamazsa
+  onay engellenir), cinsiyeti bilinmeyen öğrenci JOKER'dir (dağıtım durmaz,
+  uyarı SAYI söyler), pin çakışması İHLAL sayılır (doğrulayıcı pin bilmez) ve
+  klasik düzende kural HİÇ UYGULANMAZ (`effective_separation_mode`). "Ayrı
+  salonlar" bölüşümü servis katmanındadır (`_distribute_separate_rooms`, alt
+  seed = `seed + bölüm sırası`) — motor tek salon bilir. Motor çıktısının
+  kural KAPALIYKEN değişmediği `test_altin_kayit.py` ile bit bit kilitlidir;
+  o kaydı yenilemek AYRI bir karardır.
 - **Koltuk sabitleme koordinattır:** `(desk_row, desk_col, slot)` — `seat_no`
   numaralandırma düzeni değişince kayar. "Tek başına" kardeş koltukları motor
   girdisinden düşürür; sahte `SeatAssignment` yazılmaz.

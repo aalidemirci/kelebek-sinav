@@ -1,6 +1,14 @@
 # Plan — Kız/erkek ayrışması (aynı sıraya oturtmama · ayrı salonlar)
 
-> **Durum:** PLAN — kod YAZILMADI. 20.09.2026'da hazırlandı, aynı gün kullanıcı
+> **Durum: UYGULANDI (20.09.2026).** Aşağıdaki plan olduğu gibi bırakıldı
+> (karar geçmişi). §2'deki "Açık" başlığı ARTIK GEÇERSİZDİR: K2-K6 aynı gün
+> kullanıcıya soruldu ve cevaplandı — K2 okul varsayılanı + oturumda
+> değiştirilebilir · K3 SERT (onay engellenir) · K4 joker + uyarı · K5 pin
+> çakışması İHLAL sayılır · K6 "kendi dersliğinde" düzeni KAPSAM DIŞI.
+> Sözleşmenin özeti CLAUDE.md §3'te, gerekçe tasarım §5 ve
+> `docs/mevzuat/kvkk-6698.md` "Değerlendirme notları — cinsiyet" bölümünde.
+>
+> **Özgün durum:** PLAN — kod YAZILMADI. 20.09.2026'da hazırlandı, aynı gün kullanıcı
 > kararıyla revize edildi (§2 K1). Uygulamayı başka bir oturum (Opus 5) devralacak.
 > Bu belge tek başına okunabilir olmalıdır: önce §0'ı (çalışma ağacının durumu),
 > sonra §2'yi (alınmış ve açık kararlar) okuyun.

@@ -62,6 +62,7 @@ class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
             "level_programs",
             "daily_period_count",
             "exam_period_nos",
+            "default_separation_mode",
             "setup_completed",
         ]
         read_only_fields = ["setup_completed"]
@@ -330,6 +331,7 @@ class StudentSerializer(serializers.ModelSerializer[Student]):
             "class_level",
             "class_section",
             "class_label",
+            "gender",
             "status",
         ]
 
@@ -337,6 +339,15 @@ class StudentSerializer(serializers.ModelSerializer[Student]):
         if value is None:
             return None
         return _validate_level(value)
+
+    def validate_gender(self, value: str) -> str:
+        """Cinsiyet YALNIZ 'K'/'E'/'' olur; elle girilen başka değer boşa düşer.
+
+        Aktarımla aynı katlama (`normalize_gender`) — "Kız" da "K" da kabul
+        edilir. Alan yalnız kız/erkek ayrışması yerleştirme kuralı içindir;
+        listede sütun olarak GÖSTERİLMEZ, hiçbir evraka basılmaz.
+        """
+        return normalize.normalize_gender(value)
 
     def validate_class_section(self, value: str) -> str:
         # İçe aktarmayla aynı katlama: Türkçe büyük harf ('ş' → 'Ş', 'i' → 'İ').

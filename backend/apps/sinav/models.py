@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from django.db import models
 
+from apps.okul.models import SeparationMode
 from shared.crypto import EncryptedCharField
 from shared.models import BaseModel
 
@@ -225,6 +226,16 @@ class ExamSession(BaseModel):
     layout_mode = models.CharField(
         "düzen", max_length=14, choices=LayoutMode.choices, default=LayoutMode.BUTTERFLY
     )
+    # Kız/erkek ayrışması (20.09.2026): yeni oturum okul varsayılanıyla açılır
+    # (`SchoolConfig.default_separation_mode`), yalnız TASLAKken değiştirilir ve
+    # dağıtımda `distribution_params`a yazılır (R8 basabilsin). Klasik düzende
+    # (kendi dersliğinde) UYGULANMAZ — K6 kullanıcı kararı.
+    separation_mode = models.CharField(
+        "kız/erkek ayrışması",
+        max_length=8,
+        choices=SeparationMode.choices,
+        default=SeparationMode.NONE,
+    )
     proctors_enabled = models.BooleanField(
         "gözetmen modülü", default=False, help_text="U2 — varsayılan kapalı."
     )
@@ -437,6 +448,13 @@ class SeatAssignment(BaseModel):
         "çakışma grubu",
         max_length=24,
         help_text="Motor anahtarı: '<course_id>:<level>' veya '<course_id>:*'.",
+    )
+    # AYRIŞMA ANAHTARI SNAPSHOT'I (20.09.2026): arşiv oturumun yeniden
+    # doğrulanması ve R8 yeniden basımı canlı öğrenci verisine bağlı kalmasın
+    # (ad/no/şube snapshot deseniyle aynı gerekçe). Kaynağı şifreli olduğu için
+    # kopyası da ŞİFRELİDİR; F27 anonimleştirmesinde ad/no ile birlikte boşalır.
+    separation_key = EncryptedCharField(
+        "ayrışma anahtarı (snapshot)", max_length=1, blank=True, default=""
     )
 
     class Meta:

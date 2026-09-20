@@ -3,9 +3,11 @@
 DD (disiplin-defteri-codex) `apps/okul/models.py` kalıbından KS'ye uyarlandı
 (tasarım §4 + §11 UYARLA):
 
-- `Student`: kelebek yalnız ad-soyad + okul no + sınıf/şube kullanır. TCKN,
-  veli ve demografi alanları HİÇ YOKTUR (tasarım §5: en iyi KVKK önlemi veriyi
-  hiç edinmemek). U3 kararı gereği ad-soyad `EncryptedCharField`'dır — DD'nin
+- `Student`: kelebek yalnız ad-soyad + okul no + sınıf/şube kullanır. TCKN ve
+  veli alanları HİÇ YOKTUR (tasarım §5: en iyi KVKK önlemi veriyi hiç
+  edinmemek). TEK demografi alanı 20.09.2026'da kullanıcı kararıyla eklenen
+  `gender`'dır; yalnız kız/erkek ayrışması kuralına hizmet eder ve hiçbir
+  çıktıya basılmaz. U3 kararı gereği ad-soyad `EncryptedCharField`'dır — DD'nin
   aksine burada ad ŞİFRELİDİR ve ad temelli arama Python katmanına taşınmıştır
   (teknik borç TB3; selectors zaten Python tarafında katlayarak arıyor).
 - `Personnel`: DD kalıbı + `is_active` (gözetmen havuzu aktif personelden
@@ -31,6 +33,23 @@ from django.utils import timezone
 
 from shared.crypto import EncryptedCharField, EncryptedTextField
 from shared.models import BaseModel
+
+
+class SeparationMode(models.TextChoices):
+    """Kız/erkek ayrışması kuralı (20.09.2026 kullanıcı isteği).
+
+    Okul varsayılanı burada (`SchoolConfig.default_separation_mode`), oturum
+    bazlı değeri `sinav.ExamSession.separation_mode` alanındadır — sinav okul'u
+    import eder, tersi YASAK (CLAUDE.md), bu yüzden seçenekler burada durur.
+    Değerler `sinav.validator.SEPARATION_*` sabitleriyle AYNI kalmalıdır.
+
+    Etiketler docs/sozluk.md'ye tabidir: iç kod (DESK/ROOM) kullanıcı metninde
+    GEÇMEZ.
+    """
+
+    NONE = "NONE", "Kapalı"
+    DESK = "DESK", "Aynı sıraya oturtma"
+    ROOM = "ROOM", "Ayrı salonlar"
 
 
 class SchoolType(models.TextChoices):
@@ -127,6 +146,15 @@ class SchoolConfig(BaseModel):
     # ders yılı) senkronlandığının damgası; `apps.dersler.services
     # .ensure_catalog_synced` farkı görünce kataloğu yeniden türetir.
     catalog_stamp = models.CharField("katalog damgası", max_length=64, blank=True, default="")
+    # Kız/erkek ayrışmasının OKUL varsayılanı (20.09.2026 kullanıcı kararı K2):
+    # ihtiyacı olan okul bir kez ayarlar, her oturumda yeniden seçmez. Yeni
+    # oturum bu değerle açılır; oturum bazında (yalnız taslakken) değiştirilir.
+    default_separation_mode = models.CharField(
+        "kız/erkek ayrışması varsayılanı",
+        max_length=8,
+        choices=SeparationMode.choices,
+        default=SeparationMode.NONE,
+    )
     setup_completed = models.BooleanField("kurulum tamamlandı", default=False)
     app_password_hash = models.CharField(
         "uygulama parolası özeti", max_length=255, blank=True, default=""
@@ -458,13 +486,21 @@ class Student(BaseModel):
     Evrak sözleşmesi: `full_name`, `student_number`, `class_label` — OYS
     sinav_islemleri SNAPSHOT alanları (SeatAssignment vb.) bu üçünden kopyalanır.
 
-    ŞİFRELEME KAPSAMI (U3, tasarım §5): `first_name`/`last_name` şifrelidir;
-    okul no ve sınıf/şube AÇIKTIR (motor, sıralama, teklik ve süzgeçler bunlara
-    dayanır; ad olmadan takma-adlıdırlar). TCKN/veli/demografi alanı YOKTUR.
+    ŞİFRELEME KAPSAMI (U3, tasarım §5): `first_name`/`last_name`/`gender`
+    şifrelidir; okul no ve sınıf/şube AÇIKTIR (motor, sıralama, teklik ve
+    süzgeçler bunlara dayanır; ad olmadan takma-adlıdırlar). TCKN ve veli alanı
+    YOKTUR.
+
+    `gender` TEK demografi alanıdır ve 20.09.2026'da kullanıcı kararıyla
+    eklendi: kız/erkek ayrışması yerleştirme kuralının girdisidir, kaynağı
+    e-Okul sınıf listesidir. Hiçbir evraka, dışa aktarıma ya da ekran rozetine
+    BASILMAZ; şifreli olduğu için DB'de süzülemez/sıralanamaz (selector
+    katmanında Python ile — tasarım §5).
     """
 
     first_name = EncryptedCharField("ad", max_length=100)
     last_name = EncryptedCharField("soyad", max_length=100)
+    gender = EncryptedCharField("cinsiyet", max_length=1, blank=True, default="")
     student_number = models.CharField("okul no", max_length=16, blank=True, default="")
     class_level = models.PositiveSmallIntegerField("sınıf", null=True, blank=True)
     class_section = models.CharField("şube", max_length=8, blank=True, default="")

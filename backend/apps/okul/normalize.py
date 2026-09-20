@@ -1,9 +1,13 @@
 """Öğrenci içe aktarımı için saf (DB'siz) normalize ediciler.
 
 DD `apps/okul/normalize.py` (OYS kökenli) dosyasından SADELEŞTİRİLEREK alındı:
-TCKN/telefon/doğum tarihi/cinsiyet normalize edicileri KALDIRILDI — kelebek bu
-verileri hiç toplamaz (tasarım §5). Sınıf/şube ayrıştırması okul türünden gelen
-seviye kümesiyle PARAMETRİKTİR (U4 — sabit 9-12 yok; DD/OYS'den bilinçli sapma).
+TCKN/telefon/doğum tarihi normalize edicileri KALDIRILDI — kelebek bu verileri
+hiç toplamaz (tasarım §5). Sınıf/şube ayrıştırması okul türünden gelen seviye
+kümesiyle PARAMETRİKTİR (U4 — sabit 9-12 yok; DD/OYS'den bilinçli sapma).
+
+`normalize_gender` 20.09.2026'da GERİ ALINDI (kullanıcı kararı): kız/erkek
+ayrışması yerleştirme kuralı cinsiyeti gerektiriyor ve veri zaten e-Okul sınıf
+listesinde. Kapsam dardır — yalnız o kural; hiçbir çıktıya basılmaz.
 
 Saf fonksiyonlardır — kolay test edilir (tests/test_normalize). DB eşleştirme
 ve yazma `services/imports.py`'dadır.
@@ -126,6 +130,42 @@ def normalize_class_section(
         return None
     section = tr_upper(section_m2.group())
     return level, section
+
+
+#: Katlanmış (ASCII büyük) metin → cinsiyet kodu. e-Okul "Kız"/"Erkek" yazar;
+#: geri kalanlar uygulama şablonuyla ya da elle girilen listelerle gelebilir.
+_GENDER_MAP = {
+    "K": "K",
+    "KIZ": "K",
+    "KADIN": "K",
+    "BAYAN": "K",
+    "F": "K",
+    "FEMALE": "K",
+    "E": "E",
+    "ERKEK": "E",
+    "BAY": "E",
+    "B": "E",
+    "M": "E",
+    "MALE": "E",
+}
+
+
+def normalize_gender(value: object) -> str:
+    """'Kız' → 'K', 'ERKEK' → 'E'; tanınmayan/boş değer → '' (joker).
+
+    Cinsiyet YALNIZ kız/erkek ayrışması yerleştirme kuralı için tutulur
+    (tasarım §5, 20.09.2026 kullanıcı kararı): hiçbir evraka, dışa aktarıma ya
+    da ekran rozetine basılmaz. Tanınmayan değer sessizce '' olur — kural
+    tarafında "joker" öğrenci olarak ele alınır ve idareciye sayısı uyarıyla
+    bildirilir; aktarımı DÜŞÜRMEZ (cinsiyet kritik sütun değildir).
+
+    Katlama `_ascii_upper` iledir: eşleştirme anahtarı üretilir, veri değil
+    (şube harfi tuzağı burada yok — 'K'/'E' ASCII harflerdir).
+    """
+    if value is None:
+        return ""
+    folded = _ascii_upper(str(value).strip())
+    return _GENDER_MAP.get(folded, "")
 
 
 def split_full_name(value: object) -> tuple[str, str]:

@@ -279,13 +279,20 @@ def _process_student_row(row: ParsedRow, *, report: StudentImportReport) -> None
         student_number=row.student_number, status=StudentStatus.ACTIVE
     ).first()
     if student is None:
-        Student.objects.create(**fields)
+        Student.objects.create(**fields, gender=row.gender)
         report.created_students += 1
     else:
         changed = [name for name, value in fields.items() if getattr(student, name) != value]
+        for name in changed:
+            setattr(student, name, fields[name])
+        # Cinsiyet YALNIZ dolu ve farklı gelirse yazılır: cinsiyet sütunu
+        # olmayan bir aktarım (uygulama şablonu, panodan yapıştırma) kayıtlı
+        # cinsiyeti SİLMEZ — personeldeki `title`/`branch` emsali. Sayaçlar
+        # değişmez: cinsiyet farkı da "güncellenen" sayılır.
+        if row.gender and student.gender != row.gender:
+            student.gender = row.gender
+            changed.append("gender")
         if changed:
-            for name in changed:
-                setattr(student, name, fields[name])
             student.save(update_fields=[*changed, "updated_at"])
             report.updated_students += 1
         else:

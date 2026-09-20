@@ -15,7 +15,7 @@ import logging
 import math
 import random
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 from types import EllipsisType
 from typing import Any
@@ -30,7 +30,7 @@ from apps.dersler import selectors as ders_selectors
 from apps.dersler import services as ders_services
 from apps.okul import normalize as okul_normalize
 from apps.okul import selectors as okul_selectors
-from apps.okul.models import ClassSection, Personnel, SchoolConfig
+from apps.okul.models import ClassSection, Personnel, SchoolConfig, SeparationMode
 from apps.sinav import (
     booklet,
     engine,
@@ -505,11 +505,18 @@ def create_exam_session(
     session_type: str = ExamSessionType.SCHOOL,
     layout_mode: str = LayoutMode.BUTTERFLY,
     proctors_enabled: bool = False,
+    separation_mode: str | None = None,
 ) -> ExamSession:
-    """Yeni TASLAK oturum oluşturur (Adım 1)."""
+    """Yeni TASLAK oturum oluşturur (Adım 1).
+
+    `separation_mode` verilmezse OKUL VARSAYILANI uygulanır (K2 kullanıcı
+    kararı): ihtiyacı olan okul ayarı bir kez yapar, her oturumda seçmez.
+    """
     cleaned = " ".join((name or "").split())
     if not cleaned:
         raise ValidationError("Oturum adı boş olamaz.")
+    if separation_mode is None:
+        separation_mode = SchoolConfig.load().default_separation_mode
     session: ExamSession = ExamSession.objects.create(
         name=cleaned,
         exam_date=exam_date,
@@ -519,6 +526,7 @@ def create_exam_session(
         session_type=session_type,
         layout_mode=layout_mode,
         proctors_enabled=proctors_enabled,
+        separation_mode=separation_mode,
     )
     return session
 
@@ -537,6 +545,7 @@ def update_exam_session(session: ExamSession, **fields: Any) -> ExamSession:
         "session_type",
         "layout_mode",
         "proctors_enabled",
+        "separation_mode",
     }
     unknown = set(fields) - allowed - {"term_id"}
     if unknown:
@@ -1083,9 +1092,166 @@ def _placed_from(placements: list[engine.Placement]) -> list[validator.PlacedStu
             desk_label=layout.desk_position_label(pl.seat.desk_row, pl.seat.desk_col),
             group_label=group_labels.get(pl.participant.conflict_group, ""),
             student_number=pl.participant.student_number,
+            separation_key=pl.participant.separation_key,
+            separation_label=separation_label(pl.participant.separation_key),
         )
         for pl in placements
     ]
+
+
+#: Ayrışma anahtarının İDARECİ DİLİNDEKİ karşılığı. Anahtar denetime, etiket
+#: yalnız METNE girer (motor ve doğrulayıcı anahtarın ne olduğunu bilmez).
+SEPARATION_LABELS = {"K": "kız", "E": "erkek"}
+
+
+def separation_label(key: str) -> str:
+    """ "K" → "kız"; tanınmayan anahtar ham döner (etiket metin içindir)."""
+    return SEPARATION_LABELS.get(key, key)
+
+
+def effective_separation_mode(session: ExamSession) -> str:
+    """Oturumda GERÇEKTEN uygulanacak ayrışma kipi.
+
+    Klasik düzende (kendi dersliğinde) kural UYGULANMAZ — K6 kullanıcı kararı:
+    öğrenciler kendi şubelerinde okul no sırasıyla oturur. Ayar açık kalsa bile
+    etkin kip NONE'dır; arayüz bunu ayrıca söyler.
+    """
+    if session.layout_mode != LayoutMode.BUTTERFLY:
+        return SeparationMode.NONE
+    return session.separation_mode or SeparationMode.NONE
+
+
+def _with_separation_keys(
+    pool: list[participants.Participant],
+) -> tuple[list[participants.Participant], int]:
+    """Katılımcılara ayrışma anahtarını yazar; (yeni havuz, joker sayısı) döner.
+
+    Anahtarı SERVİS üretir (motor cinsiyet bilmez — tasarım §"Ayrışma
+    anahtarı"). Cinsiyeti bilinmeyen öğrenci JOKER olur: kurala girmez,
+    dağıtımı durdurmaz (K4 kullanıcı kararı), yalnız sayısı uyarıya yazılır.
+    """
+    cinsiyetler = okul_selectors.student_genders([p.student_id for p in pool])
+    yeni = [replace(p, separation_key=cinsiyetler.get(p.student_id, "")) for p in pool]
+    return yeni, sum(1 for p in yeni if not p.separation_key)
+
+
+def _allocate_rooms_by_separation(
+    pool: list[participants.Participant],
+    rooms: list[engine.RoomSeats],
+    preplaced: list[engine.Placement],
+) -> dict[str, list[engine.RoomSeats]]:
+    """AYRI SALON kipi: salonları ayrışma anahtarlarına bölüştürür (deterministik).
+
+    Bölüşüm sırası: (1) kuralla sabitlenmiş öğrencinin bulunduğu salon o
+    öğrencinin anahtarına AYRILIR (pin kazanır — K5; salonda iki anahtar birden
+    pinliyse salon serbest kalır ve ihlali doğrulayıcı yazar), (2) kalan
+    salonlar, açığı en büyük bölüme sırayla verilir (eşitlikte anahtar sırası).
+    Rastgelelik yok: aynı girdi → aynı bölüşüm.
+
+    Kapasite yetmezse Türkçe `ValidationError` — hangi bölüme kaç koltuk
+    gerektiğini SAYIYLA söyler (kimlik yok).
+    """
+    ihtiyac: dict[str, int] = {}
+    for p in pool:
+        if p.separation_key:
+            ihtiyac[p.separation_key] = ihtiyac.get(p.separation_key, 0) + 1
+    if len(ihtiyac) < 2:
+        # Tek anahtar (ya da hiç): bölüşecek bir şey yok, salonların tamamı ona kalır.
+        anahtar = next(iter(ihtiyac), "")
+        return {anahtar: list(rooms)} if anahtar else {}
+
+    zorunlu: dict[int, str] = {}
+    pinli_anahtarlar: dict[int, set[str]] = {}
+    for pl in preplaced:
+        if pl.participant.separation_key:
+            pinli_anahtarlar.setdefault(pl.room_id, set()).add(pl.participant.separation_key)
+    for room_id, anahtarlar in pinli_anahtarlar.items():
+        if len(anahtarlar) == 1:
+            zorunlu[room_id] = next(iter(anahtarlar))
+
+    bolumler: dict[str, list[engine.RoomSeats]] = {k: [] for k in sorted(ihtiyac)}
+    kalan = dict(ihtiyac)
+    serbest: list[engine.RoomSeats] = []
+    for room in rooms:
+        pinli_anahtar = zorunlu.get(room.room_id)
+        if pinli_anahtar is not None and pinli_anahtar in bolumler:
+            bolumler[pinli_anahtar].append(room)
+            kalan[pinli_anahtar] -= len(room.seats)
+        else:
+            serbest.append(room)
+
+    for room in serbest:
+        # Açığı en büyük bölüm alır; eşitlikte anahtar sırası (deterministik).
+        hedef = max(sorted(bolumler), key=lambda k: kalan[k])
+        bolumler[hedef].append(room)
+        kalan[hedef] -= len(room.seats)
+
+    yetmeyen = {k: v for k, v in kalan.items() if v > 0}
+    if yetmeyen:
+        eksik = "; ".join(
+            f"{separation_label(k)} öğrenciler için {v} koltuk" for k, v in sorted(yetmeyen.items())
+        )
+        raise ValidationError(
+            f"Ayrı salon kuralı uygulanamıyor: {eksik} eksik kalıyor. Salon ekleyin ya da "
+            "kuralı “Aynı sıraya oturtma” yapın."
+        )
+    return bolumler
+
+
+def _distribute_separate_rooms(
+    pool: list[participants.Participant],
+    rooms: list[engine.RoomSeats],
+    *,
+    seed: int,
+    strict: bool,
+    preplaced: list[engine.Placement],
+    previous: engine.PrevSeats,
+) -> engine.DistributionResult:
+    """AYRI SALON kipi: her bölüm kendi salonlarında AYRI dağıtılır, sonuç birleşir.
+
+    Alt seed'ler ana seed'den TÜRETİLİR (`seed + bölüm sırası`) — "aynı seed →
+    aynı dağıtım" sözleşmesi korunur. Jokerler (anahtarı boş) kapasitesi en
+    boş bölüme eklenir (K4); tek anahtar varsa kip fiilen devre dışıdır ve
+    dağıtım olağan yolundan geçer.
+    """
+    bolumler = _allocate_rooms_by_separation(pool, rooms, preplaced)
+    if len(bolumler) < 2:
+        return engine.distribute_butterfly(
+            pool, rooms, seed=seed, strict=strict, preplaced=preplaced, previous_seats=previous
+        )
+
+    havuzlar: dict[str, list[participants.Participant]] = {k: [] for k in bolumler}
+    jokerler: list[participants.Participant] = []
+    for p in pool:
+        if p.separation_key in havuzlar:
+            havuzlar[p.separation_key].append(p)
+        else:
+            jokerler.append(p)
+    bos_kapasite = {
+        k: sum(len(r.seats) for r in odalar) - len(havuzlar[k]) for k, odalar in bolumler.items()
+    }
+    for joker in sorted(jokerler, key=lambda p: p.student_id):
+        hedef = max(sorted(bos_kapasite), key=lambda k: bos_kapasite[k])
+        havuzlar[hedef].append(joker)
+        bos_kapasite[hedef] -= 1
+
+    birlesik = engine.DistributionResult(seed=seed)
+    for sira, anahtar in enumerate(sorted(bolumler)):
+        odalar = bolumler[anahtar]
+        oda_kimlikleri = {r.room_id for r in odalar}
+        bolum_pinleri = [pl for pl in preplaced if pl.room_id in oda_kimlikleri]
+        parca = engine.distribute_butterfly(
+            havuzlar[anahtar],
+            odalar,
+            seed=seed + sira,
+            strict=strict,
+            preplaced=bolum_pinleri,
+            previous_seats=previous,
+        )
+        birlesik.placements.extend(parca.placements)
+        birlesik.warnings.extend(parca.warnings)
+        birlesik.checkerboard = birlesik.checkerboard or parca.checkerboard
+    return birlesik
 
 
 @transaction.atomic
@@ -1115,6 +1281,12 @@ def distribute_session(
             "oturumda birden çok derse düşüyor. Katılımcı önizlemesinden düzeltin."
         )
     pool = resolution.participants
+
+    # Kız/erkek ayrışması: anahtarları SERVİS üretir (motor cinsiyet bilmez).
+    separation = effective_separation_mode(session)
+    bilinmeyen_cinsiyet = 0
+    if separation != SeparationMode.NONE:
+        pool, bilinmeyen_cinsiyet = _with_separation_keys(pool)
 
     if seed is None:
         seed = random.randrange(1, 1_000_000)  # noqa: S311 — kripto değil; dağıtım seed'i
@@ -1151,18 +1323,35 @@ def distribute_session(
         free_pool = [p for p in pool if p.student_id not in pinned_ids]
         previous = _previous_seats_map(session, [p.student_id for p in free_pool])
         try:
-            result = engine.distribute_butterfly(
-                free_pool,
-                butterfly_rooms,
-                seed=seed,
-                strict=strict,
-                preplaced=preplaced,
-                previous_seats=previous,
-            )
+            if separation == SeparationMode.ROOM:
+                result = _distribute_separate_rooms(
+                    free_pool,
+                    butterfly_rooms,
+                    seed=seed,
+                    strict=strict,
+                    preplaced=preplaced,
+                    previous=previous,
+                )
+            else:
+                result = engine.distribute_butterfly(
+                    free_pool,
+                    butterfly_rooms,
+                    seed=seed,
+                    strict=strict,
+                    preplaced=preplaced,
+                    previous_seats=previous,
+                )
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
         result.placements = [*preplaced, *result.placements]
         result.warnings.extend(pin_warnings)
+
+    if bilinmeyen_cinsiyet:
+        # K4: joker öğrenci kurala girmez; sessiz kalmaz — sayı KİMLİKSİZDİR.
+        result.warnings.append(
+            f"{bilinmeyen_cinsiyet} öğrencinin cinsiyet bilgisi yok; kız/erkek ayrışması "
+            "kuralı onlara uygulanmadı. e-Okul sınıf listesini yeniden aktarın."
+        )
 
     report = validator.validate_seating(
         _placed_from(result.placements),
@@ -1170,6 +1359,7 @@ def distribute_session(
         # Klasik düzende (kendi dersliğinde) tüm şube aynı gruptur; bitişik
         # oturma beklenen durumdur — yalnız bütünlük denetlenir (K3).
         enforce_group_separation=session.layout_mode == LayoutMode.BUTTERFLY,
+        separation=separation,
     )
 
     # Önceki canlı yerleşimi kapat, yenisini yaz (SNAPSHOT deseni).
@@ -1198,6 +1388,7 @@ def distribute_session(
                 SeatStatus.PINNED if pl.participant.student_id in pinned_ids else SeatStatus.NORMAL
             ),
             conflict_group=pl.participant.conflict_group,
+            separation_key=pl.participant.separation_key,
         )
         for pl in result.placements
     )
@@ -1222,6 +1413,8 @@ def distribute_session(
         "strict": strict,
         "checkerboard": result.checkerboard,
         "layout_mode": session.layout_mode,
+        # R8 kuralın ADINI buradan basar; arşiv oturumun kipi canlı ayara bağlı kalmaz.
+        "separation_mode": separation,
         "placed": len(result.placements),
         "pinned": len(pinned_ids),
         "rooms_per_section": {
@@ -1542,13 +1735,21 @@ def seating_report(session: ExamSession) -> validator.SeatingReport:
                 desk_label=layout.desk_position_label(a.desk_row, a.desk_col),
                 group_label=group_labels.get(a.conflict_group, ""),
                 student_number=a.student_number,
+                # SNAPSHOT: arşiv oturumun yeniden doğrulaması canlı öğrenci
+                # verisine (cinsiyet sonradan düzeltilebilir) bağlı kalmaz.
+                separation_key=a.separation_key,
+                separation_label=separation_label(a.separation_key),
             )
         )
     strict = bool(session.distribution_params.get("strict", False))
+    # Kip DAĞITIM ANINDAKİ değerdir: ayar sonradan değişse de basılmış evrakla
+    # tutarlı kalır (küme/kapsam snapshot'larıyla aynı gerekçe).
+    separation = str(session.distribution_params.get("separation_mode") or SeparationMode.NONE)
     return validator.validate_seating(
         placed,
         strict=strict,
         enforce_group_separation=session.layout_mode == LayoutMode.BUTTERFLY,
+        separation=separation,
     )
 
 
@@ -2094,8 +2295,13 @@ def anonymize_exam_session(session: ExamSession) -> dict[str, int]:
         if field and field.name:
             files.append((field.storage, field.name))
     counts = {
+        # Ayrışma anahtarı da BOŞALIR: anonim arşivde kuralın yeniden
+        # doğrulanması gerekmez, R8 sayıları `distribution_params`ta durur.
         "seat_assignments": SeatAssignment.all_objects.filter(session=session).update(
-            full_name=ANONYMIZED_MARK, student_number=ANONYMIZED_MARK, student=None
+            full_name=ANONYMIZED_MARK,
+            student_number=ANONYMIZED_MARK,
+            student=None,
+            separation_key="",
         ),
         "attendance_records": ExamAttendanceRecord.all_objects.filter(session=session).update(
             full_name=ANONYMIZED_MARK, student_number=ANONYMIZED_MARK, note="", student=None
@@ -2498,6 +2704,11 @@ def _validation_report_context(
             "checkerboard": bool(params.get("checkerboard", False)),
             "placed": params.get("placed", len(rows)),
             "pinned": params.get("pinned", 0),
+            # Kız/erkek ayrışması: R8'e YALNIZ kuralın adı girer (ihlaller zaten
+            # ihlal listesinde). Cinsiyet, sayım ya da öğrenci işareti BASILMAZ.
+            "separation_label": SeparationMode(
+                str(params.get("separation_mode") or SeparationMode.NONE)
+            ).label,
         },
         group_labels=group_labels,
         warnings=[str(w) for w in params.get("warnings", [])],

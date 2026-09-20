@@ -102,3 +102,30 @@ class TestSplitFullName:
     def test_ham_birakilir_title_case_uygulanmaz(self) -> None:
         """TR büyük harf tuzağı: görüntü biçimi başka katmanda (CLAUDE.md §2)."""
         assert normalize.split_full_name("emre can yılmaz") == ("emre can", "yılmaz")
+
+
+class TestNormalizeGender:
+    """Cinsiyet katlaması (20.09.2026) — yalnız kız/erkek ayrışması kuralı için."""
+
+    def test_eokul_yazimi(self) -> None:
+        assert normalize.normalize_gender("Kız") == "K"
+        assert normalize.normalize_gender("Erkek") == "E"
+
+    def test_buyuk_kucuk_ve_bosluk_farketmez(self) -> None:
+        assert normalize.normalize_gender(" KIZ ") == "K"
+        assert normalize.normalize_gender("erkek") == "E"
+        assert normalize.normalize_gender("K") == "K"
+        assert normalize.normalize_gender("e") == "E"
+
+    def test_oteki_yazimlar(self) -> None:
+        assert normalize.normalize_gender("Bayan") == "K"
+        assert normalize.normalize_gender("Female") == "K"
+        assert normalize.normalize_gender("BAY") == "E"
+        assert normalize.normalize_gender("male") == "E"
+
+    def test_taninmayan_deger_jokerdir(self) -> None:
+        """Tanınmayan değer aktarımı DÜŞÜRMEZ; kural tarafında joker olur."""
+        assert normalize.normalize_gender("belirtilmemiş") == ""
+        assert normalize.normalize_gender("") == ""
+        assert normalize.normalize_gender(None) == ""
+        assert normalize.normalize_gender(0) == ""

@@ -67,6 +67,7 @@ const ZEYNEP: Student = {
   class_level: 10,
   class_section: "C",
   class_label: "10/C",
+  gender: "",
   status: "ACTIVE",
 };
 

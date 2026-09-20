@@ -25,6 +25,7 @@ kavramları (faz/karar/evrak kodları, motor ölçütleri) yüzeye çıkmaz.
 | `seed` | **dağıtım numarası** | seed, tohum, çekirdek sayı | İlk geçtiği yardım metninde bir kez "(seed)" parantezi olabilir; R8'de "Dağıtım numarası (seed)" |
 | sert kısıt ihlali | **kural ihlali** | sert kısıt, "İHLAL = 0", halka, yakınlık skoru | Motor ölçütleri yalnız "Ayrıntı" açılır bölümünde ve R8'in teknik bölümünde |
 | katı mod | **Katı dağıtım** — "yan, ön ve arka komşuluk da kesinlikle yasak" | "Katı mod (1. halka…)" | |
+| `SeparationMode` / `separation_key` | **kız/erkek ayrışması**; seçenekler **Kapalı** / **Aynı sıraya oturtma** / **Ayrı salonlar**; öğrenci alanı **Cinsiyet** (Belirtilmemiş / Kız / Erkek) | DESK, ROOM, ayrışma anahtarı, "cinsiyet kısıtı", "karma oturma" | Kural okulun TERCİHİDİR (mevzuat dayanağı yok), varsayılan Kapalı. Cinsiyet hiçbir evraka/dışa aktarıma basılmaz, listede sütun olmaz; R8'e yalnız kuralın adı girer |
 | `ExcuseStatus` | **Beklemede / Mazeretli / Mazeretsiz** | Özürlü / Özürsüz | Mevzuat "mazeret" der |
 | `ParticipantType.MAKEUP` | **"Mazeretli öğrenciler"** (ders satırında) | "mazeret grubu", "üçüncü tip" | "Katılımcılar" SEÇENEĞİ değildir — satırı yalnız Mazeret Takibi ekranı kurar |
 | `MakeupPlan` | **mazeret sınav takvimi** (sekme: **Mazeret Takvimi**); belgeleri **"Takvim (PDF)"** = adsız ilan nüshası, **"Öğrenci listesi (PDF)"** | mazeret planı, telafi takvimi | Çizelgesi de "yerleştirme çizelgesi"dir; sıra kipi kullanıcıya "Asıl takvim sırasını kesin koru" diye sorulur |

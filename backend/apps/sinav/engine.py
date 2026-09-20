@@ -58,6 +58,11 @@ def _add(a: Penalty, b: Penalty) -> Penalty:
     return (a[0] + b[0], a[1] + b[1])
 
 
+#: Yerleşimde tutulan tek koltuk kaydı: (koltuk, çakışma grubu, ayrışma anahtarı).
+#: Ayrışma anahtarı 20.09.2026'da eklendi; boş değer JOKER'dir (kurala girmez).
+Occupant = tuple[Seat, str, str]
+
+
 @dataclass(frozen=True)
 class RoomSeats:
     """Motor girdisi: bir salonun kullanılabilir koltukları (rota sıralı).
@@ -263,17 +268,37 @@ def _pair_penalty(a_seat: Seat, b_seat: Seat, focus: tuple[float, float]) -> Pen
     return (base, 0.0)
 
 
+def _separation_conflict(a_seat: Seat, b_seat: Seat, a_key: str, b_key: str) -> bool:
+    """Aynı SIRADA iki farklı (boş olmayan) ayrışma anahtarı var mı? (Sert kısıt.)
+
+    Motor ayrışmanın NE olduğunu bilmez — yalnız "iki anahtar farklı mı" diye
+    sorar (20.09.2026, kız/erkek ayrışması; tasarım §"Ayrışma anahtarı"). Boş
+    anahtar JOKER'dir: kurala girmez, herkesin yanına oturabilir.
+
+    Denetim koltuk KİMLİĞİNDENDİR (desk_row, desk_col) — mesafeden değil;
+    aynı-grup sert kısıtıyla aynı ölçüt (CLAUDE.md §3).
+    """
+    if not a_key or not b_key or a_key == b_key:
+        return False
+    return a_seat.desk_row == b_seat.desk_row and a_seat.desk_col == b_seat.desk_col
+
+
 def _placement_penalty(
     seat: Seat,
     group: str,
-    occupied: list[tuple[Seat, str]],
+    occupied: list[Occupant],
     *,
     strict: bool,
     focus: tuple[float, float],
+    separation: str = "",
 ) -> Penalty:
     """Koltuğa bu gruptan öğrenci koymanın mevcut yerleşime göre ceza demeti."""
     penalty: Penalty = _ZERO_PENALTY
-    for other_seat, other_group in occupied:
+    for other_seat, other_group, other_separation in occupied:
+        # Ayrışma denetimi grup denetiminden ÖNCEDİR: çift FARKLI gruptan da
+        # olabilir (ikili sırada yan yana oturanlar zaten farklı derstendir).
+        if _separation_conflict(seat, other_seat, separation, other_separation):
+            return (math.inf, 0.0)
         if other_group != group:
             continue
         p = _pair_penalty(seat, other_seat, focus)
@@ -296,7 +321,7 @@ def _constructive_fill(
     *,
     strict: bool,
     warnings: list[str],
-    fixed: list[tuple[Seat, str]] | None = None,
+    fixed: list[Occupant] | None = None,
     prev_seats: PrevSeats | None = None,
 ) -> list[Placement]:
     """Faz 1 — kuyruk rotasyonlu kurucu yerleştirme (deterministik).
@@ -305,8 +330,8 @@ def _constructive_fill(
     komşuluk/ceza hesabına girerler ama asla taşınmazlar (T6).
     """
     queue = list(students)
-    occupied: list[tuple[Seat, str]] = list(fixed or [])
-    fixed_keys = {(s.desk_row, s.desk_col, s.slot) for s, _ in occupied}
+    occupied: list[Occupant] = list(fixed or [])
+    fixed_keys = {(s.desk_row, s.desk_col, s.slot) for s, _, _ in occupied}
     prev = prev_seats or {}
     placements: list[Placement] = []
     for seat in room.seats:
@@ -320,7 +345,12 @@ def _constructive_fill(
         for idx in range(min(len(queue), _LOOKAHEAD)):
             penalty = _add(
                 _placement_penalty(
-                    seat, queue[idx].conflict_group, occupied, strict=strict, focus=room.focus
+                    seat,
+                    queue[idx].conflict_group,
+                    occupied,
+                    strict=strict,
+                    focus=room.focus,
+                    separation=queue[idx].separation_key,
                 ),
                 (_prev_penalty(queue[idx], room.room_id, seat, prev), 0.0),
             )
@@ -332,13 +362,25 @@ def _constructive_fill(
         if chosen_idx is None:
             chosen_idx = best_idx
             if math.isinf(best_penalty[0]):
+                # Kaçınılmaz ihlalin SEBEBİ söylenir: aynı sınav mı, ayrışma mı?
+                # Motor ayrışmanın ne olduğunu bilmediği için metin nötrdür;
+                # somut cümleyi doğrulayıcı etiketlerle kurar (CLAUDE.md §3).
+                ayrisma = any(
+                    _separation_conflict(seat, o_seat, queue[best_idx].separation_key, o_sep)
+                    for o_seat, _o_group, o_sep in occupied
+                )
+                sebep = (
+                    "ayrı oturması gereken iki öğrencinin aynı sıraya oturması"
+                    if ayrisma
+                    else "aynı sınava giren iki öğrencinin aynı sıraya oturması"
+                )
                 warnings.append(
                     f"{_room_text(room)}, {desk_position_label(seat.desk_row, seat.desk_col)}: "
-                    "aynı sınava giren iki öğrencinin aynı sıraya oturması kaçınılmaz oldu "
+                    f"{sebep} kaçınılmaz oldu "
                     "(yerleştirilecek başka uygun öğrenci kalmadı)."
                 )
         student = queue.pop(chosen_idx)
-        occupied.append((seat, student.conflict_group))
+        occupied.append((seat, student.conflict_group, student.separation_key))
         placements.append(Placement(participant=student, room_id=room.room_id, seat=seat))
     if queue:
         warnings.append(
@@ -352,7 +394,7 @@ def _student_penalty_at(
     idx: int,
     seat: Seat,
     *,
-    fixed: list[tuple[Seat, str]] | None = None,
+    fixed: list[Occupant] | None = None,
     room_id: int = 0,
     prev_seats: PrevSeats | None = None,
     focus: tuple[float, float] = (0.0, 0.0),
@@ -364,14 +406,22 @@ def _student_penalty_at(
     """
     student = placements[idx].participant
     me = student.conflict_group
+    my_separation = student.separation_key
     total: Penalty = (_prev_penalty(student, room_id, seat, prev_seats or {}), 0.0)
     for k, other in enumerate(placements):
-        if k == idx or other.participant.conflict_group != me:
+        if k == idx:
+            continue
+        # Ayrışma grup denetiminden ÖNCE: takas/taşıma hamleleri de kuralı bozamaz.
+        if _separation_conflict(seat, other.seat, my_separation, other.participant.separation_key):
+            return (math.inf, 0.0)
+        if other.participant.conflict_group != me:
             continue
         total = _add(total, _pair_penalty(seat, other.seat, focus))
         if math.isinf(total[0]):
             return total
-    for fixed_seat, fixed_group in fixed or []:
+    for fixed_seat, fixed_group, fixed_separation in fixed or []:
+        if _separation_conflict(seat, fixed_seat, my_separation, fixed_separation):
+            return (math.inf, 0.0)
         if fixed_group != me:
             continue
         total = _add(total, _pair_penalty(seat, fixed_seat, focus))
@@ -385,7 +435,7 @@ def _local_search(
     *,
     room: RoomSeats,
     rng: random.Random,
-    fixed: list[tuple[Seat, str]] | None = None,
+    fixed: list[Occupant] | None = None,
     prev_seats: PrevSeats | None = None,
 ) -> None:
     """Faz 2 — salon-içi yerel arama: ikili takas + BOŞ koltuğa taşınma.
@@ -399,7 +449,7 @@ def _local_search(
     if n == 0:
         return
     fixed = list(fixed or [])
-    fixed_keys = {(s.desk_row, s.desk_col, s.slot) for s, _ in fixed}
+    fixed_keys = {(s.desk_row, s.desk_col, s.slot) for s, _, _ in fixed}
     used = {(p.seat.desk_row, p.seat.desk_col, p.seat.slot) for p in placements} | fixed_keys
     free_seats = [s for s in room.seats if (s.desk_row, s.desk_col, s.slot) not in used]
     budget = min(_SWAP_BUDGET_MAX, _SWAP_BUDGET_PER_SEAT * max(n, len(room.seats)))
@@ -489,9 +539,11 @@ def distribute_butterfly(
         group_sizes[p.conflict_group] = group_sizes.get(p.conflict_group, 0) + 1
 
     # Sabit yerleşimlerin koltukları kullanılamaz; salon bazında ayrıştır.
-    fixed_by_room: dict[int, list[tuple[Seat, str]]] = {}
+    fixed_by_room: dict[int, list[Occupant]] = {}
     for pl in pinned:
-        fixed_by_room.setdefault(pl.room_id, []).append((pl.seat, pl.participant.conflict_group))
+        fixed_by_room.setdefault(pl.room_id, []).append(
+            (pl.seat, pl.participant.conflict_group, pl.participant.separation_key)
+        )
 
     def _available(room: RoomSeats) -> int:
         return len(room.seats) - len(fixed_by_room.get(room.room_id, []))

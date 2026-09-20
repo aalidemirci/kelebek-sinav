@@ -68,6 +68,11 @@ sözleşmesi değişmedi: sayı basılır, etiketi Türkçedir.{% endcomment %}
     {% endif %}
     <tr><td class="k">Yerleşen öğrenci / yeri kuralla sabitlenen</td>
         <td class="v">{{ report.params.placed }} / {{ report.params.pinned }}</td></tr>
+    {% comment %}Kız/erkek ayrışması: YALNIZ kuralın adı basılır. Öğrenciye özgü
+    hiçbir işaret, sayım ya da cinsiyet bilgisi evraka girmez (tasarım kararı).
+    Django yorumu TEK satırlıktır; bu blok o yüzden {% comment %} ile yazıldı.{% endcomment %}
+    <tr><td class="k">Kız/erkek ayrışması</td>
+        <td class="v">{{ report.params.separation_label }}</td></tr>
   </table>
 
   <div class="sec">B. YAKINLIK ÖLÇÜLERİ

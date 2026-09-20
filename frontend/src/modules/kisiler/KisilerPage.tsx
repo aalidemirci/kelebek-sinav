@@ -36,11 +36,13 @@ import BepListesiPaneli from "../bep/BepListesiPaneli";
 import {
   importCounts,
   okulApi,
+  GENDER_LABELS,
   PERSONNEL_TEMPLATE_FILENAME,
   STUDENT_STATUS_TR,
   STUDENT_TEMPLATE_FILENAME,
 } from "../okul/api";
 import type {
+  Gender,
   GradeLevelOption,
   ImportInput,
   ImportReport,
@@ -370,6 +372,8 @@ function OgrenciFormDialog({
     student?.class_level == null ? "" : String(student.class_level),
   );
   const [section, setSection] = useState(student?.class_section ?? "");
+  // Cinsiyet YALNIZ kız/erkek ayrışması kuralı içindir; liste sütunu YOKTUR.
+  const [gender, setGender] = useState<Gender>(student?.gender ?? "");
   const [status, setStatus] = useState<StudentStatus>(student?.status ?? "ACTIVE");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -392,6 +396,7 @@ function OgrenciFormDialog({
       student_number: studentNumber.trim(),
       class_level: level ? Number(level) : null,
       class_section: section.trim(),
+      gender,
       status,
     };
     setBusy(true);
@@ -493,6 +498,17 @@ function OgrenciFormDialog({
             onChange={(e) => setSection(e.target.value)}
             error={errors.class_section}
             helperText="Türkçe harfler korunur ve büyütülür (ş → Ş, i → İ). 10/I ile 10/İ ayrı şubelerdir."
+          />
+          <Select
+            label="Cinsiyet"
+            value={gender}
+            onChange={(e) => setGender(e.target.value as Gender)}
+            options={(Object.keys(GENDER_LABELS) as Gender[]).map((g) => ({
+              value: g,
+              label: GENDER_LABELS[g],
+            }))}
+            error={errors.gender}
+            helperText="Yalnız kız/erkek ayrışması yerleştirme kuralı için kullanılır; hiçbir belgeye basılmaz."
           />
           <Select
             label="Durum"
@@ -778,7 +794,7 @@ type ImportKind = "students" | "personnel";
 const IMPORT_LABEL: Record<ImportKind, { title: string; hint: string; template: string }> = {
   students: {
     title: "e-Okul raporundan veya şablondan öğrenci aktar",
-    hint: "e-Okul Öğrenci İşlemleri → Raporlar → OOG01001R020 — Sınıf/Şube Öğrenci Listesi raporunu Excel olarak indirip DEĞİŞTİRMEDEN yükleyin: şube blokları, sınıf başlıkları ve sayaç dipnotları otomatik çözülür. Alternatif olarak uygulama şablonu (sınıf, okul numarası, ad, soyad) doldurulabilir ya da tablo doğrudan panoya yapıştırılabilir. Öğrencinin adı-soyadı ve numarası dışındaki sütunlar (cinsiyet, pansiyon) okunmaz.",
+    hint: "e-Okul Öğrenci İşlemleri → Raporlar → OOG01001R020 — Sınıf/Şube Öğrenci Listesi raporunu Excel olarak indirip DEĞİŞTİRMEDEN yükleyin: şube blokları, sınıf başlıkları ve sayaç dipnotları otomatik çözülür. Alternatif olarak uygulama şablonu (sınıf, okul numarası, ad, soyad) doldurulabilir ya da tablo doğrudan panoya yapıştırılabilir. Cinsiyet sütunu varsa okunur ve YALNIZ kız/erkek ayrışması yerleştirme kuralında kullanılır; hiçbir belgeye basılmaz. Pansiyon durumu okunmaz.",
     template: STUDENT_TEMPLATE_FILENAME,
   },
   personnel: {

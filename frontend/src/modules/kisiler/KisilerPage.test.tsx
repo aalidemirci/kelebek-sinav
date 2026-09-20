@@ -80,6 +80,7 @@ const STUDENT: Student = {
   class_level: 10,
   class_section: "A",
   class_label: "10/A",
+  gender: "",
   status: "ACTIVE",
 };
 
@@ -249,6 +250,31 @@ describe("KisilerPage — öğrenci ekleme/düzenleme/silme", () => {
           class_level: null,
           status: "ACTIVE",
         }),
+      ),
+    );
+  });
+
+  it("cinsiyet elle girilebilir ama listede sütun olarak gösterilmez", async () => {
+    okulApiMock.createStudent.mockResolvedValue({ ...STUDENT, id: 3 });
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("Ayşe Yılmaz");
+
+    // Liste: cinsiyet sütunu YOKTUR (yalnız yerleştirme kuralı için tutulur).
+    expect(screen.queryByRole("columnheader", { name: /Cinsiyet/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Öğrenci ekle" }));
+    const dialog = await screen.findByRole("dialog", { name: "Yeni öğrenci" });
+    await user.type(within(dialog).getByLabelText(/^Ad \*$/), "Zeynep");
+    await user.type(within(dialog).getByLabelText(/^Soyad \*$/), "Kaya");
+    const cinsiyet = within(dialog).getByLabelText("Cinsiyet");
+    expect(within(dialog).getByRole("option", { name: "Belirtilmemiş" })).toBeInTheDocument();
+    await user.selectOptions(cinsiyet, "K");
+    await user.click(within(dialog).getByRole("button", { name: "Kaydet" }));
+
+    await waitFor(() =>
+      expect(okulApiMock.createStudent).toHaveBeenCalledWith(
+        expect.objectContaining({ gender: "K" }),
       ),
     );
   });

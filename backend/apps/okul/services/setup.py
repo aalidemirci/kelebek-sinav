@@ -27,6 +27,7 @@ UPDATABLE_FIELDS: tuple[str, ...] = (
     "level_programs",
     "daily_period_count",
     "exam_period_nos",
+    "default_separation_mode",
 )
 
 #: Değişince ders kataloğunun çizelgeye yeniden çekilmesini gerektiren alanlar.

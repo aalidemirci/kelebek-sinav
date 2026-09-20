@@ -116,3 +116,43 @@ class TestNormalizeHelpers:
         assert normalize.split_full_name("EMRE CAN YILMAZ") == ("EMRE CAN", "YILMAZ")
         assert normalize.split_full_name("YILMAZ") == ("YILMAZ", "")
         assert normalize.split_full_name("") == ("", "")
+
+
+class TestCinsiyetSutunu:
+    """Cinsiyet KRİTİK DEĞİLDİR (20.09.2026): varsa okunur, yoksa aktarım sürer."""
+
+    def test_eokul_basligi_eslesir_ve_okunur(self) -> None:
+        grid = _grid(
+            ["S.No", "Öğrenci No", "Adı", "Soyadı", "Cinsiyeti", "Pansiyon Durum", "Sınıf"],
+            ["1", "101", "EMRE", "YILMAZ", "Erkek", "Yok", "10/A"],
+            ["2", "102", "ZEYNEP", "KAYA", "Kız", "Yok", "10/A"],
+        )
+        mapping = detect_columns(grid)
+        assert mapping.is_usable
+        assert mapping.fields["gender"] == 4
+        rows = parse_rows(grid, mapping)
+        assert [r.gender for r in rows] == ["E", "K"]
+        # Pansiyon HÂLÂ okunmaz (tasarım §5).
+        assert "pansiyon" not in mapping.fields
+
+    def test_cinsiyet_sutunu_baska_alani_calmaz(self) -> None:
+        """Eşleme ALT DİZE arar; 'cinsiyeti' hiçbir başka anahtarı içermemeli."""
+        grid = _grid(["Sınıf", "Okul No", "Adı Soyadı", "Cinsiyeti"])
+        mapping = detect_columns(grid)
+        assert mapping.fields == {"class": 0, "number": 1, "student_name": 2, "gender": 3}
+
+    def test_sutunsuz_aktarim_aynen_calisir(self) -> None:
+        """Uygulama şablonunda cinsiyet yoktur — satır çözülür, cinsiyet boş kalır."""
+        grid = _grid(["Sınıf", "Okul No", "Adı Soyadı"], ["10/A", "101", "EMRE YILMAZ"])
+        mapping = detect_columns(grid)
+        assert mapping.is_usable and "gender" not in mapping.fields
+        rows = parse_rows(grid, mapping)
+        assert rows[0].gender == "" and rows[0].student_number == "101"
+
+    def test_taninmayan_deger_bos_kalir(self) -> None:
+        grid = _grid(
+            ["Sınıf", "Okul No", "Adı Soyadı", "Cinsiyeti"],
+            ["10/A", "101", "EMRE YILMAZ", "—"],
+        )
+        rows = parse_rows(grid, detect_columns(grid))
+        assert rows[0].gender == ""

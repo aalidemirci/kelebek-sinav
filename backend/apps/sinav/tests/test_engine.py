@@ -14,6 +14,8 @@ DB GEREKMEZ — motor ve doğrulayıcı saf veri üzerinde çalışır.
 from __future__ import annotations
 
 import random
+from dataclasses import replace
+from typing import Any
 
 import pytest
 
@@ -574,3 +576,162 @@ def test_odak_satranc_modunda_korunur() -> None:
     temel = _grid_room(1, 4, 3, DeskType.DOUBLE)
     oda = engine.RoomSeats(room_id=temel.room_id, seats=temel.seats, focus=(2.0, 3.0))
     assert engine._checkerboard_seats(oda).focus == (2.0, 3.0)
+
+
+# ===========================================================================
+# Ayrışma anahtarı (kız/erkek ayrışması — 20.09.2026)
+# ===========================================================================
+
+
+def _ayrisik(sid: int, group: str, key: str, *, level: int = 9, section: str = "A") -> Participant:
+    """Ayrışma anahtarı taşıyan katılımcı (motor anahtarın NE olduğunu bilmez)."""
+    p = _participant(sid, group, level=level, section=section)
+    return replace(p, separation_key=key)
+
+
+def _ayrisma_placed(result: engine.DistributionResult) -> list[validator.PlacedStudent]:
+    return [
+        replace(pl, separation_key=result.placements[i].participant.separation_key)
+        for i, pl in enumerate(_placed(result))
+    ]
+
+
+def test_ayrisma_uygun_kapasitede_karisik_sira_birakmaz() -> None:
+    """Kural açıkken aynı sırada iki farklı anahtar kalmamalı (yeterli kapasite)."""
+    ogrenciler = [_ayrisik(i, "10:9", "K" if i % 2 else "E") for i in range(1, 13)] + [
+        _ayrisik(i, "11:10", "K" if i % 2 else "E", level=10, section="B") for i in range(13, 25)
+    ]
+    sonuc = engine.distribute_butterfly(ogrenciler, [_grid_room(1, 5, 4)], seed=42)
+
+    rapor = validator.validate_seating(_ayrisma_placed(sonuc), separation=validator.SEPARATION_DESK)
+    assert rapor.is_valid, rapor.hard_violations
+
+
+def test_ayrisma_determinizmi_bozmaz() -> None:
+    """Aynı seed → aynı dağıtım (kural açıkken de; yeni rng çekilişi yok)."""
+    ogrenciler = [_ayrisik(i, "10:9", "K" if i % 2 else "E") for i in range(1, 15)]
+
+    def key(r: engine.DistributionResult) -> list[tuple[int, int]]:
+        return [(p.participant.student_id, p.seat.seat_no) for p in r.placements]
+
+    assert key(engine.distribute_butterfly(ogrenciler, [_grid_room(1, 4, 3)], seed=7)) == key(
+        engine.distribute_butterfly(ogrenciler, [_grid_room(1, 4, 3)], seed=7)
+    )
+
+
+def test_ayrisma_jokeri_herkesin_yanina_oturabilir() -> None:
+    """Anahtarı BOŞ öğrenci (cinsiyeti bilinmiyor) kurala girmez — K4."""
+    ogrenciler = [_ayrisik(i, "10:9", "K") for i in range(1, 5)] + [
+        _ayrisik(i, "11:10", "", level=10, section="B") for i in range(5, 9)
+    ]
+    sonuc = engine.distribute_butterfly(ogrenciler, [_grid_room(1, 2, 2)], seed=3)
+
+    rapor = validator.validate_seating(_ayrisma_placed(sonuc), separation=validator.SEPARATION_DESK)
+    assert rapor.is_valid, rapor.hard_violations
+    assert len(sonuc.placements) == 8  # kapasite tam dolu — joker kısıt üretmedi
+
+
+def test_ayrisma_imkansiz_kapasitede_cokmez_ihlal_listelenir() -> None:
+    """Tek sıralık salonda iki anahtar: motor çökmez, en iyi çözümü + uyarı verir."""
+    ogrenciler = [_ayrisik(1, "10:9", "K"), _ayrisik(2, "11:10", "E", level=10, section="B")]
+    sonuc = engine.distribute_butterfly(ogrenciler, [_grid_room(1, 1, 1)], seed=1)
+
+    assert len(sonuc.placements) == 2
+    assert any("ayrı oturması gereken" in u for u in sonuc.warnings)
+    rapor = validator.validate_seating(_ayrisma_placed(sonuc), separation=validator.SEPARATION_DESK)
+    assert not rapor.is_valid
+
+
+def test_dogrulayici_ayrisma_ihlalini_idareci_diliyle_yazar() -> None:
+    """Metin etiketten gelir; öğrenci ADI geçmez, okul numarası geçer (KVKK)."""
+    # Sırayı paylaşan iki öğrenci zaten FARKLI derstendir (aynı-grup ayrı kısıt):
+    # ayrışma ihlali tek başına, aynı-sıra ihlaliyle karışmadan yazılmalı.
+    ortak: dict[str, Any] = {"room_id": 1, "x": 0.0, "y": 0.0}
+    a = validator.PlacedStudent(
+        student_id=1,
+        conflict_group="10:9",
+        desk_row=2,
+        desk_col=0,
+        slot=0,
+        room_label="D-201",
+        desk_label="3. sıra, 1. sütun",
+        student_number="101",
+        separation_key="K",
+        separation_label="kız",
+        **ortak,
+    )
+    b = validator.PlacedStudent(
+        student_id=2,
+        conflict_group="11:10",
+        desk_row=2,
+        desk_col=0,
+        slot=1,
+        room_label="D-201",
+        desk_label="3. sıra, 1. sütun",
+        student_number="205",
+        separation_key="E",
+        separation_label="erkek",
+        **ortak,
+    )
+
+    rapor = validator.validate_seating([a, b], separation=validator.SEPARATION_DESK)
+    (ihlal,) = rapor.hard_violations
+    assert "kız ve erkek öğrenci aynı sırada oturuyor" in ihlal
+    assert "D-201, 3. sıra, 1. sütun" in ihlal
+    assert "okul no 101" in ihlal and "okul no 205" in ihlal
+    assert "id=" not in ihlal and "DESK" not in ihlal
+
+    # Kip KAPALIYKEN aynı yerleşim temizdir (kural opt-in).
+    assert validator.validate_seating([a, b]).is_valid
+
+
+def test_dogrulayici_ayri_salon_kipinde_salonu_denetler() -> None:
+    """ROOM kipi: aynı salonda iki anahtar → TEK ihlal satırı (spam yok)."""
+
+    def _p(sid: int, room_id: int, key: str, col: int) -> validator.PlacedStudent:
+        return validator.PlacedStudent(
+            student_id=sid,
+            conflict_group="10:9",
+            room_id=room_id,
+            desk_row=0,
+            desk_col=col,
+            slot=0,
+            x=float(col),
+            y=0.0,
+            room_label=f"D-20{room_id}",
+            student_number=str(100 + sid),
+            separation_key=key,
+            separation_label="kız" if key == "K" else "erkek",
+        )
+
+    karisik = [_p(1, 1, "K", 0), _p(2, 1, "E", 1), _p(3, 1, "E", 2)]
+    rapor = validator.validate_seating(karisik, separation=validator.SEPARATION_ROOM)
+    assert len(rapor.hard_violations) == 1
+    assert "D-201 salonunda" in rapor.hard_violations[0]
+
+    # Aynı yerleşim DESK kipinde temizdir (farklı sıralar).
+    assert validator.validate_seating(karisik, separation=validator.SEPARATION_DESK).is_valid
+
+    # Salonlar ayrıldığında ROOM kipi de temizdir.
+    ayrik = [_p(1, 1, "K", 0), _p(2, 2, "E", 0)]
+    assert validator.validate_seating(ayrik, separation=validator.SEPARATION_ROOM).is_valid
+
+
+def test_klasik_duzende_ayrisma_uygulanmaz() -> None:
+    """K6 kullanıcı kararı: kendi dersliğinde düzeninde kural hiç işlemez."""
+    a = validator.PlacedStudent(
+        student_id=1,
+        conflict_group="10:9",
+        room_id=1,
+        desk_row=0,
+        desk_col=0,
+        slot=0,
+        x=0.0,
+        y=0.0,
+        separation_key="K",
+    )
+    b = replace(a, student_id=2, slot=1, separation_key="E")
+    rapor = validator.validate_seating(
+        [a, b], enforce_group_separation=False, separation=validator.SEPARATION_DESK
+    )
+    assert rapor.is_valid

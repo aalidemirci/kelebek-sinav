@@ -594,3 +594,48 @@ describe("SinavSihirbazi — adım geçişleri", () => {
     expect(screen.getByRole("heading", { name: "Dağıt" })).toBeInTheDocument();
   });
 });
+
+describe("SinavSihirbazi — kız/erkek ayrışması (20.09.2026)", () => {
+  const BILGI_ADIMI = { transfer_check_confirmed_at: ONAY_ZAMANI };
+
+  it("okul varsayılanı kapalıyken seçim 'Ayrıntılı ayarlar' içinde durur", async () => {
+    const user = userEvent.setup();
+    renderWizard(makeSession({ ...BILGI_ADIMI, separation_mode: "NONE" }));
+    await screen.findByRole("heading", { name: "Oturum Bilgileri" });
+
+    // Katlanmış bölüm: alan DOM'dadır ama görünmez (ihtiyacı olmayan okulda göze batmaz).
+    const secim = screen.getByLabelText("Kız/erkek ayrışması");
+    expect(secim).not.toBeVisible();
+    await user.click(screen.getByText("Ayrıntılı ayarlar"));
+    expect(secim).toBeVisible();
+  });
+
+  it("okul varsayılanı açıkken seçim doğrudan görünür ve kaydedilir", async () => {
+    const user = userEvent.setup();
+    sessionApi.update.mockResolvedValue(makeSession());
+    renderWizard(makeSession({ ...BILGI_ADIMI, separation_mode: "DESK" }));
+    await screen.findByRole("heading", { name: "Oturum Bilgileri" });
+
+    const secim = screen.getByLabelText("Kız/erkek ayrışması");
+    expect(secim).toBeVisible();
+    expect(secim).toHaveValue("DESK");
+    await user.selectOptions(secim, "ROOM");
+    await user.click(screen.getByRole("button", { name: "Kaydet ve devam et" }));
+
+    await waitFor(() =>
+      expect(sessionApi.update).toHaveBeenCalledWith(
+        5,
+        expect.objectContaining({ separation_mode: "ROOM" }),
+      ),
+    );
+  });
+
+  it("'Kendi dersliğinde' düzeninde seçim hiç gösterilmez (kural uygulanmaz)", async () => {
+    renderWizard(
+      makeSession({ ...BILGI_ADIMI, layout_mode: "HOME_CLASSROOM", separation_mode: "DESK" }),
+    );
+    await screen.findByRole("heading", { name: "Oturum Bilgileri" });
+
+    expect(screen.queryByLabelText("Kız/erkek ayrışması")).not.toBeInTheDocument();
+  });
+});

@@ -130,8 +130,37 @@ export interface SchoolConfig {
   daily_period_count: number;
   /** Sınav yapılabilecek ders saatleri; BOŞ liste = tüm saatler serbest. */
   exam_period_nos: number[];
+  /** Kız/erkek ayrışmasının OKUL varsayılanı; yeni oturumlar bununla açılır. */
+  default_separation_mode: SeparationMode;
   setup_completed: boolean;
 }
+
+/**
+ * Kız/erkek ayrışması kipi (20.09.2026). Etiketler docs/sozluk.md'ye tabidir:
+ * iç kod (DESK/ROOM) kullanıcıya GÖSTERİLMEZ, `SEPARATION_LABELS` basılır.
+ */
+export type SeparationMode = "NONE" | "DESK" | "ROOM";
+
+export const SEPARATION_LABELS: Record<SeparationMode, string> = {
+  NONE: "Kapalı",
+  DESK: "Aynı sıraya oturtma",
+  ROOM: "Ayrı salonlar",
+};
+
+export const SEPARATION_HINTS: Record<SeparationMode, string> = {
+  NONE: "Kız ve erkek öğrenciler için ayrı bir kural uygulanmaz.",
+  DESK: "Kız ve erkek öğrenciler aynı sıraya oturtulmaz; salonlar karışıktır.",
+  ROOM: "Kız ve erkek öğrenciler ayrı salonlara yerleştirilir; daha çok salon gerekebilir.",
+};
+
+/** Cinsiyet — YALNIZ kız/erkek ayrışması kuralı için; hiçbir belgeye basılmaz. */
+export type Gender = "" | "K" | "E";
+
+export const GENDER_LABELS: Record<Gender, string> = {
+  "": "Belirtilmemiş",
+  K: "Kız",
+  E: "Erkek",
+};
 
 // Ders saati ayarı (F6 eki-2) — sınırlar backend'le AYNI olmalı
 // (`apps.okul.models.DEFAULT_DAILY_PERIOD_COUNT` / `MAX_DAILY_PERIOD_COUNT`).
@@ -169,6 +198,8 @@ export interface Student {
   class_level: number | null;
   class_section: string;
   class_label: string;
+  /** Kız/erkek ayrışması kuralının girdisi; listede sütun olarak GÖSTERİLMEZ. */
+  gender: Gender;
   status: StudentStatus;
 }
 
@@ -179,6 +210,7 @@ export interface StudentWriteBody {
   student_number?: string;
   class_level?: number | null;
   class_section?: string;
+  gender?: Gender;
   status?: StudentStatus;
 }
 
@@ -535,6 +567,13 @@ export const okulApi = {
   },
 
   getStudent: (id: number): Promise<Student> => api.get<Student>(`/students/${id}/`),
+
+  /**
+   * Cinsiyeti bilinmeyen AKTİF öğrenci SAYISI (kız/erkek ayrışması uyarısı).
+   * Yalnız sayı döner — liste, ad ya da kimlik YOKTUR.
+   */
+  genderCoverage: (): Promise<{ missing: number; total: number }> =>
+    api.get<{ missing: number; total: number }>("/students/gender-coverage/"),
 
   createStudent: (body: StudentWriteBody): Promise<Student> =>
     api.post<Student>("/students/", body),

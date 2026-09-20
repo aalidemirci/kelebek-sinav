@@ -16,6 +16,7 @@ const oapi = vi.hoisted(() => ({
   getSetupStatus: vi.fn(),
   getSchoolConfig: vi.fn(),
   updateSchoolConfig: vi.fn(),
+  genderCoverage: vi.fn(),
   listSchoolTypes: vi.fn(),
   getGradeLevels: vi.fn(),
   listSchoolYears: vi.fn(),
@@ -99,8 +100,10 @@ beforeEach(() => {
     school_type: "ANADOLU_LISESI",
     has_prep_class: false,
     level_programs: {},
+    default_separation_mode: "NONE",
     setup_completed: true,
   });
+  oapi.genderCoverage.mockResolvedValue({ missing: 0, total: 0 });
   oapi.listSchoolTypes.mockResolvedValue([
     { value: "ANADOLU_LISESI", label: "Anadolu Lisesi", available: true, program_keys: [] },
     { value: "SPOR_LISESI", label: "Spor Lisesi", available: false, program_keys: [] },
@@ -231,11 +234,39 @@ describe("AyarlarPage — okul bilgileri", () => {
         // saatler sınava açık" (boş liste) gönderilir.
         daily_period_count: 8,
         exam_period_nos: [],
+        // Kız/erkek ayrışması varsayılanı (20.09.2026) — dokunulmadıysa "Kapalı".
+        default_separation_mode: "NONE",
       }),
     );
     // Hazırlık değişince plan yeni seçimle önizlenir.
     expect(dapi.getCatalogStatus).toHaveBeenCalledWith(
       expect.objectContaining({ schoolType: "ANADOLU_LISESI", hasPrepClass: true }),
+    );
+  });
+
+  it("kız/erkek ayrışması varsayılanı seçilir ve cinsiyeti eksik öğrenci sayısı uyarır", async () => {
+    oapi.updateSchoolConfig.mockResolvedValue({});
+    oapi.genderCoverage.mockResolvedValue({ missing: 12, total: 400 });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("tab", { name: /Okul Bilgileri/ }));
+    const secim = await screen.findByLabelText("Kız/erkek ayrışması");
+    // Kapalıyken sayaç çekilmez (şifreli alan taraması pahalı).
+    expect(screen.queryByText(/cinsiyet bilgisi yok/)).not.toBeInTheDocument();
+
+    await user.selectOptions(secim, "DESK");
+    // İç kod kullanıcıya gösterilmez; seçenek adı sözlükten gelir.
+    expect(screen.getByRole("option", { name: "Aynı sıraya oturtma" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Ayrı salonlar" })).toBeInTheDocument();
+    // Kural açılınca eksik cinsiyet SAYIYLA uyarılır (kimlik yok).
+    expect(await screen.findByText(/12 öğrencinin cinsiyet bilgisi yok/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() =>
+      expect(oapi.updateSchoolConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ default_separation_mode: "DESK" }),
+      ),
     );
   });
 

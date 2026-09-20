@@ -8,6 +8,11 @@ Kısıt modeli (K8):
 - SERT: aynı çakışma grubundan iki öğrenci aynı sırada (desk) oturamaz.
   Denetim MESAFEDEN DEĞİL (desk_row, desk_col) kimliğinden yapılır — aynı-sıra
   ve komşu-sıra koltuk araları çakışabilir (T3 testiyle belgelendi).
+- SERT (20.09.2026, kız/erkek ayrışması — `separation` parametresi): AYRIŞMA
+  anahtarı farklı iki öğrenci aynı sırada (DESK kipi) ya da aynı salonda (ROOM
+  kipi) bulunamaz. Doğrulayıcı anahtarın NE olduğunu bilmez (motorla aynı
+  soyutlama); kullanıcıya görünen sözcük isteğe bağlı ETİKETTEN gelir. Boş
+  anahtar JOKER'dir: denetime hiç girmez.
 - KATI MOD: birinci halka da sert sayılır — komşu sıra grupları
   (Chebyshev mesafe ≤ 1: yan/ön/arka/çapraz) aynı gruptan öğrenci içeremez.
 - ESNEK: toplam yakınlık skoru Σ 1/d² (aynı-grup çiftleri; d = Öklid, grid
@@ -44,6 +49,10 @@ class PlacedStudent:
     desk_label: str = ""
     group_label: str = ""
     student_number: str = ""
+    #: Ayrışma anahtarı ("K"/"E"/boş) ve onun İDARECİ DİLİNDEKİ karşılığı
+    #: ("kız"/"erkek"). Anahtar DENETİME, etiket yalnız METNE girer.
+    separation_key: str = ""
+    separation_label: str = ""
 
 
 @dataclass
@@ -97,11 +106,63 @@ def _first_ring(a: PlacedStudent, b: PlacedStudent) -> bool:
     return max(abs(a.desk_row - b.desk_row), abs(a.desk_col - b.desk_col)) <= 1
 
 
+#: `separation` kipleri — `sinav.models.SeparationMode` ile AYNI değerler.
+#: Doğrulayıcı saf kalsın diye models import EDİLMEZ (motor-bağımsızlık deseni).
+SEPARATION_NONE = "NONE"
+SEPARATION_DESK = "DESK"
+SEPARATION_ROOM = "ROOM"
+
+
+def _separation_text(p: PlacedStudent) -> str:
+    """Ayrışma anahtarının idareci dilindeki karşılığı (etiketsizse ham anahtar)."""
+    return p.separation_label or p.separation_key
+
+
+def _who(p: PlacedStudent) -> str:
+    """İhlal metninde öğrenci: KVKK gereği ad değil okul numarası."""
+    return f"okul no {p.student_number}" if p.student_number else f"id={p.student_id}"
+
+
+def _check_separation(placed: list[PlacedStudent], report: SeatingReport, *, mode: str) -> None:
+    """Ayrışma kuralının sert denetimi — aynı sıra (DESK) / aynı salon (ROOM).
+
+    Anahtarı boş olan öğrenci JOKER'dir ve hiçbir çifte girmez (K4 kullanıcı
+    kararı: cinsiyeti bilinmeyen öğrenci dağıtımı durdurmaz). Her kapsam için
+    YALNIZ BİR ihlal satırı yazılır: 40 kişilik bir salonda ROOM kipi
+    yüzlerce çift üretirdi, idareciye sayfalarca aynı cümle basılmaz.
+    """
+    kapsamlar: dict[tuple[int, int, int] | tuple[int], list[PlacedStudent]] = {}
+    for p in placed:
+        if not p.separation_key:
+            continue
+        anahtar = (p.room_id, p.desk_row, p.desk_col) if mode == SEPARATION_DESK else (p.room_id,)
+        kapsamlar.setdefault(anahtar, []).append(p)
+
+    for uyeler in kapsamlar.values():
+        farkli = {u.separation_key for u in uyeler}
+        if len(farkli) < 2:
+            continue
+        a = uyeler[0]
+        b = next(u for u in uyeler if u.separation_key != a.separation_key)
+        if mode == SEPARATION_DESK:
+            report.hard_violations.append(
+                f"Ayrı oturma ihlali: {_separation_text(a)} ve {_separation_text(b)} öğrenci "
+                f"aynı sırada oturuyor ({_where(a)}; {_who(a)} ve {_who(b)})."
+            )
+        else:
+            salon = a.room_label or f"salon {a.room_id}"
+            report.hard_violations.append(
+                f"Ayrı salon ihlali: {salon} salonunda hem {_separation_text(a)} hem "
+                f"{_separation_text(b)} öğrenci var ({len(uyeler)} öğrenci)."
+            )
+
+
 def validate_seating(
     placed: list[PlacedStudent],
     *,
     strict: bool = False,
     enforce_group_separation: bool = True,
+    separation: str = SEPARATION_NONE,
 ) -> SeatingReport:
     """Sert kısıtları sıfırdan denetler ve mesafe metriklerini üretir.
 
@@ -110,6 +171,11 @@ def validate_seating(
     yalnız bütünlük (çifte koltuk / çifte öğrenci) denetlenir, ayrışma
     metrikleri üretilmez. O(n²) çift taraması — salon ölçeğinde yeterli;
     motorun artımlı hesabından bilinçli olarak BAĞIMSIZ tutulmuştur.
+
+    `separation` AYRIŞMA ANAHTARI kuralıdır (kız/erkek — 20.09.2026) ve
+    yukarıdakinden BAĞIMSIZ bir kısıttır: "DESK" aynı sırayı, "ROOM" aynı
+    salonu yasaklar. Klasik düzende hiç uygulanmaz (K6 kullanıcı kararı) —
+    fonksiyon `enforce_group_separation=False` dalında zaten erken döner.
     """
     report = SeatingReport()
 
@@ -125,14 +191,18 @@ def validate_seating(
         seat_keys[key] = p.student_id
         if p.student_id in student_seen:
             # KVKK: ihlal metninde öğrenci ADI geçmez; okul numarası yeter.
-            who = f"okul no {p.student_number}" if p.student_number else f"id={p.student_id}"
-            report.hard_violations.append(f"Öğrenci iki koltukta: {who}.")
+            report.hard_violations.append(f"Öğrenci iki koltukta: {_who(p)}.")
         student_seen.add(p.student_id)
         # Doluluk sayacı (K1) — her düzende dolar (klasik dahil).
         report.room_counts[p.room_id] = report.room_counts.get(p.room_id, 0) + 1
 
     if not enforce_group_separation:
+        # Klasik düzen (kendi dersliğinde): kız/erkek ayrışması da UYGULANMAZ
+        # (K6 kullanıcı kararı) — herkes kendi şubesinde, okul no sırasında.
         return report  # klasik düzen: yalnız bütünlük denetimi
+
+    if separation in (SEPARATION_DESK, SEPARATION_ROOM):
+        _check_separation(placed, report, mode=separation)
 
     # K1: GROUPS-tipi açık uç sayacı — aynı şube, FARKLI grup, 1. halka komşu.
     # Salon bazlı O(n²) çift taraması (grup-içi döngüler bu çiftleri görmez).

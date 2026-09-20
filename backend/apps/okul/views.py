@@ -32,6 +32,7 @@ from apps.okul.models import (
     Personnel,
     SchoolYear,
     Student,
+    StudentStatus,
     SubjectDepartment,
 )
 from apps.okul.serializers import (
@@ -450,6 +451,27 @@ class PersonnelImportCommitView(_BaseImportView):
         generated = department_service.generate_if_catalog_empty()
         response.data["departments_created"] = generated["created"] if generated else []
         return response
+
+
+class StudentGenderCoverageView(APIView):
+    """`GET /api/v1/students/gender-coverage/` — cinsiyeti bilinmeyen öğrenci SAYISI.
+
+    Kız/erkek ayrışması kuralı açıkken arayüz "N öğrencinin cinsiyet bilgisi
+    yok — e-Okul sınıf listesini yeniden aktarın" uyarısını bu sayıyla kurar
+    (K4). Yalnız SAYI döner: kimlik, ad ya da liste YOKTUR.
+
+    Ayrı uçtur, okul künyesine gömülmedi: alan şifreli olduğu için sayım bütün
+    öğrencileri ÇÖZER; künye her ekranda okunuyor, bu sayı yalnız kural açıkken
+    gerekiyor.
+    """
+
+    def get(self, request: Request) -> Response:
+        return Response(
+            {
+                "missing": selectors.students_missing_gender_count(),
+                "total": Student.objects.filter(status=StudentStatus.ACTIVE).count(),
+            }
+        )
 
 
 # ---------------------------------------------------------------------------

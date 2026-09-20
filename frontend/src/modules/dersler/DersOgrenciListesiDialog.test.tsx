@@ -70,6 +70,7 @@ function ogrenci(id: number, no: string, ad: string): Student {
     class_level: 9,
     class_section: "A",
     class_label: "9/A",
+    gender: "",
     status: "ACTIVE",
   };
 }

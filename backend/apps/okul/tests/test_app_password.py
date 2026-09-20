@@ -110,6 +110,19 @@ class TestEnable:
         assert str(ad).startswith("gAAAA")
         assert brans == "Coğrafya"  # branş kapsam dışı — süzgeçler DB tarafında
 
+    def test_cinsiyet_de_sifrelenir(self) -> None:
+        """Tek demografi alanı (20.09.2026) adlarla AYNI korumada — tasarım §5."""
+        ogrenci = ogrenci_olustur(gender="K")
+        app_password.enable(password=PAROLA)
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT gender FROM okul_student WHERE id = %s", [ogrenci.pk])
+            (ham_cinsiyet,) = cursor.fetchone()
+        assert str(ham_cinsiyet) != "K"
+        assert str(ham_cinsiyet).startswith("gAAAA")
+        # Kilit açıkken ORM düz değeri verir (parola geçişi alanı kendiliğinden kapsadı).
+        assert Student.objects.get(pk=ogrenci.pk).gender == "K"
+
     def test_okul_no_ve_sinif_kapsam_disidir(self) -> None:
         """Tasarım kararı (§5): motor/sıralama/teklik alanları şifrelenMEZ."""
         ogrenci = ogrenci_olustur()

@@ -228,6 +228,21 @@ describe("KilavuzPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("kız/erkek ayrışmasını seçenekleri ve veri kaynağıyla anlatır (20.09.2026)", () => {
+    renderPage();
+    expect(
+      screen.getByRole("heading", { level: 3, name: /Kız ve erkek öğrencileri ayrı oturtma/ }),
+    ).toBeInTheDocument();
+    // Seçenek adları sözlükten; iç kod (DESK/ROOM) kılavuzda GEÇMEZ.
+    expect(screen.getByText("“Kız/erkek ayrışması”")).toBeInTheDocument();
+    expect(screen.getAllByText("Ayrı salonlar").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/DESK|ROOM/)).not.toBeInTheDocument();
+    // Veri kaynağı ve "hiçbir belgeye basılmaz" güvencesi yazılıdır.
+    expect(screen.getByText("e-Okul sınıf listesinden kendiliğinden okunur")).toBeInTheDocument();
+    expect(screen.getByText("basılmaz")).toBeInTheDocument();
+    expect(screen.getByText(/oturum onaylanamaz/)).toBeInTheDocument();
+  });
+
   it("yerleşimi elle düzeltmenin iki yolunu anlatır — sürükleme ve tıklama (20.09.2026)", () => {
     renderPage();
     expect(

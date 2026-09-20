@@ -35,6 +35,11 @@ urlpatterns = [
     # Öğrenciler / Personel / Şubeler
     path("students/", views.StudentListCreateView.as_view(), name="student-list"),
     path("students/<int:pk>/", views.StudentDetailView.as_view(), name="student-detail"),
+    path(
+        "students/gender-coverage/",
+        views.StudentGenderCoverageView.as_view(),
+        name="student-gender-coverage",
+    ),
     path("personnel/", views.PersonnelListCreateView.as_view(), name="personnel-list"),
     path("personnel/<int:pk>/", views.PersonnelDetailView.as_view(), name="personnel-detail"),
     path("class-sections/", views.ClassSectionListCreateView.as_view(), name="class-section-list"),

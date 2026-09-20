@@ -224,6 +224,7 @@ class ExamSessionSerializer(serializers.ModelSerializer[ExamSession]):
             "session_type",
             "layout_mode",
             "proctors_enabled",
+            "separation_mode",
             "term_id",
             "term_label",
             "status",

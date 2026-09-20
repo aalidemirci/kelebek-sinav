@@ -34,6 +34,8 @@ import CizelgeAtamaMatrisi from "../okul/CizelgeAtamaMatrisi";
 import {
   MAKS_GUNLUK_DERS_SAATI,
   MESLEKI_TURLER,
+  SEPARATION_HINTS,
+  SEPARATION_LABELS,
   VARSAYILAN_GUNLUK_DERS_SAATI,
   okulApi,
   okulTuruSecenekleri,
@@ -46,6 +48,7 @@ import type {
   SchoolType,
   SchoolTypeOption,
   SchoolYear,
+  SeparationMode,
 } from "../okul/api";
 
 // TABS[0] varsayılan sekmedir (useTabParam fallback) — başa yeni anahtar EKLEME.
@@ -700,6 +703,9 @@ function OkulBilgileriPanel() {
   const [levelPrograms, setLevelPrograms] = useState<LevelPrograms>({});
   const [gunlukDersSaati, setGunlukDersSaati] = useState(VARSAYILAN_GUNLUK_DERS_SAATI);
   const [sinavSaatleri, setSinavSaatleri] = useState<number[]>([]);
+  const [ayrisma, setAyrisma] = useState<SeparationMode>("NONE");
+  // Cinsiyeti bilinmeyen öğrenci SAYISI (kimlik değil) — yalnız kural açıkken çekilir.
+  const [cinsiyetEksik, setCinsiyetEksik] = useState<number | null>(null);
   const [okulTurleri, setOkulTurleri] = useState<SchoolTypeOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -722,6 +728,7 @@ function OkulBilgileriPanel() {
         setLevelPrograms(c.level_programs ?? {});
         setGunlukDersSaati(c.daily_period_count || VARSAYILAN_GUNLUK_DERS_SAATI);
         setSinavSaatleri(c.exam_period_nos ?? []);
+        setAyrisma(c.default_separation_mode ?? "NONE");
         setError(null);
       })
       .catch((e: unknown) =>
@@ -743,6 +750,27 @@ function OkulBilgileriPanel() {
     };
   }, []);
 
+  // Sayaç YALNIZ kural açıkken çekilir: cinsiyet şifreli olduğu için sayım
+  // bütün öğrencileri çözer; kapalıyken kimse bu bedeli ödemesin.
+  useEffect(() => {
+    if (ayrisma === "NONE") {
+      setCinsiyetEksik(null);
+      return;
+    }
+    let iptal = false;
+    okulApi
+      .genderCoverage()
+      .then((r) => {
+        if (!iptal) setCinsiyetEksik(r.missing);
+      })
+      .catch(() => {
+        if (!iptal) setCinsiyetEksik(null);
+      });
+    return () => {
+      iptal = true;
+    };
+  }, [ayrisma]);
+
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setBusy(true);
@@ -761,6 +789,7 @@ function OkulBilgileriPanel() {
         // Gün kısaldıysa taşan saatler gönderilmez: backend'in "açıkça
         // gönderilen liste sessizce kırpılmaz" kuralı hata döndürürdü.
         exam_period_nos: sinavSaatleri.filter((no) => no <= gunlukDersSaati),
+        default_separation_mode: ayrisma,
       });
       snackbar.success("Okul bilgileri kaydedildi. Ders havuzu çizelgeye göre güncellendi.");
     } catch (err) {
@@ -878,6 +907,24 @@ function OkulBilgileriPanel() {
               ))}
             </div>
           </fieldset>
+        </div>
+        <div className="sm:col-span-2">
+          <Select
+            label="Kız/erkek ayrışması"
+            value={ayrisma}
+            onChange={(e) => setAyrisma(e.target.value as SeparationMode)}
+            options={(Object.keys(SEPARATION_LABELS) as SeparationMode[]).map((kip) => ({
+              value: kip,
+              label: SEPARATION_LABELS[kip],
+            }))}
+            helperText={`${SEPARATION_HINTS[ayrisma]} Yeni sınav oturumları bu seçimle açılır; her oturumda ayrıca değiştirilebilir. “Kendi dersliğinde” düzeninde uygulanmaz.`}
+          />
+          {ayrisma !== "NONE" && cinsiyetEksik !== null && cinsiyetEksik > 0 && (
+            <p role="status" className="mt-1 text-body-small text-error">
+              {cinsiyetEksik} öğrencinin cinsiyet bilgisi yok; bu öğrencilere kural uygulanmaz.
+              e-Okul sınıf listesini yeniden aktarın (Kişiler → İçe aktar).
+            </p>
+          )}
         </div>
         <div className="sm:col-span-2">
           <CizelgeAtamaMatrisi
