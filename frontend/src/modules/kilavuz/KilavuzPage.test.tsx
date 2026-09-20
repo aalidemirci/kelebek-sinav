@@ -228,6 +228,27 @@ describe("KilavuzPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("yerleşimi elle düzeltmenin iki yolunu anlatır — sürükleme ve tıklama (20.09.2026)", () => {
+    renderPage();
+    expect(
+      screen.getByRole("heading", { level: 3, name: /bir öğrencinin yerini değiştirme/ }),
+    ).toBeInTheDocument();
+    // Dolu hedef = yer değiştirme, boş hedef = taşıma; fare olmayan yol da yazar.
+    expect(screen.getByText("sürükleyip bırakabilirsiniz")).toBeInTheDocument();
+    expect(screen.getByText(/boş bir koltuğa bırakırsanız öğrenci oraya/)).toBeInTheDocument();
+    expect(screen.getByText(/Fare kullanmadan da yapılabilir/)).toBeInTheDocument();
+    // Sabit koltuğun gerekçesi ve kuralların yeniden denetlendiği söylenir.
+    expect(screen.getByText(/sürüklenemezler/)).toBeInTheDocument();
+    // Hedef olamayan boş koltuklar da anlatılır (tek başına oturma + kapasite sınırı).
+    expect(
+      screen.getByText("tek başına oturan bir öğrencinin sırasındaki boş koltuk"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("kapasite sınırı").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Her değişiklikten sonra kurallar yeniden denetlenir/),
+    ).toBeInTheDocument();
+  });
+
   it("zümrelerin branşlardan üretildiğini ve başkan adaylarının branşa göre geldiğini anlatır (20.09.2026)", () => {
     renderPage();
     expect(screen.getByText("zümreler öğretmenlerin branşlarından üretilir")).toBeInTheDocument();

@@ -1303,6 +1303,137 @@ def swap_seats(
     return [a, b], seating_report(session)
 
 
+@transaction.atomic
+def move_seat(
+    session: ExamSession,
+    *,
+    assignment_id: int,
+    room_id: int,
+    desk_row: int,
+    desk_col: int,
+    slot: int,
+) -> tuple[SeatAssignment, validator.SeatingReport]:
+    """Bir öğrenciyi BOŞ koltuğa taşır (sürükle-bırak — elle düzeltme).
+
+    `swap_seats`in kardeşidir ve aynı kapılardan geçer (yalnız DAĞITILDI
+    durumda, kuralla sabitlenmiş koltuk taşınmaz, satır bu oturumun CANLI
+    yerleşimi olmalı, sonuçta BAĞIMSIZ doğrulayıcı raporu döner). Ayrıldığı
+    nokta hedefin BOŞ olmasıdır: iki dolu koltuk söz konusuysa çağıran
+    `swap_seats` kullanır — burada hedef doluysa açık ret verilir.
+
+    Hedef koltuk numarası (`seat_no`) salon planından YENİDEN türetilir
+    (`room_seats`): numaralandırma düzeni salonun kendi ayarıdır, taşınan
+    satırın eski numarası hedefe taşınmaz. Salonlar arası taşıma serbesttir
+    (hedef, oturumun salonlarından biri olmak kaydıyla). Hata mesajları
+    adsızdır (KVKK).
+
+    Dağıtımın koltuk havuzundan ÇIKARDIĞI koltuklara elle de girilemez —
+    aksi hâlde idarecinin kendi koyduğu kısıt sessizce delinirdi: kapasite
+    sınırının ötesi (`capacity_override`) ve "tek başına otursun" kuralıyla
+    boşaltılmış kardeş koltuklar reddedilir.
+    """
+    if session.status != ExamSessionStatus.DISTRIBUTED:
+        raise ValidationError(
+            f"Oturum '{session.get_status_display()}' durumunda; koltuk değişikliği yalnız "
+            "dağıtılmış (henüz onaylanmamış) oturumda yapılabilir."
+        )
+    row = (
+        SeatAssignment.objects.filter(session=session, pk=assignment_id).select_for_update().first()
+    )
+    if row is None:
+        raise ValidationError("Taşınacak satır bulunamadı (bu oturumun canlı yerleşimi değil).")
+    # Kuralla sabitlenmiş koltuk takasla olduğu gibi TAŞIMAYLA da bozulmaz (A12).
+    if row.status == SeatStatus.PINNED:
+        raise ValidationError(
+            f"Okul No {row.student_number} yerleştirme kuralıyla sabitlenmiş; yeri "
+            "değiştirilemez. Yeri değiştirmek için Yerleştirme Kuralları sekmesinden "
+            "kuralı düzenleyin."
+        )
+
+    session_room = (
+        ExamSessionRoom.objects.filter(session=session, room_id=room_id)
+        .select_related("room")
+        .first()
+    )
+    if session_room is None:
+        raise ValidationError("Seçilen salon bu oturumun salonlarından değil.")
+    room = session_room.room
+
+    seat = next(
+        (
+            s
+            for s in room_seats(room)
+            if (s.desk_row, s.desk_col, s.slot) == (desk_row, desk_col, slot)
+        ),
+        None,
+    )
+    if seat is None:
+        raise ValidationError(
+            f"Seçilen koltuk “{room.name}” salonunun planında yok; plan dağıtımdan sonra "
+            "değişmiş olabilir. Yeniden dağıtın."
+        )
+    if (row.room_id, row.desk_row, row.desk_col, row.slot) == (room_id, desk_row, desk_col, slot):
+        raise ValidationError("Öğrenci zaten bu koltukta.")
+
+    # Kapasite sınırı dağıtımda rota BAŞINDAN uygulanır (`_room_seats_for`:
+    # `seats[:cap]`), yani sınırın ötesindeki koltuklar motora hiç verilmez.
+    # Elle taşıma da o pencerenin dışına çıkamaz — yoksa idarecinin kendi
+    # koyduğu sınır sessizce delinirdi.
+    cap = session_room.capacity_override
+    if cap is not None and seat.seat_no > cap:
+        raise ValidationError(
+            f"Seçilen koltuk bu oturumda kullanılmıyor: “{room.name}” salonu için kapasite "
+            f"sınırı {cap} koltuk. Sınırı oturumun salon seçiminden değiştirebilirsiniz."
+        )
+
+    dolu = (
+        SeatAssignment.objects.filter(session=session, room_id=room_id, seat_no=seat.seat_no)
+        .exclude(pk=row.pk)
+        .exists()
+    )
+    if dolu:
+        raise ValidationError("Seçilen koltukta başka bir öğrenci var; iki öğrenciyi takas edin.")
+
+    # "Tek başına otursun" kuralının TAŞIMA ayağı (A12 deseninin kardeşi):
+    # o öğrencinin sıra arkadaşı koltukları dağıtımda motora hiç verilmediği
+    # için BOŞ durur — oraya elle öğrenci konursa kural sessizce delinir.
+    sira_arkadaslari = list(
+        SeatAssignment.objects.filter(
+            session=session, room_id=room_id, desk_row=seat.desk_row, desk_col=seat.desk_col
+        )
+        .exclude(pk=row.pk)
+        .exclude(student_id=None)
+    )
+    if sira_arkadaslari:
+        kurallar = _effective_rules(
+            session, [a.student_id for a in sira_arkadaslari if a.student_id]
+        )
+        yalniz = [
+            a
+            for a in sira_arkadaslari
+            if (kural := kurallar.get(a.student_id)) is not None and kural.solo_desk
+        ]
+        if yalniz:
+            raise ValidationError(
+                f"Bu sıra Okul No {yalniz[0].student_number} için tek başına ayrılmıştır; "
+                "yanına başka öğrenci oturtulamaz. Yerleştirme Kuralları sekmesinden "
+                "kuralı düzenleyin."
+            )
+
+    row.room_id = room_id
+    row.desk_row = seat.desk_row
+    row.desk_col = seat.desk_col
+    row.slot = seat.slot
+    row.seat_no = seat.seat_no
+    row.status = SeatStatus.MANUAL
+    # `save()` (QuerySet.update DEĞİL) — kitapçık bayatlık damgası updated_at'ten
+    # okunur (CLAUDE.md §3: yerleşime dokunan işlem damgayı İLERLETMELİDİR).
+    row.save(
+        update_fields=["room", "desk_row", "desk_col", "slot", "seat_no", "status", "updated_at"]
+    )
+    return row, seating_report(session)
+
+
 #: Doluluk farkı uyarı eşiği (yüzde puan) — K1 gözlemlenebilirlik.
 _OCCUPANCY_GAP_THRESHOLD = 20.0
 

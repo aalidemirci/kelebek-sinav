@@ -489,6 +489,20 @@ export const examSessionApi = {
       `/exam-sessions/${id}/swap-seats/`,
       { assignment_a: assignmentA, assignment_b: assignmentB },
     ),
+  /**
+   * Bir öğrenciyi BOŞ koltuğa taşır. Hedef koltuk KİMLİĞİYLE verilir; koltuk
+   * numarasını salon planından backend türetir (ön yüzde numaralandırma
+   * mantığı yoktur). Hedef doluysa çağıran `swapSeats` kullanır.
+   */
+  moveSeat: (
+    id: number,
+    assignment: number,
+    target: { room: number; desk_row: number; desk_col: number; slot: number },
+  ) =>
+    api.post<{ moved: SeatAssignmentRow; report: ValidationReport }>(
+      `/exam-sessions/${id}/move-seat/`,
+      { assignment, ...target },
+    ),
 
   // --- Durum makinesi ---
   approve: (id: number, payload: { approved_by_name?: string } = {}) =>

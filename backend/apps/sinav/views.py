@@ -565,6 +565,39 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
             }
         )
 
+    @action(detail=True, methods=["post"], url_path="move-seat")
+    def move_seat(self, request: Request, pk: str | None = None) -> Response:
+        """Bir öğrenciyi boş koltuğa taşır (sürükle-bırak) — anlık doğrulayıcı raporu.
+
+        Hedef koltuk KİMLİĞİYLE verilir (`room`, `desk_row`, `desk_col`, `slot`);
+        koltuk numarası salon planından servis katmanında türetilir.
+        """
+        session = self.get_object()
+        alanlar = ("assignment", "room", "desk_row", "desk_col", "slot")
+        ham = {ad: str(request.data.get(ad, "")) for ad in alanlar}
+        eksik = [ad for ad, deger in ham.items() if not deger.isdigit()]
+        if eksik:
+            raise drf_serializers.ValidationError(
+                f"{', '.join(eksik)} sayısal olmalı (koltuk kimliği)."
+            )
+        try:
+            moved, report = services.move_seat(
+                session,
+                assignment_id=int(ham["assignment"]),
+                room_id=int(ham["room"]),
+                desk_row=int(ham["desk_row"]),
+                desk_col=int(ham["desk_col"]),
+                slot=int(ham["slot"]),
+            )
+        except DjangoValidationError as exc:
+            raise drf_serializers.ValidationError(exc.messages) from exc
+        return Response(
+            {
+                "moved": SeatAssignmentSerializer(moved).data,
+                "report": _report_payload(report),
+            }
+        )
+
     @action(detail=True, methods=["get"], url_path=r"reports/(?P<code>[a-z0-9]+)")
     def reports(
         self, request: Request, pk: str | None = None, code: str | None = None

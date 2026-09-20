@@ -608,6 +608,18 @@ Korunan FE desenleri: 5 adımlı sınav sihirbazı (Adım 0 beyanlı nakil onay�
 salon editörü **palet + tıkla-yerleştir** (DnD bilinçli yok — ADR-0016) ·
 koltuk **tıkla-seç-tıkla takas** (kurala takılırsa Türkçe uyarı) · koltuk
 numaralandırma önizlemesi backend'den (`preview-seats` — iş kuralı tek yerde) ·
+
+**Yerleşimde sürükle-bırak (20.09.2026 kullanıcı isteği) — ADR-0016'dan sapma
+DEĞİL.** ADR-0016 bir DnD **kütüphanesini** erişilebilirlik ve bağımlılık
+gerekçesiyle reddetmişti; yerleşim krokisindeki sürükle-bırak tarayıcının kendi
+sürükleme olaylarıyla yazıldı (yeni bağımlılık yok) ve **tıkla-tıkla yolu
+KALDIRILMADI** — sürükleme klavyeyle çalışmaz, ikisi de aynı `uygula()`
+akışından geçer. Hedef DOLUYSA takas (`swap-seats`), BOŞSA taşıma
+(`move-seat`). Salon editöründe DnD hâlâ YOKTUR (ADR-0016 yerinde durur):
+oradaki işlem "palete tıkla, hücreye tıkla"dır ve taşınacak bir nesne yoktur.
+Boş koltuk ancak bir öğrenci seçiliyken tıklanabilir (seçimsiz gürültü yapmaz);
+kuralla sabitlenmiş satır sürüklenemez ama HEDEF olabilir — reddi gerekçesiyle
+backend söyler (tek doğruluk kaynağı serviste).
 çakışma grupları 6 tonluk renk rozetleri · React Query tek `queryClient`
 (staleTime 30 sn, 4xx retry yok, mutasyon→invalidate+snackbar) · Dialog
 `onClose` useCallback disiplini · `formatDate` gg.aa.yyyy + `todayIso()`

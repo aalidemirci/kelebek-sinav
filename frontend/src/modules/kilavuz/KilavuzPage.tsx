@@ -944,6 +944,33 @@ export default function KilavuzPage() {
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Yerleşimi elle düzeltme: bir öğrencinin yerini değiştirme
+        </h3>
+        <p>
+          Dağıtım bittikten sonra oturum detayındaki <strong>Yerleşim</strong> sekmesinde salon
+          krokisi çizilir. Tek tek yerleri düzeltmek için öğrenciyi{" "}
+          <strong>sürükleyip bırakabilirsiniz</strong>: başka bir öğrencinin üstüne bırakırsanız
+          ikisi <em>yer değiştirir</em>, boş bir koltuğa bırakırsanız öğrenci oraya <em>taşınır</em>{" "}
+          ve o koltuğun numarasını alır. Fare kullanmadan da yapılabilir: önce öğrenciye tıklayın
+          (seçildiği halkadan belli olur), sonra hedef koltuğa tıklayın.
+        </p>
+        <p>
+          Her değişiklikten sonra kurallar yeniden denetlenir ve sonuç ekranın üstünde yazar: aynı
+          sınava giren iki öğrenciyi yan yana getirdiyseniz uyarı çıkar ve{" "}
+          <strong>oturum o hâliyle onaylanamaz</strong>. Elle değiştirdiğiniz koltuklar krokide{" "}
+          <strong>“Elle”</strong> diye işaretlenir. <strong>“Sabit”</strong> işaretli öğrenciler
+          yerleştirme kuralıyla oraya konmuştur: sürüklenemezler, yerlerini değiştirmek için
+          Yerleştirme Kuralları sekmesinden kuralı düzenlemeniz gerekir. Bazı boş koltuklar da hedef
+          olamaz ve program nedenini söyleyerek geri çevirir:{" "}
+          <strong>tek başına oturan bir öğrencinin sırasındaki boş koltuk</strong> (o sıra ona
+          ayrılmıştır) ve salon için <strong>kapasite sınırı</strong> koyduysanız sınırın dışında
+          kalan koltuklar. Yerleşime her dokunduğunuzda daha önce ürettiğiniz kitapçık paketleri
+          güncelliğini yitirir (aşağıdaki <strong>“Yeniden dağıt”</strong> başlığına bakın) ve
+          evrakı yeniden basmanız gerekir. Oturum onaylandıktan sonra yerleşim kilitlenir (önce
+          “Yeniden aç”).
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
           Dağıtımdan sonra fark edilen hata: “Yeniden dağıt” ve “Taslağa al”
         </h3>
         <p>

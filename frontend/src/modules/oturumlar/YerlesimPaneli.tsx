@@ -1,13 +1,21 @@
 // Yerleşim krokisi (F3) — OYS T11 panelinden UYARLANDI: salon sekmeli kroki,
-// çakışma grupları RENK KODLU (kelebek deseni gözle doğrulanır), TIKLA-TAKAS
-// yalnız DAĞITILDI durumunda (iki dolu koltuk seçilir → backend swap-seats;
-// doğrulayıcı raporu anında döner, sert ihlal kırmızı snackbar). DnD yok.
+// çakışma grupları RENK KODLU (kelebek deseni gözle doğrulanır), yer değiştirme
+// yalnız DAĞITILDI durumunda; doğrulayıcı raporu anında döner, sert ihlal
+// kırmızı snackbar.
+//
+// İKİ YOL, TEK AKIŞ (20.09.2026): sürükle-bırak (fare) ve tıkla-tıkla (klavye,
+// dokunmatik, ekran okuyucu) aynı `uygula()` üzerinden gider. Hedef DOLUYSA
+// takas (swap-seats), BOŞSA taşıma (move-seat) olur — koltuk numarasını hedef
+// salonun planından backend türetir, ön yüz numaralandırma yapmaz. Sürükle-bırak
+// klavyeyle çalışmadığı için tıkla-tıkla yolu KALDIRILMAZ (erişilebilirlik);
+// kuralla sabitlenmiş satır sürüklenemez ama hedef olabilir — reddi gerekçesiyle
+// backend söyler.
 // Kroki grid KİMLİĞİNDEN çizilir (desk_row, desk_col, slot) — R1 ile birebir.
 // Geometri salonlar modülünden (pasif salonlar DAHİL — arşiv görünümü: salon
 // sonradan pasifleşse de eski oturumun krokisi çizilebilmeli). Gözetmen izleri
 // KS'de bilinçle yoktur (F3 kapsamı).
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type DragEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "../../lib/api";
@@ -18,7 +26,7 @@ import { SkeletonList } from "../../ui/Skeleton";
 import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import { examRoomApi } from "../salonlar/api";
-import { FURNITURE_LABELS } from "../salonlar/planEdit";
+import { FURNITURE_LABELS, seatPositionLabel } from "../salonlar/planEdit";
 import type { ExamSession, SeatAssignmentRow, ValidationReport } from "./api";
 import { examSessionApi, usesDistributionNumber } from "./api";
 
@@ -118,27 +126,46 @@ export default function YerlesimPaneli({ session }: { session: ExamSession }) {
   const rooms = useQuery({ queryKey: ["exam-rooms-all"], queryFn: () => examRoomApi.list(true) });
   const [activeRoom, setActiveRoom] = useState<string>("");
   const [picked, setPicked] = useState<SeatAssignmentRow | null>(null);
+  /** Sürüklenen satırın kimliği (yalnız fare yolu) ve üstünde durulan koltuk. */
+  const [dragId, setDragId] = useState<number | null>(null);
+  const [dropKey, setDropKey] = useState<string | null>(null);
 
   const swappable = session.status === "DISTRIBUTED";
+
+  /** İki mutasyonun ORTAK sonucu: seçimi bırak, yerleşimi tazele, raporu söyle. */
+  const onDone = (islem: string) => (result: { report: ValidationReport }) => {
+    setPicked(null);
+    void qc.invalidateQueries({ queryKey: ["exam-seating", session.id] });
+    if (result.report.is_valid) {
+      snackbar.success(`${islem}; kural ihlali yok.`);
+    } else {
+      snackbar.error(
+        `${islem} ama ${result.report.hard_violations.length} kural ihlali oluştu; bu hâliyle oturum onaylanamaz.`,
+      );
+    }
+  };
+  const onFail = (fallback: string) => (e: unknown) => {
+    setPicked(null);
+    snackbar.error(e instanceof ApiError ? e.message : fallback);
+  };
 
   const swap = useMutation({
     mutationFn: (pair: { a: number; b: number }) =>
       examSessionApi.swapSeats(session.id, pair.a, pair.b),
-    onSuccess: (result) => {
-      setPicked(null);
-      void qc.invalidateQueries({ queryKey: ["exam-seating", session.id] });
-      if (result.report.is_valid) {
-        snackbar.success("Takas yapıldı; kural ihlali yok.");
-      } else {
-        snackbar.error(
-          `Takas yapıldı ama ${result.report.hard_violations.length} kural ihlali oluştu; bu hâliyle oturum onaylanamaz.`,
-        );
-      }
-    },
-    onError: (e) => {
-      setPicked(null);
-      snackbar.error(e instanceof ApiError ? e.message : "Takas yapılamadı.");
-    },
+    onSuccess: onDone("Takas yapıldı"),
+    onError: onFail("Takas yapılamadı."),
+  });
+
+  const move = useMutation({
+    mutationFn: (p: { assignment: number; room: number; row: number; col: number; slot: number }) =>
+      examSessionApi.moveSeat(session.id, p.assignment, {
+        room: p.room,
+        desk_row: p.row,
+        desk_col: p.col,
+        slot: p.slot,
+      }),
+    onSuccess: onDone("Öğrenci taşındı"),
+    onError: onFail("Öğrenci taşınamadı."),
   });
 
   const groupTone = useMemo(() => {
@@ -182,6 +209,27 @@ export default function YerlesimPaneli({ session }: { session: ExamSession }) {
     currentRoom.assignments.map((a) => [`${a.desk_row}:${a.desk_col}:${a.slot}`, a]),
   );
 
+  /** Bırakma/tıklama hedefi: dolu koltuk (takas) ya da boş koltuk (taşıma). */
+  type Hedef =
+    | { dolu: true; assignment: SeatAssignmentRow }
+    | { dolu: false; row: number; col: number; slot: number };
+
+  /** Fare ve klavye yollarının ORTAK ucu — hedefin doluluğu işlemi seçer. */
+  const uygula = (kaynakId: number, hedef: Hedef) => {
+    if (hedef.dolu) {
+      if (hedef.assignment.id === kaynakId) return;
+      swap.mutate({ a: kaynakId, b: hedef.assignment.id });
+      return;
+    }
+    move.mutate({
+      assignment: kaynakId,
+      room: currentRoom.room_id,
+      row: hedef.row,
+      col: hedef.col,
+      slot: hedef.slot,
+    });
+  };
+
   const handleSeatClick = (assignment: SeatAssignmentRow) => {
     if (!swappable) return;
     if (picked === null) {
@@ -192,8 +240,35 @@ export default function YerlesimPaneli({ session }: { session: ExamSession }) {
       setPicked(null);
       return;
     }
-    swap.mutate({ a: picked.id, b: assignment.id });
+    uygula(picked.id, { dolu: true, assignment });
   };
+
+  /** Boş koltuğa tıklama YALNIZ bir öğrenci seçiliyken anlamlıdır (klavye yolu). */
+  const handleEmptyClick = (row: number, col: number, slot: number) => {
+    if (!swappable || picked === null) return;
+    uygula(picked.id, { dolu: false, row, col, slot });
+  };
+
+  /** Bırakma hedefi ortak davranışı — `key` yalnız görsel vurgu içindir. */
+  const dropProps = (key: string, hedef: Hedef) => ({
+    onDragOver: (e: DragEvent<HTMLElement>) => {
+      if (dragId === null) return;
+      if (hedef.dolu && hedef.assignment.id === dragId) return;
+      e.preventDefault(); // preventDefault YOKSA tarayıcı bırakmaya izin vermez
+      e.dataTransfer.dropEffect = "move";
+      setDropKey(key);
+    },
+    onDragLeave: () => setDropKey((k) => (k === key ? null : k)),
+    onDrop: (e: DragEvent<HTMLElement>) => {
+      e.preventDefault();
+      setDropKey(null);
+      // Sürükleme aynı bileşen içindedir; dataTransfer yalnız yedek kanaldır.
+      const kaynak = dragId ?? Number(e.dataTransfer.getData("text/plain"));
+      setDragId(null);
+      if (!Number.isFinite(kaynak) || kaynak <= 0) return;
+      uygula(kaynak, hedef);
+    },
+  });
 
   // Dağıtım numarası yalnız kelebek düzeninde anlamlıdır; "Kendi dersliğinde"
   // düzeninde backend hep 0 yazar (karıştırma yok) — o satır gösterilmez.
@@ -229,8 +304,10 @@ export default function YerlesimPaneli({ session }: { session: ExamSession }) {
       )}
       {swappable && (
         <p className="text-body-small text-on-surface-variant">
-          Takas: bir öğrenciye tıklayın (seçili halkayla vurgulanır), sonra yer değiştireceği
-          öğrenciye tıklayın. Her takastan sonra kurallar yeniden denetlenir.
+          Yer değiştirme: bir öğrenciyi sürükleyip başka bir öğrencinin üstüne bırakın (takas) ya da
+          boş koltuğa bırakın (taşıma). Fare kullanmadan: önce öğrenciye tıklayın (seçili halkayla
+          vurgulanır), sonra hedef koltuğa tıklayın. Her değişiklikten sonra kurallar yeniden
+          denetlenir.
         </p>
       )}
       <Tabs
@@ -283,24 +360,70 @@ export default function YerlesimPaneli({ session }: { session: ExamSession }) {
                       className="flex min-h-12 gap-1 rounded-shape-sm border border-outline-variant bg-surface p-1"
                     >
                       {Array.from({ length: size }, (_, slot) => {
-                        const a = byKey.get(`${row}:${col}:${slot}`);
+                        const seatKey = `${row}:${col}:${slot}`;
+                        const a = byKey.get(seatKey);
+                        const isDropTarget = dropKey === seatKey;
                         if (!a) {
+                          const konum = seatPositionLabel({
+                            deskRow: row,
+                            deskCol: col,
+                            slot,
+                            deskType: desk.type,
+                          });
                           return (
-                            <span
+                            <button
                               key={slot}
-                              className="flex min-h-10 w-20 items-center justify-center rounded-shape-xs border border-dashed border-outline-variant text-label-small text-on-surface-variant"
+                              type="button"
+                              // Boş koltuk YALNIZ bir öğrenci seçiliyken tıklanabilir;
+                              // sürükle-bırakta her zaman hedeftir.
+                              disabled={!swappable || picked === null}
+                              onClick={() => handleEmptyClick(row, col, slot)}
+                              aria-label={
+                                picked
+                                  ? `Boş koltuk (${konum}) — seçili öğrenciyi buraya taşı`
+                                  : `Boş koltuk (${konum})`
+                              }
+                              {...(swappable
+                                ? dropProps(seatKey, { dolu: false, row, col, slot })
+                                : {})}
+                              className={`flex min-h-10 w-20 items-center justify-center rounded-shape-xs border border-dashed text-label-small text-on-surface-variant transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default ${
+                                isDropTarget
+                                  ? "border-primary bg-primary-container text-on-primary-container"
+                                  : "border-outline-variant"
+                              }`}
                             >
                               Boş
-                            </span>
+                            </button>
                           );
                         }
                         const tone = groupTone.get(a.conflict_group) ?? GROUP_TONES[0];
                         const isPicked = picked?.id === a.id;
+                        // Kuralla sabitlenmiş satır SÜRÜKLENMEZ (backend de reddeder);
+                        // hedef olmaya devam eder — gerekçeyi backend söyler.
+                        const draggable = swappable && a.status !== "PINNED";
                         return (
                           <button
                             key={slot}
                             type="button"
                             disabled={!swappable}
+                            draggable={draggable}
+                            onDragStart={
+                              draggable
+                                ? (e) => {
+                                    setPicked(null);
+                                    setDragId(a.id);
+                                    e.dataTransfer.setData("text/plain", String(a.id));
+                                    e.dataTransfer.effectAllowed = "move";
+                                  }
+                                : undefined
+                            }
+                            onDragEnd={() => {
+                              setDragId(null);
+                              setDropKey(null);
+                            }}
+                            {...(swappable
+                              ? dropProps(seatKey, { dolu: true, assignment: a })
+                              : {})}
                             onClick={() => handleSeatClick(a)}
                             aria-pressed={isPicked}
                             aria-label={`Koltuk ${a.seat_no} — ${a.full_name} (${a.class_label})${
@@ -308,6 +431,8 @@ export default function YerlesimPaneli({ session }: { session: ExamSession }) {
                             }`}
                             className={`flex min-h-12 w-24 flex-col items-center justify-center rounded-shape-xs px-1 text-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-default ${tone} ${
                               isPicked ? "ring-2 ring-tertiary" : ""
+                            } ${isDropTarget ? "ring-2 ring-primary" : ""} ${
+                              draggable ? "cursor-grab active:cursor-grabbing" : ""
                             }`}
                           >
                             <span className="text-label-large">{a.seat_no}</span>

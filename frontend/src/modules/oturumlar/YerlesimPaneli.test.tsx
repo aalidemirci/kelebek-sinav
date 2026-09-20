@@ -1,10 +1,13 @@
 // Yerleşim krokisi testleri (F3): API mock'lanır; kroki çizimi (rapor, doluluk
-// çipleri, seed, rozet, lejant), tıkla-takas akışı ve takas KİLİDİ (yalnız
-// DAĞITILDI) doğrulanır. Ortak kurucular testFixtures.ts'ten — test dosyası
-// test dosyasından import ETMEZ (OYS Tur 232).
+// çipleri, seed, rozet, lejant), yer değiştirmenin İKİ YOLU (sürükle-bırak ve
+// tıkla-tıkla) ve KİLİT (yalnız DAĞITILDI) doğrulanır. Ortak kurucular
+// testFixtures.ts'ten — test dosyası test dosyasından import ETMEZ (OYS Tur 232).
+//
+// Sürükleme userEvent'te yoktur; fireEvent + sahte `dataTransfer` ile sürülür
+// (jsdom DataTransfer'ı desteklemez, RTL bu nesneyi olaya kendisi bağlar).
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -16,6 +19,7 @@ import { makeReport, makeRoomGeometry, makeSeating, makeSession, paginated } fro
 const sessionApi = vi.hoisted(() => ({
   seating: vi.fn(),
   swapSeats: vi.fn(),
+  moveSeat: vi.fn(),
 }));
 const roomApi = vi.hoisted(() => ({ list: vi.fn() }));
 
@@ -42,6 +46,33 @@ function renderPanel(session: ExamSession) {
 }
 
 afterEach(() => vi.clearAllMocks());
+
+/** İkinci sırası BOŞ geometri: (0,0) dolu ikili sıra, (0,1) boş ikili sıra. */
+function bosKoltukluGeometri() {
+  return makeRoomGeometry({
+    layout_plan: {
+      grid: { rows: 1, cols: 3 },
+      desks: [
+        { row: 0, col: 0, type: "DOUBLE" },
+        { row: 0, col: 1, type: "DOUBLE" },
+      ],
+      furniture: [{ kind: "TEACHER_DESK", row: 0, col: 2 }],
+    },
+  });
+}
+
+/** jsdom'da DataTransfer yoktur — sürükleme olaylarına sahte nesne verilir. */
+function sahteDataTransfer() {
+  return { dropEffect: "", effectAllowed: "", setData: vi.fn(), getData: vi.fn(() => "") };
+}
+
+/** Kaynak öğeyi hedefin üstüne sürükleyip bırakır (dragstart → dragover → drop). */
+function surukleBirak(kaynak: HTMLElement, hedef: HTMLElement) {
+  const dataTransfer = sahteDataTransfer();
+  fireEvent.dragStart(kaynak, { dataTransfer });
+  fireEvent.dragOver(hedef, { dataTransfer });
+  fireEvent.drop(hedef, { dataTransfer });
+}
 
 describe("YerlesimPaneli", () => {
   it("krokiyi kural özeti, doluluk çipi, dağıtım numarası, rozet ve lejantla çizer", async () => {
@@ -189,15 +220,120 @@ describe("YerlesimPaneli", () => {
   it("ONAYLI oturumda takas kilitli: koltuklar disabled, uç çağrılmaz", async () => {
     const user = userEvent.setup();
     sessionApi.seating.mockResolvedValue(makeSeating({ status: "APPROVED" }));
-    roomApi.list.mockResolvedValue(paginated([makeRoomGeometry()]));
+    roomApi.list.mockResolvedValue(paginated([bosKoltukluGeometri()]));
     renderPanel(makeSession({ status: "APPROVED" }));
 
     const seatA = await screen.findByRole("button", { name: /Ayşe Yılmaz/ });
     expect(seatA).toBeDisabled();
-    // Takas yönergesi de gösterilmez.
-    expect(screen.queryByText(/Takas: bir öğrenciye tıklayın/)).not.toBeInTheDocument();
+    // Yer değiştirme yönergesi de gösterilmez.
+    expect(screen.queryByText(/Yer değiştirme:/)).not.toBeInTheDocument();
+    // Sürüklenemez ve boş koltuk hedef değildir (tıklama da uç çağırmaz).
+    expect(seatA).toHaveAttribute("draggable", "false");
     await user.click(seatA);
     await user.click(screen.getByRole("button", { name: /Mehmet Demir/ }));
+    await user.click(screen.getAllByRole("button", { name: /^Boş koltuk/ })[0]);
     expect(sessionApi.swapSeats).not.toHaveBeenCalled();
+    expect(sessionApi.moveSeat).not.toHaveBeenCalled();
+  });
+
+  it("DAĞITILDI: öğrenciyi boş koltuğa sürükleyince move-seat çağrılır", async () => {
+    sessionApi.seating.mockResolvedValue(makeSeating());
+    roomApi.list.mockResolvedValue(paginated([bosKoltukluGeometri()]));
+    sessionApi.moveSeat.mockResolvedValue({ moved: {}, report: makeReport() });
+    renderPanel(makeSession({ status: "DISTRIBUTED" }));
+
+    const kaynak = await screen.findByRole("button", { name: /Ayşe Yılmaz/ });
+    // Boş koltuk konumuyla adlandırılır (planEdit ile AYNI etiket kaynağı).
+    const bos = screen.getByRole("button", { name: /^Boş koltuk \(ön cephe, 2\. sütun, sol/ });
+    surukleBirak(kaynak, bos);
+
+    // Hedef koltuk KİMLİĞİYLE gider; koltuk numarasını backend türetir.
+    await waitFor(() =>
+      expect(sessionApi.moveSeat).toHaveBeenCalledWith(5, 11, {
+        room: 1,
+        desk_row: 0,
+        desk_col: 1,
+        slot: 0,
+      }),
+    );
+    expect(await screen.findByText("Öğrenci taşındı; kural ihlali yok.")).toBeInTheDocument();
+    expect(sessionApi.swapSeats).not.toHaveBeenCalled();
+  });
+
+  it("dolu koltuğun üstüne bırakınca taşıma değil TAKAS olur", async () => {
+    sessionApi.seating.mockResolvedValue(makeSeating());
+    roomApi.list.mockResolvedValue(paginated([bosKoltukluGeometri()]));
+    sessionApi.swapSeats.mockResolvedValue({ swapped: [], report: makeReport() });
+    renderPanel(makeSession({ status: "DISTRIBUTED" }));
+
+    const kaynak = await screen.findByRole("button", { name: /Ayşe Yılmaz/ });
+    surukleBirak(kaynak, screen.getByRole("button", { name: /Mehmet Demir/ }));
+
+    await waitFor(() => expect(sessionApi.swapSeats).toHaveBeenCalledWith(5, 11, 12));
+    expect(sessionApi.moveSeat).not.toHaveBeenCalled();
+  });
+
+  it("fare olmadan da taşınır: önce öğrenci, sonra boş koltuk tıklanır", async () => {
+    const user = userEvent.setup();
+    sessionApi.seating.mockResolvedValue(makeSeating());
+    roomApi.list.mockResolvedValue(paginated([bosKoltukluGeometri()]));
+    sessionApi.moveSeat.mockResolvedValue({ moved: {}, report: makeReport() });
+    renderPanel(makeSession({ status: "DISTRIBUTED" }));
+
+    // Öğrenci seçilmeden boş koltuk tıklanabilir DEĞİLDİR (gürültü olmasın).
+    const bosKoltuklar = await screen.findAllByRole("button", { name: /^Boş koltuk/ });
+    expect(bosKoltuklar[0]).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /Ayşe Yılmaz/ }));
+    // Seçimden sonra boş koltuk etkinleşir ve ne yapacağını söyler.
+    const hedef = (await screen.findAllByRole("button", { name: /^Boş koltuk/ }))[0];
+    expect(hedef).toBeEnabled();
+    expect(hedef).toHaveAccessibleName(/seçili öğrenciyi buraya taşı$/);
+    await user.click(hedef);
+
+    await waitFor(() =>
+      expect(sessionApi.moveSeat).toHaveBeenCalledWith(5, 11, {
+        room: 1,
+        desk_row: 0,
+        desk_col: 1,
+        slot: 0,
+      }),
+    );
+  });
+
+  it("kuralla sabitlenmiş öğrenci sürüklenemez (hedef olmaya devam eder)", async () => {
+    const seating = makeSeating();
+    seating.rooms[0].assignments[0].status = "PINNED";
+    sessionApi.seating.mockResolvedValue(seating);
+    roomApi.list.mockResolvedValue(paginated([bosKoltukluGeometri()]));
+    sessionApi.swapSeats.mockResolvedValue({ swapped: [], report: makeReport() });
+    renderPanel(makeSession({ status: "DISTRIBUTED" }));
+
+    const sabit = await screen.findByRole("button", { name: /Ayşe Yılmaz/ });
+    expect(sabit).toHaveAttribute("draggable", "false");
+
+    // Ama hedef olabilir: sabit koltuğa bırakılan öğrenci takas denemesi yapar;
+    // reddi (ve gerekçesini) backend söyler.
+    surukleBirak(screen.getByRole("button", { name: /Mehmet Demir/ }), sabit);
+    await waitFor(() => expect(sessionApi.swapSeats).toHaveBeenCalledWith(5, 12, 11));
+  });
+
+  it("taşıma sonrası kural ihlali kırmızı snackbar'la duyurulur", async () => {
+    sessionApi.seating.mockResolvedValue(makeSeating());
+    roomApi.list.mockResolvedValue(paginated([bosKoltukluGeometri()]));
+    sessionApi.moveSeat.mockResolvedValue({
+      moved: {},
+      report: makeReport({ is_valid: false, hard_violations: ["101 ile 102 aynı sırada."] }),
+    });
+    renderPanel(makeSession({ status: "DISTRIBUTED" }));
+
+    const kaynak = await screen.findByRole("button", { name: /Ayşe Yılmaz/ });
+    surukleBirak(kaynak, screen.getAllByRole("button", { name: /^Boş koltuk/ })[0]);
+
+    expect(
+      await screen.findByText(
+        "Öğrenci taşındı ama 1 kural ihlali oluştu; bu hâliyle oturum onaylanamaz.",
+      ),
+    ).toBeInTheDocument();
   });
 });

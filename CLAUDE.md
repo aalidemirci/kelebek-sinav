@@ -471,6 +471,21 @@
 - **Koltuk sabitleme koordinattır:** `(desk_row, desk_col, slot)` — `seat_no`
   numaralandırma düzeni değişince kayar. "Tek başına" kardeş koltukları motor
   girdisinden düşürür; sahte `SeatAssignment` yazılmaz.
+- **Elle düzeltmenin İKİ ucu vardır** (20.09.2026): dolu↔dolu `swap_seats`,
+  dolu→BOŞ `move_seat` (`POST /exam-sessions/{id}/move-seat/`). İkisi de yalnız
+  DAĞITILDI durumda çalışır, PINNED satırı REDDEDER (A12), satırı MANUAL
+  işaretler ve `seating_report`la döner. `move_seat` hedefi KİMLİKLE alır
+  (`room, desk_row, desk_col, slot`); `seat_no` hedef salonun planından
+  `room_seats` ile YENİDEN türetilir — eski numara taşınmaz, ön yüz
+  numaralandırma yapmaz. Yazım `save()` iledir (`QuerySet.update()` kitapçık
+  bayatlık damgasını ilerletmez). Arayüzde sürükle-bırak bu iki ucu tek akışta
+  kullanır ve tıkla-tıkla yolu KALDIRILMAZ (klavye; tasarım §"Yerleşimde
+  sürükle-bırak"). **Dağıtımın koltuk havuzundan ÇIKARDIĞI koltuğa elle de
+  girilmez** — yoksa idarecinin koyduğu kısıt sessizce delinir: kapasite
+  sınırının ötesi (`capacity_override`, dağıtımda `seats[:cap]`) ve "tek başına
+  otursun" kuralıyla boşaltılmış KARDEŞ koltuklar (`solo_desk` —
+  `_effective_rules` ile sorulur) reddedilir. Koltuk havuzunu daraltan yeni bir
+  kural eklenirse `move_seat`e de kapısı yazılmalıdır.
 - `ExamCalendarEntry.authority` teklik kısıtına GİRMEZ: bir (ders, seviye, tür)
   ya okul ya üst makam sınavıdır. Aynı gün+seviyede ikisi birden varsa UYARI
   üretilir (sert kısıt değil — "zorunlu hâl" takdiri okul müdürlüğünündür).

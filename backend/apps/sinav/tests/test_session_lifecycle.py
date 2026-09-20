@@ -13,9 +13,11 @@ from django.core.exceptions import ValidationError
 from rest_framework.test import APIClient
 
 from apps.okul.models import SchoolConfig
-from apps.sinav import services
+from apps.sinav import layout, services
 from apps.sinav.models import (
+    ExamRoom,
     ExamSession,
+    ExamSessionRoom,
     ExamSessionStatus,
     RuleScope,
     RuleType,
@@ -23,7 +25,7 @@ from apps.sinav.models import (
     SeatStatus,
 )
 from apps.sinav.tests.oturum_yardim import dagitilmis_oturum as _dagitilmis_oturum
-from apps.sinav.tests.oturum_yardim import oturum
+from apps.sinav.tests.oturum_yardim import oturum, salon
 
 pytestmark = pytest.mark.django_db
 
@@ -247,3 +249,214 @@ def test_api_swap_seats() -> None:
         client.post(url, {"assignment_a": "x", "assignment_b": b.pk}, format="json").status_code
         == 400
     )
+
+
+# ===========================================================================
+# Boş koltuğa taşıma (sürükle-bırak'ın takas OLMAYAN yarısı)
+# ===========================================================================
+
+
+def _bos_koltuk(session: ExamSession, room: ExamRoom) -> layout.Seat:
+    """Salondaki ilk BOŞ koltuk (plan sırasına göre)."""
+    dolu = {
+        (a.desk_row, a.desk_col, a.slot)
+        for a in SeatAssignment.objects.filter(session=session, room=room)
+    }
+    for seat in services.room_seats(room):
+        if (seat.desk_row, seat.desk_col, seat.slot) not in dolu:
+            return seat
+    raise AssertionError("Salonda boş koltuk kalmadı (test kurulumu).")
+
+
+def test_move_seat_to_empty_marks_manual_and_renumbers() -> None:
+    """Taşınan satır hedefin plan numarasını alır ve ELLE işaretlenir."""
+    session = _dagitilmis_oturum(per_level=3)  # 6 öğrenci, 8 koltuk → 2 boş
+    room = ExamRoom.objects.get(session_rooms__session=session)
+    row = SeatAssignment.objects.filter(session=session).order_by("seat_no").first()
+    assert row is not None
+    eski_damga = row.updated_at
+    hedef = _bos_koltuk(session, room)
+
+    moved, report = services.move_seat(
+        session,
+        assignment_id=row.pk,
+        room_id=room.pk,
+        desk_row=hedef.desk_row,
+        desk_col=hedef.desk_col,
+        slot=hedef.slot,
+    )
+
+    assert (moved.desk_row, moved.desk_col, moved.slot) == (
+        hedef.desk_row,
+        hedef.desk_col,
+        hedef.slot,
+    )
+    # Koltuk numarası taşınan satırdan DEĞİL, hedef salonun planından gelir.
+    assert moved.seat_no == hedef.seat_no
+    assert moved.status == SeatStatus.MANUAL
+    assert report.is_valid, report.hard_violations
+    # Kitapçık bayatlık damgası ilerlemeli (CLAUDE.md §3).
+    assert moved.updated_at > eski_damga
+
+
+def test_move_seat_across_rooms() -> None:
+    """Hedef başka bir oturum salonu olabilir (salonlar arası taşıma)."""
+    session = _dagitilmis_oturum(rooms=2, per_level=4)
+    row = SeatAssignment.objects.filter(session=session).order_by("seat_no").first()
+    assert row is not None
+    other = ExamRoom.objects.filter(session_rooms__session=session).exclude(pk=row.room_id).first()
+    assert other is not None
+    hedef = _bos_koltuk(session, other)
+
+    moved, _report = services.move_seat(
+        session,
+        assignment_id=row.pk,
+        room_id=other.pk,
+        desk_row=hedef.desk_row,
+        desk_col=hedef.desk_col,
+        slot=hedef.slot,
+    )
+    assert moved.room_id == other.pk and moved.seat_no == hedef.seat_no
+
+
+def test_move_seat_guards() -> None:
+    session = _dagitilmis_oturum(per_level=3)
+    room = ExamRoom.objects.get(session_rooms__session=session)
+    row = SeatAssignment.objects.filter(session=session).order_by("seat_no").first()
+    assert row is not None
+    hedef = _bos_koltuk(session, room)
+
+    def tasi(**kwargs: object) -> None:
+        cagri: dict[str, object] = {
+            "assignment_id": row.pk,
+            "room_id": room.pk,
+            "desk_row": hedef.desk_row,
+            "desk_col": hedef.desk_col,
+            "slot": hedef.slot,
+        }
+        cagri.update(kwargs)
+        services.move_seat(session, **cagri)  # type: ignore[arg-type]
+
+    with pytest.raises(ValidationError, match="bulunamadı"):
+        tasi(assignment_id=987654)
+    with pytest.raises(ValidationError, match="zaten bu koltukta"):
+        tasi(desk_row=row.desk_row, desk_col=row.desk_col, slot=row.slot)
+    with pytest.raises(ValidationError, match="planında yok"):
+        tasi(desk_row=9)
+
+    # Dolu koltuğa taşıma reddedilir — orası takasın işidir.
+    komsu = SeatAssignment.objects.filter(session=session).exclude(pk=row.pk).first()
+    assert komsu is not None
+    with pytest.raises(ValidationError, match="başka bir öğrenci var"):
+        tasi(desk_row=komsu.desk_row, desk_col=komsu.desk_col, slot=komsu.slot)
+
+    # Oturumun salonlarından olmayan salon.
+    yabanci = salon("D-999")
+    with pytest.raises(ValidationError, match="salonlarından değil"):
+        tasi(room_id=yabanci.pk)
+
+    # A12: kuralla sabitlenmiş koltuk taşımayla da bozulmaz; ret ADSIZDIR.
+    SeatAssignment.objects.filter(pk=row.pk).update(status=SeatStatus.PINNED)
+    with pytest.raises(ValidationError, match="yerleştirme kuralıyla sabitlenmiş") as excinfo:
+        tasi()
+    assert row.student_number in str(excinfo.value)
+    assert row.full_name not in str(excinfo.value)
+    SeatAssignment.objects.filter(pk=row.pk).update(status=SeatStatus.NORMAL)
+
+    services.approve_session(session)
+    with pytest.raises(ValidationError, match="yalnız dağıtılmış"):
+        tasi()
+
+
+def test_move_seat_kapasite_sinirini_asamaz() -> None:
+    """Kapasite sınırı dağıtımda rota başından uygulanır; elle taşıma da aşamaz."""
+    session = _dagitilmis_oturum(per_level=3)  # 8 koltuklu salon, 6 öğrenci
+    session_room = ExamSessionRoom.objects.get(session=session)
+    hedef = _bos_koltuk(session, session_room.room)
+    # Dağıtımdan SONRA daraltılan sınır (idareci salonun bir kısmını kapattı).
+    ExamSessionRoom.objects.filter(pk=session_room.pk).update(capacity_override=hedef.seat_no - 1)
+    row = SeatAssignment.objects.filter(session=session).order_by("seat_no").first()
+    assert row is not None
+
+    with pytest.raises(ValidationError, match="kapasite sınırı"):
+        services.move_seat(
+            session,
+            assignment_id=row.pk,
+            room_id=session_room.room_id,
+            desk_row=hedef.desk_row,
+            desk_col=hedef.desk_col,
+            slot=hedef.slot,
+        )
+
+
+def test_move_seat_tek_basina_oturma_kuralini_bozmaz() -> None:
+    """ "Tek başına otursun" kuralıyla boşaltılan kardeş koltuğa öğrenci konamaz.
+
+    Dağıtım bu koltukları motora HİÇ vermez (sahte SeatAssignment yazılmaz), bu
+    yüzden boş görünürler — elle taşımada kural burada korunur (A12 deseni).
+    """
+    session = _dagitilmis_oturum(rooms=2, per_level=3)
+    ilk = SeatAssignment.objects.filter(session=session).order_by("pk").first()
+    assert ilk is not None and ilk.student_id is not None
+    services.create_placement_rule(
+        student_id=ilk.student_id,
+        rule_type=RuleType.FIXED_ROOM,
+        scope=RuleScope.SESSION,
+        session=session,
+        target_room_id=ilk.room_id,
+        solo_desk=True,
+    )
+    session, _result, _report = services.distribute_session(session, seed=42)
+
+    yalniz = SeatAssignment.objects.get(session=session, student_id=ilk.student_id)
+    assert yalniz.status == SeatStatus.PINNED
+    kardes = next(
+        s
+        for s in services.room_seats(ExamRoom.objects.get(pk=yalniz.room_id))
+        if (s.desk_row, s.desk_col) == (yalniz.desk_row, yalniz.desk_col) and s.slot != yalniz.slot
+    )
+    baskasi = SeatAssignment.objects.filter(session=session).exclude(pk=yalniz.pk).first()
+    assert baskasi is not None
+
+    with pytest.raises(ValidationError, match="tek başına ayrılmıştır") as excinfo:
+        services.move_seat(
+            session,
+            assignment_id=baskasi.pk,
+            room_id=yalniz.room_id,
+            desk_row=kardes.desk_row,
+            desk_col=kardes.desk_col,
+            slot=kardes.slot,
+        )
+    # KVKK: gerekçede okul numarası geçer, ad geçmez.
+    assert yalniz.student_number in str(excinfo.value)
+    assert yalniz.full_name not in str(excinfo.value)
+
+
+def test_api_move_seat() -> None:
+    session = _dagitilmis_oturum(per_level=3)
+    room_id = ExamSessionRoom.objects.get(session=session).room_id
+    room = ExamRoom.objects.get(pk=room_id)
+    row = SeatAssignment.objects.filter(session=session).order_by("seat_no").first()
+    assert row is not None
+    hedef = _bos_koltuk(session, room)
+    client = APIClient()
+    url = f"/api/v1/exam-sessions/{session.pk}/move-seat/"
+
+    resp = client.post(
+        url,
+        {
+            "assignment": row.pk,
+            "room": room_id,
+            "desk_row": hedef.desk_row,
+            "desk_col": hedef.desk_col,
+            "slot": hedef.slot,
+        },
+        format="json",
+    )
+    assert resp.status_code == 200
+    assert resp.data["moved"]["seat_no"] == hedef.seat_no
+    assert resp.data["moved"]["status"] == SeatStatus.MANUAL
+    assert "is_valid" in resp.data["report"]
+
+    eksik = client.post(url, {"assignment": row.pk, "room": room_id}, format="json")
+    assert eksik.status_code == 400
