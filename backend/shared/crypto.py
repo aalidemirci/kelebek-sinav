@@ -12,7 +12,12 @@ programın gerçeklerine uyarlar. OYS'den FARKLAR:
    boşaltılır, değişir.
 2. **Parolasız kip birinci sınıf vatandaştır.** Kullanıcı parola koymadıysa
    alanlar DÜZ yazılır (tasarım §10.2: "Varsayılan (parolasız): hassas alanlar
-   DÜZ"). Aynı alan sınıfı iki kipte de çalışır; şema tek biçimdir.
+   DÜZ"). Aynı alan sınıfı iki kipte de çalışır; şema tek biçimdir. Ama düz
+   yazım YALNIZ parolasız kipte meşrudur: parola KURULUYKEN anahtar bellekte
+   değilse (kilitli program, kayıp güvenlik dosyası) boş olmayan değer yazılmaz,
+   `KeyMissingError` yükselir (fail-closed). "Parola kurulu mu?" sorusunu bu
+   modül bilmez — `apps.okul` cevabı `register_key_required_probe` ile bağlar
+   (`shared` uygulama katmanını import etmez).
 3. **Yazma/okuma ayrı ayarlanabilir** (`plaintext_writes()`): parola kaldırma
    geçişinde satırlar ŞİFRELİ okunup DÜZ yazılır. Tek bayrakla bu yapılamazdı.
 
@@ -42,7 +47,7 @@ import base64
 import hmac
 import secrets
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from hashlib import sha256
@@ -162,6 +167,41 @@ def key_fingerprint(data_key: bytes) -> str:
     return "v1:" + hmac.new(data_key, b"ks-anahtar-parmak-izi", sha256).hexdigest()
 
 
+class KeyMissingError(RuntimeError):
+    """Parola kuruluyken anahtar bellekte değil ve şifreli alana değer yazılmak istendi.
+
+    Fail-closed: kilitliyken ya da güvenlik dosyası kayıpken kişisel veri düz
+    metin olarak diske düşmez, işlem bu hatayla durur. Parolasız kipte bu hata
+    HİÇ yükselmez (alanlar bilinçli olarak düz yazılır).
+    `shared.exceptions.ks_exception_handler` bunu kilit kapısıyla aynı 423
+    `locked` yanıtına çevirir (işlem geri alınır). Metni sabittir; yazılmak
+    istenen değer mesajda yankılanmaz.
+    """
+
+    def __init__(self, message: str = "Veri anahtarı bellekte değil.") -> None:
+        super().__init__(message)
+
+
+# "Parola kurulu mu?" sorusunun cevabı (bkz. modül başlığı madde 2). `apps.okul`
+# uygulaması hazır olduğunda bağlanır; bağlanmamışsa parolasız kip varsayılır.
+_key_required_probe: Callable[[], bool] | None = None
+
+
+def register_key_required_probe(probe: Callable[[], bool]) -> None:
+    """Anahtar bellekte değilken düz yazımın meşru olup olmadığını soran işlevi bağlar.
+
+    Sorgu YALNIZ anahtar yokken ve boş olmayan değer yazılırken çağrılır; kilit
+    açıkken yazım yolunda hiç maliyeti yoktur.
+    """
+    global _key_required_probe
+    _key_required_probe = probe
+
+
+def _key_required() -> bool:
+    probe = _key_required_probe
+    return probe() if probe is not None else False
+
+
 # ---------------------------------------------------------------------------
 # Süreç-geneli anahtar tutucu
 # ---------------------------------------------------------------------------
@@ -266,10 +306,12 @@ def plaintext_writes() -> Iterator[None]:
 # Model alanları
 # ---------------------------------------------------------------------------
 class EncryptedTextField(models.TextField):  # type: ignore[type-arg]  # Any davranışı korunur
-    """Anahtar yüklüyse Fernet ile şifreli, değilse DÜZ saklayan metin alanı.
+    """Anahtar yüklüyse Fernet ile şifreli, parolasız kipte DÜZ saklayan metin alanı.
 
     Python tarafında daima düz metin (str) gibi davranır. DB sütunu TEXT'tir;
     parolasız kipte içerik düz metin, parolalı kipte base64 Fernet token'ıdır.
+    Parola kuruluyken anahtar bellekte değilse yazım `KeyMissingError` ile durur
+    (modül başlığı madde 2).
 
     KARIŞIK DURUM TOLERANSI: `from_db_value` çözemediği değeri OLDUĞU GİBİ
     döndürür. Bu, geçiş yarıda kalsa bile (elektrik kesintisi) tablonun okunur
@@ -290,6 +332,11 @@ class EncryptedTextField(models.TextField):  # type: ignore[type-arg]  # Any dav
             return ""
         fernet = _holder.write_fernet()
         if fernet is None:
+            # İki meşru düz yazım vardır: parolasız kip ve kilit AÇIKKEN bilinçli
+            # `plaintext_writes()` (parola kaldırma geçişi). Anahtar bellekte
+            # değilken parola kuruluysa düz yazım veri sızıntısıdır — dur.
+            if not _holder.unlocked and _key_required():
+                raise KeyMissingError()
             return text
         return fernet.encrypt(text.encode("utf-8")).decode("ascii")
 

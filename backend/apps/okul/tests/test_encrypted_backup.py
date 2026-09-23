@@ -7,12 +7,20 @@ from typing import cast
 from unittest import mock
 
 import pytest
-from desktop.backup_crypto import MAGIC, decrypt_bytes, ensure_public_config
+from desktop.backup_crypto import (
+    MAGIC,
+    decrypt_bytes,
+    embedded_recovery_metadata,
+    ensure_public_config,
+)
 from django.conf import settings
 from django.http import StreamingHttpResponse
 from rest_framework.test import APIClient
 
 from apps.okul.services import app_password, encrypted_backup
+
+# Yapısal olarak kullanılabilir güvenlik dosyası (sarmal bu testte çözülmez).
+_GUVENLIK = b'{"kdf":{},"parola":{"salt":"dHV6","sarmal":"ornek"}}'
 
 
 def test_veritabani_ramde_sifrelenerek_ksbak_uretilir(
@@ -28,6 +36,7 @@ def test_veritabani_ramde_sifrelenerek_ksbak_uretilir(
 
     data_key = b"\x42" * 32
     ensure_public_config(data_dir, data_key)
+    (data_dir / "guvenlik.json").write_bytes(_GUVENLIK)
     monkeypatch.setattr(app_password, "state_path", lambda: data_dir / "guvenlik.json")
     monkeypatch.setattr(app_password, "is_locked", lambda: False)
     monkeypatch.setitem(settings.DATABASES["default"], "NAME", database)
@@ -37,9 +46,29 @@ def test_veritabani_ramde_sifrelenerek_ksbak_uretilir(
     assert filename.endswith(".ksbak")
     assert content.startswith(MAGIC)
     assert secret.encode() not in content
+    assert embedded_recovery_metadata(content) == _GUVENLIK
     restored = decrypt_bytes(content, data_key)
     assert restored.startswith(b"SQLite format 3")
     assert secret.encode() in restored
+
+
+def test_guvenlik_dosyasi_kullanilamazken_basliksiz_yedek_uretilmez(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Başlıksız yedek hiçbir parolayla açılamazdı — indirme açık hatayla durur."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    database = data_dir / "db.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute("CREATE TABLE kayit (deger TEXT)")
+    ensure_public_config(data_dir, b"\x42" * 32)
+    (data_dir / "guvenlik.json").write_text("{bozuk", encoding="utf-8")
+    monkeypatch.setattr(app_password, "state_path", lambda: data_dir / "guvenlik.json")
+    monkeypatch.setattr(app_password, "is_locked", lambda: False)
+    monkeypatch.setitem(settings.DATABASES["default"], "NAME", database)
+
+    with pytest.raises(encrypted_backup.EncryptedBackupError, match="guvenlik.json"):
+        encrypted_backup.create_encrypted_backup()
 
 
 def test_kilitliyken_yedek_olusturulmaz(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -49,6 +78,7 @@ def test_kilitliyken_yedek_olusturulmaz(monkeypatch: pytest.MonkeyPatch) -> None
         encrypted_backup.create_encrypted_backup()
 
 
+@pytest.mark.django_db
 def test_indirme_ucu_sifreli_dosyayi_ek_olarak_dondurur() -> None:
     with mock.patch(
         "apps.okul.views.encrypted_backup_service.create_encrypted_backup",

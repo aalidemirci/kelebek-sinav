@@ -468,6 +468,14 @@ describe("KilavuzPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("“Parolamı unuttum”")).toBeInTheDocument();
     expect(screen.getByText("yalnız bir kez")).toBeInTheDocument();
+    // Görev devri: yenileme ayrı işlemdir ve sınırı dürüstçe söylenir.
+    expect(screen.getByText("“Kurtarma anahtarını yenile”")).toBeInTheDocument();
+    expect(screen.getByText(/Parolayı değiştirmek eski\s+kurtarma anahtarını/)).toBeInTheDocument();
+    expect(screen.getByText(/eski anahtarla açılmaya devam eder/)).toBeInTheDocument();
+    expect(screen.getByText(/tam koruma değildir/)).toBeInTheDocument();
+    // Kayıp güvenlik dosyası: parolasız kipe dönülmez, çıkış yolları söylenir.
+    expect(screen.getByText("“Güvenlik dosyası bulunamadı ya da okunamıyor”")).toBeInTheDocument();
+    expect(screen.getByText(/parolasız çalışmaya dönmez/)).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { level: 3, name: "Programı güncelleme" }),
     ).toBeInTheDocument();

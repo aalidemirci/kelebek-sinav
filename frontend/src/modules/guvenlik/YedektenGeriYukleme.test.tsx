@@ -87,6 +87,20 @@ describe("YedektenGeriYukleme", () => {
     expect(screen.getByText("kelebek-sinav --geri-yukle")).toBeInTheDocument();
   });
 
+  it("güvenlik dosyası kayıp ekranında giriş metni o duruma göre yazılır", async () => {
+    render(
+      <ConfirmProvider>
+        <YedektenGeriYukleme kayipKipi />
+      </ConfirmProvider>,
+    );
+    await screen.findByText("gunluk-2026-09-01.ksbak");
+
+    expect(
+      screen.getByText(/güvenlik dosyası\s+yedeğin içinden yeniden oluşturulur/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Yanlış veri girişinden sonra/)).toBeNull();
+  });
+
   it("yedek yokken günlük yedeğin “her gün ilk açılışta” alındığını söyler", async () => {
     guvenlik.yedekler.mockResolvedValue({ ...LISTE, backups: [] });
     ekranaBas();

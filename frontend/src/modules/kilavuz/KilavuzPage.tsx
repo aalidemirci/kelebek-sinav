@@ -1270,6 +1270,30 @@ export default function KilavuzPage() {
           yeni bir parola belirlersiniz. Hem parola hem kurtarma anahtarı kaybolursa şifreli
           ad-soyadlara ve şifreli yedeklere ulaşmanın yolu yoktur.
         </p>
+        <p>
+          <strong>Görev devrinde kurtarma anahtarını yenileyin.</strong> Parolayı değiştirmek eski
+          kurtarma anahtarını geçersiz kılmaz. Anahtarı elinde tutan kişi görevden ayrıldıysa ya da
+          kâğıt kaybolduysa <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran> bölümündeki{" "}
+          <strong>“Kurtarma anahtarını yenile”</strong> ile parolanızı girip yeni bir anahtar
+          üretin; yeni anahtar da yalnız bir kez gösterilir. Eski anahtar bu bilgisayardaki
+          kayıtların kilidini artık açmaz. Ancak kayıtların anahtarı değişmediği için yenilemeden{" "}
+          <strong>önce</strong> alınmış yedekler (USB bellektekiler dahil) ve veri klasöründe{" "}
+          <span className="font-mono">guvenlik-arsiv-…</span> adıyla saklanan önceki güvenlik
+          dosyası eski anahtarla açılmaya devam eder. Yenileme bu yüzden başkasının eline geçmiş bir
+          anahtara karşı tam koruma değildir: eski yedekleri ve veri klasörünü bu gözle koruyun,
+          eski kâğıdı “bugünden önceki yedekler için” diye işaretleyip ayrı saklayın.
+        </p>
+        <p>
+          <strong>Güvenlik dosyası kaybolursa.</strong> Parola kuruluyken veri klasöründeki{" "}
+          <span className="font-mono">guvenlik.json</span> silinir, taşınır ya da bozulursa program
+          parolasız çalışmaya dönmez;{" "}
+          <strong>“Güvenlik dosyası bulunamadı ya da okunamıyor”</strong> ekranı açılır ve yeni
+          parola kurulamaz. Dosyanın sağlam bir kopyasını veri klasörüne geri koyup{" "}
+          <strong>“Yeniden denetle”</strong>ye basın ya da aynı ekrandan bir yedeği geri yükleyin:
+          her şifreli yedek güvenlik dosyasını da içinde taşır (yedeğin alındığı dönemin parolası ya
+          da kurtarma anahtarı gerekir). Bilgisayar değiştirirken veri klasörünü{" "}
+          <span className="font-mono">guvenlik.json</span> ile birlikte taşıyın.
+        </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">Programı güncelleme</h3>
         <p>

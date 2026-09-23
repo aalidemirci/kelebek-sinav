@@ -68,7 +68,7 @@ def izlenen_adimlar(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     monkeypatch.setattr(main_mod, "ensure_stamp_compatible", kaydet("surum-damgasi"))
     monkeypatch.setattr(main_mod, "check_database_integrity", kaydet("butunluk"))
     monkeypatch.setattr(main_mod, "encrypt_legacy_backups", kaydet("eski-yedekleri-sifrele", []))
-    monkeypatch.setattr(main_mod, "daily_backup", kaydet("gunluk-yedek"))
+    monkeypatch.setattr(main_mod, "daily_backup", kaydet("gunluk-yedek", Path("gunluk.ksbak")))
     monkeypatch.setattr(main_mod, "rotate_backups", kaydet("rotasyon", []))
     monkeypatch.setattr(main_mod, "prepare_django", kaydet("django-hazirla"))
     monkeypatch.setattr(main_mod, "has_pending_migrations", kaydet("bekleyen-goc-var-mi", True))
@@ -95,6 +95,19 @@ def test_acilis_sirasi_tasarimla_birebir(tmp_path: Path, izlenen_adimlar: list[s
         "goc",
         "damga-yaz",
     ]
+
+
+def test_gunluk_yedek_alinamazsa_rotasyon_kosmaz(
+    tmp_path: Path, izlenen_adimlar: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Yedek atlandıysa (güvenlik dosyası kayıp, yedek anahtarı bozuk) eski yedekler
+    silinmez — çıkış yolu onlardır."""
+    monkeypatch.setattr(main_mod, "daily_backup", lambda *args, **kwargs: None)
+    paths = resolve_app_paths(environ={ENV_APP_HOME: str(tmp_path)})
+
+    main_mod.prepare_data(paths, "0.1.0")
+
+    assert "rotasyon" not in izlenen_adimlar
 
 
 def test_bekleyen_goc_yoksa_ek_yedek_alinmaz(

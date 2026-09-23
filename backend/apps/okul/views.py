@@ -18,7 +18,9 @@ from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import FileResponse
-from rest_framework import generics, serializers
+from django.views.decorators.debug import sensitive_variables
+from rest_framework import generics, serializers, status
+from rest_framework.exceptions import APIException
 from rest_framework.generics import get_object_or_404
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -619,7 +621,11 @@ class AppPasswordRecoverSerializer(serializers.Serializer[dict[str, Any]]):
 
 
 class SecurityStatusView(APIView):
-    """`GET /api/v1/security/status/` — parola kurulu mu, kilitli mi, geçiş yarım mı."""
+    """`GET /api/v1/security/status/` — parola kurulu mu, kilitli mi, dosya kayıp mı.
+
+    Hata yükseltmez: güvenlik dosyası kayıp ya da okunamıyorsa bile arayüz hangi
+    ekranı göstereceğini buradan öğrenir.
+    """
 
     def get(self, request: Request) -> Response:
         return Response(app_password_service.status())
@@ -629,15 +635,19 @@ class SecurityEnableView(APIView):
     """`POST /api/v1/security/enable/` — parolayı kurar, alanları şifreler.
 
     Yanıttaki `recovery_key` TEK SEFERLİKTİR: sunucu onu bir daha üretemez
-    (yalnız sarmalı saklanır). Arayüz kullanıcıya yazdırtmadan diyaloğu kapatmaz.
+    (yalnız sarmalı saklanır); yanıt önbelleğe alınmaz. Arayüz kullanıcıya
+    yazdırtmadan diyaloğu kapatmaz.
     """
 
+    @sensitive_variables("req", "kurtarma")
     def post(self, request: Request) -> Response:
         req = AppPasswordRequestSerializer(data=request.data)
         req.is_valid(raise_exception=True)
         with _service_errors():
             kurtarma = app_password_service.enable(password=req.validated_data["password"])
-        return Response({"recovery_key": kurtarma, **app_password_service.status()}, status=201)
+        yanit = Response({"recovery_key": kurtarma, **app_password_service.status()}, status=201)
+        yanit["Cache-Control"] = "no-store"
+        return yanit
 
 
 class SecurityUnlockView(APIView):
@@ -695,6 +705,51 @@ class SecurityDisableView(APIView):
         req.is_valid(raise_exception=True)
         with _service_errors():
             app_password_service.disable(password=req.validated_data["password"])
+        return Response(app_password_service.status())
+
+
+class SecurityRecoveryKeyRenewView(APIView):
+    """`POST /api/v1/security/recovery-key/renew/` `{password}` — kurtarma anahtarını yeniler.
+
+    Görev devri içindir. Yalnız kilit açıkken (kilitliyken 423 —
+    `lock_middleware.LOCKED_DENIED_PATHS`). Parola bellekteki anahtara karşı
+    doğrulanır (yanlışsa 400 "Parola hatalı." + kademeli gecikme). Yanıttaki
+    `recovery_key` TEK SEFERLİKTİR: sunucu onu saklamaz, bir daha üretemez;
+    yanıt önbelleğe alınmaz, anahtar günlüğe yazılmaz.
+    """
+
+    @sensitive_variables("req", "anahtar")
+    def post(self, request: Request) -> Response:
+        req = AppPasswordRequestSerializer(data=request.data)
+        req.is_valid(raise_exception=True)
+        with _service_errors():
+            anahtar = app_password_service.renew_recovery_key(
+                password=req.validated_data["password"]
+            )
+        yanit = Response({"recovery_key": anahtar, **app_password_service.status()})
+        yanit["Cache-Control"] = "no-store"
+        return yanit
+
+
+class StateResetNotAllowedResponse(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "sifirlama_uygun_degil"
+    default_detail = app_password_service.RESET_NOT_ALLOWED_MESSAGE
+
+
+class SecurityStateResetView(APIView):
+    """`POST /api/v1/security/state/reset/` — okunamayan güvenlik dosyasını sıfırlar.
+
+    Güvenlik dosyası kayıpken açık kalan uçlardandır; koşulu servis denetler
+    (dosya var ama kullanılamıyor + DB'de anahtar parmak izi boş). Koşul
+    sağlanmıyorsa 409 `sifirlama_uygun_degil`. Dosya silinmez, arşivlenir.
+    """
+
+    def post(self, request: Request) -> Response:
+        try:
+            app_password_service.reset_unusable_state()
+        except app_password_service.StateResetNotAllowed as exc:
+            raise StateResetNotAllowedResponse() from exc
         return Response(app_password_service.status())
 
 

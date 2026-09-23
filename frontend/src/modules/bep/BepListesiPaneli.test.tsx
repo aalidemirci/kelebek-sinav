@@ -75,6 +75,8 @@ function durum(passwordSet: boolean): GuvenlikDurumu {
   return {
     password_set: passwordSet,
     locked: false,
+    security_file_missing: false,
+    reset_available: false,
     transition_pending: false,
     transition: "",
     protected_fields: [],

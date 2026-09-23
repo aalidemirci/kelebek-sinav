@@ -141,6 +141,16 @@ urlpatterns = [
     ),
     path("security/disable/", views.SecurityDisableView.as_view(), name="security-disable"),
     path(
+        "security/recovery-key/renew/",
+        views.SecurityRecoveryKeyRenewView.as_view(),
+        name="security-recovery-key-renew",
+    ),
+    path(
+        "security/state/reset/",
+        views.SecurityStateResetView.as_view(),
+        name="security-state-reset",
+    ),
+    path(
         "backups/encrypted/",
         views.EncryptedBackupDownloadView.as_view(),
         name="encrypted-backup-download",

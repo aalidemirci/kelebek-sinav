@@ -153,6 +153,8 @@ beforeEach(() => {
   guvenlikApiMock.durum.mockResolvedValue({
     password_set: true,
     locked: false,
+    security_file_missing: false,
+    reset_available: false,
     transition_pending: false,
     transition: "",
     protected_fields: [],

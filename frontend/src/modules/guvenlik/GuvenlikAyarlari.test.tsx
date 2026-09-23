@@ -24,6 +24,10 @@ vi.mock("./api", () => ({ guvenlikApi: guvenlik }));
 vi.mock("./SifreliYedekleme", () => ({ default: () => null }));
 vi.mock("./YedektenGeriYukleme", () => ({ default: () => null }));
 vi.mock("./OgrenciFotograflari", () => ({ default: () => null }));
+// Yenileme kartı kendi testinde sınanır; burada yalnız ne zaman göründüğü.
+vi.mock("./KurtarmaAnahtariniYenileKarti", () => ({
+  default: () => <p>Kurtarma anahtarı yenileme kartı</p>,
+}));
 vi.mock("../../lib/download", () => ({ saveBlob: download.saveBlob }));
 
 import GuvenlikAyarlari from "./GuvenlikAyarlari";
@@ -31,6 +35,8 @@ import GuvenlikAyarlari from "./GuvenlikAyarlari";
 const PAROLASIZ = {
   password_set: false,
   locked: false,
+  security_file_missing: false,
+  reset_available: false,
   transition_pending: false,
   transition: "",
   protected_fields: ["ad", "soyad"],
@@ -132,6 +138,18 @@ describe("GuvenlikAyarlari", () => {
     await kullanici.click(screen.getByRole("button", { name: "Uygula" }));
 
     await waitFor(() => expect(guvenlik.kaldir).toHaveBeenCalledWith("Deneme-Parola-1"));
+  });
+
+  it("kurtarma anahtarı yenileme kartı yalnız parola kuruluyken görünür", async () => {
+    ekranaBas();
+    expect(await screen.findByText(/Kişisel veri alanları açık/)).toBeInTheDocument();
+    expect(screen.queryByText("Kurtarma anahtarı yenileme kartı")).toBeNull();
+  });
+
+  it("parolalı durumda kurtarma anahtarı yenileme kartını gösterir", async () => {
+    guvenlik.durum.mockResolvedValue(PAROLALI);
+    ekranaBas();
+    expect(await screen.findByText("Kurtarma anahtarı yenileme kartı")).toBeInTheDocument();
   });
 
   it("yanlış parolayla kaldırma denemesinde backend mesajını gösterir", async () => {

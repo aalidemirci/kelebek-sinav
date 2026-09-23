@@ -8,6 +8,10 @@
 // Başarıda backend "yeniden başlat" kapısını kurar (tüm API 503 döner); kart
 // olayı yayınlar ve YenidenBaslatEkrani arayüzü örter. Parola/kurtarma anahtarı
 // yalnız istek gövdesinde taşınır, hiçbir yere yazılmaz.
+//
+// `kayipKipi`: güvenlik dosyası kayıp ekranında (GuvenlikDosyasiKayip) çıkış
+// yolu olarak gösterilir; giriş metni o duruma göre yazılır. Backend bu iki ucu
+// kayıp kilidinde de açık tutar.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -31,7 +35,12 @@ function boyutMetni(bayt: number): string {
   return `${formatNumber(Math.max(1, Math.round(bayt / 1024)))} KB`;
 }
 
-export default function YedektenGeriYukleme() {
+interface YedektenGeriYuklemeProps {
+  /** Güvenlik dosyası kayıp ekranında mı gösteriliyor? (giriş metni değişir) */
+  kayipKipi?: boolean;
+}
+
+export default function YedektenGeriYukleme({ kayipKipi = false }: YedektenGeriYuklemeProps) {
   const confirm = useConfirm();
   const [liste, setListe] = useState<YedekListesi | null>(null);
   const [listeHata, setListeHata] = useState<string | null>(null);
@@ -117,19 +126,31 @@ export default function YedektenGeriYukleme() {
         <Icon name="settings_backup_restore" className="mt-0.5 text-primary" />
         <div className="min-w-0 flex-1">
           <h2 className="text-title-large text-on-surface">Yedekten geri yükle</h2>
-          <p className="mt-2 text-body-medium text-on-surface-variant">
-            Yanlış veri girişinden sonra eski bir güne dönmek için günlük yedeklerden birini seçin
-            ya da elinizdeki <span className="font-mono">.ksbak</span> dosyasını yükleyin. Mevcut
-            veritabanı silinmez; veri klasöründe <span className="font-mono">db-onceki-…</span>{" "}
-            adıyla kenara alınır. Geri yükleme uygulandıktan sonra program kapatılıp yeniden
-            açılmalıdır.
-          </p>
-          <p className="mt-2 text-body-small text-on-surface-variant">
-            Program hiç açılmıyorsa (bozuk veritabanı) bu ekrana ulaşamazsınız; o durumda Windows’ta
-            Başlat menüsündeki “Kelebek Sınav — Yedekten Geri Yükle” kısayolunu, Pardus/Linux’ta
-            uçbirimden <span className="font-mono">kelebek-sinav --geri-yukle</span> komutunu
-            kullanın.
-          </p>
+          {kayipKipi ? (
+            <p className="mt-2 text-body-medium text-on-surface-variant">
+              En yeni şifreli yedeği seçin ya da elinizdeki{" "}
+              <span className="font-mono">.ksbak</span> dosyasını yükleyin; güvenlik dosyası yedeğin
+              içinden yeniden oluşturulur. Mevcut veritabanı silinmez; veri klasöründe{" "}
+              <span className="font-mono">db-onceki-…</span> adıyla kenara alınır. Geri yükleme
+              uygulandıktan sonra program kapatılıp yeniden açılmalıdır.
+            </p>
+          ) : (
+            <>
+              <p className="mt-2 text-body-medium text-on-surface-variant">
+                Yanlış veri girişinden sonra eski bir güne dönmek için günlük yedeklerden birini
+                seçin ya da elinizdeki <span className="font-mono">.ksbak</span> dosyasını yükleyin.
+                Mevcut veritabanı silinmez; veri klasöründe{" "}
+                <span className="font-mono">db-onceki-…</span> adıyla kenara alınır. Geri yükleme
+                uygulandıktan sonra program kapatılıp yeniden açılmalıdır.
+              </p>
+              <p className="mt-2 text-body-small text-on-surface-variant">
+                Program hiç açılmıyorsa (bozuk veritabanı) bu ekrana ulaşamazsınız; o durumda
+                Windows’ta Başlat menüsündeki “Kelebek Sınav — Yedekten Geri Yükle” kısayolunu,
+                Pardus/Linux’ta uçbirimden{" "}
+                <span className="font-mono">kelebek-sinav --geri-yukle</span> komutunu kullanın.
+              </p>
+            </>
+          )}
 
           {liste === null && listeHata === null ? (
             <SkeletonList rows={2} className="mt-4" />

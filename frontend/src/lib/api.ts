@@ -8,6 +8,7 @@
 
 // Boş/tanımsız → göreli "/api/v1": geliştirmede Vite proxy'si (vite.config.ts
 // server.proxy) backend'e yönlendirir. Mutlak URL yalnız özel senaryoda gerekir.
+import { KILIT_KAPISI_KODLARI, kilitKapisiYayinla } from "./kilit";
 import { yenidenBaslatGerekliYayinla } from "./restart";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "/api/v1";
@@ -62,6 +63,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     // Geri yükleme sonrası kapı: HANGİ çağrı olursa olsun tam ekran
     // "yeniden başlatın" yönlendirmesi tetiklenir (sayfa yenilense bile).
     if (code === RESTART_CODE) yenidenBaslatGerekliYayinla();
+    // Kilit kapısı (423): güvenlik kapısı durumu yeniden okusun (lib/kilit.ts).
+    if (resp.status === 423 && KILIT_KAPISI_KODLARI.has(code)) kilitKapisiYayinla();
     throw new ApiError(
       resp.status,
       code,
@@ -103,6 +106,7 @@ async function requestBlob(
       /* boş gövde */
     }
     if (code === RESTART_CODE) yenidenBaslatGerekliYayinla();
+    if (resp.status === 423 && KILIT_KAPISI_KODLARI.has(code)) kilitKapisiYayinla();
     throw new ApiError(resp.status, code, message, fields);
   }
   return resp.blob();

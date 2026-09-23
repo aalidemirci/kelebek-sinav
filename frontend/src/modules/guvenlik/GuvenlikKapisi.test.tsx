@@ -17,12 +17,17 @@ const guvenlik = vi.hoisted(() => ({
 }));
 
 vi.mock("./api", () => ({ guvenlikApi: guvenlik }));
+// Kayıp ekranının içindeki geri yükleme kartı kendi testinde sınanır.
+vi.mock("./YedektenGeriYukleme", () => ({ default: () => <p>Geri yükleme kartı</p> }));
 
+import { kilitKapisiYayinla } from "../../lib/kilit";
 import GuvenlikKapisi, { kilitOlayiYayinla } from "./GuvenlikKapisi";
 
 const ACIK = {
   password_set: true,
   locked: false,
+  security_file_missing: false,
+  reset_available: false,
   transition_pending: false,
   transition: "",
   protected_fields: ["ad"],
@@ -81,5 +86,42 @@ describe("GuvenlikKapisi", () => {
     act(() => kilitOlayiYayinla());
     await waitFor(() => expect(screen.queryByText("Gizli içerik")).toBeNull());
     expect(screen.getByText("Kayıtlar kilitli")).toBeInTheDocument();
+  });
+
+  it("güvenlik dosyası kayıpsa kilit ekranı yerine kayıp ekranını gösterir", async () => {
+    guvenlik.durum.mockResolvedValue({ ...KILITLI, security_file_missing: true });
+    icerikliKapi();
+
+    expect(
+      await screen.findByRole("heading", { name: "Güvenlik dosyası bulunamadı ya da okunamıyor" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Kayıtlar kilitli")).toBeNull();
+    expect(screen.queryByText("Gizli içerik")).toBeNull();
+    expect(screen.getByText("Geri yükleme kartı")).toBeInTheDocument();
+  });
+
+  it("oturum ortasındaki 423 olayında durumu sunucudan yeniden okur", async () => {
+    guvenlik.durum.mockResolvedValueOnce(ACIK);
+    icerikliKapi();
+    expect(await screen.findByText("Gizli içerik")).toBeInTheDocument();
+
+    guvenlik.durum.mockResolvedValueOnce({ ...KILITLI, security_file_missing: true });
+    act(() => kilitKapisiYayinla());
+
+    expect(
+      await screen.findByRole("heading", { name: "Güvenlik dosyası bulunamadı ya da okunamıyor" }),
+    ).toBeInTheDocument();
+    expect(guvenlik.durum).toHaveBeenCalledTimes(2);
+  });
+
+  it("kayıp ekranındaki yeniden denetle dosya geri konunca kilit ekranına geçer", async () => {
+    const kullanici = userEvent.setup();
+    guvenlik.durum.mockResolvedValueOnce({ ...KILITLI, security_file_missing: true });
+    icerikliKapi();
+
+    guvenlik.durum.mockResolvedValueOnce(KILITLI);
+    await kullanici.click(await screen.findByRole("button", { name: "Yeniden denetle" }));
+
+    expect(await screen.findByText("Kayıtlar kilitli")).toBeInTheDocument();
   });
 });

@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from desktop.backup import database_snapshot
-from desktop.backup_crypto import encrypt_bytes, load_public_key, recovery_metadata
+from desktop.backup_crypto import encrypt_bytes, load_public_key, usable_recovery_header
 from django.conf import settings
 
 from apps.okul.services import app_password
@@ -29,12 +29,19 @@ def create_encrypted_backup() -> tuple[bytes, str]:
     if not database_path.is_file():
         raise EncryptedBackupError("Yedeklenecek veritabanı bulunamadı.")
 
+    # Başlık, güncel ve kullanılabilir güvenlik dosyasından gelir: başlığı olmayan
+    # bir yedek hiçbir parolayla açılamazdı (günlük yedekle aynı kural).
+    header = usable_recovery_header(data_dir)
+    if header is None:
+        raise EncryptedBackupError(
+            "Güvenlik dosyası (guvenlik.json) okunamadığı için şifreli yedek oluşturulamadı."
+        )
     try:
         public_key = load_public_key(data_dir)
         encrypted = encrypt_bytes(
             database_snapshot(database_path),
             public_key,
-            recovery_header=recovery_metadata(data_dir),
+            recovery_header=header,
         )
     except ValueError as exc:
         raise EncryptedBackupError(str(exc)) from exc

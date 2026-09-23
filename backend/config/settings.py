@@ -134,11 +134,16 @@ DATABASES = {
             # açar ama açıkça belirtmek niyeti netleştirir; busy_timeout: kilit
             # çakışmasında 5 sn bekle (masaüstü uygulamada tek süreç ama arka
             # plan görevi olabilir); synchronous=NORMAL: WAL ile güvenli + hızlı.
+            # secure_delete=ON: silinen/üzerine yazılan içerik sıfırlanır — parola
+            # kurulurken satırların eski düz sürümü boş sayfalarda kalmasın
+            # (geçişin kapanışı ayrıca WAL'ı sıfırlayıp VACUUM koşar:
+            # `app_password.scrub_free_pages`).
             "init_command": (
                 "PRAGMA journal_mode=WAL;"
                 "PRAGMA foreign_keys=ON;"
                 "PRAGMA busy_timeout=5000;"
                 "PRAGMA synchronous=NORMAL;"
+                "PRAGMA secure_delete=ON;"
             ),
             "transaction_mode": "IMMEDIATE",
         },
