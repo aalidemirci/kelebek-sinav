@@ -480,7 +480,7 @@ def test_takvim_pdf_yatay_taslak_filigrani_ve_tr_duman() -> None:
     SchoolConfig.objects.create(
         pk=SchoolConfig.SINGLETON_PK,
         school_name=f"{TURKCE_DUMAN} Anadolu Lisesi",
-        district="Sancaktepe",
+        district="Beşiktaş",
         principal_name="Örnek MÜDÜR",
     )
     calendar = _havuzlu_takvim(course_count=2)
@@ -502,7 +502,7 @@ def test_takvim_pdf_yatay_taslak_filigrani_ve_tr_duman() -> None:
     assert not eksik, f"Takvim PDF'inde Türkçe glif kaybı: {eksik}"
     # Antet resmî yazışma usulüyle: kurum satırı TÜRKÇE büyük harf (tr_upper —
     # i→İ), birim satırı "<Okul Adı> Müdürlüğü" tek satır (18.09.2026).
-    assert "SANCAKTEPE KAYMAKAMLIĞI" in text
+    assert "BEŞİKTAŞ KAYMAKAMLIĞI" in text
     assert "Anadolu Lisesi Müdürlüğü" in text
     assert "Zümre Başkanı" in text  # boş imza çizgileri (B7)
     assert "Okul Zümre Başkanı" not in text  # mevzuatta olmayan, hiç dolmayan slot kalktı

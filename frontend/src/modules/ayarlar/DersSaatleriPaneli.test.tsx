@@ -28,7 +28,7 @@ function config(overrides: Record<string, unknown> = {}) {
   return {
     school_name: "Test Lisesi",
     province: "İstanbul",
-    district: "Sancaktepe",
+    district: "Beşiktaş",
     principal_name: "",
     school_type: "ANADOLU_LISESI",
     has_prep_class: false,
