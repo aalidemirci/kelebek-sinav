@@ -1,10 +1,10 @@
 # Sürüm notları
 
-Yayımlanmış sürümlerin paketleri ve kısa notları GitHub Releases'tadır. Bu dosya
-bir sonraki sürümün TASLAK notlarını tutar; sürüm çıkarılırken başlık sürüm
-numarası ve tarihle değiştirilir.
+Paketler GitHub Releases'ta ve indir.okulapp.org'dadır. En yeni sürüm en üsttedir;
+yayımlanmamış değişiklikler "Yayımlanmadı (taslak)" başlığı altında toplanır ve
+sürüm çıkarılırken bu başlık sürüm numarası ve tarihle değiştirilir.
 
-## Yayımlanmadı (taslak)
+## 2026.9.0-beta.13 — 24.09.2026
 
 ### Güvenlik
 
