@@ -114,6 +114,7 @@ def test_personel_sablonu_ice_aktarma_ucundan_oldugu_gibi_gecer() -> None:
         ),
     ],
 )
+@pytest.mark.django_db
 def test_sablon_indirme_ucu_excel_eki_dondurur(
     yol: str, dosya_adi: str, basliklar: tuple[str, ...]
 ) -> None:

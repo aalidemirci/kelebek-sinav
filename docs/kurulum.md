@@ -149,6 +149,19 @@ Yedeğin biçimi güvenlik ayarınıza bağlıdır:
 Yedekler bilgisayarın kendisindedir: ayda bir `backups` klasörünü USB belleğe
 kopyalamayı alışkanlık edinin.
 
+**Uygulama parolası kuruluysa `data` klasöründeki `guvenlik.json` dosyası
+kayıtların anahtarını taşır.** Bilgisayar değiştirirken `data` klasörünü bu
+dosyayla birlikte taşıyın. Dosya silinir ya da bozulursa program parolasız
+çalışmaya DÖNMEZ; "Güvenlik dosyası bulunamadı ya da okunamıyor" ekranı açılır.
+Çıkış yolu dosyanın sağlam kopyasını geri koymak ya da o ekrandan bir yedeği
+geri yüklemektir: her şifreli yedek güvenlik dosyasını da içinde taşır.
+
+**Görev devrinde** kurtarma anahtarını Ayarlar → Güvenlik → "Kurtarma
+anahtarını yenile" ile yenileyin; parolayı değiştirmek eski kurtarma anahtarını
+geçersiz kılmaz. Yenilemeden önce alınmış yedekler ve `data` klasöründeki
+`guvenlik-arsiv-*.json` dosyaları eski anahtarla açılmaya devam eder (kayıtların
+anahtarı değişmez); bu yedekleri ve eski kâğıdı buna göre saklayın.
+
 ### 5.1 Yedekten geri dönme
 
 Program yedekten dönüş için kendi aracını taşır — düz VE şifreli yedekleri

@@ -2,6 +2,8 @@
 // takılır (rota ve menü bağlama iş sahibinindir; bkz. teslim raporu).
 //
 // Üç eylem: parola koy / parola değiştir / parolayı kaldır (+ "şimdi kilitle").
+// Parola kuruluyken ayrıca "Kurtarma anahtarını yenile" kartı görünür (görev
+// devri — parola değişimi kurtarma anahtarını geçersiz kılmaz).
 // Metinler `metinler.ts`'ten gelir ve DÜRÜSTTÜR: bu koruma alan şifrelemesidir,
 // tam disk şifrelemesi değildir.
 
@@ -16,6 +18,7 @@ import { SkeletonList } from "../../ui/Skeleton";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import TextField from "../../ui/TextField";
 import KurtarmaAnahtariDiyalogu from "./KurtarmaAnahtariDiyalogu";
+import KurtarmaAnahtariniYenileKarti from "./KurtarmaAnahtariniYenileKarti";
 import OgrenciFotograflari from "./OgrenciFotograflari";
 import SifreliYedekleme from "./SifreliYedekleme";
 import YedektenGeriYukleme from "./YedektenGeriYukleme";
@@ -163,6 +166,8 @@ export default function GuvenlikAyarlari({ okulAdi = "" }: GuvenlikAyarlariProps
           )}
         </div>
       </Card>
+
+      {durum.password_set && <KurtarmaAnahtariniYenileKarti okulAdi={okulAdi} />}
 
       <SifreliYedekleme parolaKurulu={durum.password_set} />
 

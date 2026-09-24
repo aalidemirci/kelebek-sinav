@@ -57,6 +57,13 @@ class Command(BaseCommand):
         durum = app_password.status()
         self.stdout.write(f"Parola kurulu    : {'evet' if durum['password_set'] else 'hayır'}")
         self.stdout.write(f"Kilitli          : {'evet' if durum['locked'] else 'hayır'}")
+        if durum["security_file_missing"]:
+            self.stdout.write(
+                self.style.ERROR(
+                    "Güvenlik dosyası: KAYIP ya da okunamıyor — sağlam kopyasını geri koyun "
+                    "ya da yedekten geri yükleyin."
+                )
+            )
         self.stdout.write(
             "Yarım geçiş      : " + (durum["transition"] or "yok")  # SIFRELENIYOR / COZULUYOR / yok
         )

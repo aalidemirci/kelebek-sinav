@@ -367,6 +367,29 @@ DD'nin kanıtlı katmanı taşınır: `shared/crypto.py` (Fernet + Argon2id) +
   kilit yok, kilitleme = kapatma veya "Kilitle".
 - **Yedek:** parola etkinken X25519 şifreli `.ksbak`; parolasızken düz
   `.ksbak`. Her iki kipte de günlük yedek **alınır** (K9 düzeltmesi).
+- **"Parola kurulu mu?" tek dosyaya bağlı değildir (24.09.2026 sertleştirme).**
+  Cevap: güvenlik dosyası (`guvenlik.json`) VAR **ya da** DB'deki anahtar parmak
+  izi (`SchoolConfig.app_password_hash`) DOLU. Parolasız kip ikisinin de
+  yokluğudur. Parmak izi dolu + dosya yok ya da kullanılamıyor = **güvenlik
+  dosyası kayıp** kilidi: kapı veri uçlarını 423 `guvenlik_dosyasi_kayip` ile
+  keser, yalnız durum / yedek listesi / yedekten geri yükleme açıktır; `enable()`
+  reddeder; geri yükleme dosyayı yedeğin kurtarma başlığından yeniden yazar.
+  Dosya kullanılamıyor AMA parmak izi boşsa (korunan satır yok) dosya arşivlenip
+  parolasız kipe dönülebilir. "Kullanılabilir güvenlik dosyası" kuralı TEKTİR
+  (`desktop.backup_crypto.is_usable_security_state`); masaüstü yedek katmanı da
+  aynı kuralla kip belirler, başlığı kullanılamayan yedek almaz ve o gün
+  rotasyon koşmaz. Şifreli alan parola kuruluyken anahtarsız YAZMAZ
+  (`KeyMissingError` → 423); parolasız kipte düz yazım sürer. Şifreleme
+  geçişinin sonunda WAL sıfırlanır ve VACUUM koşar, bağlantılar `secure_delete`
+  ile açılır: eski düz sürüm boş sayfalarda kalmaz.
+- **Kurtarma anahtarını yenileme (görev devri, 24.09.2026).** Parola değişimi
+  yalnız parola sarmalını yeniler; kurtarma anahtarı ayrı işlemle yenilenir
+  (Ayarlar → Güvenlik, parola ister). Aynı DEK yeni anahtar + yeni tuzla
+  sarmalanır, önceki dosya `guvenlik-arsiv-<damga>.json` olarak KOPYALANIR.
+  DEK değişmediği için yenilemeden önceki yedekler ve arşiv dosyası eski
+  anahtarla açılmaya devam eder — arayüz ve kılavuz bunu açıkça söyler; tam
+  iptal DEK'in yeniden üretilmesini (tüm satırların yeniden şifrelenmesi + yeni
+  yedek anahtarı) gerektirir ve yapılmadı.
 - **Cinsiyet (20.09.2026 kullanıcı kararı — bu maddenin TEK istisnası).**
   `Student.gender` ("K"/"E"/boş) e-Okul sınıf listesindeki "Cinsiyeti"
   sütunundan KENDİLİĞİNDEN okunur ve YALNIZ kız/erkek ayrışması yerleştirme

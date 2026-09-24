@@ -130,8 +130,11 @@ def prepare_data(paths: AppPaths, app_version: str) -> None:
     check_database_integrity(paths.db_path, backup_dir=paths.backups)
 
     encrypt_legacy_backups(paths.backups, paths.data)
-    daily_backup(paths.db_path, paths.backups)
-    rotate_backups(paths.backups)
+    # Rotasyon yalnız bugünün yedeği elde varken koşar: yedek atlandıysa (yedek
+    # anahtarı bozuk, güvenlik dosyası kayıp) eski yedekler silinmez — güvenlik
+    # dosyası kayıp kilidinden çıkış yolu onlardır (desktop/backup.py başlığı).
+    if daily_backup(paths.db_path, paths.backups) is not None:
+        rotate_backups(paths.backups)
 
     prepare_django(resolve_backend_dir(), paths.data)
     if has_pending_migrations():

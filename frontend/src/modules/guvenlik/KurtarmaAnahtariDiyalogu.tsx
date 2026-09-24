@@ -37,6 +37,10 @@ interface KurtarmaAnahtariDiyaloguProps {
   anahtar: string;
   /** Okul adı — çıktının hangi kuruma ait olduğu belli olsun. */
   okulAdi?: string;
+  /** Diyalog başlığı (yenilemede "Yeni kurtarma anahtarınız"). */
+  baslik?: string;
+  /** Uyarının altında gösterilen ek not (yenilemede eski yedeklerin durumu). */
+  ekMetin?: string;
   onKapat: () => void;
 }
 
@@ -61,6 +65,8 @@ export default function KurtarmaAnahtariDiyalogu({
   open,
   anahtar,
   okulAdi = "",
+  baslik = "Kurtarma anahtarınız",
+  ekMetin,
   onKapat,
 }: KurtarmaAnahtariDiyaloguProps) {
   const [kaydettim, setKaydettim] = useState(false);
@@ -84,7 +90,7 @@ export default function KurtarmaAnahtariDiyalogu({
       onClose={() => {
         if (kaydettim) onKapat();
       }}
-      title="Kurtarma anahtarınız"
+      title={baslik}
       actions={
         <Button
           onClick={() => {
@@ -113,6 +119,7 @@ export default function KurtarmaAnahtariDiyalogu({
       </div>
 
       <p className="mb-4 text-body-small text-error">{KURTARMA_UYARISI}</p>
+      {ekMetin && <p className="mb-4 text-body-small text-on-surface-variant">{ekMetin}</p>}
 
       <div className="mb-4 flex flex-wrap gap-2">
         <Button variant="tonal" icon="print" type="button" onClick={yazdir}>

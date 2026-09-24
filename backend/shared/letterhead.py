@@ -20,8 +20,8 @@ from shared.text import tr_upper
 def letterhead_authority(district: str | None = None) -> str:
     """Antedin ikinci satırı: '<İLÇE> KAYMAKAMLIĞI' (ilçe yoksa yer-tutucu).
 
-    İlçe adı TÜRKÇE büyük harfe çevrilir: ayarda "Sancaktepe" yazılıysa antet
-    "Sancaktepe KAYMAKAMLIĞI" basıyordu (kurum satırı tamamı büyük harf olmalı).
+    İlçe adı TÜRKÇE büyük harfe çevrilir: ayarda "Beşiktaş" yazılıysa antet
+    "Beşiktaş KAYMAKAMLIĞI" basıyordu (kurum satırı tamamı büyük harf olmalı).
     Çıplak `.upper()` kullanılmaz (i→I tuzağı).
     """
     name = (district or "").strip()

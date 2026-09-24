@@ -12,6 +12,7 @@ import base64
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
@@ -23,6 +24,9 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 MAGIC = b"KSBAK\x02"
 CONFIG_FILE_NAME = "yedekleme.json"
+# Kurtarma başlığının kaynağı (`apps.okul.services.app_password.STATE_FILE_NAME`
+# ile aynı ad; masaüstü katmanı backend'i import etmez).
+SECURITY_STATE_FILE_NAME = "guvenlik.json"
 BACKUP_SUFFIX = ".ksbak"
 _NONCE_BYTES = 12
 _PUBLIC_BYTES = 32
@@ -102,9 +106,71 @@ def can_encrypt(data_dir: Path) -> bool:
     return True
 
 
+def is_usable_security_state(data: object) -> bool:
+    """Güvenlik durumu (`guvenlik.json` içeriği) DEK'i açmaya yeter mi? — TEK KURAL.
+
+    Aynı kural üç yerde uygulanır ve yalnız burada tanımlıdır:
+
+    * günlük/göç öncesi yedeğin kurtarma başlığı (`desktop.backup`): kullanılamaz
+      başlıkla yedek ALINMAZ, rotasyon da koşmaz;
+    * güvenlik dosyası kayıp kilidi (`app_password.security_file_missing`): dosya
+      var ama kullanılamıyorsa kayıp sayılır;
+    * geri yüklemede aday durumlar (`backup_restore`).
+
+    Biçim yapısaldır (kriptografik doğrulama değildir; yanlış sarmal çözümde
+    açık hatayla düşer): JSON sözlük; `kdf` varsa sözlük; `parola` ya da
+    `kurtarma` bölümlerinden EN AZ BİRİ sözlük ve içinde `salt` ile `sarmal`
+    dolu dize. Tek tam sarmal DEK'i açmaya yeter (o sırla); program her zaman
+    ikisini birlikte yazar. İkisini birden şart koşmak, parolayla açılabilecek
+    bir dosyayı "kayıp" sayıp kilidi açtırmaz, yedeği de durdururdu.
+    """
+    if not isinstance(data, dict):
+        return False
+    if not isinstance(data.get("kdf", {}), dict):
+        return False
+    return any(_is_complete_wrap(data.get(bolum)) for bolum in ("parola", "kurtarma"))
+
+
+def _is_complete_wrap(bolum: object) -> bool:
+    """Sarmal bölümü (`{"salt": ..., "sarmal": ...}`) iki alanı da dolu dize mi?"""
+    if not isinstance(bolum, dict):
+        return False
+    return all(isinstance(bolum.get(alan), str) and bolum[alan] for alan in ("salt", "sarmal"))
+
+
+def parse_security_state(raw: bytes) -> dict[str, Any] | None:
+    """Ham `guvenlik.json` baytlarını ayrıştırır; kullanılamazsa None (hata değil)."""
+    try:
+        data: Any = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return None
+    return data if is_usable_security_state(data) else None
+
+
+def usable_recovery_header(data_dir: Path) -> bytes | None:
+    """GÜNCEL `guvenlik.json` kurtarma başlığı olarak kullanılabiliyorsa baytları; yoksa None.
+
+    Yok, okunamıyor, boş ya da biçimsiz dosya aynı sonucu verir: böyle bir
+    başlıkla alınan yedek hiçbir parolayla açılamazdı. Arşiv dosyasına
+    (`guvenlik-arsiv-*`) DÜŞÜLMEZ: güncel dosya kayıpken arşivdeki sarmal bugünkü
+    veri anahtarını anlatmıyor olabilir.
+    """
+    try:
+        raw = (data_dir / SECURITY_STATE_FILE_NAME).read_bytes()
+    except OSError:
+        return None
+    return raw if parse_security_state(raw) is not None else None
+
+
 def recovery_metadata(data_dir: Path) -> bytes:
-    """Parolayla DEK'i açmaya yarayan, kişisel veri içermeyen kurtarma başlığı."""
-    current = data_dir / "guvenlik.json"
+    """Parolayla DEK'i açmaya yarayan, kişisel veri içermeyen kurtarma başlığı.
+
+    Güvenlik işlemlerinin kendi geçiş yedekleri içindir (güncel dosya o anda
+    daima yerindedir). Açılıştaki günlük yedek ve eski yedek dönüşümü bunun
+    yerine `usable_recovery_header` kullanır: güncel dosya kayıpken arşive
+    düşmek, açılamayacak yedekler üretebilirdi.
+    """
+    current = data_dir / SECURITY_STATE_FILE_NAME
     candidates = [current] if current.is_file() else []
     candidates.extend(sorted(data_dir.glob("guvenlik-arsiv-*.json"), reverse=True))
     return candidates[0].read_bytes() if candidates else b""

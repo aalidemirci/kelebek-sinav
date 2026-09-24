@@ -6,13 +6,26 @@ bir yedek üretir. `Connection.backup()` ise SQLite'ın kendi çevrimiçi yedek 
 kullanır: kaynak veritabanını sayfa sayfa RAM'e okur, WAL dahil tutarlı bir görüntü
 çıkarır.
 
-**Kip, yedek anahtarı dosyasından (`yedekleme.json`) belirlenir (K9 düzeltmesi):**
-uygulama parolası kuruluysa görüntü diske X25519 şifreli `.ksbak` kapsayıcısı
-olarak yazılır; parolasız kipte DÜZ SQLite baytları (yine `.ksbak` adıyla) yazılır.
-DD şablonundaki "parolasız kipte günlük yedek atlanır" dalı burada bilinçle
-düzeltildi — yedek her gün ALINIR. Anahtar dosyası VAR ama bozuksa düz yedek
-YAZILMAZ (şifreli kurulumdan düz kopya sızdırmak olurdu): uyarı loglanıp atlanır;
-kilit bir kez açıldığında `ensure_public_config` dosyayı onarır.
+**Kip, backend'in kilit kapısıyla AYNI kuralla belirlenir (K9 + güvenlik
+dosyası kilidi):** "parola kurulu mu?" sorusunun cevabı güvenlik dosyasının
+(`guvenlik.json`) VARLIĞI **ya da** veritabanındaki anahtar parmak izidir
+(`app_password.is_password_set`). Tek bir dosyanın varlığına bakmak yetmez:
+dosya kaybolduğunda program "parolasız" sanılır ve düz yedek yazılırdı.
+
+* Parolasız kip (güvenlik dosyası yok VE parmak izi boş): DÜZ SQLite baytları
+  (yine `.ksbak` adıyla) yazılır. DD şablonundaki "parolasız kipte günlük yedek
+  atlanır" dalı burada bilinçle düzeltildi — yedek her gün ALINIR.
+* Parolalı kip: görüntü X25519 şifreli `.ksbak` kapsayıcısına mühürlenir ve
+  başlığına GÜNCEL `guvenlik.json` gömülür. Yedek anahtarı (`yedekleme.json`)
+  yoksa ya da bozuksa, ya da güncel güvenlik dosyası kullanılamıyorsa (yok,
+  boş, bozuk — `backup_crypto.is_usable_security_state`) yedek ATLANIR ve düz
+  kopya asla yazılmaz: böyle bir yedek ya kişisel veriyi düz bırakır ya da
+  hiçbir parolayla açılamaz. Kilit bir kez açıldığında `ensure_public_config`
+  yedek anahtarını onarır.
+
+Açılış akışı (`desktop/main.py`) bugünün yedeği alınmadıkça rotasyonu KOŞMAZ:
+atlama günlerinde eski, sağlam başlıklı yedekler silinmez — güvenlik dosyası
+kayıp kilidinden çıkış yolu onlardır.
 
 Yedek adları tarihlidir ve deterministiktir: aynı gün ikinci kez açılan program o
 günün yedeğini yeniden ÜRETMEZ (sabah alınan yedek, akşam bozulan veriyle ezilmez).
@@ -31,11 +44,12 @@ from pathlib import Path
 from desktop.backup_crypto import (
     BACKUP_SUFFIX,
     MAGIC,
+    SECURITY_STATE_FILE_NAME,
     BackupCryptoError,
     config_path,
     encrypt_to_path,
     load_public_key,
-    recovery_metadata,
+    usable_recovery_header,
 )
 
 DAILY_PREFIX = "gunluk"
@@ -49,6 +63,12 @@ _DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 _UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
 logger = logging.getLogger("kelebek_sinav.backup")
+
+# Anahtar parmak izinin yeri (`apps.okul.models.SchoolConfig.app_password_hash`).
+# Masaüstü katmanı Django'yu import etmez; adlar backend testinde modele karşı
+# sınanır (`apps/okul/tests/test_guvenlik_dosyasi_kilidi.py`).
+KEY_FINGERPRINT_TABLE = "okul_schoolconfig"
+KEY_FINGERPRINT_COLUMN = "app_password_hash"
 
 _LEGACY_PATTERNS = (
     f"{DAILY_PREFIX}-*.sqlite3",
@@ -96,17 +116,47 @@ def _write_plain(content: bytes, target: Path) -> None:
         temp.unlink(missing_ok=True)
 
 
+def database_key_fingerprint(db_path: Path) -> str | None:
+    """Veritabanındaki anahtar parmak izi; tablo yoksa "", okunamazsa None.
+
+    Yalnız SELECT koşulur (görüntü alan `database_snapshot` ile aynı bağlantı
+    biçimi; `mode=ro` WAL dosyaları yokken açılamayabildiği için kullanılmaz).
+    Tablo henüz yoksa (ilk göçten önce) parmak izi de yoktur. Okuma hatası
+    "bilinmiyor" (None) döner; çağıran bunu parolalı sayar (fail-closed).
+    """
+    try:
+        with closing(sqlite3.connect(db_path)) as conn:
+            tablo = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                (KEY_FINGERPRINT_TABLE,),
+            ).fetchone()
+            if tablo is None:
+                return ""
+            satir = conn.execute(
+                f"SELECT {KEY_FINGERPRINT_COLUMN} FROM {KEY_FINGERPRINT_TABLE} LIMIT 1"  # noqa: S608 — sabit ad
+            ).fetchone()
+    except sqlite3.Error:
+        return None
+    return str(satir[0] or "") if satir is not None else ""
+
+
 def _copy_database(source_path: Path, target_path: Path) -> bool:
     """Tutarlı SQLite görüntüsünü KİPE GÖRE yazar; yazıldıysa True döner.
 
-    Kip anahtarı `yedekleme.json`un VARLIĞIdır: dosya hiç yoksa parolasız kip →
-    düz yedek (K9); dosya var ama okunamıyorsa şifreli kurulum bozulmuş demektir →
-    düz kopya SIZINTI olurdu, yedek atlanır (False).
+    Kip kuralı modül başlığındadır: parolasız kipte düz, parolalı kipte güncel
+    kurtarma başlığıyla şifreli; ikisi de mümkün değilse yedek atlanır (False).
     """
     data_dir = source_path.parent
-    if not config_path(data_dir).is_file():
+    guvenlik_dosyasi = data_dir / SECURITY_STATE_FILE_NAME
+    if not guvenlik_dosyasi.exists() and database_key_fingerprint(source_path) == "":
         _write_plain(database_snapshot(source_path), target_path)
         return True
+    if not config_path(data_dir).is_file():
+        logger.warning(
+            "Uygulama parolası kurulu ama yedekleme anahtarı yok; yedek alınamadı (düz kopya "
+            "yazılmadı). Uygulama parolasıyla kilidi açmak dosyayı onarır."
+        )
+        return False
     try:
         public_key = load_public_key(data_dir)
     except BackupCryptoError:
@@ -115,11 +165,20 @@ def _copy_database(source_path: Path, target_path: Path) -> bool:
             "Uygulama parolasıyla kilidi açmak dosyayı onarır."
         )
         return False
+    # Başlık DOĞRULANMIŞ baytlardan gömülür (denetim ile ayrı okuma arasında
+    # dosya değişse bile gömülen, denetlenenle aynıdır).
+    header = usable_recovery_header(data_dir)
+    if header is None:
+        logger.warning(
+            "Güvenlik dosyası (guvenlik.json) bulunamadı ya da okunamıyor; kurtarma "
+            "başlığı olmadan yedek alınmadı. Eski yedekler korunuyor."
+        )
+        return False
     encrypt_to_path(
         database_snapshot(source_path),
         target_path,
         public_key,
-        recovery_header=recovery_metadata(data_dir),
+        recovery_header=header,
     )
     return True
 
@@ -142,6 +201,12 @@ def encrypt_legacy_backups(backup_dir: Path, data_dir: Path) -> list[Path]:
         public_key = load_public_key(data_dir)
     except BackupCryptoError:
         return []
+    # Güncel güvenlik dosyası kullanılamıyorsa dönüşüm ERTELENİR: başlıksız (ya
+    # da yanlış başlıklı) mühürlenen düz yedek bir daha açılamazdı. Dosya yerine
+    # gelince (kilit açılışı) dönüşüm tamamlanır.
+    header = usable_recovery_header(data_dir)
+    if header is None:
+        return []
     encrypted: list[Path] = []
     for pattern in _LEGACY_PATTERNS:
         for source in sorted(backup_dir.glob(pattern)):
@@ -150,7 +215,7 @@ def encrypt_legacy_backups(backup_dir: Path, data_dir: Path) -> list[Path]:
                 source.read_bytes(),
                 target,
                 public_key,
-                recovery_header=recovery_metadata(data_dir),
+                recovery_header=header,
             )
             source.unlink()
             encrypted.append(target)
@@ -165,7 +230,7 @@ def encrypt_legacy_backups(backup_dir: Path, data_dir: Path) -> list[Path]:
                 source.read_bytes(),
                 source,
                 public_key,
-                recovery_header=recovery_metadata(data_dir),
+                recovery_header=header,
             )
             encrypted.append(source)
     if encrypted:

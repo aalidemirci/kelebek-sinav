@@ -27,6 +27,13 @@ olan `guvenlik.json` gömülüdür (`backup_crypto.recovery_metadata`). Çözerk
 AES-GCM kimlik doğrulaması nihai hakemdir: yanlış DEK açık hata verir,
 sessizce bozuk çıktı üretilemez.
 
+GÜVENLİK DOSYASI KAYIP KİLİDİNDEN ÇIKIŞ: güncel `guvenlik.json` yoksa ya da
+kullanılamıyorsa (boş, bozuk, sarmal bölümleri eksik — tek kural
+`backup_crypto.is_usable_security_state`) aday listesinde yer almaz; yedek
+gömülü başlığıyla açılır ve `_ensure_state_file` dosyayı o başlıktan yeniden
+yazar (kullanılamayan dosya silinmez, arşivlenir). Böylece geri yüklemeden çıkan
+(veritabanı, güvenlik dosyası) çifti yeniden tutarlı olur.
+
 KVKK: çözülen içerik diske YALNIZ hedef veritabanı dosyası olarak yazılır
 (aynı dizinde .tmp → atomik yer değiştirme; hata hâlinde .tmp silinir).
 Ayrı bir düz kopya bırakılmaz. Mevcut (bozuk) veritabanı da SİLİNMEZ:
@@ -36,11 +43,10 @@ için tek nüsha oydu.
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from desktop.backup_crypto import (
     MAGIC,
@@ -48,6 +54,8 @@ from desktop.backup_crypto import (
     decrypt_bytes,
     embedded_recovery_metadata,
     ensure_public_config,
+    is_usable_security_state,
+    parse_security_state,
 )
 from desktop.paths import VERSION_STAMP_FILE_NAME
 from django.utils import timezone
@@ -166,14 +174,14 @@ def restore_database(
 # İç yardımcılar
 # ---------------------------------------------------------------------------
 def _parse_state(raw: bytes) -> dict[str, Any] | None:
-    """Gömülü başlığı ayrıştırır; bozuksa None (aday listesinden düşer, hata değil)."""
+    """Gömülü başlığı ayrıştırır; kullanılamazsa None (aday listesinden düşer, hata değil).
+
+    Kural tektir (`backup_crypto.is_usable_security_state`): günlük yedek aynı
+    kuralla başlık gömer, kayıp kilidi aynı kuralla dosyayı "kayıp" sayar.
+    """
     if not raw:
         return None
-    try:
-        veri: Any = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError):
-        return None
-    return veri if isinstance(veri, dict) else None
+    return cast("dict[str, Any] | None", parse_security_state(raw))
 
 
 def _candidate_states(info: BackupInfo) -> list[tuple[str, dict[str, Any]]]:
@@ -183,6 +191,8 @@ def _candidate_states(info: BackupInfo) -> list[tuple[str, dict[str, Any]]]:
         guncel = app_password.read_state()
     except app_password.AppPasswordError:
         guncel = None  # bozuk güncel dosya gömülü başlıkla çözümü engellemesin
+    if guncel is not None and not is_usable_security_state(guncel):
+        guncel = None  # bölümleri eksik dosya aday değildir (kayıp kilidiyle aynı kural)
     if guncel is not None:
         adaylar.append((_SOURCE_CURRENT, guncel))
     if info.embedded_state is not None and info.embedded_state != guncel:
@@ -278,8 +288,8 @@ def _ensure_state_file(info: BackupInfo, kaynak: str) -> bool:
         return False
     hedef = app_password.state_path()
     if hedef.is_file():
-        damga = timezone.localtime().strftime("%Y-%m-%d-%H%M%S")
-        arsiv = hedef.with_name(f"guvenlik-arsiv-{damga}.json")
+        # Aynı saniyede başka bir arşiv (ör. kurtarma anahtarı yenilemesi) ezilmez.
+        arsiv = app_password.archive_target()
         hedef.replace(arsiv)
         logger.info("Geri yüklenen veriyle eşleşmeyen guvenlik.json arşivlendi: %s", arsiv.name)
     hedef.parent.mkdir(parents=True, exist_ok=True)

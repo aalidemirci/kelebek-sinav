@@ -127,6 +127,8 @@ beforeEach(() => {
   guvenlik.durum.mockResolvedValue({
     password_set: true,
     locked: false,
+    security_file_missing: false,
+    reset_available: false,
     transition_pending: false,
     transition: "",
     protected_fields: [],
@@ -195,6 +197,8 @@ describe("BireyselSorularBolumu — görünürlük", () => {
     guvenlik.durum.mockResolvedValue({
       password_set: false,
       locked: false,
+      security_file_missing: false,
+      reset_available: false,
       transition_pending: false,
       transition: "",
       protected_fields: [],

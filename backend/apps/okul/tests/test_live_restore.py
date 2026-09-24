@@ -4,7 +4,10 @@
 davranışlar sınanır: yedek listesi, ad/yükleme kaynak seçimi, yol ayracı
 reddi, bağlantı kapatma ve "yeniden başlat" kapısının (restart_gate) yalnız
 BAŞARIDA kurulması. Çekirdek gibi bu testler de ORM'e dokunmaz (`django_db`
-işareti bilinçli olarak yoktur); hedef veritabanı düz bir dosyadır.
+işareti bilinçli olarak yoktur); hedef veritabanı düz bir dosyadır. Tek istisna
+kilit kapısının DB'deki anahtar parmak izi sorusudur: fikstür onu "boş"
+(parolasız kurulum) olarak yanıtlar — `settings.DATABASES["NAME"]` burada geçici
+dosyaya çevrildiği için gerçek test veritabanına bağlanmak onu kapatabilirdi.
 
 Argon2id kasten yavaştır; `test_app_password` ile aynı gerekçeyle
 `crypto.DEFAULT_KDF` ucuz profile indirilir.
@@ -49,6 +52,8 @@ def ortam(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str,
         crypto, "DEFAULT_KDF", crypto.KdfParams(time_cost=1, memory_cost=8, parallelism=1)
     )
     monkeypatch.setattr(app_password, "FAILURE_DELAYS", (0.0,))
+    # Kilit kapısının parmak izi sorusu (modül başlığı): parolasız kurulum.
+    monkeypatch.setattr(app_password, "_stored_fingerprint", lambda: "")
     db = veri / "db.sqlite3"
     monkeypatch.setitem(settings.DATABASES["default"], "NAME", str(db))
     restart_gate._reset_for_tests()

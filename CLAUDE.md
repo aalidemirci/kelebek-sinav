@@ -85,6 +85,20 @@
 - **Şifreli alan sorguları:** ad-temelli filtre/sıralama/teklik DB'de
   çalışmaz → selector katmanında Python ile (tasarım §5). Yeni ad sorgusu
   doğrudan ORM filtresiyle yazılmaz.
+- **"Parola kurulu mu?" = dosya VAR ya da parmak izi DOLU (24.09.2026, tasarım §5):**
+  `app_password.is_password_set` / `gate_state` tek kaynaktır; güvenlik
+  dosyasının VARLIĞINA tek başına bakan yeni bir kod yazılmaz (masaüstü yedek
+  katmanı dahil — `desktop.backup.database_key_fingerprint`). Parmak izi dolu +
+  dosya yok/kullanılamaz = kayıp kilidi (423 `guvenlik_dosyasi_kayip`).
+  "Kullanılabilir dosya" kuralı TEKTİR: `backup_crypto.is_usable_security_state`.
+  Sonuçları: (1) kilit kapısı parolasız kipte her API isteğinde parmak izini
+  DB'den sorar — API'ye giden yeni testler `django_db` ister (ya da
+  `settings.DATABASES` değiştiren testlerde `_stored_fingerprint` yamalanır,
+  `test_live_restore.py` emsali); (2) şifreli alan parola kuruluyken anahtarsız
+  yazmaz (`crypto.KeyMissingError`) — kilitliyken koşan bir iş (açılış, yönetim
+  komutu, veri göçü) şifreli alana yazamaz, tasarlanırken bu hesaba katılır;
+  (3) güvenlik dosyasını değiştiren işlem `_state_lock` altında koşar, arşiv adı
+  `archive_target()`'tan alınır (aynı saniyede ezilmez).
 - **`table-layout: fixed` + sütun yüzdesi = content-box tuzağı:** hücre dolgusu
   yüzdenin DIŞINA eklenir ve tablo sayfayı taşırır (ölçüldü: R1 yoklama +91pt,
   R4 duyuru +57pt). Çözüm `box-sizing: border-box`'u O TABLOYA vermek; ama o

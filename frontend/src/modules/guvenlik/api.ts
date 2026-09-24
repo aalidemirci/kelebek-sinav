@@ -1,16 +1,27 @@
 // `guvenlik` modülü API istemcisi — uygulama parolası / kilit uçları.
 // Backend `apps/okul/{urls,views}.py` "security/*" bloğuyla BİREBİR.
-// Parolalar YALNIZ gövdede taşınır; hiçbir yanıtta geri dönmez. Tek istisna
-// `enable` yanıtındaki `recovery_key`: tek seferlik üretilir, bir daha alınamaz.
+// Parolalar YALNIZ gövdede taşınır; hiçbir yanıtta geri dönmez. İki istisna
+// `enable` ve `recovery-key/renew` yanıtlarındaki `recovery_key`: tek seferlik
+// üretilir, bir daha alınamaz.
 
 import { api } from "../../lib/api";
 
 /** `GET /security/status/` — sır içermez, her açılışta okunur. */
 export interface GuvenlikDurumu {
-  /** Uygulama parolası kurulu mu (veri dizininde guvenlik.json var mı)? */
+  /**
+   * Uygulama parolası kurulu mu? Güvenlik dosyası (guvenlik.json) VAR ya da
+   * veritabanında anahtar parmak izi DOLU ise evet — dosya kaybolsa da kurulu sayılır.
+   */
   password_set: boolean;
   /** Kurulu ve anahtar bellekte değil → veri okunamaz. */
   locked: boolean;
+  /**
+   * Güvenlik dosyası kayıp ya da okunamıyor (backend `security_file_missing`).
+   * Program "parolasız"a DÖNMEZ; yalnız durum, sıfırlama ve yedekten geri yükleme açıktır.
+   */
+  security_file_missing: boolean;
+  /** Kayıp ekranındaki "güvenlik dosyasını sıfırla" yolu açık mı (korunan satır yokken)? */
+  reset_available: boolean;
   /** Yarım kalmış şifreleme/çözme geçişi var mı (elektrik kesintisi vb.)? */
   transition_pending: boolean;
   /** "SIFRELENIYOR" | "COZULUYOR" | "" (yalnız yarım geçişte dolu). */
@@ -19,7 +30,7 @@ export interface GuvenlikDurumu {
   protected_fields: string[];
 }
 
-/** `POST /security/enable/` yanıtı: durum + TEK SEFERLİK kurtarma anahtarı. */
+/** `POST /security/enable/` ve `/security/recovery-key/renew/` yanıtı: durum + TEK SEFERLİK anahtar. */
 export interface ParolaKurmaSonucu extends GuvenlikDurumu {
   recovery_key: string;
 }
@@ -62,6 +73,11 @@ export const guvenlikApi = {
   parolaDegistir: (current_password: string, new_password: string) =>
     api.post<GuvenlikDurumu>("/security/change-password/", { current_password, new_password }),
   kaldir: (password: string) => api.post<GuvenlikDurumu>("/security/disable/", { password }),
+  /** Kurtarma anahtarını yeniler (görev devri); yeni anahtar yanıtta BİR KEZ döner. */
+  kurtarmaAnahtariniYenile: (password: string) =>
+    api.post<ParolaKurmaSonucu>("/security/recovery-key/renew/", { password }),
+  /** Kayıp ekranındaki "güvenlik dosyasını sıfırla" (yalnız `reset_available` iken). */
+  sifirla: () => api.post<GuvenlikDurumu>("/security/state/reset/"),
   // Yedekten geri yükleme (Güvenlik sekmesi). Parola/kurtarma anahtarı yalnız
   // form gövdesinde taşınır; `geriYukle` çok parçalı gönderir (dosya yüklemesi
   // ile aynı uç — kaynak `name` YA DA `file`).

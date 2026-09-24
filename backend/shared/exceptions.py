@@ -5,6 +5,12 @@ KALDIRILDI (tek kullanıcılı authsuz program — izin katmanı yok); gövde d�
 AYNEN. FE `lib/api.ts` bu biçimi bekler:
 
     { "code": "validation_error", "message": "Türkçe açıklama", "fields": {...} }
+
+Fail-closed şifreli alan: parola kuruluyken anahtar bellekte değilse şifreli
+alana yazma girişimi (`shared.crypto.KeyMissingError`) kilit kapısıyla AYNI
+**423 `locked`** yanıtına çevrilir (işlem geri alınır). Pratikte ara katman
+kilitliyken veri uçlarını zaten keser; bu yol, istek sürerken "Şimdi kilitle"
+gibi yarış durumları içindir — 500 yerine kilit ekranına dönüş.
 """
 
 from __future__ import annotations
@@ -13,10 +19,29 @@ from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
-from rest_framework.exceptions import NotFound
+from rest_framework import status
+from rest_framework.exceptions import APIException, NotFound
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
+
+from shared.crypto import KeyMissingError
+
+# Kilit kapısının (`apps.okul.lock_middleware`) gövdesi ile aynı kod ve metin.
+LOCKED_CODE = "locked"
+LOCKED_MESSAGE = (
+    "Kayıtlar uygulama parolasıyla kilitli. Devam etmek için parolanızı girin "
+    "(parolanızı unuttuysanız kurtarma anahtarını kullanın)."
+)
+
+
+class LockedResponse(APIException):
+    """`KeyMissingError`'ın DRF karşılığı: 423 `locked` (işlem geri alınır)."""
+
+    status_code = status.HTTP_423_LOCKED
+    default_code = LOCKED_CODE
+    default_detail = LOCKED_MESSAGE
+
 
 # Django/DRF'in kayıt-bulunamadı metinleri İngilizcedir ve model adını sızdırır
 # ("No ExamSession matches the given query."). Sözleşme Türkçe mesaj
@@ -63,6 +88,13 @@ def _service_error(exc: Exception) -> DjangoValidationError | None:
 
 def ks_exception_handler(exc: Exception, context: dict[str, Any]) -> Response | None:
     """DRF varsayılan hata gövdesini sözleşme biçimine dönüştürür."""
+    if isinstance(exc, KeyMissingError):
+        # DRF APIException'a çevrilir: böylece DRF işlemi geri alınacak diye
+        # işaretler (`set_rollback`) ve gövde aşağıdaki ortak yoldan kurulur.
+        # Hatanın kendi metni yankılanmaz; sözleşme metni gider.
+        kilitli = LockedResponse()
+        kilitli.__cause__ = exc
+        exc = kilitli
     service_error = _service_error(exc)
     if isinstance(exc, DjangoValidationError):
         # Servis katmanı Django `ValidationError` fırlatır; DRF onu TANIMAZ (handler

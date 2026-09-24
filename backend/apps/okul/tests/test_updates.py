@@ -796,6 +796,7 @@ def test_kurucusuz_ya_da_asiri_buyuk_surum_indirilmez(
 # ===========================================================================
 
 
+@pytest.mark.django_db
 def test_guncelleme_api_hatayi_400_ve_turkce_mesajla_dondurur(
     client: APIClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -815,6 +816,7 @@ def test_guncelleme_api_hatayi_400_ve_turkce_mesajla_dondurur(
     assert gorulen == {"force": True}
 
 
+@pytest.mark.django_db
 def test_guncelleme_api_varsayilan_olarak_onbellegi_kullanir(
     client: APIClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -830,6 +832,7 @@ def test_guncelleme_api_varsayilan_olarak_onbellegi_kullanir(
     assert gorulen == {"force": False}
 
 
+@pytest.mark.django_db
 def test_kurucu_indirme_ucu_dogrulanmis_dosyayi_ek_olarak_verir(
     client: APIClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -849,6 +852,7 @@ def test_kurucu_indirme_ucu_dogrulanmis_dosyayi_ek_olarak_verir(
     assert b"".join(cast(Iterable[bytes], yanit.streaming_content)) == b"kurulum"
 
 
+@pytest.mark.django_db
 def test_kurucu_indirme_ucu_onbellek_disindaki_dosyayi_vermez(
     client: APIClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -864,6 +868,7 @@ def test_kurucu_indirme_ucu_onbellek_disindaki_dosyayi_vermez(
     assert "güvenli önbellek dışında" in yanit.json()["message"]
 
 
+@pytest.mark.django_db
 def test_kurucu_indirme_ucu_servis_hatasini_400_yapar(
     client: APIClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
