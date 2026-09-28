@@ -147,8 +147,12 @@ MEB ağında GitHub sık sık engellidir. Kovadaki `SHA256SUMS` dosyası SÜRÜM
 adla yazılır (`SHA256SUMS-<sürüm>.txt`): sabit ad her yayında eski sürümlerin
 özetini silerdi.
 
-R2 adımı iki secret ister — `CLOUDFLARE_API_TOKEN` (R2 *Object Read & Write*
-izni) ve `CLOUDFLARE_ACCOUNT_ID`. Tanımlı değilse adım uyarı basıp ATLANIR:
+R2 adımı iki secret ister — `CLOUDFLARE_API_TOKEN` (R2 **Admin Read & Write**
+izni) ve `CLOUDFLARE_ACCOUNT_ID`. *Object Read & Write* YETMEZ: wrangler
+`r2 object put` Cloudflare REST API'siyle çalışır ve object-düzeyi token
+REST'te 403 (kod 10000 "Authentication error") ile reddedilir — 28.09.2026'da
+disiplin-defteri-codex hattında uçtan uca doğrulandı. Tanımlı değilse adım
+uyarı basıp ATLANIR:
 secret'ı olmayan bir çatalda da sürüm çıkarılabilmelidir; paketler o durumda
 yalnız GitHub Release'te kalır.
 
@@ -177,8 +181,9 @@ npx --yes wrangler@4 r2 object put "okulapp-indirme/kelebek-sinav/<ad>" \
 yukarıdaki iş akışı adımındaki `case` bloğundan alınır (iki liste ayrışmasın).
 Ardından beş dosya için `curl -I https://indir.okulapp.org/kelebek-sinav/<ad>`
 → 200 ve `Content-Length` = yerel boyut; kurulum dosyasında canlıdan indirip
-SHA-256 karşılaştırması. Kalıcı çözüm secret'ları tanımlamaktır (R2 *Object Read
-& Write* izinli bir API anahtarı gerekir — hesap sahibinin işidir).
+SHA-256 karşılaştırması. Kalıcı çözüm secret'ları tanımlamaktır (R2 **Admin
+Read & Write** izinli bir API anahtarı gerekir — hesap sahibinin işidir;
+object-düzeyi izin yukarıda anlatıldığı gibi REST'te reddedilir).
 
 ## İki dil kuralı
 

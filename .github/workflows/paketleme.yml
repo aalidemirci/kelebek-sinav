@@ -284,8 +284,11 @@ jobs:
       #
       # Kimlik yoksa iş DURMAZ, uyarıyla atlanır: depoyu çatallayan ya da
       # secret'ları olmayan bir ortamda sürüm çıkarmak yine mümkün olmalı.
-      # Gereken secret'lar: CLOUDFLARE_API_TOKEN (R2 Object Read & Write) +
-      # CLOUDFLARE_ACCOUNT_ID.
+      # Gereken secret'lar: CLOUDFLARE_API_TOKEN (R2 Admin Read & Write) +
+      # CLOUDFLARE_ACCOUNT_ID. Object Read & Write YETMEZ: wrangler `r2 object
+      # put` Cloudflare REST API'siyle çalışır ve object-düzeyi token REST'te
+      # 403 (kod 10000 "Authentication error") ile reddedilir — 28.09.2026'da
+      # disiplin-defteri-codex hattında uçtan uca doğrulandı.
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
