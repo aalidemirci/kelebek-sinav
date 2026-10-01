@@ -479,8 +479,10 @@ class SubjectDepartment(BaseModel):
 
     B7 revizyonu: sınav takvimi PDF'inin imza bloğu artık "her ders bir zümre"
     varsaymaz — takvime SEÇİLEN zümreler basılır (`ExamCalendar
-    .signatory_departments`). Zümre seçilmemiş takvimlerde eski dal (takvimdeki
-    derslerden boş imza çizgileri) yedek yol olarak durur.
+    .signatory_departments`). 01.10.2026 kullanıcı kararı: zümre seçilmemiş
+    takvimde ve mazeret sınav takviminde KURULDAKİ (`is_board_member`) zümrelerin
+    tamamı basılır; eski "takvimdeki derslerden boş imza çizgisi" dalı kalktı
+    (`services_calendar.department_chairs`).
 
     Başkan adı `Personnel` üzerindeki ŞİFRELİ alandan okunur; bu modelde ad
     kopyası TUTULMAZ. Zümre adı düz metindir — teklik kısıtı DB'de çalışır.

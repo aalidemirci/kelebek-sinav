@@ -1,0 +1,41 @@
+/* =========================================================================
+   ORTAK BASKI BİLEŞENLERİ (01.10.2026) — iki evrak ailesinin TEK imza dili.
+
+   documents/base.html (resmî yazı: takvim, mazeret belgeleri) ve
+   sinav/reports/base.html (sınav evrakı) bu dosyayı _design.css'in ARDINDAN
+   gömer. Önceden iki aile iki ayrı imza bileşeni kullanıyordu (.sig-grid 30 pt
+   boşluk + boş adda noktalı çizgi; .signs 20 pt + "Ad Soyad / İmza") ve
+   "UYGUNDUR" dört ayrı biçimde basılıyordu.
+
+   KURAL: imza hücresi print/_imza.html parçasıyla basılır; şablonda ayrı imza
+   bileşeni yazılmaz (koruma testi test_reports.test_imza_tek_bilesenden).
+   Belgeye özgü ölçü (ör. takvimin sıklık kademesi) şablonun kendi stilinde
+   bu sınıfları EZEREK verilir — yapı burada kalır.
+
+   DİKKAT: bu dosya şablon olarak gömülür; içine Django etiketi yazılmaz.
+   ========================================================================= */
+
+/* İmza tablosu: hücreler ÜSTTEN hizalıdır — aynı satırdaki hücreler aynı
+   yapıyı taşıdığında (tarih / başlık satırları) imza çizgileri aynı hizaya
+   düşer. Başlıklı (UYGUNDUR) ve başlıksız hücre aynı satırdaysa çağıran
+   ikisine de `ust=True` verir: başlık ve tarih satırı boş da olsa yer tutar. */
+.imzalar { width: 100%; border-collapse: collapse; table-layout: fixed;
+           margin-top: 10pt; break-inside: avoid; page-break-inside: avoid; }
+.imzalar td { padding: 0 6pt; vertical-align: top; text-align: center; }
+
+.imza-baslik { font-weight: bold; font-size: 9pt; color: var(--pr-ink); }
+.imza-tarih { font-size: 8pt; color: var(--pr-muted); margin-top: 1pt; }
+.imza-bosluk { height: 24pt; }
+.imza-cizgi { border-top: 0.7pt solid var(--pr-secondary); margin: 0 4pt 2pt; }
+.imza-ad { font-weight: bold; font-size: 8.5pt; color: var(--pr-ink); line-height: 1.15; }
+.imza-gorev { font-size: 7.5pt; color: var(--pr-secondary); line-height: 1.15; }
+
+/* İmza ŞERİDİ (print/_imza_seridi.html — takvim + mazeret takvimi): zümre
+   başkanları + düzenleyen eşit hücrelerde, okul müdürü en sağ sütunda. Müdürün
+   hücresi son satırın İÇİNDEDİR; hücreler üstten hizalı olduğundan bütün
+   çizgiler satır boyunca hizalıdır. "UYGUNDUR" + tarih bir üst satırın son
+   hücresinde ALTTAN hizalıdır (imza boşluğunun hemen üstü). */
+.serit { width: 100%; border-collapse: collapse; table-layout: fixed;
+         margin-top: 10pt; break-inside: avoid; page-break-inside: avoid; }
+.serit td { padding: 0 3pt 3pt; vertical-align: top; text-align: center; }
+.serit td.serit-onay-ust { vertical-align: bottom; padding-bottom: 1pt; }

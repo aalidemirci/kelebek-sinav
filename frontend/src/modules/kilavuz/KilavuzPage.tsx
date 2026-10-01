@@ -363,9 +363,10 @@ export default function KilavuzPage() {
         </p>
         <p>
           Bu liste sınav takvimi PDF'inin <strong>imza bölümünü</strong> besler: takvimi hazırlarken
-          hangi zümrelerin imzalayacağını seçersiniz, program da başkanların adlarını basar. Zümre
-          tanımlamazsanız program eski davranışına döner ve takvimdeki her ders için boş bir imza
-          çizgisi üretir.
+          hangi zümrelerin imzalayacağını seçersiniz, program da başkanların adlarını basar. Takvim
+          için zümre seçmezseniz “Kurulda” işaretli zümrelerin tamamı basılır; mazeret sınav takvimi
+          de bu listeyi kullanır. Hiç zümre tanımlı değilse yalnız düzenleyen müdür yardımcısı ile
+          okul müdürü imzalar.
         </p>
         <Mevzuat kaynak="MEB Yazılı ve Uygulamalı Sınavlar Yönergesi md. 4 ve md. 5">
           Eğitim kurumu sınıf/alan zümresi, aynı sınıfı okutan veya alanı aynı olan öğretmenlerden
@@ -737,8 +738,14 @@ export default function KilavuzPage() {
         </p>
         <p>
           Aynı sekmede, imza bölümünde yer alacak zümreleri işaretlersiniz (5. adımda tanımladığınız
-          liste). Seçtiğiniz her zümre için başkanının adıyla bir imza yeri, en altta da okul zümre
-          başkanı ve okul müdürü için birer imza yeri basılır.
+          liste). Seçtiğiniz her zümre için başkanının adıyla bir imza yeri basılır; bu sıranın
+          sonunda takvimi düzenleyen müdür yardımcısının, sağında da okul müdürünün (“UYGUNDUR”)
+          imza yeri bulunur.
+        </p>
+        <p>
+          Takvim PDF'i <strong>tek A4 sayfaya</strong> sığacak biçimde basılır: program sayfa yönünü
+          (yatay ya da dikey) ve yazı büyüklüğünü içeriğe göre kendisi seçer. Çok uzun bir takvim
+          ikinci sayfaya geçer; bir günün sınavları iki sayfaya bölünmez.
         </p>
         <Mevzuat kaynak="MEB Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5">
           Ortak sınavlara mazeretleri nedeniyle katılamayan öğrenciler için mazeret sınavı yapılır.

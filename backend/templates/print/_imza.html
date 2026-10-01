@@ -1,0 +1,21 @@
+{% comment %}TEK İMZA HÜCRESİ — iki evrak ailesinin ortak imza dili (01.10.2026; stil
+print/_bilesenler.css). Her zaman `only` ile gömülür; değişkenler:
+  ad         basılı ad. BOŞSA görev kalın yazılır, altına "Ad Soyad / İmza" gelir —
+             eskiden bir aile "…………………", öteki "Ad Soyad / İmza" basıyordu.
+  gorev      görev / unvan ("Okul Müdürü", "Coğrafya Zümre Başkanı").
+  alt        ad bilinmezken görevin altındaki yazı ("Ad Soyad / İmza / Mühür").
+  baslik     imzanın üstündeki başlık ("UYGUNDUR", "TEBLİĞ EDEN"). Harf aralığı
+             VERİLMEZ: aralıklı başlık PDF'te "U YGUNDUR" diye çıkar, aramada bulunmaz.
+  tarihli    tarih satırı basılsın mı; tarih boşsa elle doldurulacak çizgi basılır.
+  tarih      basılacak tarih (gg.aa.yyyy).
+  ust        başlık ve tarih satırı BOŞ da olsa yer tutsun — başlıklı hücreyle aynı
+             satırdaki başlıksız hücrenin çizgisi aynı hizaya düşsün.
+  yalniz_ust yalnız başlık + tarih basılır (imza şeridi: UYGUNDUR bir üst satırda,
+             müdürün imzası son satırda — print/_imza_seridi.html).{% endcomment %}
+{% if baslik or ust %}<div class="imza-baslik">{% if baslik %}{{ baslik }}{% else %}&nbsp;{% endif %}</div>{% endif %}
+{% if tarihli or ust %}<div class="imza-tarih">{% if tarihli %}{{ tarih|default:"…… / …… / 20……" }}{% else %}&nbsp;{% endif %}</div>{% endif %}
+{% if not yalniz_ust %}<div class="imza-bosluk"></div>
+<div class="imza-cizgi"></div>
+{% if ad %}<div class="imza-ad">{{ ad }}</div>
+<div class="imza-gorev">{{ gorev }}</div>{% else %}<div class="imza-ad">{{ gorev }}</div>
+<div class="imza-gorev">{{ alt|default:"Ad Soyad / İmza" }}</div>{% endif %}{% endif %}

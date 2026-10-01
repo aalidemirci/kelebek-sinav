@@ -18,7 +18,8 @@ kararı: okulun mevcut basılı formlarıyla aynı anatomi):
   .rpt-table  veri tablosu (thead SAYFA BAŞINA YİNELENİR — kontrollü taşma)
   .checks     kutu + metin kontrol listesi
   .freebox    serbest metin (elle doldurulur) kutusu
-  .signs      2-3 sütunlu imza bloğu
+  .imzalar    2-3 sütunlu imza bloğu — iki ailenin ORTAK bileşeni (01.10.2026):
+              hücre print/_imza.html ile basılır, stil print/_bilesenler.css
   .dayanak    mevzuat dayanağı + KVKK dipnotu
 
 TAŞMA DİSİPLİNİ (kullanıcı kuralı: 40 öğrenci bir sayfaya sığar, fazlası
@@ -32,6 +33,7 @@ taşar. Yoklama satır yüksekliği ÖĞRENCİ SAYISINA GÖRE kademelidir
   <meta charset="utf-8">
   <style>
     {% include "print/_design.css" %}
+    {% include "print/_bilesenler.css" %}
     @page {
       size: A4 portrait;
       margin: 1.1cm 1.3cm 1.5cm 1.3cm;
@@ -76,6 +78,14 @@ taşar. Yoklama satır yüksekliği ÖĞRENCİ SAYISINA GÖRE kademelidir
                          margin-top: 1.5pt; }
     .rpt-rule { height: var(--pr-rule-strong); background: var(--pr-ink);
                 margin: 4pt 0 0; }
+    /* Resmî yazışma niteliğindeki evrakın anteti (R6 görevlendirme ve tebliğ-
+       tebellüğ, 01.10.2026): okul adı satırının yerine T.C. / kurum / birim
+       üç satırı — documents/base.html anteti ile aynı dizgi. */
+    .rpt-head .tc { font-weight: bold; font-size: 9.5pt; color: var(--pr-ink); }
+    .rpt-head .authority { font-weight: bold; font-size: 10pt; color: var(--pr-ink); }
+    .rpt-head .unit { font-weight: bold; font-size: var(--pr-size-school);
+                      color: var(--pr-ink); }
+    .rpt-head .unit + .title { margin-top: 6pt; }
 
     /* Künye şeridi — sol: kapsam, sağ: yaprağın rolü */
     .rpt-scope { width: 100%; border-collapse: collapse; margin-bottom: 4pt; }
@@ -146,16 +156,12 @@ taşar. Yoklama satır yüksekliği ÖĞRENCİ SAYISINA GÖRE kademelidir
     .blank { display: inline-block; min-width: 46pt;
              border-bottom: 0.7pt solid var(--pr-ink); }
 
-    /* ---- İmza bloğu ---- */
-    .signs { width: 100%; border-collapse: collapse; margin-top: 8pt;
-             break-inside: avoid; page-break-inside: avoid; }
-    .signs td { text-align: center; vertical-align: bottom; padding: 0 8pt;
-                font-size: var(--pr-size-meta); }
-    .signs .date { font-size: 8pt; color: var(--pr-muted); }
-    .signs .space { height: 20pt; }
-    .signs .line { border-top: 0.7pt solid var(--pr-ink); margin: 0 4pt 2.5pt; }
-    .signs .who { font-weight: bold; color: var(--pr-ink); font-size: 8.5pt; }
-    .signs .role { color: var(--pr-muted); font-size: 7.5pt; }
+    /* ---- İmza bloğu ----
+       01.10.2026'dan beri iki evrak ailesinin ORTAK bileşeni: print/_imza.html +
+       print/_bilesenler.css (.imzalar). Bu ailenin eski .signs bileşeni kaldırıldı.
+       Bu evrakta imza boşluğu sıkıdır (sayfa bütçesi): */
+    .imzalar { margin-top: 8pt; }
+    .imza-bosluk { height: 20pt; }
 
     /* ---- Dayanak / KVKK dipnotu ---- */
     .dayanak { margin-top: 6pt; font-size: 6.8pt; color: var(--pr-muted);
@@ -223,8 +229,11 @@ taşar. Yoklama satır yüksekliği ÖĞRENCİ SAYISINA GÖRE kademelidir
     /* ÖN CEPHE şeridi: ince metin yerine tam genişlikte bant — belgeye bakan
        kişi salonun hangi ucunun tahta/öğretmen tarafı olduğunu bir bakışta
        görür. Altındaki kalın kural "duvar" okuması verir. */
+    /* Harf aralığı 2 pt'den 0,5 pt'ye (01.10.2026): geniş aralık PDF'te
+       "Ö N C E P H E" diye çıkıyor, metin aramasında bulunmuyordu. Bant tek
+       satırdır — aralık genişliği değiştirir, yüksekliği değiştirmez. */
     .front-label { text-align: center; font-size: 6.8pt; font-weight: bold;
-                   color: var(--pr-secondary); letter-spacing: 2pt;
+                   color: var(--pr-secondary); letter-spacing: 0.5pt;
                    background: var(--pr-fill); border-radius: 3pt;
                    padding: 2pt 0; margin-bottom: 1pt; }
     .front-rule { border-top: 1.2pt solid var(--pr-ink); margin-bottom: 3pt; }

@@ -2667,8 +2667,18 @@ def render_session_report(
         template = "r4_announcement.html"
         context["sheets"] = reports.build_announcements(rows)
     elif code == "r6":
+        from shared.letterhead import letterhead_context
+
         template = "r6_assignment.html"
         context["duty"] = reports.build_assignment_context(_proctor_rows(session))
+        # Görevlendirme ve tebliğ resmî yazışmadır: okul adı bandı yerine T.C. /
+        # kurum / birim anteti; UYGUNDUR bloğu müdürün adını basar (01.10.2026).
+        config = SchoolConfig.load()
+        context["letterhead"] = letterhead_context(
+            school_name=config.school_name,
+            district=config.district,
+            principal_name=config.principal_name,
+        )
     elif code == "r7":
         template = "r7_tutanak.html"
         context["sheets"] = reports.build_tutanak_sheets(
@@ -2677,6 +2687,8 @@ def render_session_report(
     else:  # r8
         template = "r8_validation.html"
         context["report"] = _validation_report_context(session, rows)
+        # Onay bloğu (UYGUNDUR) müdürün adını basar; boşsa "Ad Soyad / İmza".
+        context["principal_name"] = SchoolConfig.load().principal_name
 
     return ReportFile(
         filename=f"{stem}_oturum_{session.pk}.pdf",

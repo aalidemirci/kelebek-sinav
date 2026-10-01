@@ -249,17 +249,13 @@ KONTROL LİSTESİ METİNLERİ TEK SATIRA SIĞACAK UZUNLUKTA TUTULUR (~50 karakte
     </tr>
   </table>
 
-  <table class="signs">
-    <tr><td class="date">…… / …… / 20……</td><td class="date">…… / …… / 20……</td>
-        <td class="date">…… / …… / 20……</td></tr>
-    <tr><td class="space"></td><td class="space"></td><td class="space"></td></tr>
+  {% comment %}Ortak imza bileşeni (print/_imza.html). Gözetmen atanmışsa adı imza
+  çizgisinin altına basılır; atanmamışsa görev kalın, altında "Ad Soyad / İmza".{% endcomment %}
+  <table class="imzalar">
     <tr>
-      <td><div class="line"></div><span class="who">Gözetmen Öğretmen</span><br>
-          <span class="role">Ad Soyad / İmza</span></td>
-      <td><div class="line"></div><span class="who">Evrakı Sayarak Teslim Alan</span><br>
-          <span class="role">Zümre Temsilcisi — Ad Soyad / İmza</span></td>
-      <td><div class="line"></div><span class="who">Nöbetçi Müdür Yardımcısı</span><br>
-          <span class="role">Ad Soyad / İmza</span></td>
+      <td>{% include "print/_imza.html" with ad=sheet.proctor_name gorev="Gözetmen Öğretmen" tarihli=True only %}</td>
+      <td>{% include "print/_imza.html" with gorev="Evrakı Sayarak Teslim Alan" alt="Zümre Temsilcisi — Ad Soyad / İmza" tarihli=True only %}</td>
+      <td>{% include "print/_imza.html" with gorev="Nöbetçi Müdür Yardımcısı" tarihli=True only %}</td>
     </tr>
   </table>
 

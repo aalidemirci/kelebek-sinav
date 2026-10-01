@@ -1,0 +1,31 @@
+{% comment %}İMZA ŞERİDİ — sınav takvimi ve mazeret sınav takvimi (01.10.2026; stil
+print/_bilesenler.css). Zümre başkanları + düzenleyen müdür yardımcısı eşit
+hücrelerde (`sign_rows` — servis satırlara dizer, son satırı boş hücreyle
+tamamlar); okul müdürü (UYGUNDUR) en sağdaki sütunda.
+
+HİZA: müdürün imza hücresi şeridin SON satırının içindedir — hücreler üstten
+hizalı olduğu için çizgiler, görev adı kaç satıra sararsa sarsın aynı hizada
+kalır. "UYGUNDUR" ve tarih bir üstteki satırın son hücresinde alttan hizalıdır
+(imza boşluğunun hemen üstü). Şerit tek satırsa başlık müdürün kendi
+hücresindedir ve öteki hücreler `ust` ile aynı yüksekliği ayırır.
+
+Değişkenler: sign_rows, principal_name, approved_on (boşsa elle doldurulacak
+tarih), approve_width (UYGUNDUR sütununun yüzdesi).{% endcomment %}
+<table class="serit">
+  {% for row in sign_rows %}
+    <tr>
+      {% for cell in row %}
+        <td>{% if cell %}{% if sign_rows|length == 1 %}{% include "print/_imza.html" with ad=cell.name gorev=cell.role ust=True only %}{% else %}{% include "print/_imza.html" with ad=cell.name gorev=cell.role only %}{% endif %}{% endif %}</td>
+      {% endfor %}
+      {% if sign_rows|length == 1 %}
+        <td class="serit-onay" style="width: {{ approve_width|default:'24' }}%;">{% include "print/_imza.html" with ad=principal_name gorev="Okul Müdürü" baslik="UYGUNDUR" tarihli=True tarih=approved_on only %}</td>
+      {% elif forloop.last %}
+        <td class="serit-onay">{% include "print/_imza.html" with ad=principal_name gorev="Okul Müdürü" only %}</td>
+      {% elif forloop.revcounter == 2 %}
+        <td class="serit-onay-ust"{% if forloop.first %} style="width: {{ approve_width|default:'24' }}%;"{% endif %}>{% include "print/_imza.html" with baslik="UYGUNDUR" tarihli=True tarih=approved_on yalniz_ust=True only %}</td>
+      {% else %}
+        <td{% if forloop.first %} style="width: {{ approve_width|default:'24' }}%;"{% endif %}></td>
+      {% endif %}
+    </tr>
+  {% endfor %}
+</table>

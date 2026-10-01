@@ -14,6 +14,7 @@
   harfle yazılır. Yazı tipi DejaVu Sans (Türkçe-tam). Antet shared.letterhead'den.{% endcomment %}
   <style>
     {% include "print/_design.css" %}
+    {% include "print/_bilesenler.css" %}
     @page {
       size: A4 portrait;
       margin: 1.4cm 1.8cm 1.5cm 1.8cm;
@@ -23,13 +24,23 @@
         content: "Sayfa " counter(page) " / " counter(pages);
         font-family: "DejaVu Sans"; font-size: 7.5pt; color: #64748b;
       }
+      {% comment %}01.10.2026: sınav evrakı ailesi gibi sol altta düzenleme anı —
+      hangi çıktının güncel olduğu ayırt edilsin. Bağlam `print_stamp` (yerel saat,
+      "gg.aa.yyyy ss:dd") verirse basılır; yalnız rakam ve noktalama taşır (CSS
+      dizesine güvenle girer).{% endcomment %}{% if print_stamp %}
+      @bottom-left {
+        content: "Düzenleme: {{ print_stamp }}";
+        font-family: "DejaVu Sans"; font-size: 7pt; color: #64748b;
+      }{% endif %}
     }
     body { font-family: "DejaVu Sans", sans-serif; font-size: 10pt; color: var(--pr-text);
            line-height: 1.35; margin: 0; }
 
     /* Antet */
     .letterhead { text-align: center; }
-    .letterhead .tc { font-weight: bold; font-size: 10pt; letter-spacing: 3pt; }
+    /* "T.C." harf aralıksız (01.10.2026): 3 pt aralık PDF'te "T . C ." diye
+       çıkıyor, metin aramasında bulunmuyordu. */
+    .letterhead .tc { font-weight: bold; font-size: 10pt; }
     .letterhead .authority { font-weight: bold; font-size: 10.5pt; margin-top: 1pt; }
     .letterhead .school { font-weight: bold; font-size: 12.5pt; color: var(--pr-ink); margin-top: 1pt; }
     .letterhead .unit { font-size: 9pt; color: var(--pr-secondary); margin-top: 1pt; }
@@ -87,32 +98,21 @@
                       padding: 4pt 8pt; margin: 0 0 4pt; background: var(--pr-fill);
                       border-left: 2.5pt solid var(--pr-ink); }
 
-    /* Veri tablosu (dizi pusulası vb.) */
+    /* Veri tablosu (dizi pusulası vb.). Başlık dolgusu sınav evrakı ailesiyle
+       AYNI koyu arduvaz (--pr-bar; 01.10.2026) — eskiden neredeyse siyahtı
+       (--pr-ink): iki aile iki renk basıyor, siyah bant da toner harcıyordu. */
     .doc-table { width: 100%; border-collapse: collapse; margin: 8pt 0; font-size: 9.5pt;
                  border: 0.75pt solid var(--pr-line); }
-    .doc-table th { background: var(--pr-ink); color: #ffffff; font-weight: bold; font-size: 9pt;
-                    padding: 5pt 8pt; text-align: left; }
+    .doc-table th { background: var(--pr-bar); color: var(--pr-bar-text); font-weight: bold;
+                    font-size: 9pt; padding: 5pt 8pt; text-align: left; }
     .doc-table td { border: 0.5pt solid var(--pr-line-soft); padding: 5pt 8pt; vertical-align: top; }
 
     /* Paragraf metni */
     .para { margin: 8pt 0; font-size: 10pt; text-align: justify; line-height: 1.45; }
 
-    /* Çoklu imza ızgarası (kurul üyeleri / tebliğ-tebellüğ) */
-    .sig-grid { width: 100%; border-collapse: collapse; margin-top: 22pt;
-                break-inside: avoid; page-break-inside: avoid; }
-    .sig-grid td { text-align: center; vertical-align: bottom; padding: 0 8pt; font-size: 9pt; }
-    .sig-grid .space { height: 30pt; }
-    .sig-grid .line { border-top: 0.75pt solid var(--pr-secondary); margin: 0 4pt 3pt; }
-    .sig-grid .name { font-weight: bold; }
-    .sig-grid .role { color: var(--pr-secondary); font-size: 8.5pt; }
-
-    /* Tekil imza (sağ blok) */
-    .signature { margin-top: 16pt; width: 58%; margin-left: auto; text-align: center;
-                 break-inside: avoid; page-break-inside: avoid; }
-    .signature .date { font-size: 9.5pt; color: var(--pr-label); margin-bottom: 18pt; }
-    .signature .sig-line { border-top: 0.75pt solid var(--pr-secondary); width: 75%; margin: 0 auto 4pt; }
-    .signature .name { font-size: 10pt; font-weight: bold; }
-    .signature .role { font-size: 9pt; color: var(--pr-secondary); margin-top: 1pt; }
+    {% comment %}01.10.2026: .sig-grid (çoklu imza) ve .signature (tekil sağ blok)
+    kaldırıldı — imzalar iki ailede de print/_imza.html + print/_bilesenler.css
+    ile basılır (ayrı bileşen tutmak iki imza dili doğurmuştu).{% endcomment %}
 
     {% comment %}Eski .approval (UYGUNDUR) bloğu Tur 218'de kaldırıldı — EK-1 onayı
     artık işaretlenebilir seçenekli bölüm (talep 5); başka tüketicisi yoktu.{% endcomment %}

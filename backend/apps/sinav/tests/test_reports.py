@@ -655,6 +655,10 @@ def test_r4_duyurusu_duzenleyen_satiri_tasir() -> None:
     metin = " ".join(_pdf_text(pdf).split())
     assert "Müdür Yardımcısı" in metin and "DAYANAK:" in metin
     assert _sayfa_sayisi(pdf) == 1
+    # Dayanak TEK satırdır (01.10.2026): 8 pt'de dar hücrede sarıyor, "md. 5." tek
+    # başına alt satıra düşüyordu; artık öteki evrakın dayanak puntosunda.
+    metin_satirlari = _pdf_text(pdf).splitlines()
+    assert any("DAYANAK:" in satir and "md. 5." in satir for satir in metin_satirlari)
 
 
 def test_r1_cok_kalabalik_salonda_satir_kaybi_yok() -> None:
@@ -771,10 +775,96 @@ def test_unlocalize_denetimi() -> None:
 
 
 def test_design_css_ayni_kaldi() -> None:
-    """`_design.css` içine Django etiketi yazılamaz (kendini include — OYS Tur 238)."""
+    """`_design.css` içine Django etiketi yazılamaz (kendini include — OYS Tur 238).
+
+    Aynı kural ortak bileşen dosyası `_bilesenler.css` için de geçerlidir (01.10.2026):
+    ikisi de şablon olarak gömülür.
+    """
     icerik = (_TEMPLATES_DIR / "print" / "_design.css").read_text(encoding="utf-8")
     assert "{%" not in icerik and "{{" not in icerik
     assert "--pr-ink" in icerik  # token seti yerinde
+    bilesenler = (_TEMPLATES_DIR / "print" / "_bilesenler.css").read_text(encoding="utf-8")
+    assert "{%" not in bilesenler and "{{" not in bilesenler
+    assert ".imza-cizgi" in bilesenler and ".serit" in bilesenler
+
+
+#: Eski imza bileşenlerinin izleri — 01.10.2026'dan beri iki evrak ailesi TEK imza
+#: dili kullanır (print/_imza.html + print/_bilesenler.css).
+_ESKI_IMZA = re.compile(
+    r'sig-grid|class="signs"|\.signs\b|approve-grid|\bsg-(?:space|line|name|role)\b'
+    r'|class="signature"'
+)
+
+
+def test_imza_tek_bilesenden() -> None:
+    """İki evrak ailesi TEK imza bileşeni kullanır (01.10.2026 tasarım denetimi).
+
+    Eskiden resmî yazı ailesi `.sig-grid` (30 pt boşluk, boş adda "…………………"),
+    sınav evrakı `.signs` (20 pt, "Ad Soyad / İmza") kullanıyor; "UYGUNDUR" dört ayrı
+    biçimde basılıyordu. Kural: imza hücresi `print/_imza.html` ile basılır;
+    "UYGUNDUR" şablonda yalnız o parçaya verilen `baslik` olarak geçer.
+    """
+    ihlaller: list[str] = []
+    for dosya in sorted(_TEMPLATES_DIR.rglob("*.html")):
+        goreli = dosya.relative_to(_TEMPLATES_DIR).as_posix()
+        icerik = _YORUM_KALIBI.sub("", dosya.read_text(encoding="utf-8"))
+        if _ESKI_IMZA.search(icerik):
+            ihlaller.append(f"{goreli}: eski imza bileşeni")
+        if goreli != "print/_imza.html" and "UYGUNDUR" in icerik.replace('baslik="UYGUNDUR"', ""):
+            ihlaller.append(f"{goreli}: UYGUNDUR ortak parçanın dışında basılıyor")
+    assert not ihlaller, ihlaller
+
+
+def test_harf_araligi_pdf_metnini_bozmaz() -> None:
+    """1 pt ve üstü harf aralığı YASAK — PDF metni harf harf çıkar (01.10.2026).
+
+    "T.C." (3 pt), "UYGUNDUR" (1,5 pt) ve krokinin "ÖN CEPHE" şeridi (2 pt) PDF'te
+    "T . C .", "U YGUNDUR", "Ö N C E P H E" diye çıkıyor; metin aramasında ve
+    kopyalamada bulunmuyordu. Tek istisna "TASLAK" filigranıdır (süstür, aranmaz;
+    aynı bildirimde `rotate(` geçer).
+    """
+    ihlaller: list[str] = []
+    for dosya in sorted(_TEMPLATES_DIR.rglob("*")):
+        if dosya.suffix not in (".html", ".css"):
+            continue
+        icerik = _YORUM_KALIBI.sub("", dosya.read_text(encoding="utf-8"))
+        for eslesme in re.finditer(r"letter-spacing:\s*([\d.]+)pt", icerik):
+            if float(eslesme.group(1)) < 1:
+                continue
+            bas = max(icerik.rfind("{", 0, eslesme.start()), icerik.rfind('"', 0, eslesme.start()))
+            sonlar = (icerik.find("}", eslesme.end()), icerik.find('"', eslesme.end()))
+            son = min([i for i in sonlar if i >= 0], default=len(icerik))
+            if "rotate(" not in icerik[bas:son]:
+                ihlaller.append(f"{dosya.relative_to(_TEMPLATES_DIR).as_posix()}: {eslesme[0]}")
+    assert not ihlaller, ihlaller
+
+
+def test_r8_olculer_tek_ondalikla_basilir() -> None:
+    """Okul müdürünün imzaladığı raporda puan ve mesafe TEK ondalıktır (01.10.2026).
+
+    "1,2345" puan ve "2,0 / 2,24" gibi karışık hane sayısı okunmuyordu. Ham değer
+    motorda ve doğrulayıcıda değişmez — yalnız evrak bağlamı yuvarlar.
+    """
+    baglam = reports.build_validation_context(
+        is_valid=True,
+        hard_violations=[],
+        first_ring_pairs=0,
+        min_distances={"7:9": 2.0, "7:10": 2.236},
+        proximity_score=1.2345,
+        params={"seed": 7},
+        group_labels={"7:9": "Coğrafya (9. sınıf)", "7:10": "Coğrafya (10. sınıf)"},
+        warnings=[],
+    )
+    assert baglam["proximity_score"] == 1.2
+    mesafeler = cast(list[dict[str, Any]], baglam["min_distances"])
+    assert [m["distance"] for m in mesafeler] == [2.2, 2.0]
+    pdf = reports.render_pdf(
+        "sinav/reports/r8_validation.html",
+        {"header": _BASLIK, "title": reports.REPORT_TITLES["r8"][0], "report": baglam},
+    )
+    metin = " ".join(_pdf_text(pdf).split())
+    assert "1,2345" not in metin and "2,236" not in metin
+    assert "2,2 sıra arayla" in metin and "2,0 sıra arayla" in metin
 
 
 def test_sube_sirasi_turk_alfabesine_gore() -> None:

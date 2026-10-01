@@ -96,3 +96,42 @@ def test_weasyprint_yalniz_shared_pdf_kapisindan() -> None:
         "WeasyPrint'e shared.pdf.html_to_pdf dışından gidiliyor (eşzamanlı basım "
         f"kilidini atlar — 19.09.2026 çöküşü): {ihlaller}"
     )
+
+
+def _sayfalik(adet: int, etiket: str) -> str:
+    """`adet` sayfalık HTML (her sayfa sonunda zorunlu kırılma)."""
+    sayfalar = [f'<div style="break-after: page">{etiket} {i}</div>' for i in range(adet - 1)]
+    return "".join(sayfalar) + f"<div>{etiket} son</div>"
+
+
+def test_sigdirma_sigan_ilk_varyanti_basar_ve_kalanini_uretmez() -> None:
+    """Takvim deseni (01.10.2026): varyantlar sırayla dizilir, sığan İLKİ basılır.
+
+    Üreteç tembeldir — sığan varyanttan sonrakiler şablondan hiç geçmez.
+    """
+    uretilen: list[str] = []
+
+    def varyantlar() -> Any:
+        for adet, etiket in ((3, "uc"), (1, "bir"), (1, "ikinci-bir")):
+            uretilen.append(etiket)
+            yield _sayfalik(adet, etiket)
+
+    sonuc = pdf.html_to_pdf_fit(varyantlar(), max_pages=1)
+
+    assert sonuc.pdf.startswith(b"%PDF-")
+    assert (sonuc.variant, sonuc.pages) == (1, 1)
+    assert uretilen == ["uc", "bir"], "sığan varyanttan sonrası da üretildi"
+
+
+def test_sigdirma_hicbiri_sigmazsa_en_az_sayfaliyi_basar() -> None:
+    """Hiçbiri sığmazsa EN AZ sayfalı basılır; eşitlikte sıradaki öndeki (okunurluk)."""
+    sonuc = pdf.html_to_pdf_fit(
+        [_sayfalik(4, "a"), _sayfalik(2, "b"), _sayfalik(2, "c"), _sayfalik(3, "d")],
+        max_pages=1,
+    )
+    assert (sonuc.variant, sonuc.pages) == (1, 2)
+
+
+def test_sigdirma_bos_varyant_listesini_reddeder() -> None:
+    with pytest.raises(ValueError, match="varyant"):
+        pdf.html_to_pdf_fit([], max_pages=1)

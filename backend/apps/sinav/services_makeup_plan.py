@@ -769,10 +769,8 @@ PDF_KINDS = ("ilan", "liste")
 
 
 def _pdf_context(plan: MakeupPlan, *, show_names: bool) -> dict[str, Any]:
-    from apps.dersler import selectors as ders_selectors
     from apps.okul.models import SchoolConfig
-    from apps.okul.normalize import tr_sort_key
-    from apps.sinav.services_calendar import _tr_date
+    from apps.sinav.services_calendar import _TR_WEEKDAYS, _sign_rows, department_chairs
     from shared.letterhead import letterhead_context
     from shared.text import tr_upper
 
@@ -782,24 +780,35 @@ def _pdf_context(plan: MakeupPlan, *, show_names: bool) -> dict[str, Any]:
     items = [i for i in items if kayitlar[i.pk]]
     items.sort(key=lambda i: (i.placed_date, i.period_no, _item_label(i)))
 
-    gun_satirlari: list[dict[str, Any]] = []
+    # Sınav takvimiyle AYNI tablo düzeni (01.10.2026): Tarih (gg.aa.yyyy) | Gün |
+    # Ders saati; tarih ve gün, günün satırlarını BİRLEŞTİREN hücrededir ve gün
+    # sayfa sınırında bölünmez. Eskiden tarih "23 Kasım 2026 / Pazartesi" iki satır
+    # tutuyor, aynı günün öteki satırlarında boş kalıyordu.
+    gun_gruplari: list[dict[str, Any]] = []
     for item in items:
+        gun = item.placed_date
+        if gun is None:  # yukarıda süzüldü; tip denetimi için
+            continue
         saat_adi, baslangic = _period_info(int(item.period_no or 0))
-        gun_satirlari.append(
+        if not gun_gruplari or gun_gruplari[-1]["day"] != gun:
+            gun_gruplari.append(
+                {
+                    "day": gun,
+                    "date": gun.strftime("%d.%m.%Y"),
+                    "weekday": _TR_WEEKDAYS[gun.weekday()],
+                    "rows": [],
+                }
+            )
+        gun_gruplari[-1]["rows"].append(
             {
-                "date_label": _tr_date(item.placed_date),  # type: ignore[arg-type]
-                "period_label": f"{saat_adi} · {baslangic.strftime('%H:%M')}",
+                "period_name": saat_adi,
+                "time": baslangic.strftime("%H:%M"),
                 "course_label": _item_label(item),
                 "external": item.external,
                 "student_count": len(kayitlar[item.pk]),
                 "source_date": item.source_date.strftime("%d.%m.%Y"),
             }
         )
-    # Aynı günün ilk satırı günü taşır; sonrakiler boş bırakılır (takvim PDF'i deseni).
-    onceki = ""
-    for satir in gun_satirlari:
-        satir["show_date"] = satir["date_label"] != onceki
-        onceki = satir["date_label"]
 
     ogrenciler: dict[tuple[str, str, str], list[str]] = {}
     for item in items:
@@ -817,11 +826,11 @@ def _pdf_context(plan: MakeupPlan, *, show_names: bool) -> dict[str, Any]:
         )
     ]
 
-    ders_adlari = ders_selectors.course_names_by_ids({i.course_id for i in items})
-    zumreler = sorted(
-        ({"name": "", "role": f"{ad} Zümre Başkanı"} for ad in set(ders_adlari.values())),
-        key=lambda c: tr_sort_key(c["role"]),
-    )
+    # İmza: okul zümre başkanları kurulundaki zümreler — sınav takviminde zümre
+    # seçilmemişken basılan listeyle AYNI (01.10.2026 kullanıcı kararı). Eski "her
+    # dersten bir zümre başkanı" dalı gerçekte olmayan unvanlar basıyordu ("Seçmeli
+    # Fizik Zümre Başkanı"); katalog boşsa yalnız düzenleyen ve okul müdürü imzalar.
+    zumreler = department_chairs()
     return {
         **letterhead_context(
             school_name=config.school_name,
@@ -833,12 +842,17 @@ def _pdf_context(plan: MakeupPlan, *, show_names: bool) -> dict[str, Any]:
         "plan_title": tr_upper(plan.name),
         "year_label": str(plan.semester.school_year.name),
         "term_sequence": plan.semester.sequence,
-        "day_rows": gun_satirlari,
+        "day_groups": gun_gruplari,
         "student_rows": ogrenci_satirlari,
         "show_names": show_names,
         "max_per_day": plan.max_per_day,
         "chairs": zumreler,
+        # Ortak imza şeridi (print/_imza_seridi.html) — A4 dikeyde satırda dört imza.
+        "sign_rows": _sign_rows(zumreler, "", 4),
+        "approve_width": "24",
         "principal_name": config.principal_name,
+        # Sol alt altbilgi (documents/base.html): hangi çıktının güncel olduğu.
+        "print_stamp": timezone.localtime().strftime("%d.%m.%Y %H:%M"),
         "is_draft": plan.status != MakeupPlanStatus.APPROVED,
         "approved_on": (
             timezone.localtime(plan.approved_at).strftime("%d.%m.%Y")

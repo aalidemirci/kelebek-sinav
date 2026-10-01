@@ -3,12 +3,22 @@
   header      ReportHeader (okul/oturum künyesi),
   title       belge adı (REPORT_TITLES),
   scope_line  opsiyonel sol künye ("Salon: D-204" / "Şube: 9/A"),
-  scope_note  opsiyonel sağ künye (yaprağın rolü: "Sayfa 1/2 · Oturma planı").
+  scope_note  opsiyonel sağ künye (yaprağın rolü: "Sayfa 1/2 · Oturma planı"),
+  letterhead  opsiyonel RESMÎ ANTET (`shared.letterhead.letterhead_context`):
+              verilirse okul adı satırının yerine T.C. / kurum / birim basılır.
+              Yalnız resmî yazışma niteliğindeki evrak verir (R6 görevlendirme ve
+              tebliğ-tebellüğ, 01.10.2026); formlar ve duyurular kompakt bantta kalır.
 Künye şeridi ana çizginin ALTINDADIR: başlık bloğu (okul+belge+oturum) sabit
 kalır, yaprağa özgü bilgi ayrı bir bantta okunur — çok yapraklı belgede
 (R1 gibi) sayfanın hangi işe ait olduğu bir bakışta görülür.{% endcomment %}
 <div class="rpt-head">
+  {% if letterhead %}
+  <div class="tc">{{ letterhead.tc }}</div>
+  <div class="authority">{{ letterhead.authority }}</div>
+  <div class="unit">{{ letterhead.unit_line }}</div>
+  {% else %}
   <div class="school">{{ header.school_name }}</div>
+  {% endif %}
   <div class="title">{{ title }}</div>
   <div class="session">{{ header.exam_name }} · {{ header.exam_date }} {{ header.start_time }}{% if header.duration_label %} ·
     Süre: {{ header.duration_label }}{% endif %} · {{ header.year_label }} {{ header.semester_label }}</div>

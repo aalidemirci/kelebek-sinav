@@ -393,6 +393,16 @@ def test_rapor_pdf_dort_bolum_ve_imza() -> None:
         assert baslik in metin, baslik
     assert "Hastane raporu 14.11.2026" in metin
     assert "Ülke geneli" in metin
+    # Bölüm başlığı ve açıklaması tablosundan AYRI sayfaya düşmez (01.10.2026 —
+    # bu senaryoda "D." başlığı 1. sayfanın sonunda öksüz kalıyor, tablosu 2.
+    # sayfaya geçiyordu). "Sınav türü" yalnız D tablosunun başlığıdır.
+    for sayfa in reader.pages:
+        sayfa_metni = " ".join((sayfa.extract_text() or "").split())
+        if "D. İL/İLÇE MİLLÎ EĞİTİM" in sayfa_metni:
+            assert "Sınav türü" in sayfa_metni, "D. bölümünün başlığı tablosundan ayrı sayfada"
+    # Resmî yazı ailesinin ortak altbilgisi: düzenleme anı (başlık altından taşındı).
+    assert "Düzenleme:" in metin and "Düzenlenme:" not in metin
+    assert "UYGUNDUR" in metin
 
 
 def test_rapor_excel_bolumleri_ayri_sayfalarda() -> None:

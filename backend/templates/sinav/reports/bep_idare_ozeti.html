@@ -71,13 +71,12 @@ Tanı, engel türü, açıklama sütunu YOKTUR ve EKLENMEZ (yalnız üyelik tutu
     “Bireysel soru dosyası”: kitapçığı, ders öğretmeninin BEP doğrultusunda hazırladığı sorulardan
     basılır. “Dosya bekleniyor” yazan öğrencinin dosyası yüklenmeden kitapçık üretilemez.</p>
 
-  <table class="signs">
-    <tr><td class="date">…… / …… / 20……</td></tr>
-    <tr><td class="space"></td></tr>
+  {% comment %}Ortak imza bileşeni (01.10.2026); tek imza sağ sütundadır.{% endcomment %}
+  <table class="imzalar">
     <tr>
-      <td><div class="line" style="width: 40%; margin-left: auto; margin-right: auto;"></div>
-          <span class="who">Düzenleyen — Müdür Yardımcısı</span><br>
-          <span class="role">Ad Soyad / İmza</span></td>
+      <td></td>
+      <td></td>
+      <td>{% include "print/_imza.html" with gorev="Düzenleyen — Müdür Yardımcısı" tarihli=True only %}</td>
     </tr>
   </table>
 

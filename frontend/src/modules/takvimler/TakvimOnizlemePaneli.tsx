@@ -1,8 +1,8 @@
 // Sınav Takvimi — Önizleme paneli (F6) — OYS'den UYARLA. Resmî PDF'in
 // AÇIKLAMA bloğunu (description_text) ve DİPNOT bloğunu (footnote_text)
 // düzenleme (yalnız TASLAK) + "Varsayılan metne dön" + imza bloğuna girecek
-// zümrelerin seçimi (B7 revizyonu — seçim yoksa takvimdeki derslerden boş
-// imza çizgileri üretilir) + PDF indir + onay bilgisi (B12: onaylayan
+// zümrelerin seçimi (B7 revizyonu; 01.10.2026'dan beri seçim yoksa kuruldaki
+// zümrelerin tamamı basılır) + PDF indir + onay bilgisi (B12: onaylayan
 // ad-snapshot'ı ve onay zamanı). Yaşam döngüsü butonları üst başlıktadır —
 // burada yinelenmez. Tarih-saat yalnız lib/format ile basılır (yerel
 // `toLocaleString` kopyası kaldırıldı — docs/sozluk.md §3). M3 token'ları.
@@ -38,6 +38,9 @@ export default function TakvimOnizlemePaneli({
   const [footnote, setFootnote] = useState(calendar.footnote_text);
   const [loadingDefault, setLoadingDefault] = useState(false);
   const [loadingFootnoteDefault, setLoadingFootnoteDefault] = useState(false);
+  // PDF tek A4'e sığan düzen bulunana dek birkaç kez dizilir (birkaç saniye) —
+  // düğme bu sürede "Hazırlanıyor…" der ve ikinci tıklamayı kabul etmez.
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   // Dış kaynaklı değişim (kaydet sonrası invalidate) yeni metni yansıtır.
   useEffect(() => {
@@ -128,11 +131,14 @@ export default function TakvimOnizlemePaneli({
   };
 
   const downloadPdf = async () => {
+    setPdfBusy(true);
     try {
       const blob = await examCalendarApi.pdfBlob(calendar.id);
       saveBlob(blob, calendarPdfFileName(calendar));
     } catch (e) {
       snackbar.error(e instanceof ApiError ? e.message : "PDF indirilemedi.");
+    } finally {
+      setPdfBusy(false);
     }
   };
 
@@ -211,7 +217,7 @@ export default function TakvimOnizlemePaneli({
             ) : null}
           </div>
           <p className="mb-2 text-body-small text-on-surface-variant">
-            Açıklamaların altına “DİPNOT” başlığıyla basılır. Varsayılan metin, okulda yapılan
+            Açıklamaların sonuna “DİPNOT” başlığıyla basılır. Varsayılan metin, okulda yapılan
             sınavların mazeret sınavlarının takvimi izleyen hafta içinde; Bakanlık ya da İl/İlçe
             Millî Eğitim Müdürlüğü sınavlarının ise ilgili kılavuzda ilan edilen tarih ve saatlerde
             yapılacağını söyler. Okulunuzun uygulamasına göre değiştirebilirsiniz.
@@ -254,8 +260,8 @@ export default function TakvimOnizlemePaneli({
             >
               Ayarlar → Zümreler
             </Link>{" "}
-            ekranında tanımlanır. Hiç zümre seçilmezse takvimdeki her ders için boş bir imza çizgisi
-            basılır.
+            ekranında tanımlanır. Hiç zümre seçilmezse “Kurulda” işaretli zümrelerin tamamı basılır;
+            zümre tanımlı değilse yalnız düzenleyen müdür yardımcısı ile okul müdürü imzalar.
           </p>
           {departments.length === 0 ? (
             <p className="rounded-shape-sm bg-surface-container px-3 py-2 text-body-small text-on-surface-variant">
@@ -340,9 +346,18 @@ export default function TakvimOnizlemePaneli({
             </dd>
           </div>
         </dl>
-        <Button variant="outlined" icon="picture_as_pdf" onClick={() => void downloadPdf()}>
-          PDF indir
+        <Button
+          variant="outlined"
+          icon="picture_as_pdf"
+          disabled={pdfBusy}
+          onClick={() => void downloadPdf()}
+        >
+          {pdfBusy ? "Hazırlanıyor…" : "PDF indir"}
         </Button>
+        <p className="text-body-small text-on-surface-variant">
+          Takvim tek A4 sayfaya sığacak biçimde basılır: sayfa yönü (yatay ya da dikey) ve yazı
+          büyüklüğü içeriğe göre seçilir. Sığmayan takvim, gün bölünmeden ikinci sayfaya geçer.
+        </p>
         <p className="text-body-small text-on-surface-variant">
           Onaylanmamış takvimin PDF'inde “TASLAK” filigranı bulunur; filigransız resmî çıktı yalnız
           onaydan sonra üretilir.
