@@ -32,20 +32,65 @@ kapsam dışıdır.)
 from __future__ import annotations
 
 import threading
-from typing import Any
+from collections.abc import Iterable
+from typing import Any, NamedTuple
 
 _lock = threading.Lock()
 _font_config: Any = None
+
+
+def _shared_font_config() -> Any:
+    """Paylaşılan yazı tipi yapılandırması — yalnız kilit ALTINDA çağrılır."""
+    global _font_config
+    if _font_config is None:
+        from weasyprint.text.fonts import FontConfiguration
+
+        _font_config = FontConfiguration()
+    return _font_config
 
 
 def html_to_pdf(html: str) -> bytes:
     """HTML'i PDF'e çevirir — kilit altında, paylaşılan yazı tipi yapılandırmasıyla."""
     from weasyprint import HTML  # tembel import — ağır bağımlılık (DLL'ler)
 
-    global _font_config
     with _lock:
-        if _font_config is None:
-            from weasyprint.text.fonts import FontConfiguration
+        return bytes(HTML(string=html).write_pdf(font_config=_shared_font_config()))
 
-            _font_config = FontConfiguration()
-        return bytes(HTML(string=html).write_pdf(font_config=_font_config))
+
+class FittedPdf(NamedTuple):
+    """`html_to_pdf_fit` sonucu: basılan PDF, varyantın SIRASI (`variant`) ve sayfa sayısı."""
+
+    pdf: bytes
+    variant: int
+    pages: int
+
+
+def html_to_pdf_fit(variants: Iterable[str], *, max_pages: int = 1) -> FittedPdf:
+    """Varyantları SIRAYLA dizer; `max_pages`e sığan İLKİNİ basar.
+
+    Sayfaya sığdırma için vardır (sınav takvimi, 01.10.2026): çağıran aynı
+    belgenin rahattan sıkıya dizili varyantlarını verir, sığan ilk varyant
+    basılır. Hiçbiri sığmazsa EN AZ sayfalı olan basılır (eşitlikte öndeki —
+    çağıranın sırası okunurluk tercihidir).
+
+    Ölçüm yaklaşık değil, gerçek dizimdir (`render()` — PDF'e yazmadan sayfa
+    sayısı). Varyantlar tembel üretilebilir (üreteç): yalnız gereken kadarı
+    şablondan geçer — üretim de kilit altında koşar. Tek kapı kuralı burada da
+    geçerlidir: kilit bütün denemeleri kapsar, yazı tipi yapılandırması paylaşılır.
+    """
+    from weasyprint import HTML  # tembel import — ağır bağımlılık (DLL'ler)
+
+    with _lock:
+        font_config = _shared_font_config()
+        best: tuple[int, int, Any] | None = None  # (sayfa, sıra, belge)
+        for index, html in enumerate(variants):
+            document = HTML(string=html).render(font_config=font_config)
+            pages = len(document.pages)
+            if pages <= max_pages:
+                return FittedPdf(bytes(document.write_pdf()), index, pages)
+            if best is None or pages < best[0]:
+                best = (pages, index, document)
+        if best is None:
+            raise ValueError("Basılacak varyant verilmedi.")
+        pages, index, document = best
+        return FittedPdf(bytes(document.write_pdf()), index, pages)

@@ -1,27 +1,108 @@
 {% extends "documents/base.html" %}
-{% comment %}Resmî sınav takvimi (ADR-0044, FAZ T3). documents/base.html anteti +
-.sig-grid TABLO imza deseni (float-altbilgi tuzağı yok). text-transform YOK —
-başlıklar doğrudan büyük harf (WeasyPrint TR "i" tuzağı). Onaysız takvimde
-"TASLAK" filigranı. Tur 644: plan gereği A4 YATAY (seviye sütunları geniş).
-Okul dışı makam (Bakanlık/İl MEM/İlçe MEM) sınavları nötr dolgu + sol kenar
-çizgisi + makam etiketiyle ayrılır; renkli dolgu YOK (nötr slate paleti).
-İmza bloğu `chairs`/`school_chair_name` sözleşmesini tüketir — kaynağı takvime
-seçilen zümreler, seçim yoksa takvimdeki dersler.{% endcomment %}
+{% comment %}Resmî sınav takvimi (ADR-0044, FAZ T3) — TEK A4 DÜZENİ (01.10.2026, kullanıcı
+isteği: "çıktı çok yer kaplıyor; mümkünse dikey ya da yatay tek A4'e sığsın").
+Eski düzen tipik bir okulda üç yatay sayfaydı: her (gün, ders saati) satırı iki
+satırlık tarih hücresi taşıyordu, açıklamalar 10 pt tek sütundu ve zümre imzaları
+üçlü sıralarda 30 pt boşlukla neredeyse bir sayfa tutuyordu.
+
+YAPI: Tarih | Gün | Ders saati | düzey sütunları. Tarih ve gün, günün ders
+saatlerini BİRLEŞTİREN hücrelerdedir (rowspan); her gün kendi <tbody>'sidir ve
+sayfa sınırında BÖLÜNMEZ — takvim ikinci sayfaya akarsa gün grubu bütün geçer
+ve hiçbir sınav tarihsiz satırda kalmaz (30.08.2026 ölçümü: bölünen satır sınavı
+tarihsiz basıyordu). Açıklamalar iki sütunlu ince puntodur, dipnot onların
+sonundadır. İmza ŞERİDİ: zümre başkanları + düzenleyen müdür yardımcısı eşit
+hücrelerde, UYGUNDUR (okul müdürü) sağdaki sütunda.
+
+ÖLÇÜLER ŞABLONDA DEĞİL: `fit` bağlamı (`services_calendar.CalendarPdfFit`)
+sayfa yönünü, puntoyu ve boşlukları verir; servis varyantları sırayla dener ve
+tek sayfaya sığan ilkini basar. Değerler metindir (TR yerelinde sayı virgülle
+basılır, CSS bozulur). Hesaplanan kurallar `<head>`dedir (gövdedeki stil yok
+sayılır).
+
+KORUNANLAR: documents/base.html anteti; text-transform YOK (WeasyPrint TR "i"
+tuzağı — başlıklar doğrudan büyük harf); onaysız takvimde "TASLAK" filigranı;
+okul dışı makam (Bakanlık/İl MEM/İlçe MEM) sınavı nötr dolgu + sol kalın kenar +
+makam etiketi — RENKLİ DOLGU YOK; imza bloğu `chairs` / `school_chair_name`
+sözleşmesini tüketir (servis şeride `sign_rows` olarak dizer; şerit ortak
+bileşendir — print/_imza_seridi.html, mazeret sınav takvimiyle aynı).
+`table-layout: fixed` + genişlik verildiği için kutu modeli YALNIZ bu tabloda
+border-box'tır (CLAUDE.md §2 content-box tuzağı).{% endcomment %}
 {% block extra_style %}
 <style>
-  @page { size: A4 landscape; }
-  /* Okul dışı makam sınavı — RENKLİ DOLGU YOK (print/_design.css nötr slate
-     paleti): nötr dolgu + sol kalın kenar + küçük punto makam etiketi. */
-  /* Hücre içeriği artık blok kutu (makam etiketi için) — blok kutular satır
-     içinde sayfa kırılma noktası yaratır ve documents/base.html'in .doc-table
-     kuralında `tr { break-inside: avoid }` YOKTUR (kardeş şablon
-     sinav/reports/base.html'de var). Kural olmadan uzun takvimde bir <tr>
-     ortasından bölünür ve sınav, tarih sütunu boş kalmış bir satırda basılır. */
-  .doc-table tr { break-inside: avoid; page-break-inside: avoid; }
-  .cal-cell { padding: 0.5pt 0; }
-  .cal-dis { background: var(--pr-fill); border-left: 2.5pt solid var(--pr-ink); padding-left: 2pt; }
-  .cal-makam { font-size: 7pt; color: var(--pr-secondary); letter-spacing: 0.2pt; }
-  .cal-legend { margin-top: 4pt; font-size: 7.5pt; color: var(--pr-secondary); }
+  @page { size: A4 {{ fit.orientation }}; margin: {{ fit.margin }}; }
+  body { line-height: 1.2; }
+
+  /* Antet: documents/base.html dizgisi; punto sıklık kademesinden. */
+  .letterhead .tc { font-size: {{ fit.lh_tc }}pt; }
+  .letterhead .authority { font-size: {{ fit.lh_authority }}pt; margin-top: 0; }
+  .letterhead .school { font-size: {{ fit.lh_unit }}pt; margin-top: 0.5pt; }
+  .rule { height: 1.4pt; margin: 3pt 0 1.2pt; }
+
+  .doc-title { font-size: {{ fit.title }}pt; margin: {{ fit.gap }}pt 0 1pt; }
+  .doc-subtitle { font-size: {{ fit.subtitle }}pt; margin-bottom: {{ fit.gap }}pt; }
+
+  /* ---- Takvim tablosu ---- */
+  .cal { width: 100%; border-collapse: collapse; table-layout: fixed;
+         font-size: {{ fit.table }}pt; line-height: 1.15;
+         border: var(--pr-border-outer) solid var(--pr-ink); }
+  .cal, .cal th, .cal td { box-sizing: border-box; }
+  .cal th { background: var(--pr-bar); color: var(--pr-bar-text); font-weight: bold;
+            font-size: {{ fit.head }}pt; padding: {{ fit.pad_v }}pt {{ fit.pad_h }}pt;
+            border: var(--pr-border) solid var(--pr-bar); text-align: center;
+            vertical-align: middle; }
+  /* Öğrenci sayısı: yatayda düzey adının yanında (tek satır), dikeyde dar
+     sütunda altında. */
+  .cal th .cnt { font-weight: normal; font-size: 0.82em; color: var(--pr-bar-hint); }
+  .cal th .cnt.below { display: block; }
+  .cal th.c-date { width: 7.5em; }
+  .cal th.c-day { width: 6.3em; }
+  .cal th.c-per { width: {{ period_width }}em; }
+  .cal td { border: var(--pr-border) solid var(--pr-line); text-align: center;
+            padding: {{ fit.pad_v }}pt {{ fit.pad_h }}pt; vertical-align: middle; }
+  .cal td.date { font-weight: bold; color: var(--pr-ink); white-space: nowrap; }
+  .cal td.day { white-space: nowrap; }
+  .cal td.per { white-space: nowrap; }
+  .cal td.per .time { color: var(--pr-secondary); }
+  .cal td.per.wrap { white-space: normal; }
+  /* Gün grubu: üstte koyu ayraç; grup ve satır sayfa sınırında BÖLÜNMEZ. */
+  .cal tbody { break-inside: avoid; page-break-inside: avoid; }
+  .cal tr { break-inside: avoid; page-break-inside: avoid; }
+  .cal tr.first td { border-top: 0.9pt solid var(--pr-secondary); }
+  .cal td.empty { color: var(--pr-muted); font-style: italic; }
+  /* Aynı hücrede birden çok sınav (ayrık kapsamlı seçmeliler). */
+  .exam + .exam { border-top: 0.4pt dotted var(--pr-faint); margin-top: 1pt; padding-top: 1pt; }
+  .exam .tag { color: var(--pr-secondary); font-size: 0.85em; }
+  /* Okul dışı makam sınavı — RENKLİ DOLGU YOK (print/_design.css nötr paleti). */
+  .exam.ext { background: var(--pr-fill); border-left: 2.2pt solid var(--pr-ink);
+              padding: 0.6pt 2pt; }
+  .exam .makam { display: block; font-size: 0.76em; letter-spacing: 0.2pt;
+                 color: var(--pr-secondary); }
+  .legend { margin-top: 2pt; font-size: {{ fit.notes }}pt; color: var(--pr-secondary); }
+
+  /* ---- Açıklamalar + dipnot (iki sütun, ince punto) ---- */
+  .notes { margin-top: {{ fit.gap }}pt; font-size: {{ fit.notes }}pt; line-height: 1.28;
+           color: var(--pr-text); }
+  .notes .ttl { font-size: {{ fit.head }}pt; font-weight: bold; color: var(--pr-ink);
+                letter-spacing: 0.3pt; border-bottom: 0.9pt solid var(--pr-ink);
+                padding-bottom: 1pt; margin-bottom: 2.5pt; }
+  .notes .cols { columns: 2; column-gap: 14pt; }
+  /* Sola yaslı: dar sütunda iki yana yaslama sözcük arasını açıyordu. Madde
+     sütun ve sayfa sınırında BÖLÜNMEZ (takvim iki sayfaya akarsa dipnot ikiye
+     kesilmesin). */
+  .notes p { margin: 0 0 1.3pt; text-align: left; break-inside: avoid;
+             page-break-inside: avoid; }
+  .notes p.num { padding-left: 1.45em; text-indent: -1.45em; }
+  .notes .no { display: inline-block; width: 1.45em; text-indent: 0; font-weight: bold;
+               color: var(--pr-ink); }
+  .notes .fn b { color: var(--pr-ink); }
+
+  /* ---- İmza şeridi: ORTAK bileşen (print/_imza_seridi.html + print/_bilesenler.css,
+     01.10.2026) — yapı orada, burada yalnız sıklık kademesinin ölçüleri. ---- */
+  .serit { margin-top: {{ fit.gap }}pt; }
+  .serit .imza-bosluk { height: {{ fit.sign_space }}pt; }
+  .serit .imza-cizgi { margin: 0 3pt 1.5pt; }
+  .serit .imza-ad, .serit .imza-baslik { font-size: {{ fit.sign_name }}pt; }
+  .serit .imza-gorev, .serit .imza-tarih { font-size: {{ fit.sign_role }}pt; }
 </style>
 {% endblock %}
 {% block content %}
@@ -31,108 +112,75 @@ seçilen zümreler, seçim yoksa takvimdeki dersler.{% endcomment %}
                 transform: rotate(-20deg); z-index: -1;">TASLAK</div>
   {% endif %}
 
-  <div class="doc-title">{{ calendar.semester.school_year.name }} EĞİTİM VE ÖĞRETİM YILI</div>
-  <div class="doc-title" style="margin-top: 0;">{{ calendar_title }}</div>
+  <div class="doc-title">{{ calendar.semester.school_year.name }} EĞİTİM VE ÖĞRETİM YILI {{ calendar_title }}</div>
   <div class="doc-subtitle">
     {{ calendar.start_date|date:"d.m.Y" }} – {{ calendar.end_date|date:"d.m.Y" }}
   </div>
 
-  <table class="doc-table" style="font-size: 8.5pt;">
+  <table class="cal">
     <thead>
       <tr>
-        <th style="width: 30%;">Tarih / Ders Saati</th>
+        <th class="c-date">Tarih</th>
+        <th class="c-day">Gün</th>
+        <th class="c-per">Ders saati</th>
         {% for level in levels %}
-          <th style="text-align: center;">{{ level.display_label }}<br>
-            <span style="font-weight: normal; font-size: 7.5pt;">{{ level.student_count }} öğrenci</span></th>
+          <th>{{ level.display_label }}{% if fit.orientation == "landscape" %} <span class="cnt">· {{ level.student_count }} öğrenci</span>{% else %} <span class="cnt below">{{ level.student_count }} öğrenci</span>{% endif %}</th>
         {% endfor %}
       </tr>
     </thead>
-    <tbody>
-      {% for day in day_rows %}
+    {% for day in day_rows %}
+      <tbody>
         {% for pc in day.period_cells %}
-          <tr>
-            <td>
-              {% if forloop.first %}<strong>{{ day.label }}</strong><br>{% endif %}
-              {% comment %}`period.name` zaten "1. Ders" biçimindedir (zil çizelgesi
-              sözleşmesi, DEFAULT_BELL_SCHEDULE); ayrıca ". Ders" eklenince
-              "1. Ders. Ders" basılıyordu.{% endcomment %}
-              {{ pc.period.name }}{% if pc.time_label %} · {{ pc.time_label }}{% endif %}
-            </td>
+          <tr{% if forloop.first %} class="first"{% endif %}>
+            {% if forloop.first %}
+              <td class="date" rowspan="{{ day.period_cells|length }}">{{ day.date }}</td>
+              <td class="day" rowspan="{{ day.period_cells|length }}">{{ day.weekday }}</td>
+            {% endif %}
+            {% comment %}`period.name` zaten "1. Ders" biçimindedir (zil çizelgesi
+            sözleşmesi); ayrıca ". Ders" eklenince "1. Ders. Ders" basılıyordu.{% endcomment %}
+            <td class="per{% if period_wraps %} wrap{% endif %}">{{ pc.period.name }}{% if pc.time_label %} <span class="time">· {{ pc.time_label }}</span>{% endif %}</td>
             {% for cell_list in pc.level_cells %}
-              <td style="text-align: center;">
+              <td>
                 {% for cell in cell_list %}
-                  <div class="cal-cell{% if cell.authority != "SCHOOL" %} cal-dis{% endif %}">
-                    {{ cell.course_name }}{% if cell.exam_kind == "PRACTICE" %} (Uygulamalı){% endif %}{% if not cell.is_butterfly %} (Kendi dersliğinde){% endif %}
-                    {% if cell.authority == "MINISTRY" %}<div class="cal-makam">BAKANLIK SINAVI</div>
-                    {% elif cell.authority == "PROVINCIAL" %}<div class="cal-makam">İL MEM SINAVI</div>
-                    {% elif cell.authority == "DISTRICT" %}<div class="cal-makam">İLÇE MEM SINAVI</div>{% endif %}
+                  <div class="exam{% if cell.authority != "SCHOOL" %} ext{% endif %}">{{ cell.course_name }}{% if cell.exam_kind == "PRACTICE" %} <span class="tag">(uygulamalı)</span>{% endif %}{% if not cell.is_butterfly %} <span class="tag">(kendi dersliğinde)</span>{% endif %}
+                    {% if cell.authority == "MINISTRY" %}<span class="makam">BAKANLIK SINAVI</span>
+                    {% elif cell.authority == "PROVINCIAL" %}<span class="makam">İL MEM SINAVI</span>
+                    {% elif cell.authority == "DISTRICT" %}<span class="makam">İLÇE MEM SINAVI</span>{% endif %}
                   </div>
                 {% endfor %}
               </td>
             {% endfor %}
           </tr>
         {% endfor %}
-      {% empty %}
-        <tr><td colspan="{{ levels|length|add:1 }}" style="text-align: center;">
-          Henüz sınav yerleştirilmedi.
-        </td></tr>
-      {% endfor %}
-    </tbody>
+      </tbody>
+    {% empty %}
+      <tbody>
+        <tr><td class="empty" colspan="{{ levels|length|add:3 }}">Henüz sınav yerleştirilmedi.</td></tr>
+      </tbody>
+    {% endfor %}
   </table>
 
-  <div class="cal-legend">
-    Gölgeli ve sol kenarı kalın çizgili hücreler Bakanlık ya da İl/İlçe Millî
-    Eğitim Müdürlüğünce yapılan sınavlardır; tarih ve saatleri ilgili makamın
-    kılavuzuna göredir.
-  </div>
-
-  {% if description_lines %}
-    <div class="section flow" style="margin-top: 12pt;">
-      <div class="section-title">AÇIKLAMALAR</div>
-      <div class="field-box" style="border-top: 0.75pt solid var(--pr-line);">{% for line in description_lines %}{{ line }}
-{% endfor %}</div>
+  {% if has_external %}
+    <div class="legend">
+      Gölgeli ve sol kenarı kalın çizgili sınavlar Bakanlık ya da İl/İlçe Millî Eğitim
+      Müdürlüğünce yapılır; tarih ve saatleri ilgili makamın kılavuzuna göredir.
     </div>
   {% endif %}
 
-  {% if footnote_lines %}
-    <div class="section flow" style="margin-top: 8pt;">
-      <div class="section-title">DİPNOT</div>
-      <div class="field-box" style="border-top: 0.75pt solid var(--pr-line);">{% for line in footnote_lines %}{{ line }}
-{% endfor %}</div>
+  {% if description_items or footnote_lines %}
+    <div class="notes">
+      <div class="ttl">AÇIKLAMALAR</div>
+      <div class="cols">
+        {% for item in description_items %}
+          {% if item.no %}<p class="num"><span class="no">{{ item.no }}</span>{{ item.text }}</p>
+          {% else %}<p>{{ item.text }}</p>{% endif %}
+        {% endfor %}
+        {% for line in footnote_lines %}
+          <p class="fn">{% if forloop.first %}<b>DİPNOT:</b> {% endif %}{{ line }}</p>
+        {% endfor %}
+      </div>
     </div>
   {% endif %}
 
-  <table class="sig-grid">
-    <tr>
-      {% for chair in chairs %}
-        <td>
-          <div class="space"></div>
-          <div class="line"></div>
-          <div class="name">{{ chair.name|default:"…………………" }}</div>
-          <div class="role">{{ chair.role }}</div>
-        </td>
-        {% if forloop.counter|divisibleby:3 and not forloop.last %}</tr><tr>{% endif %}
-      {% endfor %}
-    </tr>
-    <tr>
-      <td>
-        <div class="space"></div>
-        <div class="line"></div>
-        {% comment %}Eski etiket "Okul Zümre Başkanı" idi: mevzuatta böyle bir unvan yok ve
-        alan KS'de hiç dolmuyordu. Takvimi düzenleyen müdür yardımcısıdır; bağlam
-        anahtarı (`school_chair_name`) sözleşme gereği korunur.{% endcomment %}
-        <div class="name">{{ school_chair_name|default:"…………………" }}</div>
-        <div class="role">Düzenleyen — Müdür Yardımcısı</div>
-      </td>
-      <td></td>
-      <td>
-        <div class="date" style="font-size: 9.5pt; color: var(--pr-label);">UYGUNDUR</div>
-        <div class="date" style="font-size: 9pt;">{% if approved_on %}{{ approved_on }}{% else %}…… / …… / 20……{% endif %}</div>
-        <div class="space"></div>
-        <div class="line"></div>
-        <div class="name">{{ principal_name|default:"…………………" }}</div>
-        <div class="role">Okul Müdürü</div>
-      </td>
-    </tr>
-  </table>
+  {% include "print/_imza_seridi.html" with sign_rows=sign_rows principal_name=principal_name approved_on=approved_on approve_width=approve_width only %}
 {% endblock %}

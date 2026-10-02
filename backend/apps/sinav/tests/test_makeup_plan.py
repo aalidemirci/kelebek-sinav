@@ -16,7 +16,7 @@ from django.core.exceptions import ValidationError
 from pypdf import PdfReader
 from rest_framework.test import APIClient
 
-from apps.okul.models import SchoolConfig
+from apps.okul.models import Personnel, SchoolConfig, SubjectDepartment
 from apps.sinav import participants, services, services_makeup
 from apps.sinav import services_makeup_plan as plans
 from apps.sinav.models import (
@@ -364,18 +364,30 @@ def test_ilan_nushasi_ogrenci_verisi_tasimaz_liste_tasir() -> None:
     )
     _senaryo()
     plan = _plan(name="Kasım Mazeret Sınav Takvimi")
+    # İmza: okul zümre başkanları kurulundaki zümreler (01.10.2026) — sınav takviminde
+    # zümre seçilmemişken basılan listeyle aynı; eskiden her ders için bir "… Zümre
+    # Başkanı" basılıyordu.
+    baskan = Personnel.objects.create(first_name="Gülşen", last_name="YILDIRIMLI")
+    SubjectDepartment.objects.create(name="Sosyal Bilimler", head=baskan)
 
     ilan = _pdf_metni(plans.render_plan_pdf(plan, kind="ilan"))
     for beklenen in (
         "KASIM MAZERET SINAV TAKVİMİ",
         "TASLAK",
-        "23 Kasım 2026 Pazartesi",
+        # Sınav takvimiyle aynı tablo: tarih gg.aa.yyyy, gün adı ayrı sütunda (pypdf
+        # iki hücreyi boşluksuz birleştirebilir — ikisi ayrı aranır).
+        "23.11.2026",
+        "Pazartesi",
         "Coğrafya — 9. Sınıf",
-        "Coğrafya Zümre Başkanı",
+        "Gülşen YILDIRIMLI",
+        "Sosyal Bilimler Zümre Başkanı",
         "Düzenleyen — Müdür Yardımcısı",
+        "UYGUNDUR",
         "Örnek Anadolu Lisesi Müdürlüğü",
     ):
         assert beklenen in ilan, beklenen
+    assert "Coğrafya Zümre Başkanı" not in ilan  # ders başına imza kalktı
+    assert "23 Kasım 2026" not in ilan  # eski uzun tarih biçimi kalktı
     # KVKK: ilan nüshasında öğrenci adı da okul numarası da YOK.
     assert "SOYAD9A" not in ilan and "Okul No" not in ilan and " 101 " not in ilan
 

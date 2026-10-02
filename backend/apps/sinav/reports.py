@@ -879,16 +879,19 @@ def build_validation_context(
     anahtar sessizce "yanlış" sayılırdı.
     """
     params = {"shuffled": True, **params}
+    # Ölçüler TEK ondalıkla basılır (01.10.2026): belgeyi okul müdürü imzalar;
+    # "1,2345" puan ve "2,0 / 2,24" gibi karışık hane sayısı okunmuyordu. Ham
+    # değerler motorda ve doğrulayıcıda değişmez — yalnız evrak yuvarlar.
     return {
         "is_valid": is_valid,
         "hard_violations": hard_violations,
         "violation_count": len(hard_violations),
         "first_ring_pairs": first_ring_pairs,
         "min_distances": [
-            {"group_label": group_labels.get(key, key), "distance": dist}
+            {"group_label": group_labels.get(key, key), "distance": round(dist, 1)}
             for key, dist in sorted(min_distances.items())
         ],
-        "proximity_score": round(proximity_score, 4),
+        "proximity_score": round(proximity_score, 1),
         "cross_section_pairs": cross_section_pairs,
         "occupancy": list(occupancy or []),
         "params": params,

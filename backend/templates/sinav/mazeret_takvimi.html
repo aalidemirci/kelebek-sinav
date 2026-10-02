@@ -2,14 +2,42 @@
 {% comment %}Mazeret sınav takvimi — İLAN nüshası (20.09.2026, kullanıcı kararı): öğrenci ADI ve
 NUMARASI YOKTUR; panoya ya da siteye asılabilir. Yalnız tarih, saat, sınav ve öğrenci
 sayısı basılır. Öğrenci listeli nüsha ayrı şablondur (mazeret_takvimi_liste.html).
-documents/base.html anteti + .sig-grid imza deseni; text-transform YOK (WeasyPrint TR
-"i" tuzağı); onaysız takvimde TASLAK filigranı. Bağlam: services_makeup_plan._pdf_context.{% endcomment %}
+documents/base.html anteti; text-transform YOK (WeasyPrint TR "i" tuzağı); onaysız
+takvimde TASLAK filigranı. Bağlam: services_makeup_plan._pdf_context.
+
+01.10.2026 — SINAV TAKVİMİYLE AYNI DİL: Tarih (gg.aa.yyyy) | Gün | Ders saati; tarih ve
+gün, günün satırlarını BİRLEŞTİREN hücrededir, her gün kendi <tbody>'sidir ve sayfa
+sınırında BÖLÜNMEZ (devam sayfasında tarihsiz satır olamaz). "2. Ders · 09:20" tek
+satırdır (eskiden dar sütunda ikiye kırılıyordu). İmzalar ortak şerittir
+(print/_imza_seridi.html): okul zümre başkanları kurulundaki zümreler + düzenleyen,
+UYGUNDUR sağda — eskiden her ders için bir "… Zümre Başkanı" basılıyordu.
+`table-layout: fixed` + genişlik verildiği için kutu modeli YALNIZ bu tabloda
+border-box'tır (CLAUDE.md §2 content-box tuzağı).{% endcomment %}
 {% block extra_style %}
 <style>
-  /* documents/base.html .doc-table için satır bölünmesini YASAKLAMAZ (CLAUDE.md §2). */
-  .doc-table tr { break-inside: avoid; page-break-inside: avoid; }
-  .doc-table td.num { text-align: center; white-space: nowrap; }
-  .ust-makam { font-size: 7.5pt; color: var(--pr-secondary); }
+  .mz { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 6pt 0 4pt;
+        font-size: 9pt; line-height: 1.2; border: var(--pr-border-outer) solid var(--pr-ink); }
+  .mz, .mz th, .mz td { box-sizing: border-box; }
+  .mz th { background: var(--pr-bar); color: var(--pr-bar-text); font-weight: bold;
+           font-size: 8.5pt; padding: 4pt 5pt; border: var(--pr-border) solid var(--pr-bar);
+           text-align: left; vertical-align: middle; }
+  .mz th.c-date { width: 7.5em; }
+  .mz th.c-day { width: 6.3em; }
+  .mz th.c-per { width: 8.8em; }
+  .mz th.c-num { width: 10%; text-align: center; }
+  .mz th.c-src { width: 13%; text-align: center; }
+  .mz td { border: var(--pr-border) solid var(--pr-line); padding: 3.5pt 5pt;
+           vertical-align: middle; }
+  .mz td.date { font-weight: bold; color: var(--pr-ink); white-space: nowrap; }
+  .mz td.day, .mz td.per { white-space: nowrap; }
+  .mz td.per .time { color: var(--pr-secondary); }
+  .mz td.num { text-align: center; white-space: nowrap; }
+  .mz td.empty { text-align: center; color: var(--pr-muted); font-style: italic; }
+  /* Gün grubu: üstte koyu ayraç; grup ve satır sayfa sınırında BÖLÜNMEZ. */
+  .mz tbody { break-inside: avoid; page-break-inside: avoid; }
+  .mz tr { break-inside: avoid; page-break-inside: avoid; }
+  .mz tr.first td { border-top: 0.9pt solid var(--pr-secondary); }
+  .ust-makam { display: block; font-size: 7.5pt; color: var(--pr-secondary); }
   .notes { margin-top: 10pt; font-size: 8.4pt; line-height: 1.4; color: var(--pr-label);
            break-inside: avoid; page-break-inside: avoid; }
   .notes ol { margin: 2pt 0 0 14pt; padding: 0; }
@@ -28,29 +56,37 @@ documents/base.html anteti + .sig-grid imza deseni; text-transform YOK (WeasyPri
   <div class="doc-title" style="margin-top: 0;">{{ plan_title }}</div>
   <div class="doc-subtitle">Bu takvimde yalnız mazeret sınavları yer alır.</div>
 
-  <table class="doc-table">
+  <table class="mz">
     <thead>
       <tr>
-        <th style="width: 24%;">Tarih</th>
-        <th style="width: 17%;">Ders saati</th>
-        <th style="width: 35%;">Sınav</th>
-        <th style="width: 11%; text-align: center;">Öğrenci sayısı</th>
-        <th style="width: 13%; text-align: center;">Asıl sınav tarihi</th>
+        <th class="c-date">Tarih</th>
+        <th class="c-day">Gün</th>
+        <th class="c-per">Ders saati</th>
+        <th>Sınav</th>
+        <th class="c-num">Öğrenci sayısı</th>
+        <th class="c-src">Asıl sınav tarihi</th>
       </tr>
     </thead>
-    <tbody>
-      {% for row in day_rows %}
-        <tr>
-          <td>{% if row.show_date %}<strong>{{ row.date_label }}</strong>{% endif %}</td>
-          <td>{{ row.period_label }}</td>
-          <td>{{ row.course_label }}{% if row.external %}<br><span class="ust-makam">Ülke / il / ilçe geneli sınav</span>{% endif %}</td>
-          <td class="num">{{ row.student_count }}</td>
-          <td class="num">{{ row.source_date }}</td>
-        </tr>
-      {% empty %}
-        <tr><td colspan="5" style="text-align: center;">Henüz mazeret sınavı yerleştirilmedi.</td></tr>
-      {% endfor %}
-    </tbody>
+    {% for gun in day_groups %}
+      <tbody>
+        {% for row in gun.rows %}
+          <tr{% if forloop.first %} class="first"{% endif %}>
+            {% if forloop.first %}
+              <td class="date" rowspan="{{ gun.rows|length }}">{{ gun.date }}</td>
+              <td class="day" rowspan="{{ gun.rows|length }}">{{ gun.weekday }}</td>
+            {% endif %}
+            <td class="per">{{ row.period_name }} <span class="time">· {{ row.time }}</span></td>
+            <td>{{ row.course_label }}{% if row.external %}<span class="ust-makam">Ülke / il / ilçe geneli sınav</span>{% endif %}</td>
+            <td class="num">{{ row.student_count }}</td>
+            <td class="num">{{ row.source_date }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    {% empty %}
+      <tbody>
+        <tr><td class="empty" colspan="6">Henüz mazeret sınavı yerleştirilmedi.</td></tr>
+      </tbody>
+    {% endfor %}
   </table>
 
   <div class="notes">
@@ -66,38 +102,7 @@ documents/base.html anteti + .sig-grid imza deseni; text-transform YOK (WeasyPri
     </ol>
   </div>
 
-  <table class="sig-grid">
-    {% if chairs %}
-    <tr>
-      {% for chair in chairs %}
-        <td>
-          <div class="space"></div>
-          <div class="line"></div>
-          <div class="name">{{ chair.name|default:"…………………" }}</div>
-          <div class="role">{{ chair.role }}</div>
-        </td>
-        {% if forloop.counter|divisibleby:3 and not forloop.last %}</tr><tr>{% endif %}
-      {% endfor %}
-    </tr>
-    {% endif %}
-    <tr>
-      <td>
-        <div class="space"></div>
-        <div class="line"></div>
-        <div class="name">…………………</div>
-        <div class="role">Düzenleyen — Müdür Yardımcısı</div>
-      </td>
-      <td></td>
-      <td>
-        <div style="font-size: 9.5pt; color: var(--pr-label);">UYGUNDUR</div>
-        <div style="font-size: 9pt;">{% if approved_on %}{{ approved_on }}{% else %}…… / …… / 20……{% endif %}</div>
-        <div class="space"></div>
-        <div class="line"></div>
-        <div class="name">{{ principal_name|default:"…………………" }}</div>
-        <div class="role">Okul Müdürü</div>
-      </td>
-    </tr>
-  </table>
+  {% include "print/_imza_seridi.html" with sign_rows=sign_rows principal_name=principal_name approved_on=approved_on approve_width=approve_width only %}
 
   <div class="dayanak">
     <b>DAYANAK:</b> MEB Ortaöğretim Kurumları Yönetmeliği md. 45/1-g, 48/1 · MEB Yazılı ve

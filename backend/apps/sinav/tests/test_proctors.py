@@ -231,6 +231,14 @@ def test_r6_uretimi_ve_tr_duman() -> None:
         (page.extract_text() or "") for page in PdfReader(io.BytesIO(rf.content)).pages
     )
     assert "TEBL" in r6_text and "Müdür Yardımcısı" in r6_text and "sınav süresi" in r6_text
+    # 01.10.2026: görevlendirme resmî yazışmadır — T.C. / kurum / birim anteti; onay
+    # başlıkları harf aralıksız (aranabilir) ve ortak imza bileşeninden. Müdür adı
+    # yapılandırmada yoksa altında "Ad Soyad / İmza / Mühür" basılır.
+    duz = " ".join(r6_text.split())
+    assert "T.C." in duz and "KAYMAKAMLIĞI" in duz and "Anadolu Lisesi Müdürlüğü" in duz
+    assert "TEBLİĞ EDEN" in duz and "UYGUNDUR" in duz
+    # pypdf alt alta iki bloğu boşluksuz birleştirebilir ("Okul MüdürüAd …").
+    assert "Okul Müdürü" in duz and "Ad Soyad / İmza / Mühür" in duz
     text = "\n".join(p.extract_text() or "" for p in PdfReader(io.BytesIO(rf.content)).pages)
     assert "Şükrü ĞÜVENÇ" in text and "Yedek İĞNECİ" in text
     assert "Yedek" in text  # rol etiketi; yedek salonsuz satırda

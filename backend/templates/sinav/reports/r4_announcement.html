@@ -45,6 +45,11 @@ fazlası başlık yinelenerek akar (base.html taşma disiplini).{% endcomment %}
   .ann-sign { width: 100%; border-collapse: collapse; margin-top: 7pt; font-size: 8pt;
               color: var(--pr-secondary); break-inside: avoid; page-break-inside: avoid; }
   .ann-sign td { padding: 0; vertical-align: bottom; }
+  /* Dayanak öteki evraktaki .dayanak puntosunda (6,8 pt; 01.10.2026): 8 pt'de
+     dar hücrede sarıyor, "md. 5." tek başına alt satıra düşüyordu. Satır
+     KISALDI — sayfa bütçesi (_ANN_FIXED_PX) yalnız güvenli yönde değişir. */
+  .ann-sign .basis { font-size: 6.8pt; color: var(--pr-muted); }
+  .ann-sign .basis b { color: var(--pr-secondary); }
   .ann-sign .who { text-align: right; white-space: nowrap; color: var(--pr-label); }
   .ann-sign .blank { display: inline-block; min-width: 90pt;
                      border-bottom: 0.7pt solid var(--pr-ink); }
@@ -114,7 +119,9 @@ fazlası başlık yinelenerek akar (base.html taşma disiplini).{% endcomment %}
       okul müdürlüğüne yazılı olarak bildirilir.</div>
   </div>
   {% comment %}Panoya asılan duyuru imzasız çıkıyordu. Tek satırlık düzenleyen alanı;
-  yüksekliği `reports._ANN_FIXED_PX` bütçesine dâhildir.{% endcomment %}
+  yüksekliği `reports._ANN_FIXED_PX` bütçesine dâhildir. Ortak imza bileşeninin
+  (print/_imza.html) BİLİNÇLİ istisnasıdır: 40 öğrencilik liste tek yaprağa
+  sığsın diye imza alanı tek satırdır.{% endcomment %}
   <table class="ann-sign"><tr>
     <td class="basis"><b>DAYANAK:</b> MEB Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5.</td>
     <td class="who">…… / …… / 20…… &nbsp;·&nbsp; <b>Müdür Yardımcısı</b> — İmza: <span class="blank"></span></td>

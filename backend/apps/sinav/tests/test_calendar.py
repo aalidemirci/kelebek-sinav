@@ -4,10 +4,11 @@ Kapı (tasarım §12 F6): PENCERE HESABI senaryoları (ayın son Pazartesisi + 1
 gün; dönem sınırına kırpma; tur 3 = son iki hafta) + ÖĞRENCİ-BAZLI GÜNLÜK
 LİMİT senaryoları (3. sınav = uyarı, ≥4 = sert hata; kayıt verisi olmayan
 ders seviyenin tamamı — konservatif düşüş, risk #4). Ek: durum makinesi +
-damgalar (B12/risk #10), slot→oturum, havuz doldurma, A4 YATAY PDF + TASLAK
+damgalar (B12/risk #10), slot→oturum, havuz doldurma, tek A4 PDF + TASLAK
 filigranı + TR duman. Ek (30.08.2026): hazırlayan makam ayrımı (üst makam
 sınav gününe okul sınavı = uyarı), düzenlenebilir dipnot ve imza bloğunun
-seçilen zümrelerden üretimi (B7 revizyonu).
+seçilen zümrelerden üretimi (B7 revizyonu). Ek (01.10.2026): tek A4 düzeni — tipik okulun
+takvimi tek sayfaya sığar, sığmayan takvim gün bölünmeden ikinci sayfaya akar.
 """
 
 from __future__ import annotations
@@ -50,6 +51,11 @@ from apps.sinav.tests.oturum_yardim import aktif_yil, ders, donem, salon, sube
 pytestmark = pytest.mark.django_db
 
 TURKCE_DUMAN = "ĞÜŞİÖÇ ığüşiöç"
+
+
+def _duz(metin: str) -> str:
+    """PDF metnini tek boşluklu düz metne indirger (sarılan satır karşılaştırmayı bozmasın)."""
+    return " ".join(metin.split())
 
 
 def _guz(start: date = date(2026, 9, 8), end: date = date(2027, 1, 15)) -> SimpleNamespace:
@@ -454,7 +460,7 @@ def test_uzun_takvim_adi_kirpilir() -> None:
 
 
 # ===========================================================================
-# Izgara + PDF (A4 YATAY, TASLAK filigranı, TR duman)
+# Izgara + PDF (tek A4 sığdırma, TASLAK filigranı, TR duman)
 # ===========================================================================
 
 
@@ -494,9 +500,12 @@ def test_takvim_pdf_yatay_taslak_filigrani_ve_tr_duman() -> None:
     assert taslak_pdf.startswith(b"%PDF")
     reader = PdfReader(io.BytesIO(taslak_pdf))
     page = reader.pages[0]
-    # A4 YATAY: genişlik > yükseklik (~842×595 pt).
+    # Küçük takvim ilk (rahat, YATAY) düzene sığar: genişlik > yükseklik (~842×595 pt).
     assert float(page.mediabox.width) > float(page.mediabox.height)
-    text = "\n".join(p.extract_text() or "" for p in reader.pages)
+    assert len(reader.pages) == 1
+    # İmza şeridinde görev satırı dar hücrede SARAR — karşılaştırma satır
+    # sonlarından bağımsız yapılır (test_reports emsali).
+    text = _duz("\n".join(p.extract_text() or "" for p in reader.pages))
     assert "TASLAK" in text  # onaysız PDF filigranlı
     eksik = [h for h in TURKCE_DUMAN if h != " " and h not in text]
     assert not eksik, f"Takvim PDF'inde Türkçe glif kaybı: {eksik}"
@@ -504,7 +513,9 @@ def test_takvim_pdf_yatay_taslak_filigrani_ve_tr_duman() -> None:
     # i→İ), birim satırı "<Okul Adı> Müdürlüğü" tek satır (18.09.2026).
     assert "BEŞİKTAŞ KAYMAKAMLIĞI" in text
     assert "Anadolu Lisesi Müdürlüğü" in text
-    assert "Zümre Başkanı" in text  # boş imza çizgileri (B7)
+    # Zümre kataloğu boş: ders başına boş imza ARTIK basılmaz (01.10.2026 kararı) —
+    # yalnız düzenleyen ve okul müdürü imzalar.
+    assert "Zümre Başkanı" not in text
     assert "Okul Zümre Başkanı" not in text  # mevzuatta olmayan, hiç dolmayan slot kalktı
     assert "Düzenleyen — Müdür Yardımcısı" in text
     assert "· 08:30" in text  # ders saatinin başlangıcı satır başlığında
@@ -666,36 +677,75 @@ def test_dipnot_varsayilandan_kopyalanir_ve_duzenlenebilir() -> None:
 
 
 def test_imza_blogu_secilen_zumrelerden_basilir() -> None:
-    """Zümre seçilirse başkan adları basılır; seçim yoksa B7 dalı (derslerden)."""
+    """Seçilen zümreler basılır; seçim yoksa KURULDAKİ zümrelerin tamamı (01.10.2026).
+
+    Kullanıcı kararı ((a) seçeneği): B7'nin "modülsüz" yedek dalı — takvimdeki her
+    dersten boş imza — kalktı; tipik okulda 26 imza yeri basıyor ("Psikoloji Zümre
+    Başkanı" gibi gerçekte olmayan unvanlarla) ve takvimi tek A4'e sığdırmıyordu.
+    Kurul dışına alınan zümre ("Kurulda" işaretsiz) yedek listeye girmez; katalog
+    boşsa zümre imzası hiç basılmaz.
+    """
     SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, principal_name="Örnek MÜDÜR")
     calendar = _havuzlu_takvim(course_count=1)
 
     def _pdf_metni() -> str:
         reader = PdfReader(io.BytesIO(takvim.render_calendar_pdf(calendar)))
-        return "\n".join(p.extract_text() or "" for p in reader.pages)
+        return _duz("\n".join(p.extract_text() or "" for p in reader.pages))
 
-    # Seçim yokken yedek dal: takvimdeki dersten imza çizgisi.
-    assert "Ders 1 Zümre Başkanı" in _pdf_metni()
+    # Katalog boş + seçim yok: dersten imza ÜRETİLMEZ; düzenleyen ve müdür kalır.
+    bos = _pdf_metni()
+    assert "Zümre Başkanı" not in bos
+    assert "Düzenleyen — Müdür Yardımcısı" in bos and "Örnek MÜDÜR" in bos
 
     baskan = Personnel.objects.create(first_name="Ayşe", last_name="ÇELİK", branch="Coğrafya")
     sosyal = SubjectDepartment.objects.create(name="Sosyal Bilimler", head=baskan)
     SubjectDepartment.objects.create(name="Çevre Bilimleri")
-    calendar.signatory_departments.set(
-        SubjectDepartment.objects.filter(name__in=["Sosyal Bilimler", "Çevre Bilimleri"])
-    )
+    SubjectDepartment.objects.create(name="Rehberlik", is_board_member=False)
 
-    imzalar = takvim._calendar_signatures(calendar)
-    # Türk alfabesi sıralaması: 'Ç' < 'S' (kod noktası sırasında tersi olurdu).
-    assert [c["role"] for c in imzalar["chairs"]] == [
+    # Seçim yok: kuruldaki zümrelerin TAMAMI, Türk alfabesi sırasıyla ('Ç' < 'S').
+    yedek = takvim._calendar_signatures(calendar)
+    assert [c["role"] for c in yedek["chairs"]] == [
         "Çevre Bilimleri Zümre Başkanı",
         "Sosyal Bilimler Zümre Başkanı",
     ]
-    assert imzalar["chairs"][1]["name"] == "Ayşe ÇELİK"
-
+    assert yedek["chairs"][1]["name"] == "Ayşe ÇELİK"
     metin = _pdf_metni()
     assert "Sosyal Bilimler Zümre Başkanı" in metin and "Ayşe ÇELİK" in metin
-    assert "Ders 1 Zümre Başkanı" not in metin  # seçim yedek dalı KAPATIR
-    assert sosyal.head is not None
+    assert "Rehberlik" not in metin  # kurul dışı zümre yedek listeye girmez
+    assert "Ders 1 Zümre Başkanı" not in metin
+
+    # Seçim varsa YALNIZ seçilenler.
+    calendar.signatory_departments.set([sosyal])
+    secili = takvim._calendar_signatures(calendar)
+    assert secili["chairs"] == [{"name": "Ayşe ÇELİK", "role": "Sosyal Bilimler Zümre Başkanı"}]
+    assert "Çevre Bilimleri" not in _pdf_metni()
+
+
+def test_aralik_disindaki_sinav_pdften_dusmez_ve_uyari_kimlik_tasimaz() -> None:
+    """Takvim aralığı daraltılınca dışarıda kalan sınav resmî evraktan SESSİZCE düşüyordu.
+
+    01.10.2026: PDF o sınavı kendi tarihiyle basar; doğrulama uyarısı da iç kimlik
+    ("Girdi #12") yerine ders ve düzeyi söyler (docs/sozluk.md).
+    """
+    SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, principal_name="Örnek MÜDÜR")
+    calendar = _havuzlu_takvim(course_count=1)
+    entry = ExamCalendarEntry.objects.filter(calendar=calendar).select_related("course").get()
+    takvim.place_entry(entry, on_date=date(2026, 11, 6), period_no=2)
+    takvim.update_exam_calendar(calendar, end_date=date(2026, 11, 3))  # sınav dışarıda kaldı
+
+    uyarilar = takvim.calendar_validation(calendar)["warnings"]
+    disari = [u for u in uyarilar if "takvim aralığı dışında" in u]
+    assert disari, uyarilar
+    assert "#" not in disari[0]
+    assert entry.course.name in disari[0] and "06.11.2026" in disari[0]
+
+    metin = _duz(
+        "\n".join(
+            p.extract_text() or ""
+            for p in PdfReader(io.BytesIO(takvim.render_calendar_pdf(calendar))).pages
+        )
+    )
+    assert "06.11.2026" in metin and entry.course.name in metin
 
 
 def test_pdf_makam_etiketi_ve_dipnotu_basiyor() -> None:
@@ -710,7 +760,7 @@ def test_pdf_makam_etiketi_ve_dipnotu_basiyor() -> None:
     takvim.update_exam_calendar(calendar, footnote_text="Mazeret sınavları izleyen hafta yapılır.")
 
     reader = PdfReader(io.BytesIO(takvim.render_calendar_pdf(calendar)))
-    metin = "\n".join(p.extract_text() or "" for p in reader.pages)
+    metin = _duz("\n".join(p.extract_text() or "" for p in reader.pages))
     assert "İL MEM SINAVI" in metin
     assert "DİPNOT" in metin and "Mazeret sınavları izleyen hafta yapılır." in metin
     assert "2026-2027 EĞİTİM VE ÖĞRETİM YILI" in metin  # dönem üzerinden ders yılı
@@ -784,34 +834,35 @@ def test_ayrilan_zumre_baskani_evrakta_basilmaz() -> None:
     imzalar = takvim._calendar_signatures(calendar)
     assert imzalar["chairs"] == [{"name": "", "role": "Sosyal Bilimler Zümre Başkanı"}]
     reader = PdfReader(io.BytesIO(takvim.render_calendar_pdf(calendar)))
-    metin = "\n".join(p.extract_text() or "" for p in reader.pages)
+    metin = _duz("\n".join(p.extract_text() or "" for p in reader.pages))
     assert "Sosyal Bilimler Zümre Başkanı" in metin and "Ayşe ÇELİK" not in metin
 
 
-def test_cok_sayfali_takvim_ve_satir_bolunme_korumasi() -> None:
-    """Çok sayfalı takvim bütün basılır + `tr { break-inside: avoid }` yerinde durur.
+def test_cok_sayfali_takvim_gun_bolunmeden_akar() -> None:
+    """Hiçbir düzene sığmayan takvim ikinci sayfaya GÜN BÖLÜNMEDEN akar.
 
-    Hücre içeriği makam etiketi için BLOK kutu oldu; blok kutular satır içinde
-    sayfa kırılma noktası yaratır ve `documents/base.html`in `.doc-table`
-    kuralında bu koruma YOKTUR (kardeş şablon `sinav/reports/base.html`de var).
-    30.08.2026'da ÖLÇÜLDÜ: kural kaldırılınca 12 günlük/4 seviyeli bir takvimde
-    ikinci sayfa, tarih sütunu boş kalmış bir ders satırıyla başlıyordu — sınav
-    resmî evrakta tarihsiz görünüyordu.
+    Tek A4 düzeninde (01.10.2026) tarih ve gün, günün ders saatlerini
+    BİRLEŞTİREN hücrededir (rowspan) ve her gün kendi <tbody>'sidir. Grup
+    sayfa sınırında bölünürse devam sayfasındaki ders saatleri tarih hücresi
+    olmadan basılır — sınav resmî evrakta TARİHSİZ görünür (30.08.2026'da eski
+    tek satırlık düzende ölçülen kusurun aynısı). `documents/base.html`in
+    `.doc-table` kuralında bu koruma yoktur; kural bu yüzden şablondadır.
 
-    Bölünmenin hangi satıra denk geleceği sayfa aritmetiğine bağlı olduğundan
-    davranış testi kırılgandır; koruma bu yüzden ŞABLON TARAMASIYLA sabitlenir
-    (`test_reports.test_sablonlarda_text_transform_yasak` emsali). Ek olarak
-    çok sayfalı belgenin bütünlüğü (her ders TAM BİR kez) burada denetlenir.
+    Bölünmenin hangi güne denk geleceği sayfa aritmetiğine bağlı olduğundan
+    koruma ŞABLON TARAMASIYLA da sabitlenir (`test_reports` emsali). Davranış
+    tarafı: her sınav TAM BİR kez basılır ve devam sayfasında ilk sınavdan önce
+    bir tarih vardır.
     """
     from pathlib import Path
 
-    sablon = Path(__file__).resolve().parents[3] / "templates/sinav/calendar_pdf.html"
-    assert re.search(
-        r"\.doc-table\s+tr\s*\{[^}]*break-inside:\s*avoid", sablon.read_text("utf-8")
-    ), (
-        "calendar_pdf.html'de `.doc-table tr { break-inside: avoid }` kuralı yok — "
-        "uzun takvimde satır sayfa sınırında bölünür."
+    sablon = (Path(__file__).resolve().parents[3] / "templates/sinav/calendar_pdf.html").read_text(
+        "utf-8"
     )
+    for secici in (r"\.cal\s+tbody", r"\.cal\s+tr"):
+        assert re.search(secici + r"\s*\{[^}]*break-inside:\s*avoid", sablon), (
+            f"calendar_pdf.html'de `{secici} {{ break-inside: avoid }}` kuralı yok — "
+            "uzun takvimde gün grubu sayfa sınırında bölünür."
+        )
 
     SchoolConfig.objects.create(
         pk=SchoolConfig.SINGLETON_PK, school_name="Örnek Lisesi", principal_name="Örnek MÜDÜR"
@@ -819,51 +870,236 @@ def test_cok_sayfali_takvim_ve_satir_bolunme_korumasi() -> None:
     calendar = _havuzlu_takvim(course_count=0)
     for lvl in (10, 11, 12):
         sube(lvl, "A", students=1, start_no=lvl * 100)
-    # Her seviyede ikinci şube: aynı hücrenin iki sınavı AYRIK kapsamlı olmalı
-    # (kesişen kapsam aynı saate konamaz), hücre yine iki çip taşır.
-    kapsamlar = {
-        lvl: [
-            ClassSection.objects.get(class_level=lvl, class_section="A").pk,
-            sube(lvl, "B", students=1, start_no=lvl * 100 + 50).pk,
-        ]
-        for lvl in (9, 10, 11, 12)
-    }
-    adlar: list[str] = []
+    # Uzun ders adı dar sütunda üç satıra sarar — satırlar yükselir, tablo en
+    # sıkı düzende de tek sayfayı aşar. Benzersiz belirteç TİRESİZDİR: tire
+    # satır sonu fırsatıdır, sarılırsa metin aramasını bölerdi.
+    belirtecler: list[str] = []
     for i in range(12):
         gun = date(2026, 10, 26) + timedelta(days=i)
         for lvl in (9, 10, 11, 12):
-            for k in (1, 2):  # aynı hücrede iki sınav → hücre yükselir
-                ad = f"Deneme {i}-{lvl}-{k}"
-                adlar.append(ad)
-                course = ders(ad, levels=[lvl])
+            for saat in (1, 2):
+                belirtec = f"Deneme{i:02d}{lvl:02d}{saat}"
+                belirtecler.append(belirtec)
+                course = ders(
+                    f"{belirtec} Uzun Adlı Sınav Dersi Sütunda Sarsın Diye Yazıldı",
+                    levels=[lvl],
+                )
                 entry = takvim.add_calendar_entry(
                     calendar=calendar,
                     course_id=course.pk,
                     level=lvl,
-                    authority=ExamAuthority.MINISTRY if k == 1 else ExamAuthority.SCHOOL,
-                    participant_type="SECTIONS",
-                    section_ids=[kapsamlar[lvl][k - 1]],
+                    authority=ExamAuthority.MINISTRY if saat == 1 else ExamAuthority.SCHOOL,
                 )
-                takvim.place_entry(entry, on_date=gun, period_no=1)
+                takvim.place_entry(entry, on_date=gun, period_no=saat)
     # İmza bloğu seçilen zümreden gelsin — yedek dal her ders için imza satırı basar.
     calendar.signatory_departments.set([SubjectDepartment.objects.create(name="Sosyal Bilimler")])
 
-    reader = PdfReader(io.BytesIO(takvim.render_calendar_pdf(calendar)))
-    assert len(reader.pages) >= 2, "senaryo çok sayfalı olmalı, aksi hâlde test bir şey ölçmez"
-    metin = "\n".join(p.extract_text() or "" for p in reader.pages)
-    eksik = [ad for ad in adlar if metin.count(ad) != 1]
-    assert not eksik, f"Çok sayfalı takvimde bir kez basılmayan dersler: {eksik[:5]}"
-    # Devam sayfaları tablo başlığından hemen sonra TARİHSİZ ders satırıyla başlamamalı.
+    sonuc = takvim.render_calendar_pdf_fitted(calendar)
+    reader = PdfReader(io.BytesIO(sonuc.pdf))
+    assert (
+        sonuc.pages == len(reader.pages) >= 2
+    ), "senaryo hiçbir düzene sığmamalı, aksi hâlde test bir şey ölçmez"
+    metin = _duz("\n".join(p.extract_text() or "" for p in reader.pages))
+    eksik = [b for b in belirtecler if metin.count(b) != 1]
+    assert not eksik, f"Çok sayfalı takvimde bir kez basılmayan sınavlar: {eksik[:5]}"
+    # Devam sayfalarında ilk sınavdan ÖNCE bir tarih basılmış olmalı (gün grubu
+    # bölünmedi; bölünseydi sayfa tarihsiz ders saati satırıyla başlardı).
+    tarih = re.compile(r"\d{2}\.\d{2}\.\d{4}")
     for sayfa_no, page in enumerate(reader.pages[1:], start=2):
-        satirlar = [ln for ln in (page.extract_text() or "").splitlines() if ln.strip()]
-        basliklar = [i for i, ln in enumerate(satirlar) if ln.startswith("Tarih / Ders Saati")]
-        if not basliklar:
-            continue  # tablo bitmiş (açıklama/dipnot/imza sayfası)
-        ilk_govde = satirlar[basliklar[0] + 1]
-        assert "Deneme" not in ilk_govde, (
-            f"Sayfa {sayfa_no} tablo başlığından sonra tarihsiz ders satırıyla başlıyor "
-            f"(satır bölünmüş): {ilk_govde!r}"
+        sayfa = _duz(page.extract_text() or "")
+        ilk_sinav = sayfa.find("Deneme")
+        if ilk_sinav < 0:
+            continue  # tablo bitmiş (açıklama/imza sayfası)
+        ilk_tarih = tarih.search(sayfa)
+        assert ilk_tarih is not None and ilk_tarih.start() < ilk_sinav, (
+            f"Sayfa {sayfa_no} tarihsiz bir ders saati satırıyla başlıyor (gün bölünmüş): "
+            f"{sayfa[:160]!r}"
         )
+
+
+#: Tipik bir Anadolu Lisesinin 1. dönem 1. sınavı (gerçek çizelge adlarıyla).
+#: Düzey başına 11-15 yazılı sınav; 11-12. sınıfta seçmeliler. Sayfa bütçesi
+#: testi GERÇEK uzunlukta adlarla koşar (`test_reports._GERCEK_DERSLER` emsali):
+#: kısa fixture adları sarmayı gizler ve tek sayfa güvencesini boşa çıkarır.
+_TIPIK_SINAVLAR: dict[int, tuple[str, ...]] = {
+    9: (
+        "Türk Dili ve Edebiyatı",
+        "Tarih",
+        "Sağlık Bilgisi ve Trafik Kültürü",
+        "Matematik",
+        "Kimya",
+        "Fizik",
+        "Din Kültürü ve Ahlak Bilgisi",
+        "Coğrafya",
+        "Biyoloji",
+        "Birinci Yabancı Dil",
+        "Bilişim Teknolojileri ve Yazılım",
+        "Astronomi ve Uzay Bilimleri",
+    ),
+    10: (
+        "Tarih",
+        "Matematik",
+        "Kimya",
+        "Fizik",
+        "Felsefe",
+        "Din Kültürü ve Ahlak Bilgisi",
+        "Coğrafya",
+        "Biyoloji",
+        "Türk Dili ve Edebiyatı",
+        "Birinci Yabancı Dil",
+        "Seçmeli İkinci Yabancı Dil",
+    ),
+    11: (
+        "Seçmeli Fizik",
+        "Seçmeli Coğrafya",
+        "Seçmeli Biyoloji",
+        "Psikoloji",
+        "Mantık",
+        "Türk Dili ve Edebiyatı",
+        "Tarih",
+        "Felsefe",
+        "Din Kültürü ve Ahlak Bilgisi",
+        "Birinci Yabancı Dil",
+        "Seçmeli Türk Dili ve Edebiyatı",
+        "Seçmeli Tarih",
+        "Seçmeli Matematik",
+        "Seçmeli Kimya",
+        "Seçmeli İkinci Yabancı Dil",
+    ),
+    12: (
+        "Seçmeli İkinci Yabancı Dil",
+        "Seçmeli Fizik",
+        "Seçmeli Coğrafya",
+        "Seçmeli Biyoloji",
+        "Psikoloji",
+        "Çağdaş Türk ve Dünya Tarihi",
+        "Türk Dili ve Edebiyatı",
+        "T.C. İnkılap Tarihi ve Atatürkçülük",
+        "Din Kültürü ve Ahlak Bilgisi",
+        "Birinci Yabancı Dil",
+        "Sosyoloji",
+        "Seçmeli Türk Dili ve Edebiyatı",
+        "Seçmeli Tarih",
+        "Seçmeli Matematik",
+        "Seçmeli Kimya",
+    ),
+}
+
+#: On bir zümre — gerçek uzunlukta ad ve görev (imza şeridi iki satıra sarar).
+_TIPIK_ZUMRELER: tuple[tuple[str, str, str], ...] = (
+    ("Türk Dili ve Edebiyatı", "Ayşe", "KILIÇARSLAN"),
+    ("Matematik", "Mehmet Emin", "ÇAĞLAYAN"),
+    ("Fizik", "Zeynep", "ÖZTÜRKMEN"),
+    ("Kimya", "Burak", "ŞAHİNOĞLU"),
+    ("Biyoloji", "Elif Nur", "DEMİRCİOĞLU"),
+    ("Tarih", "Mustafa", "AKGÜNDÜZ"),
+    ("Coğrafya", "Gülşen", "YILDIRIMLI"),
+    ("Felsefe", "Kemal", "ERDOĞDU"),
+    ("Din Kültürü ve Ahlak Bilgisi", "Abdülkadir", "BÜYÜKKAYA"),
+    ("Yabancı Diller", "Özge", "KARAOĞLU"),
+    ("Bilişim Teknolojileri", "Serkan", "TUNÇBİLEK"),
+)
+
+
+def test_tipik_okulun_takvimi_tek_a4_sayfaya_sigar() -> None:
+    """Kullanıcı isteği (01.10.2026): takvim "çok yer kaplıyordu"; tek A4 hedefi.
+
+    Senaryo eski düzenin ÜÇ yatay sayfa bastığı tipik okuldur: dört düzey, iki
+    hafta, 53 yazılı sınav (on beş tablo satırı), varsayılan sekiz maddelik
+    açıklama + dipnot, on bir zümre başkanı + düzenleyen + UYGUNDUR. Dizim
+    varyantlarından biri TEK sayfaya sığmalıdır; hangisinin seçildiği burada
+    sabitlenmez (ölçüler `CalendarPdfFit`te ayarlanabilir kalsın).
+    """
+    SchoolConfig.objects.create(
+        pk=SchoolConfig.SINGLETON_PK,
+        school_name="Örnek Anadolu Lisesi",
+        district="Beşiktaş",
+        principal_name="Hüseyin KARADAĞ",
+    )
+    calendar = _havuzlu_takvim(course_count=0)
+    for lvl in (10, 11, 12):
+        sube(lvl, "A", students=1, start_no=lvl * 100)
+    # Takvim aralığının (26.10-06.11) on iş günü.
+    gunler = [date(2026, 10, 26) + timedelta(days=g) for g in (0, 1, 2, 3, 4, 7, 8, 9, 10, 11)]
+    for lvl, adlar in _TIPIK_SINAVLAR.items():
+        for sira, ad in enumerate(adlar):
+            course = ders(ad, levels=[9, 10, 11, 12])
+            entry = takvim.add_calendar_entry(
+                calendar=calendar,
+                course_id=course.pk,
+                level=lvl,
+                # 10. sınıf Türk Dili ve Edebiyatı ülke geneli sınavdır (lejant da basılır).
+                authority=ExamAuthority.MINISTRY
+                if (lvl, ad) == (10, "Türk Dili ve Edebiyatı")
+                else ExamAuthority.SCHOOL,
+            )
+            # İlk on sınav birer gün, kalanlar ilk günlerin 2. ders saatine.
+            takvim.place_entry(entry, on_date=gunler[sira % 10], period_no=1 + sira // 10)
+    zumreler = []
+    for zumre, ad, soyad in _TIPIK_ZUMRELER:
+        baskan = Personnel.objects.create(first_name=ad, last_name=soyad)
+        zumreler.append(SubjectDepartment.objects.create(name=zumre, head=baskan))
+    calendar.signatory_departments.set(zumreler)
+
+    sonuc = takvim.render_calendar_pdf_fitted(calendar)
+
+    assert sonuc.pages == 1, (
+        f"tipik okulun takvimi {sonuc.pages} sayfa — tek A4 güvencesi bozuldu "
+        f"(son denenen: {sonuc.fit.orientation} / {sonuc.fit.density})"
+    )
+    metin = _duz(PdfReader(io.BytesIO(sonuc.pdf)).pages[0].extract_text() or "")
+    assert "Mehmet Emin ÇAĞLAYAN" in metin
+    # pypdf "T"den sonra kerning boşluğu koyar ("T arihi") — T'siz sözcüklerle bakılır.
+    assert "İnkılap" in metin and "Atatürkçülük" in metin
+    assert "DİPNOT:" in metin and "UYGUNDUR" in metin
+
+
+def test_aciklama_maddeleri_numara_ve_metin_olarak_ayrilir() -> None:
+    """Numara yalnız dizgi için ayrılır (asılı girinti); boş satır düşer, metin aynen kalır."""
+    maddeler = takvim._description_items(
+        "1. Birinci madde.\n\n  2) İkinci madde metni.\nNumarasız not satırı\n10. Onuncu."
+    )
+    assert maddeler == [
+        {"no": "1.", "text": "Birinci madde."},
+        {"no": "2)", "text": "İkinci madde metni."},
+        {"no": "", "text": "Numarasız not satırı"},
+        {"no": "10.", "text": "Onuncu."},
+    ]
+    # Varsayılan metin sekiz numaralı maddedir; hiçbir madde kaybolmaz.
+    varsayilan = takvim._description_items(takvim.DEFAULT_CALENDAR_DESCRIPTION)
+    assert [m["no"] for m in varsayilan] == [f"{n}." for n in range(1, 9)]
+
+
+def test_imza_seridi_duzenleyeni_sona_koyar_ve_satirlari_tamamlar() -> None:
+    zumre = [{"name": f"Ad {i}", "role": f"Zümre {i} Zümre Başkanı"} for i in range(5)]
+    satirlar = takvim._sign_rows(zumre, "", 4)
+    assert [len(s) for s in satirlar] == [4, 4]  # 5 zümre + düzenleyen = 6 → 4 + 2 (+2 boş)
+    assert satirlar[1][1] == {"name": "", "role": "Düzenleyen — Müdür Yardımcısı"}
+    assert satirlar[1][2:] == [None, None]
+    # Zümre seçilmemiş ve takvimde ders yokken şerit yalnız düzenleyeni taşır.
+    assert takvim._sign_rows([], "", 6) == [
+        [{"name": "", "role": "Düzenleyen — Müdür Yardımcısı"}, None, None, None, None, None]
+    ]
+
+
+def test_ders_saati_sutunu_basilan_metne_gore_genisler() -> None:
+    def gun(*etiketler: tuple[str, str]) -> list[dict[str, Any]]:
+        return [
+            {
+                "period_cells": [
+                    {"period": {"name": ad}, "time_label": saat} for ad, saat in etiketler
+                ]
+            }
+        ]
+
+    dar, dar_sarar = takvim._period_column(gun(("1. Ders", "")))
+    saatli, saatli_sarar = takvim._period_column(gun(("1. Ders", "08:30"), ("10. Ders", "15:40")))
+    vardiyali, vardiyali_sarar = takvim._period_column(
+        gun(("3. Ders", "Sabah 10:10 / Öğleden sonra 15:00"))
+    )
+    assert float(dar) < float(saatli) < float(vardiyali) <= 10.5
+    assert not dar_sarar and not saatli_sarar
+    assert vardiyali_sarar  # vardiya adı tek satıra zorlanmaz, sütun sınırlı kalır
 
 
 # ===========================================================================
@@ -2330,7 +2566,7 @@ def _vardiya_takvimi(*, education_model: str = "FULL_DAY") -> tuple[ExamCalendar
 
 def _pdf_metni(calendar: ExamCalendar) -> str:
     ham = takvim.render_calendar_pdf(calendar)
-    return "\n".join(p.extract_text() or "" for p in PdfReader(io.BytesIO(ham)).pages)
+    return _duz("\n".join(p.extract_text() or "" for p in PdfReader(io.BytesIO(ham)).pages))
 
 
 def test_takvim_pdf_saatleri_secime_bagli_basar() -> None:

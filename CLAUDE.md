@@ -77,6 +77,9 @@
   paralel basım yığın bozulmasıyla (0xC0000374) düştü, sıralı basım düşmedi.
   Gömülü sunucu altı iş parçacıklıdır; kilit olmadan evrak/kitapçık/takvim PDF'i
   çakışır. Koruma testi `shared/tests/test_pdf.py` başka `write_pdf`e izin vermez.
+  Aynı kapının ikinci girişi `html_to_pdf_fit`tir (sayfaya sığdırma: varyantları
+  kilit altında sırayla dizer, sığan ilkini basar) — WeasyPrint'e üçüncü bir yol
+  açılmaz.
   Yerel çöküş Python istisnası DEĞİLDİR, `uygulama.log`a düşmez — `logs/cokme.log`
   (`faulthandler`, `desktop.logging_setup.enable_crash_log`) o anın yığınını tutar.
   Tanı düzeneği (Windows): kurulu programın `_internal` DLL'leri + yerel Python312;
@@ -104,6 +107,19 @@
   R4 duyuru +57pt). Çözüm `box-sizing: border-box`'u O TABLOYA vermek; ama o
   zaman ad sütununun içi dolgu kadar daralır — `_NAME_CELL_CHROME_PX` yatay
   dolguyu da içermek ZORUNDA, yoksa adlar sarar ve sayfa bütçesi kırılır.
+- **Evrak imzaları TEK bileşendir (01.10.2026 tasarım denetimi):** iki evrak
+  ailesi (resmî yazı: `documents/base.html` — takvim, mazeret belgeleri; sınav
+  evrakı: `sinav/reports/base.html`) imza hücresini `print/_imza.html` ile, stili
+  `print/_bilesenler.css` ile basar. Boş ad kuralı tektir: ad yoksa görev kalın,
+  altında "Ad Soyad / İmza" ("…………………" basılmaz). "UYGUNDUR" yalnız o parçanın
+  `baslik`ıdır; başlıklı ve başlıksız hücre aynı satırdaysa başlıksıza `ust=True`
+  verilir (çizgiler hizalı kalır). Takvim ve mazeret takvimi `print/_imza_seridi.html`
+  şeridini paylaşır (müdür hücresi son satırın İÇİNDEDİR — hiza bu yüzden tutar).
+  R4'ün tek satırlık imzası sayfa bütçesi gereği bilinçli istisnadır. Harf aralığı
+  1 pt ve üstü YASAK (PDF metni "U YGUNDUR" diye çıkar, aranmaz) — tek istisna
+  "TASLAK" filigranı. Koruma: `test_reports.test_imza_tek_bilesenden`,
+  `test_harf_araligi_pdf_metnini_bozmaz`. Resmî yazı ailesi altbilgide `print_stamp`
+  (yerel "gg.aa.yyyy ss:dd") verilirse sol altta düzenleme anını basar.
 - **Kroki kutu modeli:** `box-sizing: border-box` YALNIZ `.kroki` ve `.fplan`
   (fotoğraflı plan) alt ağaçlarına verilir. GLOBAL verilirse sütunlar daralır,
   metin sarar ve evrak ikinci sayfaya taşar (denendi — o gün R1 yoklama + R4
@@ -410,12 +426,26 @@
   PDF ORTAK tüketir; hücre sözlüğüne alan eklenir, anahtar biçimi değişmez.
 - Takvim imza bloğu sözleşmesi `{"chairs": [{"name", "role"}],
   "school_chair_name"}` (`_calendar_signatures` çıktısı). Kaynak takvime seçilen
-  zümrelerdir (`okul.SubjectDepartment`); seçim yoksa derslerden boş çizgi
-  üretilir (B7 revizyonu) — şablon iki anahtarı görmeye devam eder.
+  zümrelerdir (`okul.SubjectDepartment`); seçim yoksa okul zümre başkanları
+  KURULUNDAKİ ("Kurulda" işaretli) zümrelerin tamamı basılır, katalog boşsa zümre
+  imzası hiç basılmaz (01.10.2026 kullanıcı kararı — `department_chairs`; eski
+  "derslerden boş çizgi" B7 dalı gerçekte olmayan unvanlar basıyor ve takvimi tek
+  A4'e sığdırmıyordu). Mazeret sınav takvimi aynı listeyi kullanır. Şablon iki
+  anahtarı görmeye devam eder; servis şeride `sign_rows` olarak dizer.
   `school_chair_name` slotunun ETİKETİ "Düzenleyen — Müdür Yardımcısı"dır
   (18.09.2026; eski "Okul Zümre Başkanı" mevzuatta yoktu ve hiç dolmuyordu).
   Antet resmî yazışma usulündedir: kurum satırı `tr_upper`, birim satırı
   "<Okul Adı> Müdürlüğü" (`letterhead_unit`).
+- **Takvim PDF'i tek A4'e SIĞDIRILIR, yönü sabit değildir** (01.10.2026, tasarım
+  §9): `CalendarPdfFit` üç sıklık × iki yön varyantı tanımlar, `render_calendar_pdf`
+  bunları sırayla GERÇEKTEN dizer ve tek sayfaya sığan ilkini basar (hiçbiri
+  sığmazsa en az sayfalıyı). Çoklu dizim israf değildir — sığmayı tahmin etmek
+  imza şeridi, sarılan ders adı ve açıklama uzunluğu yüzünden tutmaz. Ölçü
+  değiştiren (punto, boşluk, sütun) her düzenleme sentetik okulda yeniden
+  ölçülür; güvence `test_tipik_okulun_takvimi_tek_a4_sayfaya_sigar`. Gün
+  `<tbody>`'si sayfa sınırında bölünmez (tarih/gün hücresi rowspan'dır — bölünen
+  gün devam sayfasında TARİHSİZ basılırdı). Şablonda `tr` ve `tbody` için
+  `break-inside: avoid` ŞART; test şablonu tarar.
 - **Ceza demeti:** `engine._pair_penalty` leksikografik `(birincil, ikincil)`
   döner. Birincil sert/yumuşak yakınlık cezasıdır (sert kısıt kaynağı);
   ikincil YALNIZ eşitlik bozar (kaçınılmaz komşu çiftin öğretmen masasına

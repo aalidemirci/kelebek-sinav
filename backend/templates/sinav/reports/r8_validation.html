@@ -132,17 +132,15 @@ sözleşmesi değişmedi: sayı basılır, etiketi Türkçedir.{% endcomment %}
   </ul>
   {% endif %}
 
-  <table class="signs">
-    <tr><td class="date">…… / …… / 20……</td><td class="date">…… / …… / 20……</td></tr>
-    <tr><td class="space"></td><td class="space"></td></tr>
+  {% comment %}"Sınav Komisyonu" mevzuatta tanımlı bir organ değildir; okul geneli
+  sınavın iş ve işlemleri okul müdürlüğünündür (Yönerge md. 5) — belgeyi
+  düzenleyen müdür yardımcısı, onaylayan okul müdürüdür. Onay hücresi öteki
+  belgelerdeki gibi "UYGUNDUR" başlığını taşır (01.10.2026, ortak onay bloğu);
+  başlıksız düzenleyen hücresi `ust` ile aynı yüksekliği ayırır, çizgiler hizalı.{% endcomment %}
+  <table class="imzalar">
     <tr>
-      {% comment %}"Sınav Komisyonu" mevzuatta tanımlı bir organ değildir; okul geneli
-      sınavın iş ve işlemleri okul müdürlüğünündür (Yönerge md. 5) — belgeyi
-      düzenleyen müdür yardımcısı, onaylayan okul müdürüdür.{% endcomment %}
-      <td><div class="line"></div><span class="who">Düzenleyen — Müdür Yardımcısı</span><br>
-          <span class="role">Ad Soyad / İmza</span></td>
-      <td><div class="line"></div><span class="who">Okul Müdürü</span><br>
-          <span class="role">Ad Soyad / İmza</span></td>
+      <td>{% include "print/_imza.html" with gorev="Düzenleyen — Müdür Yardımcısı" tarihli=True ust=True only %}</td>
+      <td>{% include "print/_imza.html" with ad=principal_name gorev="Okul Müdürü" baslik="UYGUNDUR" tarihli=True only %}</td>
     </tr>
   </table>
 </div>

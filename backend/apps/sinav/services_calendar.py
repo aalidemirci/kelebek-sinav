@@ -21,6 +21,7 @@ KS kesimleri:
 from __future__ import annotations
 
 import calendar as _calmod
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date, time, timedelta
@@ -2348,12 +2349,24 @@ def calendar_validation(calendar: ExamCalendar) -> dict[str, list[str]]:
     # Slot başına girdiler (aynı anda iki salonda olma + salon kapasitesi).
     per_slot: dict[tuple[date, int], list[ExamCalendarEntry]] = {}
     for e in placed:
+        # Metin idareci dilindedir: iç kimlik ("Girdi #12") yazılmaz, sınav ders ve
+        # düzeyiyle anılır (docs/sozluk.md; 01.10.2026).
+        etiket = f"{e.course.name} — {_level_display(e.level)}"
         if valid_period_nos and e.period_no not in valid_period_nos:
-            errors.append(f"Girdi #{e.pk}: ders saati listede yok.")
+            errors.append(
+                f"{etiket}: yerleştirildiği {e.period_no}. ders saati okulun ders saatleri "
+                "listesinde yok (Ayarlar → Ders saatleri)."
+            )
         if e.placed_date is not None and not (
             calendar.start_date <= e.placed_date <= calendar.end_date
         ):
-            warnings.append(f"Girdi #{e.pk}: tarih takvim aralığı dışında.")
+            # Takvim PDF'i bu sınavı yine BASAR (`_pdf_day_rows`) — resmî evrakta
+            # sessizce kaybolmasın; uyarı tarihi düzeltmeyi hatırlatır.
+            warnings.append(
+                f"{etiket}: sınav tarihi ({e.placed_date.strftime('%d.%m.%Y')}) takvim "
+                "aralığı dışında; PDF'e bu tarihle basılır — tarihi ya da takvim "
+                "aralığını düzeltin."
+            )
         if e.placed_date is not None:
             per_day.setdefault((e.level, e.placed_date), []).append(e.course_id)
             authorities_per_day.setdefault((e.level, e.placed_date), set()).add(e.authority)
@@ -2750,7 +2763,7 @@ def _tr_date(d: date) -> str:
 
 
 def _chair_name(department: Any) -> str:
-    """Zümre başkanının adı; kayıt SİLİNMİŞSE boş (evrakta noktalı çizgi).
+    """Zümre başkanının adı; kayıt SİLİNMİŞSE boş (evrakta görev + "Ad Soyad / İmza").
 
     `head` ileri-FK erişimi `_base_manager` üzerinden (ve burada `select_related`
     JOIN'iyle) çözülür — ikisi de soft-delete süzgeci UYGULAMAZ. Personel silme
@@ -2764,46 +2777,49 @@ def _chair_name(department: Any) -> str:
     return str(head.get_full_name())
 
 
+def department_chairs(departments: Iterable[Any] | None = None) -> list[dict[str, str]]:
+    """Zümreler → imza hücreleri `{"name", "role"}`, zümre adının Türk alfabesi sırasıyla.
+
+    `departments` verilmezse okul zümre başkanları KURULUNDAKİ zümrelerin tamamı
+    (Ayarlar → Zümreler, "Kurulda" işaretli) kullanılır — takvime zümre
+    seçilmemişse ve mazeret sınav takviminde (seçim alanı yok) imza listesi
+    budur. Başkanı olmayan ya da başkanı okuldan ayrılmış zümrede ad boş kalır
+    (evrakta görev kalın, altında "Ad Soyad / İmza").
+    """
+    from apps.okul.normalize import tr_sort_key
+
+    if departments is None:
+        secilen = okul_selectors.subject_departments_sorted(board_only=True)
+    else:
+        secilen = sorted(departments, key=lambda d: tr_sort_key(d.name))
+    return [{"name": _chair_name(d), "role": f"{d.name} Zümre Başkanı"} for d in secilen]
+
+
 def _calendar_signatures(calendar: ExamCalendar) -> dict[str, Any]:
-    """İmza bloğu: takvime SEÇİLEN zümreler; seçim yoksa derslerden boş çizgiler.
+    """İmza bloğu: takvime SEÇİLEN zümreler; seçim yoksa kuruldaki zümrelerin tamamı.
 
     B7 revizyonu: OYS'de zümre modülü kuruluysa gerçek başkan adları basılırdı;
     KS'de zümre yapısı Ayarlar'da tanımlanır (`okul.SubjectDepartment`) ve
-    takvim başına seçilir — seçilen zümrenin başkanı varsa adı basılır, yoksa
-    noktalı çizgi kalır. Zümre seçilmemiş (ve eski) takvimlerde OYS'nin
-    "modülsüz" dalı yedek yoldur: takvimdeki her dersten bir imza çizgisi.
+    takvim başına seçilir — seçilen zümrenin başkanı varsa adı basılır.
+
+    01.10.2026 kullanıcı kararı: seçim YOKSA OYS'nin "modülsüz" yedek dalı
+    (takvimdeki her dersten boş imza çizgisi) artık kullanılmaz. O dal tipik
+    okulda 26 imza yeri basıyordu — "Psikoloji Zümre Başkanı", "Seçmeli Fizik
+    Zümre Başkanı" gibi gerçekte olmayan unvanlarla — ve takvimi hiçbir düzende
+    tek A4'e sığdırmıyordu. Yerine okul zümre başkanları kurulundaki zümrelerin
+    tamamı basılır (`department_chairs`); zümreler öğretmen branşlarından
+    üretildiği için (20.09.2026) katalog çoğu okulda doludur. Katalog BOŞSA zümre
+    imzası basılmaz: yalnız düzenleyen müdür yardımcısı ve okul müdürü imzalar.
 
     Başkan adı ŞİFRELİ alandan çözülür → sıralama DB'de değil, zümre adına göre
     Python'da (Türk alfabesi). Sözleşme: `{"chairs": [{"name", "role"}],
     "school_chair_name": str}` — şablon bu iki anahtarı tüketir.
     """
-    from apps.okul.normalize import tr_sort_key
-
     departments = list(calendar.signatory_departments.select_related("head").all())
-    if departments:
-        departments.sort(key=lambda d: tr_sort_key(d.name))
-        return {
-            "chairs": [
-                {"name": _chair_name(d), "role": f"{d.name} Zümre Başkanı"} for d in departments
-            ],
-            "school_chair_name": "",
-        }
-
-    from apps.dersler import selectors as ders_selectors
-
-    course_ids = list(
-        ExamCalendarEntry.objects.filter(calendar=calendar)
-        .values_list("course_id", flat=True)
-        .distinct()
-    )
-    course_names = ders_selectors.course_names_by_ids(set(course_ids))
-
-    chairs: list[dict[str, str]] = [
-        {"name": "", "role": f"{course_names.get(course_id, '')} Zümre Başkanı"}
-        for course_id in course_ids
-    ]
-    chairs.sort(key=lambda c: tr_sort_key(c["role"]))
-    return {"chairs": chairs, "school_chair_name": ""}
+    return {
+        "chairs": department_chairs(departments or None),
+        "school_chair_name": "",
+    }
 
 
 def _pdf_day_rows(grid: dict[str, Any], calendar: ExamCalendar) -> list[dict[str, Any]]:
@@ -2817,6 +2833,13 @@ def _pdf_day_rows(grid: dict[str, Any], calendar: ExamCalendar) -> list[dict[str
     tutmaz. Takvimin `print_period_times` ayarı kapalıysa boştur (yalnız "3.
     Ders" basılır); ikili eğitimde o satırda sınavı olan şubelerin vardiyalarına
     göre bir ya da iki saat taşır.
+
+    HİÇBİR SINAV SESSİZCE KAYBOLMAZ (01.10.2026): ızgara yalnız takvim aralığının
+    günlerini ve çizelgedeki ders saatlerini taşır. Aralık sonradan daraltılırsa
+    ya da ders saati çizelgeden çıkarılırsa o sınav eskiden resmî evraktan
+    düşüyordu (yalnız doğrulama uyarısı kalıyordu). Artık hücre anahtarından
+    bulunan bu günler ve saatler de basılır; düzeltme çağrısı
+    `calendar_validation`dadır.
     """
     section_shifts = _section_shifts()
     level_sections = _level_section_ids() if section_shifts else {}
@@ -2827,14 +2850,27 @@ def _pdf_day_rows(grid: dict[str, Any], calendar: ExamCalendar) -> list[dict[str
     )
     print_times = bool(calendar.print_period_times)
 
+    gunler = {str(day["date"]) for day in grid["days"]}
+    saatler = {int(p["no"]) for p in grid["periods"]}
+    ek_saatler: set[int] = set()
+    for anahtar in grid["cells"]:
+        gun_iso, saat_no, _duzey = anahtar.split("|")
+        gunler.add(gun_iso)
+        if int(saat_no) not in saatler:
+            ek_saatler.add(int(saat_no))
+    periods = sorted(
+        [*grid["periods"], *({"no": n, "name": f"{n}. Ders", "start": ""} for n in ek_saatler)],
+        key=lambda p: int(p["no"]),
+    )
+
     day_rows: list[dict[str, Any]] = []
-    for day in grid["days"]:
-        d = date.fromisoformat(day["date"])
+    for gun_iso in sorted(gunler):
+        d = date.fromisoformat(gun_iso)
         period_cells: list[dict[str, Any]] = []
-        for p in grid["periods"]:
+        for p in periods:
             slot_cells = []
             for level in grid["levels"]:
-                key = f"{day['date']}|{p['no']}|{level['value']}"
+                key = f"{gun_iso}|{p['no']}|{level['value']}"
                 slot_cells.append(grid["cells"].get(key, []))
             if any(slot_cells):
                 shifts: set[str] = set()
@@ -2855,24 +2891,183 @@ def _pdf_day_rows(grid: dict[str, Any], calendar: ExamCalendar) -> list[dict[str
                     }
                 )
         if period_cells:
-            day_rows.append({"label": _tr_date(d), "period_cells": period_cells})
+            day_rows.append(
+                {
+                    "label": _tr_date(d),
+                    # Kompakt tablo (01.10.2026): tarih gg.aa.yyyy, gün adı ayrı
+                    # sütunda — ikisi de günün satırlarını BİRLEŞTİREN hücrededir.
+                    "date": d.strftime("%d.%m.%Y"),
+                    "weekday": _TR_WEEKDAYS[d.weekday()],
+                    "period_cells": period_cells,
+                }
+            )
     return day_rows
 
 
-def render_calendar_pdf(calendar: ExamCalendar) -> bytes:
-    """Resmî sınav takvimi PDF'i (WeasyPrint — documents/base.html; A4 YATAY)."""
-    from django.template.loader import render_to_string
+#: Açıklama satırının madde numarası ("1." / "2)") — asılı girinti için ayrılır.
+_ITEM_NO = re.compile(r"^\s*(\d{1,2}[.)])\s+(.*\S)\s*$")
 
+
+def _description_items(text: str) -> list[dict[str, str]]:
+    """Açıklama metnini maddelere böler: `{"no": "1.", "text": "…"}`; boş satır düşer.
+
+    Metin idarecinin serbest girdisidir ve numarayı İÇİNDE taşır; numara yalnız
+    dizgi için ayrılır (sarılan satır numaranın altına değil metnin hizasına
+    girer). Numarasız satır `no` boş bir paragraf olarak kalır — içerik
+    değişmez, yalnız biçimlenir.
+    """
+    items: list[dict[str, str]] = []
+    for line in text.split("\n"):
+        if not line.strip():
+            continue
+        match = _ITEM_NO.match(line)
+        if match:
+            items.append({"no": match.group(1), "text": match.group(2)})
+        else:
+            items.append({"no": "", "text": line.strip()})
+    return items
+
+
+@dataclass(frozen=True)
+class CalendarPdfFit:
+    """Takvim PDF'inin bir dizim varyantı: sayfa yönü + sıklık (01.10.2026).
+
+    Kullanıcı isteği: "çıktı çok yer kaplıyor; mümkünse dikey ya da yatay TEK
+    A4'e sığsın". Sığıp sığmadığı tahminle değil GERÇEK DİZİMLE ölçülür
+    (`shared.pdf.html_to_pdf_fit`): varyantlar `CALENDAR_PDF_FITS` sırasıyla
+    denenir, tek sayfaya sığan ilki basılır; hiçbiri sığmazsa en az sayfalı olan
+    basılır ve tablo, gün bölünmeden (gün grubu tek parça) ikinci sayfaya akar.
+
+    SIRA okunurluk tercihidir: önce punto, sonra yön — küçük takvim rahat puntoda
+    yatay kalır (Tur 644 kararı), büyüyen takvim önce aynı puntoda dikeye, sonra
+    sıkı puntoya iner. Alt sınır bilinçlidir: tablo 7,2 pt'nin, açıklama 6,4
+    pt'nin altına inmez (evrak dipnotlarının 6,2-6,8 pt bandı) — daha büyük
+    takvim okunmaz hâle gelmektense iki sayfaya akar.
+
+    Değerler WeasyPrint dizimiyle ÖLÇÜLEREK seçildi (gerçek Anadolu Lisesi
+    çizelgesiyle dört sentetik okul: 8, 24 ve 38 şube, bir de üç haftalık takvim
+    — eski düzende hepsi üç sayfaydı); şablon iş kuralı tutmaz, ölçüler buradan
+    `<head>`e basılır (gövdedeki stil yok sayılır — CLAUDE.md §2).
+    """
+
+    orientation: str  # "landscape" | "portrait"
+    density: str  # teşhis ve test etiketi: "rahat" | "sıkı" | "en sıkı"
+    margin_cm: tuple[float, float, float, float]  # üst, sağ, alt, sol
+    letterhead_pt: tuple[float, float, float]  # T.C. · kurum · birim
+    title_pt: float
+    table_pt: float
+    cell_pad_pt: tuple[float, float]  # dikey, yatay
+    notes_pt: float
+    sign_space_pt: float
+    sign_name_pt: float
+    gap_pt: float
+
+    @property
+    def chair_columns(self) -> int:
+        """İmza şeridinde satır başına zümre başkanı (onay sütunu hariç)."""
+        return 6 if self.orientation == "landscape" else 4
+
+    def as_context(self) -> dict[str, Any]:
+        """Şablona hazır METİN değerler — sayı yerelleştirmesi CSS'i bozmasın.
+
+        Django kayan noktalı sayıyı TR yerelinde virgülle basar ("8,4pt" geçersiz
+        CSS'tir); değerler bu yüzden burada noktalı metne çevrilir (`|unlocalize`
+        deseninin Python tarafı).
+        """
+
+        def n(value: float) -> str:
+            return f"{value:g}"
+
+        return {
+            "orientation": self.orientation,
+            "margin": " ".join(f"{n(v)}cm" for v in self.margin_cm),
+            "lh_tc": n(self.letterhead_pt[0]),
+            "lh_authority": n(self.letterhead_pt[1]),
+            "lh_unit": n(self.letterhead_pt[2]),
+            "title": n(self.title_pt),
+            "subtitle": n(round(self.title_pt * 0.72, 1)),
+            "table": n(self.table_pt),
+            "head": n(round(self.table_pt * 0.92, 1)),
+            "pad_v": n(self.cell_pad_pt[0]),
+            "pad_h": n(self.cell_pad_pt[1]),
+            "notes": n(self.notes_pt),
+            "sign_space": n(self.sign_space_pt),
+            "sign_name": n(self.sign_name_pt),
+            "sign_role": n(round(self.sign_name_pt - 1, 1)),
+            "gap": n(self.gap_pt),
+        }
+
+
+def _fit(orientation: str, density: str) -> CalendarPdfFit:
+    """Sıklık kademesinin ölçüleri; yön yalnız sayfa boyutu ve imza sütunlarıdır."""
+    if density == "rahat":
+        return CalendarPdfFit(
+            orientation=orientation,
+            density=density,
+            margin_cm=(1.1, 1.3, 1.2, 1.3),
+            letterhead_pt=(9.5, 10, 11.5),
+            title_pt=11.5,
+            table_pt=8.6,
+            cell_pad_pt=(2.8, 4.5),
+            notes_pt=7.4,
+            sign_space_pt=24,
+            sign_name_pt=8,
+            gap_pt=8,
+        )
+    if density == "sıkı":
+        return CalendarPdfFit(
+            orientation=orientation,
+            density=density,
+            margin_cm=(0.9, 1.1, 1.1, 1.1),
+            letterhead_pt=(8.5, 9, 10.5),
+            title_pt=10.5,
+            table_pt=7.9,
+            cell_pad_pt=(1.9, 3.5),
+            notes_pt=6.9,
+            sign_space_pt=19,
+            sign_name_pt=7.5,
+            gap_pt=6,
+        )
+    return CalendarPdfFit(
+        orientation=orientation,
+        density="en sıkı",
+        margin_cm=(0.8, 1.0, 1.0, 1.0),
+        letterhead_pt=(8, 8.5, 10),
+        title_pt=10,
+        table_pt=7.2,
+        cell_pad_pt=(1.2, 3),
+        notes_pt=6.4,
+        sign_space_pt=15,
+        sign_name_pt=7,
+        gap_pt=4,
+    )
+
+
+#: Deneme sırası — okunurluk tercihi (bkz. `CalendarPdfFit`).
+CALENDAR_PDF_FITS: tuple[CalendarPdfFit, ...] = tuple(
+    _fit(orientation, density)
+    for density in ("rahat", "sıkı", "en sıkı")
+    for orientation in ("landscape", "portrait")
+)
+
+
+def _calendar_pdf_context(calendar: ExamCalendar) -> dict[str, Any]:
+    """Takvim PDF'inin VERİ bağlamı — dizim varyantından bağımsız, bir kez kurulur."""
     from shared.letterhead import letterhead_context
-    from shared.pdf import html_to_pdf
     from shared.text import tr_upper
 
     config = SchoolConfig.load()
     grid = calendar_grid(calendar)
     day_rows = _pdf_day_rows(grid, calendar)
     signatures = _calendar_signatures(calendar)
-
-    context = {
+    has_external = any(
+        hucre["authority"] != ExamAuthority.SCHOOL
+        for gun in day_rows
+        for pc in gun["period_cells"]
+        for hucreler in pc["level_cells"]
+        for hucre in hucreler
+    )
+    return {
         **letterhead_context(
             school_name=config.school_name,
             unit="Okul Müdürlüğü",
@@ -2883,13 +3078,18 @@ def render_calendar_pdf(calendar: ExamCalendar) -> bytes:
         "calendar_title": tr_upper(calendar.name),
         "levels": grid["levels"],
         "day_rows": day_rows,
-        "description_lines": calendar.description_text.split("\n"),
-        "footnote_lines": [ln for ln in calendar.footnote_text.split("\n") if ln.strip()],
+        # Lejant yalnız tabloda okul dışı makam sınavı varsa basılır (yer kazancı).
+        "has_external": has_external,
+        "description_items": _description_items(calendar.description_text),
+        # Dipnot açıklamaların SONUNDA, ilk satırı "DİPNOT:" etiketli paragraflardır.
+        "footnote_lines": [ln.strip() for ln in calendar.footnote_text.split("\n") if ln.strip()],
         "chairs": signatures["chairs"],
         "school_chair_name": signatures["school_chair_name"],
         "principal_name": config.principal_name,
         "is_draft": calendar.status != ExamCalendarStatus.APPROVED,
-        "generated_at": timezone.now(),
+        # Sol alt altbilgi (documents/base.html, 01.10.2026): hangi çıktının güncel
+        # olduğu ayırt edilsin. Yerel saat — UTC'den türetilmez.
+        "print_stamp": timezone.localtime().strftime("%d.%m.%Y %H:%M"),
         # Onay tarihi UYGUNDUR bloğuna basılır (belgede hiçbir tarih yoktu); onaysız
         # takvimde elle doldurulacak boş tarih çizgisi kalır. Yerel tarih — UTC değil.
         "approved_on": (
@@ -2898,9 +3098,103 @@ def render_calendar_pdf(calendar: ExamCalendar) -> bytes:
             else ""
         ),
     }
-    html = render_to_string("sinav/calendar_pdf.html", context)
-    # Eşzamanlı basım kilidi — `shared.pdf` (19.09.2026 çöküş tanısı).
-    return html_to_pdf(html)
+
+
+#: İmza şeridinin son hücresi. Eski etiket "Okul Zümre Başkanı" idi: mevzuatta
+#: böyle bir unvan yok ve alan KS'de hiç dolmuyordu. Takvimi düzenleyen müdür
+#: yardımcısıdır; bağlam anahtarı (`school_chair_name`) sözleşme gereği korunur.
+_EDITOR_ROLE = "Düzenleyen — Müdür Yardımcısı"
+
+
+def _sign_rows(
+    chairs: list[dict[str, str]], school_chair_name: str, columns: int
+) -> list[list[dict[str, str] | None]]:
+    """İmza şeridi: zümre başkanları + düzenleyen, `columns`'lık satırlara dizili.
+
+    Son satır boş hücreyle tamamlanır — sütunlar bütün satırlarda hizalı kalır.
+    Okul müdürü (UYGUNDUR) bu hücrelere girmez: şeridin en sağ sütununu ortak
+    parça kendisi ekler (print/_imza_seridi.html — takvim ve mazeret takvimi).
+    """
+    cells = [*chairs, {"name": school_chair_name, "role": _EDITOR_ROLE}]
+    rows: list[list[dict[str, str] | None]] = []
+    for start in range(0, len(cells), columns):
+        row: list[dict[str, str] | None] = list(cells[start : start + columns])
+        row.extend([None] * (columns - len(row)))
+        rows.append(row)
+    return rows
+
+
+def _period_column(day_rows: list[dict[str, Any]]) -> tuple[str, bool]:
+    """Ders saati sütununun genişliği (em) ve metnin sarıp sarmayacağı.
+
+    Genişlik basılan en uzun metinden türer: saat basılmıyorsa "1. Ders" kadar,
+    tek saatte "1. Ders · 08:30" kadar. İkili eğitimde vardiya adı ("Öğleden
+    sonra 15:00") tek satıra sığdırılmaz — sütun sınırlı kalır, metin sarar.
+    """
+    longest = max(
+        (
+            len(str(pc["period"]["name"])) + (len(pc["time_label"]) + 3 if pc["time_label"] else 0)
+            for day in day_rows
+            for pc in day["period_cells"]
+        ),
+        default=7,
+    )
+    wraps = longest > 17
+    width = min(max(0.56 * longest + 1.3, 5.6), 10.5)
+    return f"{width:.1f}", wraps
+
+
+def _render_calendar_html(context: dict[str, Any], fit: CalendarPdfFit) -> str:
+    """Bir dizim varyantının HTML'i — veri bağlamı + o varyantın ölçüleri."""
+    from django.template.loader import render_to_string
+
+    period_width, period_wraps = _period_column(context["day_rows"])
+    return render_to_string(
+        "sinav/calendar_pdf.html",
+        {
+            **context,
+            "fit": fit.as_context(),
+            "sign_rows": _sign_rows(
+                context["chairs"], context["school_chair_name"], fit.chair_columns
+            ),
+            "period_width": period_width,
+            "period_wraps": period_wraps,
+            # UYGUNDUR sütunu: yatayda dar pay yeter, dikeyde şerit 4 sütundur.
+            "approve_width": "17" if fit.orientation == "landscape" else "24",
+        },
+    )
+
+
+@dataclass(frozen=True)
+class CalendarPdf:
+    """Basılan takvim PDF'i ve hangi dizim varyantıyla basıldığı (teşhis + test)."""
+
+    pdf: bytes
+    fit: CalendarPdfFit
+    pages: int
+
+
+def render_calendar_pdf_fitted(calendar: ExamCalendar) -> CalendarPdf:
+    """Resmî sınav takvimi PDF'i — tek A4'e sığan ilk dizim varyantıyla.
+
+    Varyantlar `CALENDAR_PDF_FITS` sırasıyla denenir (bkz. `CalendarPdfFit`).
+    Veri bağlamı bir kez kurulur, yalnız dizim ölçüleri değişir; şablon yalnız
+    gereken varyant için işlenir.
+    """
+    from shared.pdf import html_to_pdf_fit
+
+    context = _calendar_pdf_context(calendar)
+    # Eşzamanlı basım kilidi — `shared.pdf` (19.09.2026 çöküş tanısı); bütün
+    # denemeler aynı kilidin altındadır.
+    sonuc = html_to_pdf_fit(
+        (_render_calendar_html(context, fit) for fit in CALENDAR_PDF_FITS), max_pages=1
+    )
+    return CalendarPdf(pdf=sonuc.pdf, fit=CALENDAR_PDF_FITS[sonuc.variant], pages=sonuc.pages)
+
+
+def render_calendar_pdf(calendar: ExamCalendar) -> bytes:
+    """Resmî sınav takvimi PDF'i (WeasyPrint — documents/base.html; tek A4 hedefi)."""
+    return render_calendar_pdf_fitted(calendar).pdf
 
 
 # --------------------------------------------------------------------------- #

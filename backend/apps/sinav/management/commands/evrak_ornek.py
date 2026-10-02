@@ -31,6 +31,7 @@ from typing import Any
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 
 from apps.sinav import layout, reports
+from shared.letterhead import letterhead_context
 
 #: Uydurma adlar — uzun Türkçe adlar sarma davranışını da gösterir.
 ADLAR = (
@@ -49,6 +50,7 @@ DERSLER = ("Coğrafya — 9. Sınıf", "Coğrafya — 10. Sınıf", "Matematik")
 SURELER = (40, 40, 60)
 ODA = "A-201 Dersliği"
 GOZETMEN = "Nurten ÖZDEMİRCİ"
+MUDUR = "Hüseyin KARADAĞ"
 
 BASLIK = reports.ReportHeader(
     school_name="ÖRNEK ANADOLU LİSESİ",
@@ -170,6 +172,13 @@ class Command(BaseCommand):
                 "header": BASLIK,
                 "title": reports.REPORT_TITLES["r6"][0],
                 "duty": reports.build_assignment_context(self._gorevliler()),
+                # R6 resmî yazışmadır: okul adı bandı yerine T.C. / kurum / birim
+                # anteti (services.render_session_report ile aynı bağlam).
+                "letterhead": letterhead_context(
+                    school_name="Örnek Anadolu Lisesi",
+                    district="Beşiktaş",
+                    principal_name=MUDUR,
+                ),
             },
             beklenen=1,
         )
@@ -182,6 +191,7 @@ class Command(BaseCommand):
                 "header": BASLIK,
                 "title": reports.REPORT_TITLES["r8"][0],
                 "report": self._dogrulama(),
+                "principal_name": MUDUR,
             },
             beklenen=1,
         )
@@ -285,6 +295,7 @@ class Command(BaseCommand):
                 "checkerboard": True,
                 "placed": 240,
                 "pinned": 3,
+                "separation_label": "Kapalı",
             },
             group_labels={"7:9": "Coğrafya (9. sınıf)", "7:10": "Coğrafya (10. sınıf)"},
             warnings=["A-205 dersliği %100 doluluğa ulaştı."],

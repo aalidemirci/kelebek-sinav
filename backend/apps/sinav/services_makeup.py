@@ -471,6 +471,7 @@ def makeup_report_context(semester_id: int) -> dict[str, Any]:
         raise ValidationError({"semester": "Dönem bulunamadı."})
     config = SchoolConfig.load()
     rows = _report_rows(semester_id)
+    zaman = timezone.localtime().strftime("%d.%m.%Y %H:%M")
     return {
         **letterhead_context(
             school_name=config.school_name,
@@ -481,7 +482,10 @@ def makeup_report_context(semester_id: int) -> dict[str, Any]:
         "year_label": str(donem.school_year.name),
         "term_sequence": donem.sequence,
         "term_label": str(donem),
-        "generated_at": timezone.localtime().strftime("%d.%m.%Y %H:%M"),
+        "generated_at": zaman,
+        # PDF'te düzenleme anı başlık altı yerine sol alt altbilgidedir (resmî yazı
+        # ailesinin ortak altbilgisi, documents/base.html — 01.10.2026).
+        "print_stamp": zaman,
         "summary": absence_summary(rows),
         "rows": rows,
         "g_rows": [r for r in rows if r["excuse_status"] == ExcuseStatus.UNEXCUSED],

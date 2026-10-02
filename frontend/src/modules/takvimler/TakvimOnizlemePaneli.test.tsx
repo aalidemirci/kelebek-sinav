@@ -190,4 +190,22 @@ describe("TakvimOnizlemePaneli", () => {
       ),
     );
   });
+
+  it("PDF hazırlanırken düğme kilitlenir ve bitince geri açılır", async () => {
+    // Sunucu tek A4'e sığan düzeni bulana dek PDF'i birkaç kez dizer (birkaç
+    // saniye); bu sürede ikinci tıklama yeni bir basım başlatmamalı.
+    const user = userEvent.setup();
+    let bitir: (b: Blob) => void = () => {};
+    okulApiMock.listSubjectDepartments.mockResolvedValue([]);
+    calApi.pdfBlob.mockReturnValue(new Promise<Blob>((resolve) => (bitir = resolve)));
+    renderPanel(makeCalendar());
+
+    await user.click(screen.getByRole("button", { name: "PDF indir" }));
+
+    const bekleyen = screen.getByRole("button", { name: "Hazırlanıyor…" });
+    expect(bekleyen).toBeDisabled();
+    bitir(new Blob(["pdf"]));
+    await waitFor(() => expect(screen.getByRole("button", { name: "PDF indir" })).toBeEnabled());
+    expect(calApi.pdfBlob).toHaveBeenCalledTimes(1);
+  });
 });

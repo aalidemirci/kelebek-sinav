@@ -4,6 +4,10 @@ gözetmen modülü açıkken). Resmî yazı formatı: görevlendirme metni + tab
 (görevli / görev / salon / tebellüğ imzası) + müdür UYGUNDUR onay bloku.
 Yedek görevliler salonsuz ("—") listelenir.
 
+ANTET (01.10.2026): görevlendirme ve tebliğ resmî yazışma niteliğindedir —
+okul adı satırının yerine T.C. / kurum / birim anteti basılır (`letterhead`
+bağlamı, sinav/reports/_head.html). Öteki sınav evrakı kompakt bantta kalır.
+
 MADDE NUMARASI KASITLI GÖMÜLMEDİ (Tur 219 emsali): dayanak dipnotta yönetmelik
 ADIYLA anılır — görevlendirme hükmünün madde numarası değişikliklerde kayar ve
 basılı evrakı yanlışlar. R7 tutanağı bundan ayrılır (orada hüküm eşlemesi
@@ -17,16 +21,10 @@ TAŞMA: görevli sayısı arttıkça tablo başlığı yinelenir; onay bloğu b�
                line-height: 1.4; }
   .duty td { height: 21pt; }
   .duty .ack { width: 24%; }
-  .approve-grid { width: 100%; margin-top: 20pt; border-collapse: collapse;
-                  break-inside: avoid; page-break-inside: avoid; }
-  .approve-grid td { width: 50%; text-align: center; vertical-align: top; }
-  .approve-grid .label { font-weight: bold; font-size: 12pt; letter-spacing: 1.5pt;
-                         color: var(--pr-ink); }
-  .approve-grid .label-sm { font-weight: bold; font-size: 9.5pt; letter-spacing: 1pt;
-                            color: var(--pr-label); padding-top: 2.5pt; }
-  .approve-grid .date { margin-top: 4pt; font-size: 9pt; color: var(--pr-secondary); }
-  .approve-grid .sign { margin-top: 30pt; font-size: 9pt; }
-  .approve-grid .sign b { font-size: 9.5pt; color: var(--pr-ink); }
+  /* Onay bloğu ortak bileşendir (print/_imza.html, 01.10.2026); burada yalnız
+     resmî yazının daha geniş imza boşluğu verilir. */
+  .imzalar { margin-top: 18pt; }
+  .imza-bosluk { height: 28pt; }
   .summary { margin-top: 5pt; font-size: 8.5pt; color: var(--pr-label); }
 </style>
 {% endblock %}
@@ -77,22 +75,13 @@ TAŞMA: görevli sayısı arttıkça tablo başlığı yinelenir; onay bloğu b�
   </div>
 
   {% comment %}Tebliğ-tebellüğ belgesinde TEBLİĞ EDEN de imzalar: yazıyı müdür
-  yardımcısı düzenleyip tebliğ eder, okul müdürü onaylar (eskiden yalnız onay
-  bloğu vardı — tebliğ edenin imzası ve tarihi yoktu).{% endcomment %}
-  <table class="approve-grid">
+  yardımcısı düzenleyip tebliğ eder, okul müdürü onaylar. Ortak imza bileşeni
+  (01.10.2026): iki hücre de başlık + tarih taşıdığı için çizgiler hizalıdır;
+  müdürün adı yapılandırmada varsa basılır.{% endcomment %}
+  <table class="imzalar">
     <tr>
-      <td>
-        <div class="label-sm">TEBLİĞ EDEN</div>
-        <div class="date">…… / …… / 20……</div>
-        <div class="sign"><b>Müdür Yardımcısı</b><br>
-          <span class="muted">Ad Soyad / İmza</span></div>
-      </td>
-      <td>
-        <div class="label">UYGUNDUR</div>
-        <div class="date">…… / …… / 20……</div>
-        <div class="sign"><b>Okul Müdürü</b><br>
-          <span class="muted">Ad Soyad / İmza / Mühür</span></div>
-      </td>
+      <td>{% include "print/_imza.html" with gorev="Müdür Yardımcısı" baslik="TEBLİĞ EDEN" tarihli=True only %}</td>
+      <td>{% include "print/_imza.html" with ad=letterhead.principal_name gorev="Okul Müdürü" alt="Ad Soyad / İmza / Mühür" baslik="UYGUNDUR" tarihli=True only %}</td>
     </tr>
   </table>
 

@@ -131,17 +131,11 @@ bilinemez — kişisel veri de basılmaz).{% endcomment %}
     </tr>
   </table>
 
-  <table class="signs">
-    <tr><td class="date">…… / …… / 20……</td><td class="date">…… / …… / 20……</td>
-        <td class="date">…… / …… / 20……</td></tr>
-    <tr><td class="space"></td><td class="space"></td><td class="space"></td></tr>
+  <table class="imzalar">
     <tr>
-      <td><div class="line"></div><span class="who">Gözetmen Öğretmen</span><br>
-          <span class="role">Ad Soyad / İmza</span></td>
-      <td><div class="line"></div><span class="who">(Varsa) Diğer Görevli / Tanık</span><br>
-          <span class="role">Ad Soyad / İmza</span></td>
-      <td><div class="line"></div><span class="who">Nöbetçi Müdür Yardımcısı</span><br>
-          <span class="role">Ad Soyad / İmza</span></td>
+      <td>{% include "print/_imza.html" with ad=sheet.proctor_name gorev="Gözetmen Öğretmen" tarihli=True only %}</td>
+      <td>{% include "print/_imza.html" with gorev="(Varsa) Diğer Görevli / Tanık" tarihli=True only %}</td>
+      <td>{% include "print/_imza.html" with gorev="Nöbetçi Müdür Yardımcısı" tarihli=True only %}</td>
     </tr>
   </table>
 

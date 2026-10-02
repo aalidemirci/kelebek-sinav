@@ -45,6 +45,8 @@ export default function TakvimDetayPage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState("havuz");
   const [dateEditOpen, setDateEditOpen] = useState(false);
+  // PDF tek A4'e sığan düzen bulunana dek birkaç kez dizilir — düğme beklerken kilitli.
+  const [pdfBusy, setPdfBusy] = useState(false);
   const closeDateEdit = useCallback(() => setDateEditOpen(false), []);
 
   const calendarQuery = useQuery({
@@ -136,11 +138,14 @@ export default function TakvimDetayPage() {
   const lifecycleBusy = approveMutation.isPending || reopenMutation.isPending;
 
   const downloadPdf = async () => {
+    setPdfBusy(true);
     try {
       const blob = await examCalendarApi.pdfBlob(calendarId);
       saveBlob(blob, calendarPdfFileName(calendar));
     } catch (e) {
       snackbar.error(e instanceof ApiError ? e.message : "PDF indirilemedi.");
+    } finally {
+      setPdfBusy(false);
     }
   };
 
@@ -191,8 +196,13 @@ export default function TakvimDetayPage() {
           </Button>
         ) : null}
         <span className="ml-auto" />
-        <Button variant="outlined" icon="picture_as_pdf" onClick={() => void downloadPdf()}>
-          PDF
+        <Button
+          variant="outlined"
+          icon="picture_as_pdf"
+          disabled={pdfBusy}
+          onClick={() => void downloadPdf()}
+        >
+          {pdfBusy ? "Hazırlanıyor…" : "PDF"}
         </Button>
         {isDraft ? (
           <Button

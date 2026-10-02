@@ -820,9 +820,9 @@ başına bir kâğıt**.
 | R8 | Dağıtım Doğrulama Raporu (seed basılır) — idare nüshası | oturum | 1 |
 
 Ayrıca: R10 kişiselleştirilmiş kitapçık ZIP · oturumsuz boş salon yerleşim
-planı · resmî takvim PDF (A4 yatay) · Word soru şablonu · tümü-ZIP · BEP
-kapsamındaki öğrenciler idare özeti (20.09.2026 — yalnız idare nüshası, tümü-ZIP'e
-GİRMEZ; aşağıdaki "BEP…" paragrafı).
+planı · resmî takvim PDF (tek A4 hedefi — yön içeriğe göre; aşağıda) · Word soru
+şablonu · tümü-ZIP · BEP kapsamındaki öğrenciler idare özeti (20.09.2026 — yalnız
+idare nüshası, tümü-ZIP'e GİRMEZ; aşağıdaki "BEP…" paragrafı).
 
 **Takvim PDF'i (30.08.2026 eklentileri):** okul dışı makam sınavları (Bakanlık /
 İl MEM / İlçe MEM) hücrede nötr dolgu + sol kenar çizgisi + makam etiketiyle
@@ -830,6 +830,76 @@ ayrışır — RENKLİ DOLGU YOK (palet nötr slate); tablonun altında lejant s
 AÇIKLAMALAR bloğunun ardına düzenlenebilir **DİPNOT** bloğu (`footnote_text`) ·
 imza bloğu takvime seçilen zümrelerden üretilir, seçim yoksa derslerden boş
 çizgi (B7 revizyonu). Şablon sözleşmesi değişmedi: `chairs` + `school_chair_name`.
+
+**01.10.2026 — takvim PDF'i tek A4 (kullanıcı isteği: "çok yer kaplıyor; mümkünse
+dikey ya da yatay tek A4'e sığsın").** Eski düzen tipik bir okulda (dört düzey, iki
+hafta, 53 sınav, 11 zümre) ÜÇ yatay sayfaydı: her (gün, ders saati) satırı iki
+satırlık tarih hücresi taşıyordu, açıklamalar 10 pt tek sütundu, zümre imzaları
+üçlü sıralarda 30 pt boşlukla bir sayfa tutuyordu. Yeni düzen:
+
+* **Tablo** `Tarih | Gün | Ders saati | düzeyler`. Tarih gg.aa.yyyy, gün adı ayrı
+  sütunda; ikisi de günün ders saatlerini BİRLEŞTİREN hücrede (rowspan). Her gün
+  kendi `<tbody>`'sidir ve sayfa sınırında BÖLÜNMEZ — devam sayfasında tarihsiz
+  ders saati satırı olamaz (30.08.2026 kusurunun yeni yapıdaki karşılığı). Günler
+  arasında koyu ayraç; aynı hücredeki sınavlar noktalı çizgiyle ayrılır.
+* **Açıklamalar** iki sütun, ince punto, madde numarası asılı girintili
+  (`_description_items` yalnız dizgi için ayırır, metin aynen kalır); dipnot
+  açıklamaların SONUNDA "DİPNOT:" etiketiyle. Makam lejantı yalnız tabloda okul
+  dışı makam sınavı varsa basılır.
+* **İmza şeridi**: zümre başkanları + düzenleyen müdür yardımcısı eşit hücrelerde
+  (yatayda 6, dikeyde 4 sütun); UYGUNDUR (okul müdürü) sağ sütunda, çizgisi
+  şeridin son satırıyla aynı hizada.
+* **Sığdırma ÖLÇÜLEREK yapılır, tahminle değil:** `CalendarPdfFit` üç sıklık
+  kademesi (rahat 8,6 pt · sıkı 7,9 pt · en sıkı 7,2 pt tablo) × iki yön tanımlar;
+  `shared.pdf.html_to_pdf_fit` varyantları SIRAYLA dizer, tek sayfaya sığan
+  ilkini basar, hiçbiri sığmazsa en az sayfalıyı. Sıra okunurluk tercihidir:
+  önce punto, sonra yön (küçük takvim rahat ve yatay kalır — Tur 644). Alt sınır
+  bilinçlidir: daha büyük takvim okunmaz hâle gelmektense ikinci sayfaya akar.
+  Ölçüm (gerçek Anadolu Lisesi çizelgesi, sentetik veri): 8 şube/1 hafta ve 24
+  şube/2 hafta → dikey-sıkı; 38 şube + hazırlık → yatay-en sıkı; 3 hafta/23
+  satır → dikey-en sıkı; hepsi tek sayfa (eskisi üçer sayfa). Bedeli süredir:
+  bağlam bir kez kurulur, varyant başına dizim ~0,2-0,45 sn (tipik takvim ~2 sn);
+  arayüz düğmesi bu sürede "Hazırlanıyor…" der. Garanti
+  `test_calendar.py::test_tipik_okulun_takvimi_tek_a4_sayfaya_sigar`.
+* **İmza kaynağı (kullanıcı kararı, 01.10.2026):** zümre SEÇİLMEMİŞ takvimde B7
+  yedek dalı her ders için boş imza basıyordu (tipik okulda 26 hücre, "Psikoloji
+  Zümre Başkanı" gibi gerçekte olmayan unvanlarla) ve takvim hiçbir düzende tek
+  sayfaya sığmıyordu. Artık okul zümre başkanları KURULUNDAKİ zümrelerin tamamı
+  basılır (`department_chairs`); katalog boşsa zümre imzası basılmaz — düzenleyen
+  ve okul müdürü kalır. Mazeret sınav takvimi aynı listeyi kullanır. Sonuç: aynı
+  sentetik okul zümre seçilmeden de tek sayfa.
+
+**01.10.2026 — evrak tasarım dili denetimi (kullanıcı isteği: "tüm belgelerin
+tasarım dilini denetle"; önerilerin hepsi onaylandı).** İki evrak ailesi kasıtlı
+olarak ayrı kaldı — resmî yazı (`documents/base.html`: antetli, takvim + mazeret
+belgeleri) ve sınav evrakı (`sinav/reports/base.html`: kompakt oturum bandı,
+formlar) — ama ortak dil birleştirildi:
+
+* **Tek imza bileşeni** (`print/_imza.html` + `print/_bilesenler.css`): eskiden
+  `.sig-grid` (30 pt boşluk, boş adda "…………………") ve `.signs` (20 pt, "Ad Soyad /
+  İmza") vardı; "UYGUNDUR" dört ayrı biçimde basılıyordu (R6'da iri ve harf
+  aralıklı, takvimde küçük kalın, mazeret belgelerinde ince, R8'de hiç). Boş ad
+  kuralı tek: görev kalın + "Ad Soyad / İmza". R8'in müdür hücresi artık
+  "UYGUNDUR" başlıklı; R1/R7'de atanmış gözetmenin adı imza çizgisinin altına,
+  R6/R8'de yapılandırmadaki müdür adı basılır. R4'ün tek satırlık imzası sayfa
+  bütçesi gereği istisnadır.
+* **Tablo başlığı tek renk:** resmî yazı ailesinin neredeyse siyah (`--pr-ink`)
+  başlığı sınav evrakının koyu arduvazına (`--pr-bar`) çekildi.
+* **Düzenleme anı:** resmî yazı ailesi de sol altta "Düzenleme: gg.aa.yyyy ss:dd"
+  basar (`print_stamp`); mazeret takip çizelgesindeki başlık altı satırı kalktı.
+* **R6 resmî antetli:** görevlendirme ve tebliğ-tebellüğ resmî yazışmadır — okul
+  adı bandı yerine T.C. / kurum / birim (`_head.html` `letterhead`).
+* **Harf aralığı ≥ 1 pt kalktı** ("T.C.", "UYGUNDUR", "TEBLİĞ EDEN", krokinin "ÖN
+  CEPHE" şeridi): PDF'te harf harf çıkıyor, aranamıyordu. Filigran istisnadır.
+* **Somut kusurlar:** mazeret takip çizelgesinde bölüm başlığı + açıklaması
+  sayfa sonunda öksüz kalıyordu (açıklama artık tablosuna bağlı) · mazeret sınav
+  takvimi sınav takviminin tablo düzenine geçti (Tarih | Gün birleşik hücre, "2.
+  Ders · 09:20" tek satır, gün sayfada bölünmez) · R4'te dayanak satırı sarıp
+  "md. 5." alt satıra düşüyordu (öteki evrakın 6,8 pt dayanak puntosu) · R8'de puan
+  ve mesafeler tek ondalık · takvim doğrulamasındaki "Girdi #12" iç kimliği ders ve
+  düzey adına döndü · takvim aralığı dışına düşen (ya da ders saati çizelgeden
+  çıkarılan) sınav PDF'ten sessizce düşüyordu — artık kendi tarihiyle basılır,
+  uyarı düzeltmeyi hatırlatır.
 
 **Kaldırılanlar:** R2 (salon yoklama — R1'e girdi) · R2k (şube yoklama —
 duyuru ve salon yoklaması ikisini de karşılıyordu) · R3 (kapı listesi — kroki
