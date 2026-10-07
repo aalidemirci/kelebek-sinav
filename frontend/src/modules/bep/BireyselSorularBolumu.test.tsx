@@ -207,7 +207,9 @@ describe("BireyselSorularBolumu — görünürlük", () => {
 
     expect(
       await screen.findByRole("status", { name: "Uygulama parolası kapalı" }),
-    ).toHaveTextContent(/BEP bilgisi bu bilgisayarda ve yedeklerde şifresiz saklanıyor/);
+    ).toHaveTextContent(
+      /BEP ve sınav tedbiri bilgisi bu bilgisayarda ve yedeklerde şifresiz saklanıyor/,
+    );
   });
 });
 
@@ -507,7 +509,7 @@ describe("BireyselSorularBolumu — işlemler", () => {
     await waitFor(() =>
       expect(download.saveBlob).toHaveBeenCalledWith(
         blob,
-        "BEP-İdare-Özeti_2-Ortak-Sınav_15.06.2026.pdf",
+        "Sınav-Tedbirleri-ve-BEP-İdare-Özeti_2-Ortak-Sınav_15.06.2026.pdf",
       ),
     );
   });

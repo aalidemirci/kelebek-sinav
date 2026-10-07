@@ -184,6 +184,12 @@ export interface ParticipantsResponse {
   total_count: number;
   has_blocking_conflicts: boolean;
   /**
+   * Seçmeli ders seçimi bekleyen öğrenci var (07.10.2026): şubesi değişti ya da yeni
+   * geldi ve şubesi dersi bölünerek okutuyor — dağıtım ENGELLENİR. Metin backend'den.
+   */
+  has_pending_choices?: boolean;
+  pending_choices_message?: string;
+  /**
    * Dağıtımdan sonra katılımcılar değişti (seçmeli ders listesi, öğrenci aktarımı,
    * nakil) — yerleşim ve kitapçıklar eski listeye göre; açıklaması `warnings[0]`.
    */

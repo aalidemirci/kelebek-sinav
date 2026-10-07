@@ -334,6 +334,31 @@ describe("SinavSihirbazi — adım geçişleri", () => {
     expect(screen.getByRole("button", { name: "Devam" })).toBeDisabled();
   });
 
+  it("seçmeli ders seçimi bekleyen öğrenci Devam'ı kilitler ve seçim penceresine götürür", async () => {
+    // 07.10.2026 kullanıcı kararı: uyarı değil ENGEL — öğrenci bölünmüş dersin
+    // sınavından sessizce düşmesin. Metin backend'den gelir (ad yok, yalnız sayı).
+    const session = makeSession({
+      transfer_check_confirmed_at: ONAY_ZAMANI,
+      courses: [makeCourseRow()],
+    });
+    sessionApi.participants.mockResolvedValue(
+      makeParticipants({
+        has_pending_choices: true,
+        pending_choices_message: "1 öğrencinin seçmeli ders seçimi bekliyor (9/B).",
+      }),
+    );
+    renderWizard(session);
+
+    expect(
+      await screen.findByText("1 öğrencinin seçmeli ders seçimi bekliyor (9/B)."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Seçimleri yap" })).toHaveAttribute(
+      "href",
+      "/dersler?secim=bekleyen",
+    );
+    expect(screen.getByRole("button", { name: "Devam" })).toBeDisabled();
+  });
+
   it("ders satırı katılımcıları sözlükteki adla gösterir ('Sınıf düzeyinin tamamı')", async () => {
     sessionApi.participants.mockResolvedValue(makeParticipants());
     renderWizard(

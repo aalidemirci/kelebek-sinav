@@ -478,6 +478,11 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
             {
                 "total_count": resolution.total_count,
                 "has_blocking_conflicts": resolution.has_blocking_conflicts,
+                # Seçmeli ders seçimi bekleyen öğrenci (07.10.2026) — dağıtım engellenir.
+                "has_pending_choices": resolution.has_pending_choices,
+                "pending_choices_message": (
+                    resolution.pending_choices_message() if resolution.has_pending_choices else ""
+                ),
                 "placement_outdated": bool(drift is not None and drift.outdated),
                 "warnings": [*sapma, *resolution.warnings, *cross],
                 "courses": [

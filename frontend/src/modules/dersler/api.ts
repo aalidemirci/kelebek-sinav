@@ -207,6 +207,45 @@ export interface SetSectionEnrollmentResult {
   complement: { course_id: number; student_ids: number[] } | null;
 }
 
+// ---------------------------------------------------------------------------
+// Seçmeli ders seçimi bekleyen öğrenciler (07.10.2026) — şubesi değişen ya da
+// nakil gelen öğrencinin yeni şubesi seçmeliyi BÖLÜNEREK okutuyorsa öğrenci o
+// listelerin hiçbirinde değildir; idareci hangi dersleri aldığını seçer.
+// Seçim beklerken o şubenin bölünmüş dersini içeren oturum dağıtılamaz.
+// ---------------------------------------------------------------------------
+
+/** Bekleyen öğrencinin şubesinde öğrenci listesiyle okutulan bir seçmeli. */
+export interface PendingChoiceCourse {
+  course_id: number;
+  course_name: string;
+  /** Şubenin bu dersteki listesinde kaç öğrenci var. */
+  listed_count: number;
+  /** Öğrenci zaten bu listede (elle eklenmiş olabilir). */
+  enrolled: boolean;
+  /** Öğrenci eski şubesinde bu dersi alıyordu — öneri, karar idarecinin. */
+  suggested: boolean;
+}
+
+export interface PendingElectiveChoice {
+  student_id: number;
+  student_number: string;
+  full_name: string;
+  class_level: number;
+  class_label: string;
+  section_id: number;
+  courses: PendingChoiceCourse[];
+}
+
+export interface ResolveElectiveChoiceResult {
+  school_year: number;
+  student_id: number;
+  section_id: number;
+  course_ids: number[];
+}
+
+/** Bekleyen seçimler sorgusunun anahtarı — bant, pencere ve aktarımlar AYNI önbelleği tazeler. */
+export const PENDING_CHOICES_KEY = ["pending-elective-choices"] as const;
+
 /** e-Okul OOK10002R010 raporundaki bir ders grubunun eşleşme özeti. */
 export interface ElectiveImportCourse {
   /** e-Okul başlığı ("SEÇMELİ KUR`AN-I KERİM"). */
@@ -255,6 +294,8 @@ export interface ElectiveImportReport {
   covered_levels: string[];
   /** Listesi olup bu raporda yer almayan dersler — dokunulmadı. */
   untouched_courses: string[];
+  /** Raporda geçtiği için bekleyen seçmeli ders seçimi kapanan öğrenci sayısı. */
+  pending_resolved?: number;
   warnings: ElectiveImportIssue[];
   skipped: ElectiveImportIssue[];
   warnings_truncated: number;
@@ -349,6 +390,17 @@ export const derslerApi = {
   /** TEK ŞUBEYİ tamamen değiştirir; boş liste = şubenin tamamı. */
   setSectionEnrollment: (courseId: number, body: SetSectionEnrollmentBody) =>
     api.put<SetSectionEnrollmentResult>(`/courses/${courseId}/enrollments/`, body),
+  /** Seçmeli ders seçimi bekleyen öğrenciler (şubeleri değişti ya da yeni geldiler). */
+  pendingElectiveChoices: () =>
+    api.get<{ school_year: number; results: PendingElectiveChoice[] }>(
+      "/courses/elective-choices/",
+    ),
+  /** Öğrencinin şubesinde bölünerek okutulan derslerden aldıkları; boş liste = hiçbiri. */
+  resolveElectiveChoice: (studentId: number, courseIds: number[]) =>
+    api.post<ResolveElectiveChoiceResult>("/courses/elective-choices/resolve/", {
+      student_id: studentId,
+      course_ids: courseIds,
+    }),
   /** e-Okul OOK10002R010 PDF'i — yazmadan önizleme. */
   previewEnrollmentImport: (file: File) =>
     electiveImport("/courses/enrollments/import/preview/", file),

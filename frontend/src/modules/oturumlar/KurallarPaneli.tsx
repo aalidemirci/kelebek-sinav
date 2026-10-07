@@ -30,6 +30,7 @@ import Icon from "../../ui/Icon";
 import Select from "../../ui/Select";
 import { SkeletonList } from "../../ui/Skeleton";
 import { useSnackbar } from "../../ui/SnackbarProvider";
+import OturumTedbirleriBolumu from "../bep/OturumTedbirleriBolumu";
 import type { Student } from "../okul/api";
 import { okulApi } from "../okul/api";
 import type { SeatPreview } from "../salonlar/api";
@@ -52,7 +53,14 @@ function seatLabel(seat: SeatPreview): string {
   });
 }
 
-export default function KurallarPaneli({ sessionId }: { sessionId: number }) {
+export default function KurallarPaneli({
+  sessionId,
+  session,
+}: {
+  sessionId: number;
+  /** Kalıcı sınav tedbirleri bölümü + idare özeti dosya adı için (07.10.2026). */
+  session?: { id: number; name: string; exam_date: string };
+}) {
   const qc = useQueryClient();
   const snackbar = useSnackbar();
   const confirm = useConfirm();
@@ -63,11 +71,17 @@ export default function KurallarPaneli({ sessionId }: { sessionId: number }) {
     queryFn: () => placementRuleApi.list({ session: sessionId }),
   });
 
+  // Oturum kuralı tedbirin yer ayağını ezer: kural değişince tedbir bölümü de tazelenir.
+  const tazele = () => {
+    void qc.invalidateQueries({ queryKey: ["placement-rules", sessionId] });
+    void qc.invalidateQueries({ queryKey: ["session-accommodations", sessionId] });
+  };
+
   const sil = useMutation({
     mutationFn: (id: number) => placementRuleApi.remove(id),
     onSuccess: () => {
       snackbar.success("Kural kaldırıldı.");
-      void qc.invalidateQueries({ queryKey: ["placement-rules", sessionId] });
+      tazele();
     },
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Kural kaldırılamadı."),
   });
@@ -118,8 +132,10 @@ export default function KurallarPaneli({ sessionId }: { sessionId: number }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <p className="text-body-medium text-on-surface-variant">
-          Engelli ya da özel durumu olan öğrencilerin yeri burada sabitlenir. Yer seçilmezse öğrenci
-          kendi dersliğinde, arka sırada ve tek başına oturur. Kuralı olan öğrencinin yeri dağıtımda
+          Engelli ya da özel durumu olan öğrencilerin yeri burada, yalnız bu oturum için sabitlenir.
+          Her sınavda geçerli olacak tedbirleri Kişiler → BEP ve tedbirler ekranında bir kez girin;
+          burada eklenen kural o oturumda tedbirin yerine geçer. Yer seçilmezse öğrenci kendi
+          dersliğinde, arka sırada ve tek başına oturur. Kuralı olan öğrencinin yeri dağıtımda
           değiştirilmez; dağıtımdan sonra eklenen kural için “Yeniden dağıt” gerekir.
         </p>
         <span className="ml-auto" />
@@ -180,10 +196,12 @@ export default function KurallarPaneli({ sessionId }: { sessionId: number }) {
           onClose={() => setAddOpen(false)}
           onSaved={() => {
             setAddOpen(false);
-            void qc.invalidateQueries({ queryKey: ["placement-rules", sessionId] });
+            tazele();
           }}
         />
       ) : null}
+
+      {session ? <OturumTedbirleriBolumu session={session} /> : null}
     </div>
   );
 }

@@ -303,8 +303,8 @@ export default function KilavuzPage() {
           şubelerde her dersin bu yılki öğrenci listesi ve şubeleri yenilenir; raporda olmayan
           derslere ve şubelere dokunulmaz, yani raporu tek bir sınıf düzeyi için de alabilirsiniz.
           Öğrenciler okul numarasıyla eşleştiği için önce öğrenci listesini (3. adım) güncelleyin;
-          nakil gelen öğrenci de e-Okul'da seçmelisi girilip rapor yeniden aktarılınca listeye
-          girer.
+          nakil gelen öğrenci de e-Okul'da seçmelisi girilip rapor yeniden aktarılınca listeye girer
+          (rapor gelene kadar aşağıdaki “Seçimleri yap” penceresi de kullanılabilir).
         </p>
         <p>
           Aktarım ders havuzunu da toparlar. Raporda olup havuzda hiç karşılığı olmayan seçmeli
@@ -321,6 +321,24 @@ export default function KilavuzPage() {
           <em>Yalnız işaretlenen öğrenciler alıyor</em>. İşaretlemediğiniz öğrencileri aynı adımda
           başka bir seçmeliye (örneğin Peygamberimizin Hayatı) yazabilirsiniz. Listesi girilmiş
           şubeler “Şubeler” sütununda öğrenci sayısıyla görünür (“9: A (14), B”).
+        </p>
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Şubesi değişen ya da nakil gelen öğrenci
+        </h3>
+        <p>
+          Öğrencinin şubesini değiştirdiğinizde (e-Okul listesini yeniden aktararak ya da kaydını
+          düzenleyerek) zorunlu dersleri ve şubenin tamamının aldığı seçmelileri kendiliğinden yeni
+          şubesine geçer; eski şubesinin öğrenci listelerinden de çıkar. Yeni şubesi bir seçmeliyi{" "}
+          <strong>bölünerek</strong> okutuyorsa (dersi şubenin yalnız bir kısmı alıyorsa) program
+          hangi dersi aldığını tahmin etmez: öğrenci <strong>“seçmeli ders seçimi bekliyor”</strong>{" "}
+          olur. Nakil gelen öğrenci için de aynısı geçerlidir. Öğrenci aktarımının önizlemesi kaç
+          öğrencinin bekleyeceğini söyler; <Ekran to="/dersler">Ders Havuzu</Ekran> ve Kişiler
+          ekranlarının üstünde bir bant çıkar. <strong>“Seçimleri yap”</strong> penceresinde
+          öğrencinin aldığı dersleri işaretleyip kaydedin — eski şubesinde aldığı ders işaretli
+          gelir; hiçbirini almıyorsa işaretsiz kaydedin. Seçim yapılana kadar o şubenin bölünmüş
+          dersini içeren sınav oturumu dağıtılamaz: öğrenci sınavdan sessizce düşmesin. e-Okul
+          seçmeli raporunu yeniden aktarırsanız raporda geçen öğrencilerin seçimi kendiliğinden
+          kapanır. Okuldan ayrılan ya da sicilden silinen öğrencinin seçmeli kayıtları silinir.
         </p>
         <Ipucu>
           Liste dağıtımdan sonra değişirse (e-Okul'u yeniden aktardınız ya da bir öğrencinin dersi
@@ -864,7 +882,9 @@ export default function KilavuzPage() {
         <p>
           Kural <strong>eklendiği oturuma özgüdür</strong>: her sınav oturumunda yeniden tanımlanır
           ve bir öğrencinin aynı oturumda tek kuralı olur. Değiştirmek için kuralı kaldırıp yeniden
-          ekleyin.
+          ekleyin. Her sınavda geçerli olacak yeri öğrenci için bir kez Kişiler → BEP ve tedbirler
+          ekranında girebilirsiniz (aşağıdaki “Kalıcı sınav tedbirleri” başlığı); oturumda
+          eklediğiniz kural o oturumda tedbirin yerine geçer.
         </p>
         <p>
           Gerekçe olarak yalnız kategori seçilir (engel durumu, BEP, sağlık, diğer);{" "}
@@ -877,8 +897,48 @@ export default function KilavuzPage() {
           Yerleştirme kuralı yalnız öğrencinin <em>yerini</em> belirler. Öğrencinin sınavı da BEP'i
           doğrultusunda ayrıca hazırlanıyorsa aşağıdaki “BEP kapsamındaki öğrenciler ve bireysel
           soru dosyası” başlığına bakın. İkisi birbirinden bağımsızdır: gerekçesi BEP olan bir kural
-          öğrenciyi BEP listesine eklemez, listedeki öğrenci de kendiliğinden sabit bir yere
-          oturtulmaz.
+          öğrenciyi BEP listesine eklemez; listedeki öğrenci de ancak listede bir yer tedbiri
+          girildiyse kendiliğinden yerine oturtulur.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Kalıcı sınav tedbirleri: ayrı salon, ek süre, okuyucu ve yazıcı desteği
+        </h3>
+        <p>
+          Sınavlarda tedbir uygulanacak öğrencileri{" "}
+          <Ekran to="/kisiler?tab=bep">Kişiler → BEP ve tedbirler</Ekran> ekranında{" "}
+          <strong>bir kez</strong> girersiniz; tedbir bütün sınav oturumlarında geçerli olur.{" "}
+          <strong>“Öğrenci ekle”</strong> penceresinde öğrenciyi adıyla ya da okul numarasıyla
+          seçin; birden çok öğrenci için <strong>“Okul numaralarıyla toplu”</strong> seçeneğine
+          numaraları yazın (hepsine aynı tedbirler yazılır, farklı olanı sonra satırından
+          düzenlersiniz). Gerekçe yalnız kategoridir — BEP, engel durumu, sağlık ya da diğer; tanı
+          veya rapor kaydedilmez.
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Yer:</strong> <em>Kendi sınıfında</em> (öğrencinin şube dersliği),{" "}
+            <em>Ayrı salon</em> (salonu siz seçersiniz; salon kelebek dağıtımından çıkar) ya da{" "}
+            <em>Ön sırada</em>; istenirse salon içinde ön/arka sıra ve <em>sırada tek başına</em>.
+            Bu tedbir her dağıtımda yerleştirme kuralı gibi uygulanır; o oturumda öğrenciye ayrıca
+            kural eklerseniz kural geçerli olur.
+          </li>
+          <li>
+            <strong>Ek süre</strong> (dakika) ile <strong>okuyucu</strong> ve{" "}
+            <strong>yazıcı desteği</strong> yerleşimi değiştirmez. Salon sınav evrakına, yoklama
+            listesine ve kitapçığa <strong>hiç basılmaz</strong>; yalnız oturumun “İdare özeti
+            (PDF)” belgesinde görünür, gözetmene siz bildirirsiniz. Görevli öğretmeni program
+            atamaz.
+          </li>
+        </ul>
+        <p>
+          Sesli okuma ve yazdırma salondaki öbür öğrencileri etkilediği için okuyucu ya da yazıcı
+          desteği seçilen öğrenciye ayrı salon önerilir; dağıtım, destekli öğrenci ayrı salonda
+          değilse ya da aynı ayrı salonda iki destekli öğrenci varsa uyarır. Ek süreli öğrencinin
+          iki sınavı arasında süre kalmıyorsa da uyarılırsınız: aynı gün çakışan oturumlarda ve
+          sınav takviminde ardışık iki ders saatinde. Bu uyarılar öğrencinin adını ya da numarasını
+          söylemez, yalnız kaç öğrenci olduğunu. Oturumun Yerleştirme Kuralları sekmesindeki{" "}
+          <strong>“Kalıcı sınav tedbirleri”</strong> bölümü o sınava giren tedbirli öğrencileri
+          gösterir.
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
@@ -969,9 +1029,10 @@ export default function KilavuzPage() {
         </p>
         <ol className="list-decimal space-y-1 pl-5">
           <li>
-            <Ekran to="/kisiler?tab=bep">Kişiler → BEP</Ekran> sekmesinde BEP kapsamındaki
-            öğrencileri listeye ekleyin. Bu bir kez yapılır; liste bütün sınav oturumlarında
-            kullanılır.
+            Kişiler → BEP ve tedbirler sekmesinde BEP kapsamındaki öğrencileri{" "}
+            <strong>“BEP” gerekçesiyle</strong> listeye ekleyin. Bu bir kez yapılır; liste bütün
+            sınav oturumlarında kullanılır. Bireysel soru dosyası yalnız BEP gerekçeli öğrenciye
+            uygulanır.
           </li>
           <li>
             Oturumu dağıttıktan sonra <strong>Sorular ve Kitapçıklar</strong> sekmesine geçin. “BEP
@@ -997,10 +1058,11 @@ export default function KilavuzPage() {
         </p>
         <p>
           Bu bilgiyi taşıyan tek basılı belge, aynı bölümden indirilen{" "}
-          <strong>“İdare özeti (PDF)”</strong> belgesidir: oturuma giren BEP kapsamındaki
-          öğrencileri ve hangisine bireysel soru dosyası uygulandığını gösterir.{" "}
-          <strong>Yalnız idarede kalır</strong>: salonlara dağıtılmaz ve Evrak sekmesindeki “Tümünü
-          indir” paketine girmez. Gözetmene verilmesi gereken bilgiyi idare kendisi aktarır.
+          <strong>“İdare özeti (PDF)”</strong> belgesidir: oturuma giren BEP kapsamındaki ve
+          tedbirli öğrencileri, tedbirlerini ve hangisine bireysel soru dosyası uygulandığını
+          gösterir. <strong>Yalnız idarede kalır</strong>: salonlara dağıtılmaz ve Evrak
+          sekmesindeki “Tümünü indir” paketine girmez. Gözetmene verilmesi gereken bilgiyi idare
+          kendisi aktarır.
         </p>
         <Ipucu>
           Bir öğrenciyi seçip PDF'ini yüklemediyseniz <strong>kitapçık üretilmez</strong>: program
@@ -1010,16 +1072,16 @@ export default function KilavuzPage() {
           dosya değişmez — önce “Yeniden aç” ile onayı geri alın.
         </Ipucu>
         <p>
-          Program bu konuda <strong>yalnız üyelik bilgisini</strong> tutar: öğrencinin listede olup
-          olmadığını ve oturumdaki soru dosyasını. Tanı, rapor ya da açıklama kaydedilmez; böyle bir
-          alan yoktur. Öğrenci okuldan ayrıldığında ya da sicilden silindiğinde liste kaydı ve
+          Program bu konuda <strong>tanı tutmaz</strong>: listede yalnız gerekçe kategorisi, varsa
+          tedbirler ve oturumdaki soru dosyası durur. Tanı, rapor ya da açıklama kaydedilmez; böyle
+          bir alan yoktur. Öğrenci okuldan ayrıldığında ya da sicilden silindiğinde liste kaydı ve
           bireysel soru dosyaları kendiliğinden silinir. Öğrenciyi listeden çıkarırsanız
-          onaylanmamış oturumlardaki bireysel soru dosyaları da silinir; BEP sekmesindeki{" "}
-          <strong>“Tüm BEP kayıtlarını sil”</strong> düğmesi bütün kayıtları kalıcı olarak kaldırır.
-          Bu bilgi özel nitelikli kişisel veridir (KVKK md. 6):{" "}
+          onaylanmamış oturumlardaki bireysel soru dosyaları da silinir; sekmedeki{" "}
+          <strong>“Tüm kayıtları sil”</strong> düğmesi bütün kayıtları kalıcı olarak kaldırır. Bu
+          bilgi özel nitelikli kişisel veridir (KVKK md. 6):{" "}
           <Ekran to="/ayarlar?tab=guvenlik">Ayarlar → Güvenlik</Ekran> bölümünden uygulama parolası
-          koymanız önerilir. Parola kapalıyken program bunu BEP sekmesinde ve oturumdaki bölümde
-          hatırlatır.
+          koymanız önerilir. Parola kapalıyken program bunu BEP ve tedbirler sekmesinde ve
+          oturumdaki bölümde hatırlatır.
         </p>
         <p className="text-body-small">
           Dayanak: Ölçme ve Değerlendirme Yönetmeliği md. 4/1-ç, 5/1-n, 6/1-d; Yazılı ve Uygulamalı

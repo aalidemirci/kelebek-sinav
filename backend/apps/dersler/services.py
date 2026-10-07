@@ -15,6 +15,7 @@ OYS `ders_yapisi.services`'ten KELEBEK KESİTİ (tasarım §7 + §11):
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -970,3 +971,196 @@ def set_section_enrollment(
         tamamlayici = {"course_id": diger.pk, "student_ids": kalan}
 
     return {"section_id": int(section.pk), "student_ids": ids, "complement": tamamlayici}
+
+
+# --------------------------------------------------------------------------- #
+# Şube değişikliği / nakil → seçmeli ders seçimi bekleyen öğrenci (07.10.2026)
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class SectionChangeSummary:
+    """Şube değişikliği köprüsünün özeti — aktarım raporu yalnız SAYI basar."""
+
+    #: Yeni şubesi seçmeliyi bölünerek okuttuğu için seçim bekleyen öğrenci.
+    pending: int = 0
+    #: Eski şubelerin listelerinden silinen satır.
+    removed_rows: int = 0
+
+
+def _listed_course_ids(school_year_id: int, section_id: int) -> set[int]:
+    """Şubede öğrenci listesiyle (bölünerek) okutulan seçmeliler."""
+    return set(
+        CourseEnrollment.objects.filter(
+            school_year_id=school_year_id,
+            section_id=section_id,
+            student__deleted_at__isnull=True,
+        )
+        .values_list("course_id", flat=True)
+        .distinct()
+    )
+
+
+@transaction.atomic
+def handle_student_section_changes(student_ids: Iterable[int]) -> SectionChangeSummary:
+    """Şubesi değişen ya da yeni kaydedilen öğrencilerin seçmeli listelerini toparlar.
+
+    Okul uygulamasının köprüsüdür (öğrenci aktarımı, elle düzenleme, yeni kayıt;
+    `okul.services.persons.notify_student_section_changes`). Her öğrenci için:
+
+    1. Başka şubelerdeki liste satırları KATI silinir — liste güncel durumdur
+       (`CourseEnrollment` docstring'i); dersleri öneri olarak saklanır.
+    2. Yeni şubede öğrenci listeli seçmeli varsa öğrenci SEÇİM BEKLER
+       (`PendingElectiveChoice`). Yoksa iş biter: listesiz ders şubenin
+       tamamıdır, zorunlu ders şubeden türer.
+
+    YALNIZ şubesi gerçekten değişen, yeni gelen ya da yeniden aktifleşen öğrenci
+    verilir: hiçbir listede olmayan eski öğrenci o dersleri almıyor olabilir,
+    onu bekletmek yanlış olurdu. Aktif ders yılı yoksa hiçbir şey yapılmaz.
+    """
+    from apps.dersler.models import PendingElectiveChoice
+    from apps.okul import selectors as okul_selectors
+    from apps.okul.models import ClassSection, Student, StudentStatus
+
+    ids = sorted({int(x) for x in student_ids})
+    year = okul_selectors.active_school_year()
+    if not ids or year is None:
+        return SectionChangeSummary()
+    bekleyen = 0
+    silinen = 0
+    for ogrenci in Student.objects.filter(pk__in=ids):
+        eski_bekleyen = PendingElectiveChoice.all_objects.get_queryset().filter(
+            student=ogrenci, school_year=year
+        )
+        onerilen: set[int] = set()
+        for onceki in eski_bekleyen:
+            onerilen.update(int(x) for x in onceki.previous_course_ids or [])
+        eski_bekleyen.hard_delete()
+
+        sube = None
+        if (
+            ogrenci.status == StudentStatus.ACTIVE
+            and ogrenci.class_level is not None
+            and ogrenci.class_section
+        ):
+            sube = ClassSection.objects.filter(
+                school_year=year,
+                class_level=ogrenci.class_level,
+                class_section=ogrenci.class_section,
+            ).first()
+        bayat = CourseEnrollment.all_objects.get_queryset().filter(
+            student=ogrenci, school_year=year
+        )
+        if sube is not None:
+            bayat = bayat.exclude(section=sube)
+        onerilen.update(int(x) for x in bayat.values_list("course_id", flat=True))
+        sayi, _ = bayat.hard_delete()
+        silinen += sayi
+
+        if sube is None or not _listed_course_ids(int(year.pk), int(sube.pk)):
+            continue
+        PendingElectiveChoice.objects.create(
+            student=ogrenci,
+            school_year=year,
+            section=sube,
+            previous_course_ids=sorted(onerilen),
+        )
+        bekleyen += 1
+    return SectionChangeSummary(pending=bekleyen, removed_rows=silinen)
+
+
+@transaction.atomic
+def resolve_elective_choice(
+    *, student_id: int, course_ids: list[int], school_year_id: int
+) -> dict[str, Any]:
+    """Seçim bekleyen öğrencinin şubesindeki listeli seçmelilerden aldıklarını yazar.
+
+    Öğrenci ölçeğinde TAM DEĞİŞTİRMEDİR: şubenin listeli dersleri arasında
+    seçilenlerin listesine öğrenci eklenir, seçilmeyenlerden çıkarılır; boş seçim
+    "bu şubede bölünerek okutulan derslerin hiçbirini almıyor" demektir. Çıkarma
+    bir listeyi BOŞALTIRSA ders o şubenin kapsamından düşer — listesiz şube
+    "şubenin tamamı" demek olduğundan öbür türlü ders bütün şubeye geçerdi
+    (`set_section_enrollment` tamamlayıcı kuralının aynısı). Hata metni ad
+    içermez (KVKK).
+    """
+    from apps.dersler.models import PendingElectiveChoice
+    from apps.okul.models import Student, StudentStatus
+
+    bekleyen = (
+        PendingElectiveChoice.objects.filter(student_id=student_id, school_year_id=school_year_id)
+        .select_related("section")
+        .first()
+    )
+    if bekleyen is None:
+        raise ValidationError(
+            {
+                "student_id": "Bu öğrenci için bekleyen seçmeli ders seçimi yok; seçim başka "
+                "bir pencereden kaydedilmiş olabilir."
+            }
+        )
+    sube = bekleyen.section
+    ogrenci = Student.objects.filter(pk=student_id, status=StudentStatus.ACTIVE).first()
+    if (
+        ogrenci is None
+        or sube.deleted_at is not None
+        or (ogrenci.class_level, ogrenci.class_section) != (sube.class_level, sube.class_section)
+    ):
+        raise ValidationError(
+            {"student_id": "Öğrencinin şubesi seçim beklerken değişti; listeyi yenileyin."}
+        )
+
+    secilen: set[int] = set()
+    for raw in course_ids:
+        if isinstance(raw, bool) or not isinstance(raw, int):
+            raise ValidationError({"course_ids": "Ders seçimi geçersiz; listeden seçin."})
+        secilen.add(raw)
+    listeli = _listed_course_ids(school_year_id, int(sube.pk))
+    yabanci = secilen - listeli
+    if yabanci:
+        raise ValidationError(
+            {
+                "course_ids": f"Seçilen derslerden {len(yabanci)} tanesi {sube.class_label} "
+                "şubesinde öğrenci listesiyle okutulmuyor; listeyi yenileyin."
+            }
+        )
+
+    for course_id in sorted(listeli):
+        satirlar = CourseEnrollment.all_objects.get_queryset().filter(
+            course_id=course_id, school_year_id=school_year_id, student_id=student_id
+        )
+        if course_id in secilen:
+            # Teklik (ders, yıl, öğrenci)'dir: başka şubeden kalmış satır düşer.
+            satirlar.exclude(section=sube).hard_delete()
+            if not satirlar.filter(section=sube, deleted_at__isnull=True).exists():
+                CourseEnrollment.objects.create(
+                    course_id=course_id,
+                    school_year_id=school_year_id,
+                    section=sube,
+                    student_id=student_id,
+                )
+            continue
+        satirlar.filter(section=sube).hard_delete()
+        if not CourseEnrollment.objects.filter(
+            course_id=course_id, school_year_id=school_year_id, section=sube
+        ).exists():
+            ders = Course.objects.get(pk=course_id)
+            _offering_remove_section(ders, school_year_id, int(sube.class_level), int(sube.pk))
+    bekleyen.hard_delete()
+    return {
+        "student_id": int(student_id),
+        "section_id": int(sube.pk),
+        "course_ids": sorted(secilen),
+    }
+
+
+def forget_student_enrollments(student_id: int) -> None:
+    """KVKK: ayrılan/silinen öğrencinin seçmeli listeleri ve bekleyen seçimi KATI silinir.
+
+    `persons.register_student_forget_hook` ile bağlanır (`DerslerConfig.ready`) —
+    fotoğraf ve BEP kaydının emsali. Ders seçimi öğrencinin kişisel verisidir;
+    öğrenci okuldan ayrılınca tutulması için sebep kalmaz (KVKK md. 7/1).
+    """
+    from apps.dersler.models import PendingElectiveChoice
+
+    CourseEnrollment.all_objects.get_queryset().filter(student_id=student_id).hard_delete()
+    PendingElectiveChoice.all_objects.get_queryset().filter(student_id=student_id).hard_delete()

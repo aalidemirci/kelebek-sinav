@@ -734,6 +734,44 @@ yaz" seçeneği tamamlayıcı dersin listesini aynı işlemde yazar.
   katılımcı doğru çözüldüğünde kitapçık, R1/R4/R5/R7 ve R8 kendiliğinden doğru
   olur.
 
+**07.10.2026 eki — şube değiştiren / nakil gelen öğrenci (kullanıcı isteği).**
+İstek: "nakil gelen veya sınıfı değiştirilen öğrenciyi yeni sınıfındaki derslerle
+ilişkilendirip eski sınıfıyla bağını silsin; sınıfın bölünerek aldığı ders varsa
+uyarıp hangi dersi aldığını seçtirsin." Teşhis: zorunlu dersler ve listesiz
+seçmeliler şubeden TÜREDİĞİ için zaten doğru çalışıyordu (bağ saklanmaz). Kusur
+listeli şubedeydi: öğrenci yeni şubenin hiçbir listesinde olmadığından bölünmüş
+derslerin sınavından SESSİZCE düşüyordu; eski şubedeki satırı silinmiyor (okumada
+süzülüyor, her oturumda "artık bu şubede değil" uyarısı basıyordu) ve ayrılan
+öğrencinin satırları da kalıyordu.
+
+- **Köprü:** öğrenci aktarımı (`imports._ingest_students` — şube kataloğu
+  tohumlandıktan SONRA), elle düzenleme ve yeni kayıt (`persons`) şubesi değişen /
+  yeni gelen / yeniden aktifleşen öğrenciyi `persons.notify_student_section_changes`
+  ile `dersler.services.handle_student_section_changes`e verir
+  (`setup.sync_course_catalog` emsali — okul ders havuzunun kuralını bilmez).
+  Eski şube satırları KATI silinir; yeni şubede liste varsa öğrenci
+  `PendingElectiveChoice` olur (eski dersleri öneri olarak tutulur). Şubesi
+  değişmeyen öğrenci BEKLETİLMEZ: hiçbir listede olmaması dersi almadığı anlamına
+  gelebilir.
+- **Engel (kullanıcı kararı — uyarı değil):** katılımcı çözümü listeli şubedeki
+  bekleyeni katılımcı saymaz, `pending_choices`e yazar; `distribute_session`
+  reddeder, sihirbaz "Devam"ı kilitler. Listesiz ders (şubenin tamamı) ve LEVEL
+  satırı etkilenmez — öğrenci oraya zaten kendiliğinden girer.
+- **Günlük yük:** kapsamdaki şubede bekleyen varsa `course_level_student_ids`
+  "bilinmiyor"a döner (listesiz şube gerekçesi). Takvim kesişimi (`_scope_overlaps`)
+  bekleyeni bilmez: öğrenci iki listeli dersi birden seçerse dağıtımda çift ders
+  çakışması onu durdurur.
+- **Kapanış:** "Seçimleri yap" penceresi (öğrenci ölçeğinde TAM DEĞİŞTİRME; boş
+  seçim = hiçbirini almıyor; boşalan liste dersi şubenin kapsamından düşürür —
+  yoksa ders bütün şubeye geçerdi), e-Okul raporunda geçmek (raporda HİÇ geçmeyen
+  bekleyen kapanmaz — rapor şube değişikliğinden eski olabilir), yeniden şube
+  değişikliği, ayrılma/silme (`forget_student_enrollments` — KVKK md. 7/1,
+  fotoğraf ve BEP emsali).
+- **Geçiş:** `dersler/0009` göçü güncelleme öncesi artıkları bir kez toparlar
+  (ayrılmışın satırları silinir; şube değiştirmişin eski satırı silinir, yeni
+  şubesi listeliyse seçim bekler). Şifreli alana dokunmaz (açılışta kilitliyken
+  koşabilir).
+
 ---
 
 ## 8. Arayüz planı (M3 "Mürekkep")
@@ -1052,8 +1090,49 @@ karşılığı yoktur (yalnız `RuleReason.IEP` kategorisi vardı) — KS'ye öz
   parçasıdır). Bireysel PDF diske `soru_b_<uuid>.pdf` adıyla yazılır; hata, günlük
   ve uç YOLU öğrenci kimliği taşımaz (öğrenci pk'si gövdede, satır kimliği opak).
 * **Bilinçli olarak yapılmayanlar.** Ek süre / öğrenciye özgü süre (salon evrakına
-  basılsa işaret olurdu); "bu derste hep ayrı kâğıt" gibi ders bazlı kalıcı tercih
-  (hangi derslerin uyarlandığı da veridir); e-Okul'dan BEP aktarımı.
+  basılsa işaret olurdu — 07.10.2026'da salon evrakına BASILMADAN yapıldı, aşağıda);
+  "bu derste hep ayrı kâğıt" gibi ders bazlı kalıcı tercih (hangi derslerin
+  uyarlandığı da veridir); e-Okul'dan BEP aktarımı.
+
+**07.10.2026 eki — kalıcı sınav tedbirleri (kullanıcı isteği ve kararları).** İstek:
+"özel eğitim ihtiyacı olan öğrencilerin okul numaralarını girerek hangi tedbirlerin
+uygulanacağını seçebilsek (ayrı salon, ek süre, kendi sınıfında, okuyucu desteği,
+yazıcı desteği vb.)". Kararlar: tedbir YALNIZ idare özetinde basılır; okuyucu/yazıcı
+görevlisini program atamaz; liste gerekçeyle herkesi kapsar (BEP / engel durumu /
+sağlık / diğer). Kanun düzeyinde dayanak 573 KHK md. 16/1 ("sınavlarda gerekli önlemler
+alınır ve düzenlemeler yapılır"); tedbirleri ADIYLA sayan bir metin depoda yoktur —
+kılavuzda ya da evrakta bir maddeye bağlanacaksa önce metin `docs/mevzuat/`e alınır.
+
+* **Tek satır, tek liste.** `IepStudent` (tarihsel ad) gerekçe kategorisi + tedbir
+  alanlarını taşır; Kişiler'deki sekme "BEP ve tedbirler" oldu (anahtar `bep` — derin
+  bağlantılar bozulmasın). Ayrı model reddedildi: BEP'li öğrencinin tedbiri iki listede
+  iki kez girilir ve iki şifreli bağ birbirinden kopabilirdi. BEP'e özgü işler gerekçesi
+  BEP olan satırla sınırlıdır; gerekçe BEP'ten çıkınca onaylanmamış oturumlardaki
+  bireysel soru dosyaları düşer (`update_accommodation`).
+* **Yer tedbiri = yerleştirme kuralı.** Kendi sınıfında → `HOME_CLASSROOM`, ayrı salon →
+  `SEPARATE_ROOM` (salon tedbirde seçilir), ön sırada → `FRONT_ROW`; salon içi ön/arka ve
+  "sırada tek başına" aynen taşınır. `_effective_rules` tedbirden KAYITSIZ kural üretir
+  ve en alta koyar: oturum kuralı > kalıcı kural > tedbir. Yeni motor yok; `move_seat`in
+  "tek başına" kapısı ve klasik düzen uyarısı aynı sözlükten okur. Kural satırı
+  yazılmaz: tedbirin kaynağı şifreli bağlı listedir.
+* **Süre ve destek yerleşimi değiştirmez.** Ek süre ve okuyucu/yazıcı desteği idare
+  özetinin "Tedbirler" sütunundadır. Dağıtım ekranda uyarır (destekli öğrenci ayrı
+  salonda değil; aynı ayrı salonda iki destekli öğrenci; ek süreli öğrenci sayısı;
+  klasik düzende ayrı salon gerektiren öğrenci) ama bu uyarılar R8'e GİRMEZ
+  (`distribution_params`a yazılmaz). Ek süre iki denetime girer: aynı gün oturum
+  çakışması (öğrencinin aralığı ek süre kadar uzar) ve takvimde ardışık iki ders
+  saatinde sınava giren ek süreli öğrenci (takvimde süre olmadığı için yaklaşık,
+  ihtiyatlı). Metinler yalnız SAYI söyler.
+* **Ekranlar.** Liste: gerekçe + tedbir özeti (metin backend'den, `measure_labels`),
+  ekleme (ad/okul no ya da okul numaralarıyla toplu — hepsine aynı tedbir) ve düzenleme
+  penceresi. Oturum: Yerleştirme Kuralları'nda "Kalıcı sınav tedbirleri" bölümü
+  (oturuma giren tedbirliler, oturum kuralının ezdiği satırın rozeti, idare özeti).
+  İdare özeti BEP'li ve tedbirli öğrencileri birlikte basar; gerekçe basılmaz.
+* **Bilinçli olarak yapılmayanlar.** Okuyucu/yazıcı görevlendirmesi (kullanıcı kararı —
+  görev çizelgesinde dolaylı işaret olurdu); salon evrakına öğrenci düzeyinde süre
+  notu; tedbirin süre sonu/tarihi (tarih de veri olurdu — durum geçince idareci
+  kaldırır); okuyucu/yazıcı için ayrı salonu ZORLAMAK (öneri ve uyarı var, karar
+  idarecinin).
 
 Şablonlar: `templates/sinav/reports/` (base · _head · _kroki · _kroki_style ·
 _foto_plan · _foto_plan_style · r1_salon_evraki · r4_announcement ·

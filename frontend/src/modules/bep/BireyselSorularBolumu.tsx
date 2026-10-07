@@ -26,8 +26,6 @@ import { useCallback, useId, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "../../lib/api";
-import { dosyaAdi, saveBlob } from "../../lib/download";
-import { formatDate } from "../../lib/format";
 import Button from "../../ui/Button";
 import { useConfirm } from "../../ui/ConfirmProvider";
 import Dialog from "../../ui/Dialog";
@@ -37,9 +35,10 @@ import SoruYuklemeDialog from "../oturumlar/SoruYuklemeDialog";
 import type { IndividualDocument, IndividualQuestionRow } from "./api";
 import { individualQuestionApi } from "./api";
 import BepParolaUyarisi from "./BepParolaUyarisi";
+import IdareOzetiDugmesi from "./IdareOzetiDugmesi";
 
-/** İndirilen idare özetinin dosya adındaki belge adı (docs/sozluk.md §3). */
-export const IEP_SUMMARY_FILE_TITLE = "BEP İdare Özeti";
+/** Belge adı ortak düğmededir (Yerleştirme Kuralları da aynı özeti indirir). */
+export { IEP_SUMMARY_FILE_TITLE } from "./IdareOzetiDugmesi";
 
 /** Satırın yeri — diyalog başlıkları da öğrenciyi adla değil BUNUNLA anar. */
 function yerEtiketi(row: IndividualQuestionRow): string {
@@ -194,7 +193,6 @@ export default function BireyselSorularBolumu({
   const snackbar = useSnackbar();
   const qc = useQueryClient();
   const headingId = useId();
-  const [summaryDownloading, setSummaryDownloading] = useState(false);
   const [preview, setPreview] = useState<{ url: string; label: string } | null>(null);
 
   const rows = useQuery({
@@ -226,22 +224,6 @@ export default function BireyselSorularBolumu({
       return null;
     });
   }, []);
-
-  const downloadSummary = async () => {
-    setSummaryDownloading(true);
-    try {
-      const blob = await individualQuestionApi.summaryBlob(session.id);
-      // Belge adı + oturum adı + tarih (docs/sozluk.md §3).
-      saveBlob(
-        blob,
-        dosyaAdi([IEP_SUMMARY_FILE_TITLE, session.name, formatDate(session.exam_date)], "pdf"),
-      );
-    } catch (e) {
-      snackbar.error(e instanceof ApiError ? e.message : "İdare özeti indirilemedi.");
-    } finally {
-      setSummaryDownloading(false);
-    }
-  };
 
   // Liste HİÇ okunamadıysa sessiz kalınmaz: bölüm çizilmezse idareci bu oturumda
   // BEP kapsamında öğrenci olmadığını sanar ve öğrenci dersin kitapçığını alır.
@@ -289,19 +271,7 @@ export default function BireyselSorularBolumu({
         ))}
       </ul>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          variant="outlined"
-          icon="picture_as_pdf"
-          onClick={() => void downloadSummary()}
-          disabled={summaryDownloading}
-        >
-          İdare özeti (PDF)
-        </Button>
-        <span className="text-body-small text-on-surface-variant">
-          Yalnız idare nüshasıdır; salonlara dağıtılmaz ve “Tümünü indir” paketine girmez.
-        </span>
-      </div>
+      <IdareOzetiDugmesi session={session} />
 
       <Dialog
         open={preview !== null}

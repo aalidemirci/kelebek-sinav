@@ -65,6 +65,8 @@ class CourseResolution:
     warnings: list[str] = field(default_factory=list)
     #: Öğrenci listesiyle (şubenin bir kısmı) çözülen şubelerin etiketleri ('9/A').
     listed_sections: list[str] = field(default_factory=list)
+    #: Listeli şubede seçmeli ders seçimi bekleyen öğrenci → şube etiketi.
+    pending: dict[int, str] = field(default_factory=dict)
 
     @property
     def count(self) -> int:
@@ -79,6 +81,9 @@ class SessionResolution:
     # Öğrenci iki derse düştü: student_id → o öğrencinin düştüğü ders adları.
     duplicate_students: dict[int, list[str]] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    #: Seçmeli ders seçimi BEKLEYEN öğrenci → şube etiketi (07.10.2026): şubesi
+    #: dersi bölünerek okutuyor ve öğrencinin girip girmeyeceği bilinmiyor.
+    pending_choices: dict[int, str] = field(default_factory=dict)
 
     @property
     def participants(self) -> list[Participant]:
@@ -93,6 +98,21 @@ class SessionResolution:
     def has_blocking_conflicts(self) -> bool:
         """Sert çakışma var mı (öğrenci iki derste) — dağıtım engellenir."""
         return bool(self.duplicate_students)
+
+    @property
+    def has_pending_choices(self) -> bool:
+        """Seçim bekleyen öğrenci var mı — dağıtım engellenir (kullanıcı kararı 07.10.2026)."""
+        return bool(self.pending_choices)
+
+    def pending_choices_message(self) -> str:
+        """Dağıtım reddinin ve sihirbaz bandının ortak metni (ad yok, yalnız SAYI)."""
+        subeler = ", ".join(sorted(set(self.pending_choices.values())))
+        return (
+            f"{len(self.pending_choices)} öğrencinin seçmeli ders seçimi bekliyor ({subeler}): "
+            "şubesi değişti ya da okula yeni geldi ve yeni şubesi dersi bölünerek okutuyor. "
+            "Ders Havuzu → “Seçimleri yap” penceresinden hangi dersleri aldıklarını seçin; "
+            "o zamana kadar oturum dağıtılamaz."
+        )
 
 
 def conflict_group_key(course_id: int, level: int, *, shared_booklet: bool = False) -> str:
@@ -191,6 +211,8 @@ def _resolve_sections(
     Kural şube bazındadır (`dersler.CourseEnrollment`): listesiz şubeyi dersi
     tamamen alır (bugünkü davranış). Listedeki öğrenci artık o şubede değilse
     (şube değiştirmiş, ayrılmış) atlanır ve SAYIYLA uyarılır — ad yazılmaz.
+    Listeli şubede seçmeli ders SEÇİMİ BEKLEYEN öğrenci (07.10.2026) katılımcı
+    sayılmaz; `pending` sözlüğüne yazılır ve oturum dağıtılamaz.
     """
     from apps.okul import selectors as okul_selectors
 
@@ -219,6 +241,17 @@ def _resolve_sections(
                 resolution.warnings.append(
                     f"{section.class_label} şubesinde '{sc.course.name}' listesinden bu şubede "
                     "kalan öğrenci yok."
+                )
+            # Bu dersin listesine elle eklenmiş bekleyen öğrencinin bu derse girdiği
+            # BELLİDİR; belirsiz olan yalnız listede olmayanlardır.
+            bekleyen = (index.pending_in(int(section.pk)) & mevcut) - uyeler
+            if bekleyen:
+                for student_id in bekleyen:
+                    resolution.pending[student_id] = section.class_label
+                resolution.warnings.append(
+                    f"{section.class_label} şubesinde {len(bekleyen)} öğrencinin seçmeli ders "
+                    f"seçimi bekliyor; '{sc.course.name}' dersine girip girmeyecekleri seçilmeden "
+                    "oturum dağıtılamaz."
                 )
         _append_students(resolution, sc, students, class_level=section.class_level)
 
@@ -318,6 +351,7 @@ def resolve_session(session: ExamSession) -> SessionResolution:
         resolvers[ParticipantType(sc.participant_type)](sc, resolution, index)
         _dedupe_within_course(resolution)
         result.courses.append(resolution)
+        result.pending_choices.update(resolution.pending)
         for p in resolution.participants:
             student_courses.setdefault(p.student_id, []).append(p.course_name)
             student_numbers[p.student_id] = p.student_number
@@ -401,9 +435,15 @@ def overlapping_session_conflicts(session: ExamSession) -> list[str]:
 
     Uyarı listesi döner (Türkçe); boş liste = çakışma yok. Saat aralığı
     [start, start+duration) olarak karşılaştırılır.
+
+    Ek süre (07.10.2026, kalıcı sınav tedbiri): ek süreli öğrencinin aralığı
+    ek süre kadar UZAR — oturumlar kesişmese de öğrencinin ek süresi bir sonraki
+    sınavın başlangıcına taşıyorsa ayrıca uyarılır. Bu uyarı yalnız SAYI söyler:
+    okul numarası "ek süreli öğrenci" bilgisini metne yazardı (KVKK md. 6).
     """
     from datetime import date, datetime, timedelta
 
+    from apps.sinav import services_individual
     from apps.sinav.models import ExamSession
 
     def _interval(s: ExamSession) -> tuple[datetime, datetime]:
@@ -414,21 +454,43 @@ def overlapping_session_conflicts(session: ExamSession) -> list[str]:
     own_students = {p.student_id: p.student_number for p in resolve_session(session).participants}
     if not own_students:
         return []
+    ek_sure = services_individual.extra_minutes_map(list(own_students))
+    en_uzun = max(ek_sure.values(), default=0)
 
     conflicts: list[str] = []
     others = ExamSession.objects.filter(exam_date=session.exam_date).exclude(pk=session.pk)
     for other in others:
         other_start, other_end = _interval(other)
-        if own_start >= other_end or other_start >= own_end:
-            continue  # zaman kesişmiyor
+        kesisiyor = not (own_start >= other_end or other_start >= own_end)
+        if not kesisiyor and not (
+            en_uzun
+            and own_start < other_end + timedelta(minutes=en_uzun)
+            and other_start < own_end + timedelta(minutes=en_uzun)
+        ):
+            continue  # ek süreyle bile zaman kesişmiyor
         other_ids = {p.student_id for p in resolve_session(other).participants}
-        shared = sorted(set(own_students) & other_ids)
-        if shared:
-            # Ad değil okul no listelenir (KVKK — uyarı metni log/iletiye sızabilir).
-            numbers = ", ".join(own_students[sid] for sid in shared[:5])
-            suffix = " …" if len(shared) > 5 else ""
+        ortak = set(own_students) & other_ids
+        if kesisiyor:
+            shared = sorted(ortak)
+            if shared:
+                # Ad değil okul no listelenir (KVKK — uyarı metni log/iletiye sızabilir).
+                numbers = ", ".join(own_students[sid] for sid in shared[:5])
+                suffix = " …" if len(shared) > 5 else ""
+                conflicts.append(
+                    f"'{other.name}' oturumuyla aynı zaman diliminde {len(shared)} ortak "
+                    f"öğrenci var (No: {numbers}{suffix})."
+                )
+            continue
+        tasan = [
+            sid
+            for sid in ortak
+            if sid in ek_sure
+            and own_start < other_end + timedelta(minutes=ek_sure[sid])
+            and other_start < own_end + timedelta(minutes=ek_sure[sid])
+        ]
+        if tasan:
             conflicts.append(
-                f"'{other.name}' oturumuyla aynı zaman diliminde {len(shared)} ortak "
-                f"öğrenci var (No: {numbers}{suffix})."
+                f"'{other.name}' oturumuyla ek süreli {len(tasan)} öğrencinin sınav süresi "
+                "çakışıyor: ek süre öbür sınavın başlangıcına taşıyor."
             )
     return conflicts

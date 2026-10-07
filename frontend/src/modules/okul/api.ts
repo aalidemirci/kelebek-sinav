@@ -412,6 +412,11 @@ export interface StudentImportReport extends ImportReportBase {
   created_students: number;
   updated_students: number;
   unchanged_students: number;
+  /**
+   * Şubesi değişen ya da yeni gelen ve yeni şubesi seçmeliyi BÖLÜNEREK okuttuğu için
+   * seçmeli ders seçimi bekleyen öğrenci sayısı (07.10.2026; önizlemede de dolar).
+   */
+  elective_choices_pending?: number;
 }
 
 export interface PersonnelImportReport extends ImportReportBase {

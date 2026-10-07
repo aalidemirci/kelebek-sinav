@@ -35,9 +35,31 @@ def _forget_student_data(student_id: int) -> None:
         hook(student_id)
 
 
+#: Şube değişikliği sayılan alanlar — `status` da girer: yeniden aktifleşen
+#: öğrencinin seçmeli listesi ayrılırken silinmişti, yeni gelen gibi sorulur.
+_SECTION_FIELDS = frozenset({"class_level", "class_section", "status"})
+
+
+def notify_student_section_changes(student_ids: list[int]) -> int:
+    """Şubesi değişen / yeni gelen öğrenciyi seçmeli listelerine yansıtır (07.10.2026).
+
+    `dersler` köprüsüdür (`setup.sync_course_catalog` emsali): okul, ders havuzunun
+    iç kuralını bilmez, yalnız "bu öğrencilerin şubesi değişti" der. Eski şubedeki
+    liste satırları silinir; yeni şube seçmeliyi bölünerek okutuyorsa öğrenci
+    seçim bekler. Dönüş: seçim bekleyen öğrenci SAYISI (aktarım raporu basar).
+    """
+    if not student_ids:
+        return 0
+    from apps.dersler import services as ders_services
+
+    return ders_services.handle_student_section_changes(student_ids).pending
+
+
 @transaction.atomic
 def create_student(**fields: Any) -> Student:
     student: Student = Student.objects.create(**fields)
+    if student.status == StudentStatus.ACTIVE:
+        notify_student_section_changes([student.pk])
     return student
 
 
@@ -51,6 +73,8 @@ def update_student(student: Student, **fields: Any) -> Student:
     if student.status != StudentStatus.ACTIVE:
         # KVKK: ayrılan öğrencinin fotoğrafı tutulmaz (StudentPhoto docstring'i).
         _forget_student_data(student.pk)
+    elif _SECTION_FIELDS.intersection(changed):
+        notify_student_section_changes([student.pk])
     return student
 
 

@@ -1,8 +1,8 @@
-// BEP kapsamındaki öğrenciler listesi testleri (20.09.2026): liste + boş durum,
-// Autocomplete ile ekleme, çıkarma onayı (SATIR kimliğiyle siler; onay ve
-// bildirim metninde öğrenci adı ve okul numarası YOK), "Tüm BEP kayıtlarını sil"
-// ve uygulama parolası uyarısı (kapalıyken görünür, açıkken/okunamazsa gizli).
-// KVKK: fixture'lardaki ad ve numaralar UYDURMADIR.
+// "BEP ve tedbirler" listesi testleri (20.09.2026 BEP; tedbirler 07.10.2026): liste +
+// boş durum, gerekçe ve tedbir sütunları (tedbir metni backend'den), ekleme/düzenleme
+// penceresine giriş, çıkarma onayı (SATIR kimliğiyle siler; onay ve bildirim metninde
+// öğrenci adı ve okul numarası YOK), "Tüm kayıtları sil" ve uygulama parolası uyarısı.
+// Pencerenin ayrıntısı TedbirDialog.test.tsx'tedir. KVKK: ad ve numaralar UYDURMADIR.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -20,11 +20,16 @@ import type { IepStudent } from "./api";
 const iep = vi.hoisted(() => ({
   list: vi.fn(),
   add: vi.fn(),
+  update: vi.fn(),
+  addByNumbers: vi.fn(),
   remove: vi.fn(),
   deleteAll: vi.fn(),
 }));
 const okulApiMock = vi.hoisted(() => ({ listStudents: vi.fn() }));
 const guvenlik = vi.hoisted(() => ({ durum: vi.fn() }));
+const salonApi = vi.hoisted(() => ({
+  list: vi.fn(() => Promise.resolve({ count: 0, next: null, previous: null, results: [] })),
+}));
 
 vi.mock("./api", async (importActual) => {
   const actual = await importActual<typeof import("./api")>();
@@ -38,12 +43,33 @@ vi.mock("../guvenlik/api", async (importActual) => {
   const actual = await importActual<typeof import("../guvenlik/api")>();
   return { ...actual, guvenlikApi: { ...actual.guvenlikApi, ...guvenlik } };
 });
+vi.mock("../salonlar/api", async (importActual) => {
+  const actual = await importActual<typeof import("../salonlar/api")>();
+  return { ...actual, examRoomApi: { ...actual.examRoomApi, ...salonApi } };
+});
 
 import BepListesiPaneli from "./BepListesiPaneli";
+
+const TEDBIRSIZ: Omit<
+  IepStudent,
+  "id" | "student_id" | "student_number" | "full_name" | "class_label"
+> = {
+  reason_category: "IEP",
+  reason_label: "BEP",
+  placement: "NONE",
+  target_room_id: null,
+  seat_preference: "NONE",
+  solo_desk: false,
+  extra_minutes: 0,
+  reader: false,
+  scribe: false,
+  measures: [],
+};
 
 // Satır kimliği (id) ile öğrenci pk'si (student_id) BİLEREK farklıdır: silme
 // satır kimliğiyle yapılır; öğrenci pk'si yola hiç girmez.
 const AYSE: IepStudent = {
+  ...TEDBIRSIZ,
   id: 7,
   student_id: 301,
   student_number: "101",
@@ -51,11 +77,17 @@ const AYSE: IepStudent = {
   class_label: "9/A",
 };
 const MEHMET: IepStudent = {
+  ...TEDBIRSIZ,
   id: 8,
   student_id: 302,
   student_number: "102",
   full_name: "Mehmet Demir",
   class_label: "9/B",
+  reason_category: "HEALTH",
+  reason_label: "Sağlık",
+  extra_minutes: 20,
+  scribe: true,
+  measures: ["Ek süre 20 dk", "Yazıcı desteği"],
 };
 
 const ZEYNEP: Student = {
@@ -111,20 +143,21 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("BepListesiPaneli", () => {
-  it("listeyi okul no, ad soyad ve şubeyle gösterir; yalnız üyelik tutulduğunu söyler", async () => {
+  it("listeyi gerekçe ve tedbirleriyle gösterir; tanı tutulmadığını söyler", async () => {
     renderPanel();
 
-    const satir = (await screen.findByText("Ayşe Yılmaz")).closest("tr") as HTMLElement;
-    expect(within(satir).getByText("101")).toBeInTheDocument();
-    expect(within(satir).getByText("9/A")).toBeInTheDocument();
-    expect(screen.getByText("Mehmet Demir")).toBeInTheDocument();
+    const ayse = (await screen.findByText("Ayşe Yılmaz")).closest("tr") as HTMLElement;
+    expect(within(ayse).getByText("101")).toBeInTheDocument();
+    expect(within(ayse).getByText("BEP")).toBeInTheDocument();
+    expect(within(ayse).getByText("Tedbir yok")).toBeInTheDocument();
+    const mehmet = screen.getByText("Mehmet Demir").closest("tr") as HTMLElement;
+    expect(within(mehmet).getByText("Sağlık")).toBeInTheDocument();
+    expect(within(mehmet).getByText("Ek süre 20 dk · Yazıcı desteği")).toBeInTheDocument();
     expect(screen.getByText("2 öğrenci")).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Şube" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Tedbirler" })).toBeInTheDocument();
     // KVKK md. 6: tanı/rapor/açıklama kaydedilmez; evrak ve kitapçıkta işaret yok.
     expect(screen.getByText("tanı, rapor ya da açıklama kaydedilmez")).toBeInTheDocument();
-    expect(
-      screen.getByText(/kitapçıklarda öğrenciyi ayıran hiçbir işaret\s+basılmaz/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/öğrenciyi ayıran hiçbir işaret\s+basılmaz/)).toBeInTheDocument();
   });
 
   it("boş listede boş durum gösterilir", async () => {
@@ -143,35 +176,39 @@ describe("BepListesiPaneli", () => {
     expect(screen.queryByText("Listede öğrenci yok")).not.toBeInTheDocument();
   });
 
-  it("öğrenci ekleme: aramadan seçilir, student_id ile gönderilir ve liste tazelenir", async () => {
+  it("öğrenci ekleme penceresi: aramadan seçilir, tedbirsiz BEP üyeliği gönderilir", async () => {
     const user = userEvent.setup();
     okulApiMock.listStudents.mockResolvedValue(ogrenciSayfasi([ZEYNEP]));
     iep.add.mockResolvedValue({ id: 9 });
     renderPanel();
     await screen.findByText("Ayşe Yılmaz");
 
-    // Seçim yokken ekleme kapalıdır.
-    expect(screen.getByRole("button", { name: "Listeye ekle" })).toBeDisabled();
-    await user.type(screen.getByLabelText("Öğrenci ekle"), "Zey");
-    // Autocomplete etiketi vurguyla parçalara bölünür → metinle değil ROL ile seçilir.
-    const listbox = await screen.findByRole("listbox");
-    await user.click(within(listbox).getAllByRole("option")[0]);
-    expect(okulApiMock.listStudents).toHaveBeenCalledWith({
-      search: "Zey",
-      onlyActive: true,
-      limit: 20,
-    });
+    await user.click(screen.getByRole("button", { name: "Öğrenci ekle" }));
+    const dialog = await screen.findByRole("dialog", { name: "Öğrenci ekle" });
+    // Seçim yokken kayıt kapalıdır.
+    expect(within(dialog).getByRole("button", { name: "Kaydet" })).toBeDisabled();
+    await user.type(within(dialog).getByLabelText(/^Öğrenci/), "Zey");
+    await user.click(within(await screen.findByRole("listbox")).getAllByRole("option")[0]);
 
     const cagriOncesi = iep.list.mock.calls.length;
-    await user.click(screen.getByRole("button", { name: "Listeye ekle" }));
+    await user.click(within(dialog).getByRole("button", { name: "Kaydet" }));
 
-    await waitFor(() => expect(iep.add).toHaveBeenCalledWith(303));
+    await waitFor(() =>
+      expect(iep.add).toHaveBeenCalledWith(303, {
+        reason_category: "IEP",
+        placement: "NONE",
+        target_room_id: null,
+        seat_preference: "NONE",
+        solo_desk: false,
+        extra_minutes: 0,
+        reader: false,
+        scribe: false,
+      }),
+    );
     // Bildirimde öğrenci adı ve okul numarası geçmez.
     expect(await screen.findByText("Öğrenci listeye eklendi.")).toBeInTheDocument();
     await waitFor(() => expect(iep.list.mock.calls.length).toBeGreaterThan(cagriOncesi));
-    // Arama kutusu boşalır: aynı öğrenci yeniden aranmaz, düğme yeniden kapanır.
-    expect(screen.getByLabelText("Öğrenci ekle")).toHaveValue("");
-    expect(screen.getByRole("button", { name: "Listeye ekle" })).toBeDisabled();
+    expect(screen.queryByRole("dialog", { name: "Öğrenci ekle" })).not.toBeInTheDocument();
   });
 
   it("zaten listedeki öğrenci aramada görünür ama seçilemez", async () => {
@@ -182,28 +219,30 @@ describe("BepListesiPaneli", () => {
     renderPanel();
     await screen.findByText("Ayşe Yılmaz");
 
-    await user.type(screen.getByLabelText("Öğrenci ekle"), "Ayş");
+    await user.click(screen.getByRole("button", { name: "Öğrenci ekle" }));
+    const dialog = await screen.findByRole("dialog", { name: "Öğrenci ekle" });
+    await user.type(within(dialog).getByLabelText(/^Öğrenci/), "Ayş");
     const secenek = within(await screen.findByRole("listbox")).getAllByRole("option")[0];
     expect(secenek).toHaveAttribute("aria-disabled", "true");
     expect(secenek).toHaveTextContent("zaten listede");
-    await user.click(secenek);
-
-    expect(screen.getByRole("button", { name: "Listeye ekle" })).toBeDisabled();
-    expect(iep.add).not.toHaveBeenCalled();
   });
 
-  it("ekleme reddedilirse backend gerekçesi bildirilir", async () => {
+  it("Düzenle satırın tedbirleriyle açılır ve SATIR kimliğiyle kaydeder", async () => {
     const user = userEvent.setup();
-    okulApiMock.listStudents.mockResolvedValue(ogrenciSayfasi([ZEYNEP]));
-    iep.add.mockRejectedValue(new ApiError(400, "validation_error", "Bu öğrenci zaten listede."));
+    iep.update.mockResolvedValue({ id: 8 });
     renderPanel();
-    await screen.findByText("Ayşe Yılmaz");
 
-    await user.type(screen.getByLabelText("Öğrenci ekle"), "Zey");
-    await user.click(within(await screen.findByRole("listbox")).getAllByRole("option")[0]);
-    await user.click(screen.getByRole("button", { name: "Listeye ekle" }));
+    const satir = (await screen.findByText("Mehmet Demir")).closest("tr") as HTMLElement;
+    await user.click(within(satir).getByRole("button", { name: "Düzenle" }));
+    const dialog = await screen.findByRole("dialog", { name: "Tedbirleri düzenle" });
+    expect(within(dialog).getByLabelText("Ek süre (dakika)")).toHaveValue(20);
+    expect(within(dialog).getByRole("checkbox", { name: "Yazıcı desteği" })).toBeChecked();
+    await user.click(within(dialog).getByRole("button", { name: "Kaydet" }));
 
-    expect(await screen.findByText("Bu öğrenci zaten listede.")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(iep.update).toHaveBeenCalledWith(8, expect.objectContaining({ extra_minutes: 20 })),
+    );
+    expect(await screen.findByText("Tedbirler kaydedildi.")).toBeInTheDocument();
   });
 
   it("çıkarma onayı: başlık soru, gövde sonuç — metinde öğrenci adı ve okul numarası yok", async () => {
@@ -214,11 +253,11 @@ describe("BepListesiPaneli", () => {
     const satir = (await screen.findByText("Ayşe Yılmaz")).closest("tr") as HTMLElement;
     await user.click(within(satir).getByRole("button", { name: "Çıkar" }));
 
-    // Tek tıkla çıkarılmaz (bireysel soru dosyaları da silinir).
+    // Tek tıkla çıkarılmaz (tedbirler ve bireysel soru dosyaları da silinir).
     expect(iep.remove).not.toHaveBeenCalled();
     const dialog = await screen.findByRole("dialog", { name: "Öğrenci listeden çıkarılsın mı?" });
     expect(dialog).toHaveTextContent(
-      "Bu öğrenci BEP kapsamındaki öğrenciler listesinden çıkarılır; onaylanmamış oturumlardaki bireysel soru dosyaları da silinir.",
+      "Bu öğrencinin tedbirleri silinir ve öğrenci BEP kapsamındaki öğrenciler listesinden çıkar; onaylanmamış oturumlardaki bireysel soru dosyaları da silinir.",
     );
     expect(dialog).not.toHaveTextContent("Ayşe Yılmaz");
     expect(dialog).not.toHaveTextContent("101");
@@ -243,22 +282,24 @@ describe("BepListesiPaneli", () => {
     expect(iep.remove).not.toHaveBeenCalled();
   });
 
-  it("“Tüm BEP kayıtlarını sil” onaydan geçer ve geri alınamayacağını söyler", async () => {
+  it("“Tüm kayıtları sil” onaydan geçer ve geri alınamayacağını söyler", async () => {
     const user = userEvent.setup();
     iep.deleteAll.mockResolvedValue({ students: 2, documents: 3 });
     renderPanel();
     await screen.findByText("Ayşe Yılmaz");
 
-    await user.click(screen.getByRole("button", { name: "Tüm BEP kayıtlarını sil" }));
-    const dialog = await screen.findByRole("dialog", { name: "Tüm BEP kayıtları silinsin mi?" });
+    await user.click(screen.getByRole("button", { name: "Tüm kayıtları sil" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Tüm BEP ve tedbir kayıtları silinsin mi?",
+    });
     expect(dialog).toHaveTextContent(
-      "Listedeki bütün öğrenciler ve bütün oturumlardaki bireysel soru dosyaları kalıcı olarak silinir. Bu işlem geri alınamaz.",
+      "Listedeki bütün öğrenciler, tedbirleri ve bütün oturumlardaki bireysel soru dosyaları kalıcı olarak silinir. Bu işlem geri alınamaz.",
     );
     expect(iep.deleteAll).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole("button", { name: "Sil" }));
 
     await waitFor(() => expect(iep.deleteAll).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText("BEP kayıtları silindi.")).toBeInTheDocument();
+    expect(await screen.findByText("BEP ve tedbir kayıtları silindi.")).toBeInTheDocument();
   });
 
   it("silme başarısız olursa hata bildirilir", async () => {
@@ -267,11 +308,13 @@ describe("BepListesiPaneli", () => {
     renderPanel();
     await screen.findByText("Ayşe Yılmaz");
 
-    await user.click(screen.getByRole("button", { name: "Tüm BEP kayıtlarını sil" }));
-    const dialog = await screen.findByRole("dialog", { name: "Tüm BEP kayıtları silinsin mi?" });
+    await user.click(screen.getByRole("button", { name: "Tüm kayıtları sil" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Tüm BEP ve tedbir kayıtları silinsin mi?",
+    });
     await user.click(within(dialog).getByRole("button", { name: "Sil" }));
 
-    expect(await screen.findByText("BEP kayıtları silinemedi.")).toBeInTheDocument();
+    expect(await screen.findByText("Kayıtlar silinemedi.")).toBeInTheDocument();
   });
 });
 
@@ -281,9 +324,6 @@ describe("BepListesiPaneli — uygulama parolası uyarısı", () => {
     renderPanel();
 
     const bant = await screen.findByRole("status", { name: "Uygulama parolası kapalı" });
-    expect(bant).toHaveTextContent(
-      "Uygulama parolası kapalı: BEP bilgisi bu bilgisayarda ve yedeklerde şifresiz saklanıyor. Bu bilgi özel nitelikli kişisel veridir (KVKK md. 6); Ayarlar → Güvenlik bölümünden parola koymanız önerilir.",
-    );
     expect(within(bant).getByRole("link", { name: "Ayarlar → Güvenlik" })).toHaveAttribute(
       "href",
       "/ayarlar?tab=guvenlik",

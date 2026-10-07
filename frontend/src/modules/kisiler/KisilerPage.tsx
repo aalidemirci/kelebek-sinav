@@ -4,11 +4,13 @@
 // KVKK (tasarım §5): TCKN, veli ve demografi alanları bu programda HİÇ YOKTUR —
 // kelebek dağıtımı ad-soyad + okul no + sınıf/şube üçlüsüyle çalışır.
 //
-// Üçüncü sekme (20.09.2026) BEP kapsamındaki öğrenciler listesidir
-// (`bep/BepListesiPaneli` — yalnız üyelik; tanı/açıklama alanı yoktur). Sekme
-// URL'de tutulur (`?tab=bep`): kılavuz doğrudan o sekmeye bağlanır.
+// Üçüncü sekme (20.09.2026) BEP kapsamındaki öğrenciler listesidir; 07.10.2026'dan
+// beri kalıcı sınav tedbirlerini de tutar (`bep/BepListesiPaneli` — gerekçe yalnız
+// kategori; tanı/açıklama alanı yoktur). Sekme URL'de tutulur (`?tab=bep`):
+// kılavuz doğrudan o sekmeye bağlanır.
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
 import { useFormErrors } from "../../hooks/useFormErrors";
@@ -33,6 +35,8 @@ import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import type { TabItem } from "../../ui/Tabs";
 import TextField from "../../ui/TextField";
 import BepListesiPaneli from "../bep/BepListesiPaneli";
+import { PENDING_CHOICES_KEY } from "../dersler/api";
+import { SECIM_BEKLEYENLER_YOLU, SecimBekleyenBandi } from "../dersler/SecimBekleyenler";
 import {
   importCounts,
   okulApi,
@@ -64,8 +68,9 @@ type TabKey = (typeof TAB_KEYS)[number];
 const TABS: TabItem[] = [
   { key: "ogrenciler", label: "Öğrenciler", icon: "school" },
   { key: "personel", label: "Öğretmenler", icon: "badge" },
-  // Sekme etiketi kısa, panel başlığı tam addır: "BEP kapsamındaki öğrenciler".
-  { key: "bep", label: "BEP", icon: "assignment_ind" },
+  // Sekme etiketi kısa, panel başlığı tam addır: "BEP ve sınav tedbirleri" (07.10.2026).
+  // Anahtar "bep" kalır: kılavuz ve uyarılar `?tab=bep` derin bağlantısını kullanır.
+  { key: "bep", label: "BEP ve tedbirler", icon: "assignment_ind" },
 ];
 
 function emptyPage<T>(): Paginated<T> {
@@ -196,8 +201,13 @@ function OgrencilerSekmesi() {
   const [reloadKey, setReloadKey] = useState(0);
   const [editing, setEditing] = useState<Student | null>(null);
   const [creating, setCreating] = useState(false);
+  const queryClient = useQueryClient();
 
-  const reload = useCallback(() => setReloadKey((k) => k + 1), []);
+  // Kayıt/aktarım şube değiştirebilir: seçmeli ders seçimi bekleyenler bandı da tazelenir.
+  const reload = useCallback(() => {
+    setReloadKey((k) => k + 1);
+    void queryClient.invalidateQueries({ queryKey: [...PENDING_CHOICES_KEY] });
+  }, [queryClient]);
 
   // Sınıf seçicisi sicilden türetilir (kurulum öncesi lise varsayılanı döner).
   useEffect(() => {
@@ -265,6 +275,9 @@ function OgrencilerSekmesi() {
           Öğrenci ekle
         </Button>
       </div>
+
+      {/* Şubesi değişen / nakil gelen öğrenci bölünmüş seçmelide seçim bekler (07.10.2026). */}
+      <SecimBekleyenBandi />
 
       <Card
         elevation={0}
@@ -965,6 +978,10 @@ function ImportReportView({ report }: { report: ImportReport }) {
   // Öğretmen aktarımı zümre kataloğu BOŞKEN branşlardan zümreleri de üretir
   // (yalnız commit yanıtında gelir; katalog doluyken liste boştur).
   const zumreler = "departments_created" in report ? (report.departments_created ?? []) : [];
+  // Öğrenci aktarımı: şubesi değişen / yeni gelen ve yeni şubesi seçmeliyi bölünerek
+  // okutan öğrenci (07.10.2026). Önizleme de sayar — aktarmadan önce görünür.
+  const bekleyen =
+    "elective_choices_pending" in report ? (report.elective_choices_pending ?? 0) : 0;
 
   return (
     <div className="space-y-3 rounded-shape-md bg-surface-container-low p-4">
@@ -985,6 +1002,34 @@ function ImportReportView({ report }: { report: ImportReport }) {
               Ayarlar → Zümreler
             </Link>{" "}
             ekranından seçin; zümreleri orada birleştirebilir ya da kaldırabilirsiniz.
+          </span>
+        </div>
+      )}
+
+      {bekleyen > 0 && (
+        <div className="flex items-start gap-2 rounded-shape-sm bg-tertiary-container px-4 py-3 text-body-medium text-on-tertiary-container">
+          <Icon name="rule" size="lg" />
+          <span>
+            {report.dry_run ? (
+              <>
+                Aktarılırsa {formatNumber(bekleyen)} öğrencinin seçmeli ders seçimi bekleyecek:
+                şubeleri değişiyor ya da okula yeni geliyorlar ve yeni şubeleri bazı seçmelileri
+                bölünerek okutuyor. Aktardıktan sonra hangi dersleri aldıklarını seçmeniz gerekir.
+              </>
+            ) : (
+              <>
+                {formatNumber(bekleyen)} öğrencinin seçmeli ders seçimi bekliyor: yeni şubeleri bazı
+                seçmelileri bölünerek okutuyor. Hangi dersleri aldıklarını{" "}
+                <Link
+                  to={SECIM_BEKLEYENLER_YOLU}
+                  className="font-medium underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  Ders Havuzu → Seçimleri yap
+                </Link>{" "}
+                penceresinden seçin; o zamana kadar bu şubelerin bölünmüş derslerini içeren sınav
+                oturumları dağıtılamaz.
+              </>
+            )}
           </span>
         </div>
       )}

@@ -69,6 +69,16 @@ vi.mock("../guvenlik/api", async (importOriginal) => {
   return { ...actual, guvenlikApi: { ...actual.guvenlikApi, ...guvenlikApiMock } };
 });
 
+// Seçmeli ders seçimi bekleyenler bandı (07.10.2026) — ayrıntısı
+// dersler/SecimBekleyenler.test.tsx'te; burada varsayılan "bekleyen yok".
+const derslerApiMock = vi.hoisted(() => ({
+  pendingElectiveChoices: vi.fn(() => Promise.resolve({ school_year: 1, results: [] })),
+}));
+vi.mock("../dersler/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../dersler/api")>();
+  return { ...actual, derslerApi: { ...actual.derslerApi, ...derslerApiMock } };
+});
+
 import KisilerPage from "./KisilerPage";
 
 const STUDENT: Student = {
@@ -147,6 +157,17 @@ beforeEach(() => {
         student_number: "123",
         full_name: "Ayşe Yılmaz",
         class_label: "10/A",
+        // 07.10.2026: satır gerekçe + tedbirleri de taşır (ayrıntısı BepListesiPaneli.test).
+        reason_category: "IEP",
+        reason_label: "BEP",
+        placement: "NONE",
+        target_room_id: null,
+        seat_preference: "NONE",
+        solo_desk: false,
+        extra_minutes: 0,
+        reader: false,
+        scribe: false,
+        measures: [],
       },
     ],
   });
@@ -449,8 +470,8 @@ describe("KisilerPage — BEP sekmesi", () => {
 
     await user.click(screen.getByRole("tab", { name: /BEP/ }));
 
-    // Sekme etiketi kısa ("BEP"), panel başlığı tam addır.
-    expect(await screen.findByText("BEP kapsamındaki öğrenciler")).toBeInTheDocument();
+    // Sekme etiketi kısa ("BEP ve tedbirler"), panel başlığı tam addır (07.10.2026).
+    expect(await screen.findByText("BEP ve sınav tedbirleri")).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Çıkar" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /BEP/ })).toHaveAttribute("aria-selected", "true");
     expect(iepApiMock.list).toHaveBeenCalledTimes(1);
@@ -461,7 +482,7 @@ describe("KisilerPage — BEP sekmesi", () => {
   it("derin bağlantı: /kisiler?tab=bep doğrudan BEP sekmesini açar (kılavuz buraya bağlanır)", async () => {
     renderPage("/kisiler?tab=bep");
 
-    expect(await screen.findByText("BEP kapsamındaki öğrenciler")).toBeInTheDocument();
+    expect(await screen.findByText("BEP ve sınav tedbirleri")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /BEP/ })).toHaveAttribute("aria-selected", "true");
     expect(okulApiMock.listStudents).not.toHaveBeenCalled();
   });
@@ -523,6 +544,40 @@ describe("KisilerPage — içe aktarma paneli", () => {
     expect(await screen.findByText(/daha önce aktarılmış/)).toBeInTheDocument();
     await waitFor(() =>
       expect(okulApiMock.listStudents.mock.calls.length).toBeGreaterThan(callsBefore),
+    );
+  });
+
+  it("öğrenci aktarımı: seçmeli ders seçimi bekleyecek öğrenci önizlemede ve sonuçta söylenir", async () => {
+    // 07.10.2026: şubesi değişen / yeni gelen öğrencinin yeni şubesi seçmeliyi
+    // bölünerek okutuyorsa öğrenci seçim bekler — aktarmadan ÖNCE görünür.
+    okulApiMock.previewStudentImport.mockResolvedValue({
+      ...PREVIEW_REPORT,
+      elective_choices_pending: 2,
+    });
+    okulApiMock.commitStudentImport.mockResolvedValue({
+      ...PREVIEW_REPORT,
+      dry_run: false,
+      elective_choices_pending: 2,
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("Ayşe Yılmaz");
+
+    await user.type(screen.getByLabelText("Ya da tabloyu yapıştırın"), "ad\tsoyad");
+    await user.click(screen.getByRole("button", { name: /Önizle/ }));
+    expect(
+      await screen.findByText(/Aktarılırsa 2 öğrencinin seçmeli ders seçimi bekleyecek/),
+    ).toBeInTheDocument();
+
+    const bantSorgusu = derslerApiMock.pendingElectiveChoices.mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "Aktar" }));
+
+    expect(
+      await screen.findByRole("link", { name: "Ders Havuzu → Seçimleri yap" }),
+    ).toHaveAttribute("href", "/dersler?secim=bekleyen");
+    // Aktarım şube değiştirdi: bekleyenler bandı da tazelenir.
+    await waitFor(() =>
+      expect(derslerApiMock.pendingElectiveChoices.mock.calls.length).toBeGreaterThan(bantSorgusu),
     );
   });
 

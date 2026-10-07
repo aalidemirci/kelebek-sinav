@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
+import { useTabParam } from "../../hooks/useTabParam";
 import { ApiError } from "../../lib/api";
 import { gradeLevelLabel } from "../../lib/gradeLevels";
 import Button from "../../ui/Button";
@@ -28,7 +29,11 @@ import { SINIF_DUZEYININ_TAMAMI } from "../okul/SubeKapsamSecici";
 import { COURSE_EXAM_MODE_TR, COURSE_SOURCE_TR, COURSE_TYPE_TR, derslerApi } from "./api";
 import type { CatalogStatus, Course, CourseExamMode, CourseType, DuplicateCluster } from "./api";
 import DersSubeKapsamiDialog from "./DersSubeKapsamiDialog";
+import SecimBekleyenlerDialog, { SecimBekleyenBandi } from "./SecimBekleyenler";
 import SecmeliOgrenciAktarDialog from "./SecmeliOgrenciAktarDialog";
+
+/** "Seçimleri yap" penceresi URL'de durur: Kişiler bandı ve sihirbaz `?secim=bekleyen` açar. */
+const SECIM_DURUMLARI = ["kapali", "bekleyen"] as const;
 
 export default function DersHavuzuPage() {
   const [rows, setRows] = useState<Course[]>([]);
@@ -52,6 +57,8 @@ export default function DersHavuzuPage() {
   // kararı 19.09.2026: ayrı görünsün, listeyi kalabalık etmesin; pasif değildir).
   const [acilmayanGoster, setAcilmayanGoster] = useState(false);
   const [duplicates, setDuplicates] = useState<DuplicateCluster[]>([]);
+  // Seçmeli ders seçimi bekleyen öğrenciler penceresi (07.10.2026).
+  const [secim, setSecim] = useTabParam("secim", SECIM_DURUMLARI, "kapali");
 
   const offeringsQuery = useQuery({
     queryKey: ["course-section-offerings"],
@@ -168,6 +175,8 @@ export default function DersHavuzuPage() {
       </div>
 
       {error && <ErrorBanner message={error} />}
+
+      <SecimBekleyenBandi onOpen={() => setSecim("bekleyen")} />
 
       {status && <CizelgePaneli status={status} onResynced={load} />}
 
@@ -287,6 +296,8 @@ export default function DersHavuzuPage() {
       {importing && (
         <SecmeliOgrenciAktarDialog onClose={() => setImporting(false)} onImported={load} />
       )}
+
+      {secim === "bekleyen" && <SecimBekleyenlerDialog onClose={() => setSecim("kapali")} />}
 
       {(adding || editing) && (
         <CourseDialog

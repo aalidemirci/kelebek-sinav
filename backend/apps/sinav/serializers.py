@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from rest_framework import serializers
 
 from apps.sinav import selectors, services, services_calendar
 from apps.sinav.models import (
+    MAX_EXTRA_MINUTES,
+    AccommodationPlacement,
     BookletRun,
     ExamAttendanceRecord,
     ExamCalendar,
@@ -24,9 +27,11 @@ from apps.sinav.models import (
     ProctorExemption,
     ProctorRole,
     QuestionDocument,
+    RuleReason,
     RuleType,
     ScoreMode,
     SeatAssignment,
+    SeatPreference,
 )
 
 
@@ -494,10 +499,43 @@ class QuestionUploadSerializer(serializers.Serializer[Any]):
     # anahtar DRF tarafından sessizce yutulur.
 
 
-class IepStudentAddSerializer(serializers.Serializer[dict[str, Any]]):
+class AccommodationSerializer(serializers.Serializer[dict[str, Any]]):
+    """Kalıcı sınav tedbirleri (07.10.2026) — gerekçe yalnız KATEGORİDİR, serbest metin YOK.
+
+    Alanların birbiriyle uyumu (ayrı salon → salon zorunlu vb.) serviste denetlenir
+    (`services_individual._clean_measures`); burada yalnız tip ve aralık.
+    """
+
+    reason_category = serializers.ChoiceField(choices=RuleReason.choices, default=RuleReason.IEP)
+    placement = serializers.ChoiceField(
+        choices=AccommodationPlacement.choices, default=AccommodationPlacement.NONE
+    )
+    target_room_id = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+    seat_preference = serializers.ChoiceField(
+        choices=SeatPreference.choices, default=SeatPreference.NONE
+    )
+    solo_desk = serializers.BooleanField(default=False)
+    extra_minutes = serializers.IntegerField(min_value=0, max_value=MAX_EXTRA_MINUTES, default=0)
+    reader = serializers.BooleanField(default=False)
+    scribe = serializers.BooleanField(default=False)
+
+
+class IepStudentAddSerializer(AccommodationSerializer):
     """`POST /iep-students/` girdisi — öğrenci pk'si GÖVDEDE gelir (yolda değil; KVKK md. 6)."""
 
     student_id = serializers.IntegerField(min_value=1)
+
+
+class IepStudentBulkSerializer(AccommodationSerializer):
+    """`POST /iep-students/bulk/` — okul numaraları (boşluk, virgül ya da satır ayraçlı)."""
+
+    student_numbers = serializers.CharField(max_length=4000, trim_whitespace=True)
+
+    def validate_student_numbers(self, value: str) -> list[str]:
+        parcalar = [p for p in re.split(r"[\s,;]+", value) if p]
+        if not parcalar:
+            raise serializers.ValidationError("En az bir okul numarası yazın.")
+        return parcalar
 
 
 class IndividualSelectSerializer(serializers.Serializer[dict[str, Any]]):

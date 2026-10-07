@@ -28,6 +28,7 @@ import TextField from "../../ui/TextField";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import type { Course } from "../dersler/api";
 import { derslerApi } from "../dersler/api";
+import { SECIM_BEKLEYENLER_YOLU } from "../dersler/SecimBekleyenler";
 import { SEPARATION_HINTS, SEPARATION_LABELS, okulApi } from "../okul/api";
 import type { SeparationMode } from "../okul/api";
 import { examRoomApi, examRoomGroupApi } from "../salonlar/api";
@@ -519,6 +520,8 @@ function CoursesStep({
   }, [participants.data]);
 
   const blocking = participants.data?.has_blocking_conflicts ?? false;
+  // Seçmeli ders seçimi bekleyen öğrenci (07.10.2026) — dağıtım backend'de de reddedilir.
+  const bekleyenSecim = participants.data?.has_pending_choices ?? false;
 
   const toggleSection = (id: number) =>
     setSectionIds((prev) => (prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]));
@@ -673,12 +676,23 @@ function CoursesStep({
           katılımcılarını düzeltin.
         </p>
       )}
+      {bekleyenSecim && (
+        <p role="alert" className="flex flex-wrap items-start gap-2 text-body-medium text-error">
+          <span>{participants.data?.pending_choices_message}</span>
+          <Link to={SECIM_BEKLEYENLER_YOLU} className="font-medium underline underline-offset-2">
+            Seçimleri yap
+          </Link>
+        </p>
+      )}
 
       <div className="flex justify-between">
         <Button variant="text" onClick={onBack}>
           Geri
         </Button>
-        <Button onClick={onNext} disabled={session.courses.length === 0 || blocking}>
+        <Button
+          onClick={onNext}
+          disabled={session.courses.length === 0 || blocking || bekleyenSecim}
+        >
           Devam
         </Button>
       </div>

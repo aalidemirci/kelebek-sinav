@@ -3,9 +3,12 @@
 İnce katman; mantık `services_individual`'da.
 
     GET    /iep-students/                       liste (sınıf/şube + okul no sıralı)
-    POST   /iep-students/                       {student_id} — listeye ekle
+    POST   /iep-students/                       {student_id, tedbirler} — listeye ekle
+    PUT    /iep-students/<id>/                  gerekçe + tedbirleri değiştir (07.10.2026)
     DELETE /iep-students/<id>/                  listeden çıkar
+    POST   /iep-students/bulk/                  {student_numbers, tedbirler} — okul no ile toplu
     POST   /iep-students/delete-all/            KVKK düğmesi — tüm kayıtlar + dosyalar
+    GET    /iep-students/session/?session=<id>  oturuma giren tedbirli öğrenciler (panel)
 
     GET    /individual-questions/?session=<id>  oturum paneli satırları
     POST   /individual-questions/               {session_id, student_id} — seçim
@@ -21,6 +24,8 @@ sızardı.
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import FileResponse, HttpResponse
@@ -38,7 +43,9 @@ from apps.sinav.models import (
     ScoreMode,
 )
 from apps.sinav.serializers import (
+    AccommodationSerializer,
     IepStudentAddSerializer,
+    IepStudentBulkSerializer,
     IndividualSelectSerializer,
     QuestionUploadSerializer,
 )
@@ -59,8 +66,18 @@ def _document(pk: str | None) -> IndividualQuestionDocument | None:
     return services_individual.get_individual(int(pk)) if pk is not None and pk.isdigit() else None
 
 
+def _measures(validated: dict[str, Any]) -> dict[str, Any]:
+    """Serileştirici çıktısından tedbir alanları (öğrenci kimliği/numaraları hariç)."""
+    return {
+        key: value
+        for key, value in validated.items()
+        if key not in ("student_id", "student_numbers")
+    }
+
+
 class IepStudentViewSet(viewsets.ViewSet):
-    """BEP kapsamındaki öğrenciler — yalnız üyelik; tanı/açıklama alanı YOKTUR."""
+    """BEP kapsamındaki öğrenciler + kalıcı sınav tedbirleri — gerekçe yalnız kategori;
+    tanı/açıklama/serbest metin alanı YOKTUR (07.10.2026 genişletmesi)."""
 
     def list(self, request: Request) -> Response:
         return Response({"results": services_individual.iep_list()})
@@ -68,11 +85,25 @@ class IepStudentViewSet(viewsets.ViewSet):
     def create(self, request: Request) -> Response:
         serializer = IepStudentAddSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        vd = serializer.validated_data
         try:
-            row = services_individual.add_iep_student(serializer.validated_data["student_id"])
+            row = services_individual.add_iep_student(vd["student_id"], _measures(dict(vd)))
         except DjangoValidationError as exc:
             raise drf_serializers.ValidationError(exc.messages) from exc
         return Response({"id": row.pk}, status=201)
+
+    def update(self, request: Request, pk: str | None = None) -> Response:
+        """`PUT /iep-students/<id>/` — gerekçe ve tedbirleri TAMAMEN değiştirir."""
+        row = IepStudent.objects.filter(pk=pk).first() if str(pk).isdigit() else None
+        if row is None:
+            return _not_found("Kayıt bulunamadı.")
+        serializer = AccommodationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            services_individual.update_accommodation(row, dict(serializer.validated_data))
+        except DjangoValidationError as exc:
+            raise drf_serializers.ValidationError(exc.messages) from exc
+        return Response({"id": row.pk})
 
     def destroy(self, request: Request, pk: str | None = None) -> Response:
         row = IepStudent.objects.filter(pk=pk).first() if str(pk).isdigit() else None
@@ -81,10 +112,30 @@ class IepStudentViewSet(viewsets.ViewSet):
         services_individual.remove_iep_student(row)
         return Response(status=204)
 
+    @action(detail=False, methods=["post"])
+    def bulk(self, request: Request) -> Response:
+        """Okul numaralarıyla toplu ekleme — hepsine aynı gerekçe ve tedbirler."""
+        serializer = IepStudentBulkSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        vd = dict(serializer.validated_data)
+        try:
+            sonuc = services_individual.add_by_numbers(vd["student_numbers"], _measures(vd))
+        except DjangoValidationError as exc:
+            raise drf_serializers.ValidationError(exc.messages) from exc
+        return Response(sonuc)
+
     @action(detail=False, methods=["post"], url_path="delete-all")
     def delete_all(self, request: Request) -> Response:
         """Geri alınamaz; arayüz onay ister ("Tüm fotoğrafları sil" emsali)."""
         return Response(services_individual.delete_all())
+
+    @action(detail=False, methods=["get"])
+    def session(self, request: Request) -> Response:
+        """Oturuma giren tedbirli öğrenciler — Yerleştirme Kuralları paneli (07.10.2026)."""
+        session = _session_param(request)
+        if session is None:
+            return _not_found("Oturum bulunamadı.")
+        return Response({"rows": services_individual.session_accommodations(session)})
 
 
 class IndividualQuestionViewSet(viewsets.ViewSet):
