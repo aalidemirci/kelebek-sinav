@@ -20,7 +20,7 @@ import { SkeletonList } from "../../ui/Skeleton";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import { okulApi } from "../okul/api";
 import type { Course } from "./api";
-import { derslerApi } from "./api";
+import { PENDING_CHOICES_KEY, derslerApi } from "./api";
 
 export interface SubeBilgisi {
   id: number;
@@ -106,6 +106,8 @@ export default function DersOgrenciListesiDialog({
         ["course-enrollment-counts"],
         ["course-section-offerings"],
         ["course-sections"],
+        // Seçim bekleyen öğrencinin "listede" işareti bu listeden okunur.
+        [...PENDING_CHOICES_KEY],
       ]) {
         void queryClient.invalidateQueries({ queryKey: key });
       }

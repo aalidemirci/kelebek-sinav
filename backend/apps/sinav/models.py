@@ -847,30 +847,99 @@ class BookletRun(BaseModel):
 # ===========================================================================
 
 
+class AccommodationPlacement(models.TextChoices):
+    """Kalıcı sınav tedbirinin YER ayağı (07.10.2026) — oturumda yerleştirme kuralına açılır.
+
+    Her seçenek bir `RuleType`'a karşılık gelir (`services_individual
+    .accommodation_rules`); yeni bir yerleştirme motoru YOKTUR.
+    """
+
+    NONE = "NONE", "Yer kuralı yok"
+    HOME_CLASSROOM = "HOME_CLASSROOM", "Kendi sınıfında"
+    SEPARATE_ROOM = "SEPARATE_ROOM", "Ayrı salon"
+    FRONT_ROW = "FRONT_ROW", "Ön sırada"
+
+
+#: Ek süre üst sınırı (dakika) — iki ders saatini aşan ek süre veri hatasıdır.
+MAX_EXTRA_MINUTES = 120
+
+
 class IepStudent(BaseModel):
-    """BEP kapsamındaki öğrenci — YALNIZ ÜYELİK (kullanıcı kararı 20.09.2026).
+    """BEP kapsamındaki öğrenci + kalıcı SINAV TEDBİRLERİ.
+
+    Tarihsel ad: 20.09.2026'da YALNIZ BEP üyeliğiydi. 07.10.2026 kullanıcı isteği
+    ve kararlarıyla aynı satır öğrencinin kalıcı sınav tedbirlerini de taşır ve
+    BEP dışındaki gerekçeleri kapsar ("gerekçeyle herkes"): BEP / engel durumu /
+    sağlık / diğer. Bir öğrenci için TEK satır vardır. BEP'e özgü işler
+    (oturumdaki hatırlatma, bireysel soru dosyası) yalnız gerekçesi BEP olan
+    satıra uygulanır.
 
     Dayanak: kaynaştırma/bütünleştirme yoluyla eğitim gören öğrencinin ölçme ve
     değerlendirmesinde BEP esas alınır (ÖDY md. 4/1-ç, 5/1-n, 6/1-d; Yönerge
     md. 5/1-u; OKY md. 45/1-ğ) ve sınavı BEP'i doğrultusunda ders öğretmenince
-    hazırlanır (ÖDSHGM 10.09.2026 yazısı md. 8). Liste iki işe yarar: oturumda
-    "bu sınava BEP kapsamında şu öğrenciler giriyor" hatırlatması ve idare özeti.
+    hazırlanır (ÖDSHGM 10.09.2026 yazısı md. 8); engellilik durumu ve özellikleri
+    dikkate alınarak sınavlarda gerekli önlemler alınır ve düzenlemeler yapılır
+    (573 sayılı KHK md. 16/1). Tedbirler bu "düzenleme"nin kaydıdır — tanının değil.
+
+    Tedbirler: YER (`placement` — kendi sınıfında / ayrı salon / ön sırada; salon
+    içi tercih ve "sırada tek başına" ile) her oturumda yerleştirme kuralı olarak
+    uygulanır, oturumdaki kural kazanır. SÜRE (`extra_minutes`) ve DESTEK
+    (`reader`, `scribe`) yerleşimi değiştirmez: YALNIZ idare özetine basılır
+    (kullanıcı kararı 07.10.2026 — salon evrakına öğrenci notu yok, gözetmene
+    idareci bildirir) ve çakışma denetimleri ek süreyi hesaba katar. Okuyucu/yazıcı
+    görevlisini program ATAMAZ (kullanıcı kararı).
 
     ÖZEL NİTELİKLİ VERİYE İŞARET EDER (KVKK md. 6 — `PlacementRule` emsali, bir
     adım ötesi: burada kayıt bir kuralın gerekçesi değil, listenin kendisidir):
 
-    - Tanı, rapor, engel türü, açıklama, tarih alanı YOKTUR ve EKLENMEZ.
+    - Tanı, rapor, engel türü, açıklama, tarih ya da SERBEST METİN alanı YOKTUR ve
+      EKLENMEZ; gerekçe yalnız kategoridir, tedbirler seçenek/sayıdır.
     - Öğrenci bağı FK DEĞİL şifreli metindir (`student_ref` = öğrenci pk'si):
       okul numarası ve şube açık alan olduğundan düz FK, çalınmış bir veri
       klasöründe "şu numaralı öğrenci BEP kapsamında" demek olurdu. Bedeli:
       teklik ve süzme Python'dadır (`services_individual`), FK bütünlüğü yoktur —
       ayrılan/silinen öğrencinin kaydı serviste KATI silinir (fotoğraf emsali).
+      Tedbir alanları açıktır ama bağ çözülmeden kimseye bağlanmaz.
     - Soft-delete KULLANILMAZ: kaldırılan kayıt iz bırakmaz (`hard_delete`).
     - Uygulama parolası kapalıyken alan DÜZ saklanır; arayüz bunu uyarır
       (kullanıcı kararı: parola zorunlu değil, uyarı var — KVKK md. 6/4).
     """
 
     student_ref = EncryptedCharField("BEP kapsamındaki öğrenci", max_length=20)
+    reason_category = models.CharField(
+        "gerekçe",
+        max_length=10,
+        choices=RuleReason.choices,
+        default=RuleReason.IEP,
+        help_text="Yalnız kategori — tanı/rapor bilgisi ASLA tutulmaz.",
+    )
+    placement = models.CharField(
+        "yer",
+        max_length=14,
+        choices=AccommodationPlacement.choices,
+        default=AccommodationPlacement.NONE,
+    )
+    target_room = models.ForeignKey(
+        ExamRoom,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="accommodations",
+        verbose_name="ayrı salon",
+        help_text="Yalnız “Ayrı salon” yerinde dolu.",
+    )
+    seat_preference = models.CharField(
+        "salon içinde",
+        max_length=6,
+        choices=SeatPreference.choices,
+        default=SeatPreference.NONE,
+    )
+    solo_desk = models.BooleanField("sırada tek başına", default=False)
+    extra_minutes = models.PositiveSmallIntegerField(
+        "ek süre (dakika)", default=0, help_text="0 = ek süre yok."
+    )
+    reader = models.BooleanField("okuyucu desteği", default=False)
+    scribe = models.BooleanField("yazıcı desteği", default=False)
 
     class Meta:
         verbose_name = "BEP kapsamındaki öğrenci"

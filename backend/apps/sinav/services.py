@@ -1323,6 +1323,10 @@ def distribute_session(
             f"Dağıtım engellendi: {len(resolution.duplicate_students)} öğrenci aynı "
             "oturumda birden çok derse düşüyor. Katılımcı önizlemesinden düzeltin."
         )
+    # Seçmeli ders seçimi bekleyen öğrenci (07.10.2026, kullanıcı kararı: UYARI
+    # değil ENGEL) — öğrenci bölünmüş dersin sınavından sessizce düşmesin.
+    if resolution.has_pending_choices:
+        raise ValidationError(f"Dağıtım engellendi: {resolution.pending_choices_message()}")
     pool = resolution.participants
 
     # Kız/erkek ayrışması: anahtarları SERVİS üretir (motor cinsiyet bilmez).
@@ -1389,6 +1393,17 @@ def distribute_session(
             raise ValidationError(str(exc)) from exc
         result.placements = [*preplaced, *result.placements]
         result.warnings.extend(pin_warnings)
+
+    # Kalıcı sınav tedbirleri (07.10.2026): okuyucu/yazıcı desteği ve ek süre
+    # yerleşimi DEĞİŞTİRMEZ — idareci uyarılır (yalnız SAYI, kimlik yok). Bu
+    # uyarılar `distribution_params`a YAZILMAZ: oradakiler R8'e basılır ve R8
+    # "Tümünü indir" paketindedir; tedbir bilgisi yalnız idare özetinde basılır
+    # (kullanıcı kararı). Ekrandaki dağıtım yanıtına aşağıda eklenir.
+    from apps.sinav import services_individual
+
+    tedbir_uyarilari = services_individual.distribution_warnings(
+        session, [p.student_id for p in pool], result.placements
+    )
 
     if bilinmeyen_cinsiyet:
         # K4: joker öğrenci kurala girmez; sessiz kalmaz — sayı KİMLİKSİZDİR.
@@ -1470,9 +1485,10 @@ def distribute_session(
             ),
             "sections": dict(sorted(rooms_per_section.items())),
         },
-        "warnings": result.warnings,
+        "warnings": list(result.warnings),
     }
     session.save(update_fields=["status", "distribution_params", "updated_at"])
+    result.warnings.extend(tedbir_uyarilari)
     return session, result, report
 
 
@@ -1651,10 +1667,15 @@ def move_seat(
             if (kural := kurallar.get(a.student_id)) is not None and kural.solo_desk
         ]
         if yalniz:
+            ilk = yalniz[0]
+            ipucu = (
+                _rule_fix_hint(kurallar[ilk.student_id])
+                if ilk.student_id is not None
+                else "Yerleştirme Kuralları sekmesinden kuralı düzeltin."
+            )
             raise ValidationError(
-                f"Bu sıra Okul No {yalniz[0].student_number} için tek başına ayrılmıştır; "
-                "yanına başka öğrenci oturtulamaz. Yerleştirme Kuralları sekmesinden "
-                "kuralı düzenleyin."
+                f"Bu sıra Okul No {ilk.student_number} için tek başına ayrılmıştır; "
+                f"yanına başka öğrenci oturtulamaz. {ipucu}"
             )
 
     row.room_id = room_id
@@ -1977,7 +1998,16 @@ def remove_placement_rule(rule: PlacementRule) -> None:
 
 
 def _effective_rules(session: ExamSession, student_ids: list[int]) -> dict[int, PlacementRule]:
-    """Öğrenci başına geçerli kural: OTURUM kapsamı KALICI'yı ezer."""
+    """Öğrenci başına geçerli kural: OTURUM kapsamı KALICI'yı ezer.
+
+    En altta kalıcı SINAV TEDBİRİNİN yer ayağı durur (07.10.2026 —
+    `services_individual.accommodation_rules`, kayıtsız kural): kuralı olmayan
+    tedbirli öğrenci her oturumda tedbiriyle yerleşir. Tek kural motoru budur;
+    dağıtım, "tek başına" koltuk kapısı (`move_seat`) ve klasik düzen uyarısı
+    aynı sözlüğü okur.
+    """
+    from apps.sinav import services_individual
+
     rules = PlacementRule.objects.filter(
         Q(session=session) | Q(session__isnull=True),
         student_id__in=student_ids,
@@ -1987,7 +2017,18 @@ def _effective_rules(session: ExamSession, student_ids: list[int]) -> dict[int, 
         current = chosen.get(rule.student_id)
         if current is None or (current.session_id is None and rule.session_id is not None):
             chosen[rule.student_id] = rule
+    for student_id, rule in services_individual.accommodation_rules(student_ids).items():
+        chosen.setdefault(student_id, rule)
     return chosen
+
+
+def _rule_fix_hint(rule: PlacementRule) -> str:
+    """Kural hatasında idareciyi kuralın KAYNAĞINA yönlendiren ek (ekran adı)."""
+    from apps.sinav import services_individual
+
+    if services_individual.is_accommodation_rule(rule):
+        return "Kişiler → BEP ve tedbirler ekranından öğrencinin tedbirini düzeltin."
+    return "Yerleştirme Kuralları sekmesinden kuralı düzeltin."
 
 
 def _previous_seats_map(session: ExamSession, student_ids: list[int]) -> engine.PrevSeats:
@@ -2026,13 +2067,13 @@ def _resolve_rule_pins(
     # "Tek başına" oturan öğrencinin KARDEŞ koltukları: motora hiç verilmez.
     blocked: dict[int, set[tuple[int, int, int]]] = {}
 
-    def _room_seats_by_id(room_id: int) -> engine.RoomSeats:
+    def _room_seats_by_id(room_id: int, rule: PlacementRule) -> engine.RoomSeats:
         if room_id not in rooms_cache:
             room = ExamRoom.objects.filter(pk=room_id, is_active=True).first()
             if room is None:
                 raise ValidationError(
                     "Bir yerleştirme kuralının hedef salonu bulunamadı ya da pasif; "
-                    "Yerleştirme Kuralları sekmesinden kuralı düzeltin."
+                    f"{_rule_fix_hint(rule)}"
                 )
             rooms_cache[room_id] = _room_seats_for(room)
         return rooms_cache[room_id]
@@ -2144,15 +2185,19 @@ def _resolve_rule_pins(
                     f"“Kendi dersliğinde” kuralı: {p.class_level}/{p.class_section} şubesinin "
                     "dersliği tanımlı değil (Salonlar ekranında salonun “Bağlı şube” alanı)."
                 )
-            rs = _room_seats_by_id(room.pk)
+            rs = _room_seats_by_id(room.pk, rule)
             seat = _take_seat(rs, preference=rule.seat_preference, solo=rule.solo_desk)
         elif rule.rule_type == RuleType.FIXED_SEAT:
             assert rule.target_room_id is not None  # serializer'da doğrulandı
-            rs = _room_seats_by_id(rule.target_room_id)
+            rs = _room_seats_by_id(rule.target_room_id, rule)
             seat = _take_exact_seat(rs, rule, solo=rule.solo_desk)
         elif rule.rule_type in (RuleType.FIXED_ROOM, RuleType.SEPARATE_ROOM):
-            assert rule.target_room_id is not None  # create'te doğrulandı
-            rs = _room_seats_by_id(rule.target_room_id)
+            if rule.target_room_id is None:
+                # Servis ve serileştirici salonu zorunlu kılar; bozuk kayıt 500 değil ret alır.
+                raise ValidationError(
+                    f"Bir yerleştirme kuralında salon seçilmemiş; {_rule_fix_hint(rule)}"
+                )
+            rs = _room_seats_by_id(rule.target_room_id, rule)
             if rule.rule_type == RuleType.SEPARATE_ROOM:
                 separate_room_ids.add(rs.room_id)
             seat = _take_seat(rs, preference=rule.seat_preference, solo=rule.solo_desk)

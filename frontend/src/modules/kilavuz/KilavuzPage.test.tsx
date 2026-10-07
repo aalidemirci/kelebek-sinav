@@ -51,9 +51,9 @@ describe("KilavuzPage", () => {
     expect(basliklar).toContain("Bakım: yedek, parola ve güncelleme");
 
     // Sayfa adı her yerde "Ders Havuzu"dur (4. adım + seçmeli öğrenci listesi
-    // + 7. adım ipucu).
+    // + şubesi değişen öğrencinin seçimi (07.10.2026) + 7. adım ipucu).
     const dersHavuzu = screen.getAllByRole("link", { name: "Ders Havuzu" });
-    expect(dersHavuzu.length).toBe(3);
+    expect(dersHavuzu.length).toBe(4);
     for (const link of dersHavuzu) expect(link).toHaveAttribute("href", "/dersler");
     expect(screen.getByRole("link", { name: "Ayarlar → Zümreler" })).toHaveAttribute(
       "href",
@@ -282,10 +282,12 @@ describe("KilavuzPage", () => {
       }),
     ).toBeInTheDocument();
     // (a) Adımlar: liste (derin bağlantıyla) → oturumda seçim + PDF → kitapçık üretimi.
-    expect(screen.getByRole("link", { name: "Kişiler → BEP" })).toHaveAttribute(
+    // (07.10.2026) Liste "BEP ve tedbirler" oldu; derin bağlantı kalıcı tedbirler bölümündedir.
+    expect(screen.getByRole("link", { name: "Kişiler → BEP ve tedbirler" })).toHaveAttribute(
       "href",
       "/kisiler?tab=bep",
     );
+    expect(screen.getByText("“BEP” gerekçesiyle")).toBeInTheDocument();
     expect(screen.getByText("“Bireysel soru dosyası uygula”")).toBeInTheDocument();
     expect(screen.getByText("“Kitapçıkları üret”")).toBeInTheDocument();
     expect(
@@ -301,12 +303,12 @@ describe("KilavuzPage", () => {
     // (d) Dosyası yüklenmemiş seçim varken kitapçık üretilmez.
     expect(screen.getByText("kitapçık üretilmez")).toBeInTheDocument();
     // (e) Veri: yalnız üyelik; tanı/açıklama yok; ayrılan öğrencinin kaydı silinir; parola önerilir.
-    expect(screen.getByText("yalnız üyelik bilgisini")).toBeInTheDocument();
+    expect(screen.getByText("tanı tutmaz")).toBeInTheDocument();
     expect(screen.getByText(/Tanı, rapor ya da açıklama kaydedilmez/)).toBeInTheDocument();
     expect(
       screen.getByText(/okuldan ayrıldığında ya da sicilden silindiğinde liste kaydı/),
     ).toBeInTheDocument();
-    expect(screen.getByText("“Tüm BEP kayıtlarını sil”")).toBeInTheDocument();
+    expect(screen.getByText("“Tüm kayıtları sil”")).toBeInTheDocument();
     expect(screen.getByText(/uygulama parolası\s+koymanız önerilir/)).toBeInTheDocument();
     // Dayanak atıfları docs/mevzuat atıf haritalarıyla ve idare özetiyle BİREBİR —
     // başka madde numarası uydurulmaz.
@@ -326,6 +328,20 @@ describe("KilavuzPage", () => {
     // Eski uyarı metni iki nedeni kapsamıyordu; kılavuz panelle aynı metni anar.
     expect(screen.getByText("“Güncel değil — yeniden üretin”")).toBeInTheDocument();
     expect(screen.queryByText(/Eski yerleşime göre/)).not.toBeInTheDocument();
+  });
+
+  it("kalıcı sınav tedbirlerini anlatır: yer, ek süre, destek — evraka basılmaz (07.10.2026)", () => {
+    renderPage();
+    expect(
+      screen.getByRole("heading", {
+        level: 3,
+        name: "Kalıcı sınav tedbirleri: ayrı salon, ek süre, okuyucu ve yazıcı desteği",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("“Okul numaralarıyla toplu”")).toBeInTheDocument();
+    expect(screen.getByText(/yalnız oturumun “İdare özeti \(PDF\)”/)).toBeInTheDocument();
+    expect(screen.getByText(/Görevli öğretmeni program atamaz/)).toBeInTheDocument();
+    expect(screen.getByText(/yalnız kaç öğrenci olduğunu/)).toBeInTheDocument();
   });
 
   it("takvim onayını tek “Onayla” adımıyla anlatır", () => {

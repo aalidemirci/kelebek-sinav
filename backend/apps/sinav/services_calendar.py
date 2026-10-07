@@ -2473,7 +2473,79 @@ def calendar_validation(calendar: ExamCalendar) -> dict[str, list[str]]:
                 f"{_level_display(level)} {day}: bir öğrenciye aynı gün {max_load} sınav "
                 "— üst sınır aşıldı."
             )
+    warnings.extend(_extra_time_warnings(calendar, list(placed)))
     return {"errors": errors, "warnings": warnings}
+
+
+def _extra_time_warnings(calendar: ExamCalendar, placed: list[ExamCalendarEntry]) -> list[str]:
+    """Ek süreli öğrenci ARDIŞIK iki ders saatinde sınava giriyor mu (07.10.2026)?
+
+    Kalıcı sınav tedbirindeki ek süre ilk sınavı teneffüse ve ikinci sınavın
+    başlangıcına taşır. Takvim girdisinde sınav süresi yoktur (süre oturumda
+    verilir), bu yüzden kural yaklaşık ve İHTİYATLIDIR: ek süreli öğrencinin aynı
+    gün n. ve n+1. ders saatinde sınavı varsa uyarılır. Kapsam katılımcı kuralının
+    aynısıdır: sınıf düzeyinin tamamı, ya da öğrencinin şubesi kapsamda ve dersin
+    o şubede öğrenci listesi varsa öğrenci listede. Metin yalnız SAYI söyler (ek
+    süre tedbiri özel nitelikli veriye işaret eder — öğrenci kimliği yazılmaz).
+    """
+    from apps.okul.models import ClassSection, Student, StudentStatus
+    from apps.sinav import services_individual
+
+    ek_sure = services_individual.extra_minutes_map()
+    if not ek_sure or not placed:
+        return []
+    ogrenciler = list(
+        Student.objects.filter(pk__in=list(ek_sure), status=StudentStatus.ACTIVE).values_list(
+            "pk", "class_level", "class_section"
+        )
+    )
+    sube_pk = {
+        (int(s.class_level), s.class_section): int(s.pk)
+        for s in ClassSection.objects.filter(school_year_id=calendar.semester.school_year_id)
+    }
+    index = _calendar_enrollment_index(calendar)
+    gun_saat: dict[tuple[date, int], list[ExamCalendarEntry]] = {}
+    for entry in placed:
+        if entry.placed_date is not None and entry.period_no is not None:
+            gun_saat.setdefault((entry.placed_date, int(entry.level)), []).append(entry)
+
+    sayac: dict[tuple[date, int, int], int] = {}
+    for student_id, seviye, harf in ogrenciler:
+        if seviye is None:
+            continue
+        sube = sube_pk.get((int(seviye), harf))
+        for (gun, duzey), girdiler in gun_saat.items():
+            if duzey != int(seviye):
+                continue
+            saatler = sorted(
+                {
+                    int(e.period_no)
+                    for e in girdiler
+                    if e.period_no is not None and _student_in_entry(e, student_id, sube, index)
+                }
+            )
+            for onceki, sonraki in zip(saatler, saatler[1:], strict=False):
+                if sonraki == onceki + 1:
+                    anahtar = (gun, duzey, onceki)
+                    sayac[anahtar] = sayac.get(anahtar, 0) + 1
+    return [
+        f"{_level_display(duzey)} {gun.strftime('%d.%m.%Y')}: ek süreli {n} öğrenci "
+        f"{saat}. ve {saat + 1}. ders saatindeki iki sınava da giriyor; ek süre teneffüse "
+        "taşar, ikinci sınava geç başlayabilir."
+        for (gun, duzey, saat), n in sorted(sayac.items())
+    ]
+
+
+def _student_in_entry(
+    entry: ExamCalendarEntry, student_id: int, section_pk: int | None, index: EnrollmentIndex
+) -> bool:
+    """Öğrenci bu takvim girdisinin sınavına girer mi — katılımcı kuralının takvim ayağı."""
+    if entry.participant_type != ParticipantType.SECTIONS:
+        return True
+    if section_pk is None or section_pk not in {int(x) for x in entry.section_ids or []}:
+        return False
+    uyeler = index.members(entry.course_id, section_pk)
+    return uyeler is None or student_id in uyeler
 
 
 def _level_display(level: int) -> str:

@@ -110,7 +110,25 @@ def test_liste_ekle_cikar_ve_sirala() -> None:
     items = services_individual.iep_list()
     # Sınıf/şube (seviye sayısal), sonra okul no — eklenme sırası DEĞİL.
     assert [item["student_number"] for item in items] == ["101", "102", "201"]
-    assert set(items[0]) == {"id", "student_id", "student_number", "full_name", "class_label"}
+    # 07.10.2026: satır gerekçe + tedbirleri de taşır; tedbir metni backend'den gelir.
+    assert set(items[0]) == {
+        "id",
+        "student_id",
+        "student_number",
+        "full_name",
+        "class_label",
+        "reason_category",
+        "reason_label",
+        "placement",
+        "target_room_id",
+        "seat_preference",
+        "solo_desk",
+        "extra_minutes",
+        "reader",
+        "scribe",
+        "measures",
+    }
+    assert items[0]["reason_category"] == "IEP" and items[0]["measures"] == []
 
     with pytest.raises(ValidationError, match="zaten listede"):
         services_individual.add_iep_student(_student("101").pk)
@@ -160,9 +178,35 @@ def test_sifreli_alanlar_parola_gecisine_kendiliginden_girer() -> None:
 
 
 def test_modelde_serbest_metin_alani_yok() -> None:
-    """KVKK md. 6: tanı/açıklama alanı EKLENMEZ — alan kümesi sabittir."""
+    """KVKK md. 6: tanı/açıklama alanı EKLENMEZ — alan kümesi sabittir.
+
+    07.10.2026: kalıcı sınav tedbirleri eklendi (kullanıcı kararı); hepsi seçenek,
+    sayı ya da bayraktır. Şifreli bağ DIŞINDAKİ her metin alanı seçenekli olmalı —
+    serbest metin girilebilen bir alan bu testi kırar.
+    """
+    from django.db import models as dj_models
+
     iep_fields = {f.name for f in IepStudent._meta.get_fields()}
-    assert iep_fields == {"id", "created_at", "updated_at", "deleted_at", "student_ref"}
+    assert iep_fields == {
+        "id",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "student_ref",
+        "reason_category",
+        "placement",
+        "target_room",
+        "seat_preference",
+        "solo_desk",
+        "extra_minutes",
+        "reader",
+        "scribe",
+    }
+    for field in IepStudent._meta.fields:
+        if isinstance(field, dj_models.CharField | dj_models.TextField) and field.name != (
+            "student_ref"
+        ):
+            assert field.choices, f"{field.name} serbest metin olamaz"
     doc_fields = {f.name for f in IndividualQuestionDocument._meta.get_fields()}
     assert doc_fields == {
         "id",
@@ -188,7 +232,7 @@ def test_secim_kapilari() -> None:
     session = _session(with_course_docs=False)
     student = _student("101")
 
-    with pytest.raises(ValidationError, match="listesindeki"):
+    with pytest.raises(ValidationError, match="BEP kapsamındaki öğrenciye"):
         services_individual.select_individual(session, student_id=student.pk)
 
     services_individual.add_iep_student(student.pk)
@@ -514,7 +558,9 @@ def test_idare_ozeti_icerigi() -> None:
 
 def test_idare_ozeti_kapilari() -> None:
     session = _session(with_course_docs=False)
-    with pytest.raises(ValidationError, match="BEP kapsamında yerleşmiş öğrenci yok"):
+    with pytest.raises(
+        ValidationError, match="BEP kapsamında ya da sınav tedbiri olan yerleşmiş öğrenci yok"
+    ):
         services_individual.render_iep_summary(session)
     with pytest.raises(ValidationError, match="Önce dağıtım"):
         services_individual.render_iep_summary(oturum(name="Taslak"))

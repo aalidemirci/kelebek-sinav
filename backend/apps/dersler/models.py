@@ -254,9 +254,14 @@ class CourseEnrollment(BaseModel):
     Liste GEÇMİŞ değil GÜNCEL DURUMDUR: değiştirme satırları KALICI siler
     (`hard_delete`) — her e-Okul aktarımında binlerce kişisel veri artığı
     birikmesin (KVKK veri en aza indirme). Arşiv evrakının sabitliği zaten
-    yerleşim SNAPSHOT'ındadır (`SeatAssignment.conflict_group`). Öğrenci şube
-    değiştirir ya da ayrılırsa satır okuma anında düşer (katılımcı çözümü şube
-    mevcuduyla kesiştirir) ve uyarıya sayıyla yazılır — ad yazılmaz.
+    yerleşim SNAPSHOT'ındadır (`SeatAssignment.conflict_group`).
+
+    Şube değişikliği (07.10.2026): öğrenci aktarımı, elle düzenleme ya da yeni
+    kayıt şube değiştirince eski şubedeki satırlar SİLİNİR; yeni şubede liste
+    varsa öğrenci seçim bekler (`PendingElectiveChoice`). Öğrenci ayrılınca ya da
+    silinince satırları KATI silinir (`services.forget_student_enrollments`).
+    Okuma anındaki süzgeç (katılımcı çözümü şube mevcuduyla kesiştirir, sayıyla
+    uyarır — ad yazılmaz) servis dışı değişikliklere karşı emniyet olarak kalır.
 
     Neden `Course` ya da `Student` üzerinde alan DEĞİL: katalog yıldan bağımsızdır
     ve `sync_catalog` alanlarını ezer; öğrencinin seçmelisi ise yıla bağlıdır
@@ -355,3 +360,68 @@ class ElectiveReportSection(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.school_year_id} / şube {self.section_id}"
+
+
+class PendingElectiveChoice(BaseModel):
+    """Seçmeli ders seçimi bekleyen öğrenci — (öğrenci, ders yılı) (07.10.2026).
+
+    Kullanıcı isteği: şubesi değiştirilen ya da nakil gelen öğrenci, yeni şubesi
+    seçmeli dersi BÖLÜNEREK alıyorsa (şubede o dersin öğrenci listesi varsa)
+    hangi dersi aldığı seçtirilmeli. Liste kuralı şube bazındadır
+    (`CourseEnrollment`): öğrenci yeni şubenin hiçbir listesinde değildir ve
+    kendiliğinden hiçbirine yazılmaz — bu satır olmadan o derslerin sınavından
+    SESSİZCE düşerdi. Listesiz dersler (şubenin tamamı) ve zorunlu dersler
+    şubeden türetildiği için seçim gerektirmez.
+
+    Satır, öğrencinin şubesi değişince ya da öğrenci yeni kaydedilince yeni
+    şubede listeli seçmeli varsa yazılır (`services.handle_student_section_changes`);
+    idareci Ders Havuzu'ndaki pencereden seçince (`resolve_elective_choice`),
+    e-Okul seçmeli raporu öğrenciyi kapsayınca, öğrenci yeniden şube değiştirince
+    ya da ayrılınca KATI silinir. Seçim beklerken o şubenin listeli dersini içeren
+    oturum DAĞITILAMAZ (kullanıcı kararı 07.10.2026 — dosyasız bireysel soru
+    seçiminin kitapçık üretimini durdurması emsali).
+
+    `previous_course_ids` öğrencinin ESKİ şubesinde listesinde olduğu seçmelilerdir;
+    pencere yeni şubede de okutulanları işaretli getirir (öneri — karar idarecinin).
+    """
+
+    student = models.ForeignKey(
+        "okul.Student",
+        on_delete=models.CASCADE,
+        related_name="pending_elective_choices",
+        verbose_name="öğrenci",
+    )
+    school_year = models.ForeignKey(
+        "okul.SchoolYear",
+        on_delete=models.CASCADE,
+        related_name="pending_elective_choices",
+        verbose_name="ders yılı",
+    )
+    section = models.ForeignKey(
+        "okul.ClassSection",
+        on_delete=models.CASCADE,
+        related_name="pending_elective_choices",
+        verbose_name="şube",
+        help_text="Seçimin beklendiği şube — öğrencinin satır yazıldığı andaki şubesi.",
+    )
+    previous_course_ids = models.JSONField(
+        "eski şubedeki seçmeliler",
+        default=list,
+        blank=True,
+        help_text="Dersler.Course id listesi — pencerenin önerisi.",
+    )
+
+    class Meta:
+        verbose_name = "seçmeli ders seçimi bekleyen öğrenci"
+        verbose_name_plural = "seçmeli ders seçimi bekleyen öğrenciler"
+        ordering = ["section", "student"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["student", "school_year"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="uq_pending_elective_choice_alive",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"seçim bekliyor — öğrenci {self.student_id} / şube {self.section_id}"

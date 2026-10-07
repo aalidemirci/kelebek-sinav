@@ -8,6 +8,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../lib/api";
@@ -19,6 +20,7 @@ import type {
   CourseSectionOffering,
   CourseSectionOfferingRow,
   EnrollmentCountRow,
+  PendingElectiveChoice,
 } from "./api";
 
 const dersler = vi.hoisted(() => ({
@@ -88,6 +90,12 @@ const dersler = vi.hoisted(() => ({
   ),
   previewEnrollmentImport: vi.fn(),
   commitEnrollmentImport: vi.fn(),
+  // Seçmeli ders seçimi bekleyenler (07.10.2026): varsayılan "bekleyen yok".
+  pendingElectiveChoices: vi.fn(
+    (): Promise<{ school_year: number; results: PendingElectiveChoice[] }> =>
+      Promise.resolve({ school_year: 1, results: [] }),
+  ),
+  resolveElectiveChoice: vi.fn(),
 }));
 
 const okul = vi.hoisted(() => ({
@@ -166,13 +174,16 @@ const BEDEN = ders({
   exam_mode_label: "Uygulama",
 });
 
-function renderPage() {
+function renderPage(route = "/dersler") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // Router: "Seçimleri yap" penceresi URL'de durur (`?secim=bekleyen`).
   return render(
     <QueryClientProvider client={qc}>
       <SnackbarProvider>
         <ConfirmProvider>
-          <DersHavuzuPage />
+          <MemoryRouter initialEntries={[route]}>
+            <DersHavuzuPage />
+          </MemoryRouter>
         </ConfirmProvider>
       </SnackbarProvider>
     </QueryClientProvider>,
@@ -180,6 +191,56 @@ function renderPage() {
 }
 
 afterEach(() => vi.clearAllMocks());
+
+const BEKLEYEN: PendingElectiveChoice = {
+  student_id: 31,
+  student_number: "512",
+  full_name: "Deniz Deneme",
+  class_level: 9,
+  class_label: "9/B",
+  section_id: 2,
+  courses: [
+    { course_id: 7, course_name: "Almanca", listed_count: 14, enrolled: false, suggested: true },
+  ],
+};
+
+describe("DersHavuzuPage — seçmeli ders seçimi bekleyenler (07.10.2026)", () => {
+  // clearAllMocks uygulamayı SIFIRLAMAZ: öbür testler "bekleyen yok" varsayımıyla koşsun.
+  afterEach(() =>
+    dersler.pendingElectiveChoices.mockResolvedValue({ school_year: 1, results: [] }),
+  );
+
+  it("bant bekleyeni sayar, 'Seçimleri yap' pencereyi açar", async () => {
+    const user = userEvent.setup();
+    dersler.listCourses.mockResolvedValue([ders()]);
+    dersler.pendingElectiveChoices.mockResolvedValue({ school_year: 1, results: [BEKLEYEN] });
+
+    renderPage();
+
+    expect(
+      await screen.findByText(/1 öğrencinin seçmeli ders seçimi bekliyor/),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Seçimleri yap" }));
+    expect(
+      await screen.findByRole("dialog", { name: "Seçmeli ders seçimi bekleyen öğrenciler" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Kapat" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Seçmeli ders seçimi bekleyen öğrenciler" }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("derin bağlantı (?secim=bekleyen) pencereyi doğrudan açar", async () => {
+    dersler.listCourses.mockResolvedValue([ders()]);
+    dersler.pendingElectiveChoices.mockResolvedValue({ school_year: 1, results: [BEKLEYEN] });
+
+    renderPage("/dersler?secim=bekleyen");
+
+    expect(await screen.findByRole("checkbox", { name: /Almanca/ })).toBeChecked();
+  });
+});
 
 describe("DersHavuzuPage", () => {
   it("yürürlükteki çizelge panelini dayanağıyla basar; 'yeniden uygula' senkronu tetikler", async () => {

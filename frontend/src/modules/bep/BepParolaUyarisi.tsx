@@ -35,8 +35,8 @@ export default function BepParolaUyarisi({ className = "" }: { className?: strin
     >
       <Icon name="lock_open" size="lg" className="mt-0.5 shrink-0" />
       <p>
-        <strong>Uygulama parolası kapalı:</strong> BEP bilgisi bu bilgisayarda ve yedeklerde
-        şifresiz saklanıyor. Bu bilgi özel nitelikli kişisel veridir (KVKK md. 6);{" "}
+        <strong>Uygulama parolası kapalı:</strong> BEP ve sınav tedbiri bilgisi bu bilgisayarda ve
+        yedeklerde şifresiz saklanıyor. Bu bilgi özel nitelikli kişisel veridir (KVKK md. 6);{" "}
         <Link
           to="/ayarlar?tab=guvenlik"
           className="font-medium underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"

@@ -259,7 +259,7 @@ export default function OturumDetayPage() {
           <Tabs items={tabs} active={tab} onChange={setTab} idBase="oturum-detay" />
           <div {...tabPanelProps("oturum-detay", tab)}>
             {tab === "yerlesim" && <YerlesimPaneli session={data} />}
-            {tab === "kurallar" && <KurallarPaneli sessionId={data.id} />}
+            {tab === "kurallar" && <KurallarPaneli sessionId={data.id} session={data} />}
             {tab === "gozetmenler" && <GozetmenlerPaneli session={data} />}
             {tab === "sorular" && <SorularPaneli session={data} />}
             {tab === "evrak" && <EvrakPaneli session={data} />}

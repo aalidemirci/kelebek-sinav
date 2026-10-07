@@ -45,6 +45,7 @@ from apps.okul.models import (
     Student,
     StudentStatus,
 )
+from apps.okul.services import persons
 
 
 @dataclass
@@ -70,6 +71,9 @@ class StudentImportReport:
     unchanged_students: int = 0
     already_imported: bool = False
     dry_run: bool = False
+    #: Şubesi değişen ya da yeni gelen ve yeni şubesi seçmeliyi BÖLÜNEREK okuttuğu
+    #: için seçmeli ders seçimi bekleyen öğrenci sayısı (07.10.2026; ad yok).
+    elective_choices_pending: int = 0
     warnings: list[ImportIssue] = field(default_factory=list)
     skipped: list[ImportIssue] = field(default_factory=list)
 
@@ -245,16 +249,27 @@ def _ingest_students(
     for header_warning in mapping.warnings:
         report.add_warning(mapping.header_row + 1, "header", header_warning)
 
+    sube_degisen: list[int] = []
     for row in rows:
-        _process_student_row(row, report=report)
+        _process_student_row(row, report=report, section_changed=sube_degisen)
 
     _ensure_class_sections()
+    # Şubesi değişen / yeni gelen öğrencinin seçmeli listeleri — ŞUBE KATALOĞU
+    # tohumlandıktan SONRA (yeni şube kaydı bu aktarımla açılmış olabilir).
+    # Önizleme aynı yoldan geçer ve geri sarılır: sayı aktarmadan önce görünür.
+    report.elective_choices_pending = persons.notify_student_section_changes(sube_degisen)
     _close_run(run, report.to_dict())
     return report
 
 
-def _process_student_row(row: ParsedRow, *, report: StudentImportReport) -> None:
-    """Tek satır: doğrula → okul numarasıyla bul/oluştur/güncelle."""
+def _process_student_row(
+    row: ParsedRow, *, report: StudentImportReport, section_changed: list[int]
+) -> None:
+    """Tek satır: doğrula → okul numarasıyla bul/oluştur/güncelle.
+
+    Yeni kayıt ya da sınıf/şubesi değişen kayıt `section_changed`a yazılır
+    (seçmeli ders listeleri köprüsü — `persons.notify_student_section_changes`).
+    """
     if not row.student_number:
         report.add_skip(row.row_number, "number", "Okul numarası bulunamadı.")
         return
@@ -279,10 +294,13 @@ def _process_student_row(row: ParsedRow, *, report: StudentImportReport) -> None
         student_number=row.student_number, status=StudentStatus.ACTIVE
     ).first()
     if student is None:
-        Student.objects.create(**fields, gender=row.gender)
+        yeni = Student.objects.create(**fields, gender=row.gender)
+        section_changed.append(int(yeni.pk))
         report.created_students += 1
     else:
         changed = [name for name, value in fields.items() if getattr(student, name) != value]
+        if {"class_level", "class_section"}.intersection(changed):
+            section_changed.append(int(student.pk))
         for name in changed:
             setattr(student, name, fields[name])
         # Cinsiyet YALNIZ dolu ve farklı gelirse yazılır: cinsiyet sütunu

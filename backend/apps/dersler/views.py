@@ -331,6 +331,45 @@ class CourseEnrollmentsView(APIView):
         return Response({"school_year": year_id, **sonuc})
 
 
+class PendingElectiveChoicesView(APIView):
+    """`GET /api/v1/courses/elective-choices/` — seçmeli ders seçimi bekleyen öğrenciler.
+
+    Şubesi değişen ya da nakil gelen öğrencinin yeni şubesi seçmeliyi bölünerek
+    okutuyorsa (07.10.2026) öğrenci burada listelenir; satır şubenin listeli
+    derslerini öneriyle taşır (`selectors.pending_elective_choices`).
+    """
+
+    def get(self, request: Request) -> Response:
+        year_id = _cozulen_yil_id(request)
+        return Response(
+            {"school_year": year_id, "results": selectors.pending_elective_choices(year_id)}
+        )
+
+
+class ResolveElectiveChoiceView(APIView):
+    """`POST /api/v1/courses/elective-choices/resolve/` — `{"student_id", "course_ids"}`.
+
+    Öğrencinin şubesinde bölünerek okutulan derslerden aldıklarını yazar; boş
+    liste = hiçbirini almıyor. Öğrenci kimliği YOLDA değil gövdededir.
+    """
+
+    def post(self, request: Request) -> Response:
+        year_id = _cozulen_yil_id(request)
+        student_id = request.data.get("student_id")
+        course_ids = request.data.get("course_ids")
+        if isinstance(student_id, bool) or not isinstance(student_id, int):
+            raise serializers.ValidationError({"student_id": "Öğrenci seçimi gerekli."})
+        if not isinstance(course_ids, list):
+            raise serializers.ValidationError({"course_ids": "Ders listesi gerekli."})
+        sonuc = _servis(
+            services.resolve_elective_choice,
+            student_id=student_id,
+            course_ids=course_ids,
+            school_year_id=year_id,
+        )
+        return Response({"school_year": year_id, **sonuc})
+
+
 class _EnrollmentImportView(APIView):
     """e-Okul OOK10002R010 PDF'i — yalnız dosya (pano yolu yok: PDF'ten okunur)."""
 

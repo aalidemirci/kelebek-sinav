@@ -44,7 +44,13 @@ from django.db import transaction
 from django.db.models import Q
 
 from apps.dersler import selectors as ders_selectors
-from apps.dersler.models import Course, CourseEnrollment, CourseSectionOffering, CourseType
+from apps.dersler.models import (
+    Course,
+    CourseEnrollment,
+    CourseSectionOffering,
+    CourseType,
+    PendingElectiveChoice,
+)
 from apps.dersler.text import course_match_key, level_label
 from apps.okul import eokul, normalize
 from apps.okul.excel_ogrenci import ParserError
@@ -277,6 +283,9 @@ class ElectiveImportReport:
     covered_levels: list[str] = field(default_factory=list)
     #: Listesi olup bu raporda YER ALMAYAN dersler — dokunulmadı.
     untouched_courses: list[str] = field(default_factory=list)
+    #: Raporda yer aldığı için seçmeli ders seçimi bekleyişi KAPANAN öğrenci
+    #: sayısı (07.10.2026): e-Okul verisi idarecinin seçiminin yerini tutar.
+    pending_resolved: int = 0
     warnings: list[ReportIssue] = field(default_factory=list)
     skipped: list[ReportIssue] = field(default_factory=list)
     #: Sınırı aşıp listeye yazılmayan sorun sayıları (rapor okunur kalsın).
@@ -541,6 +550,18 @@ def _ingest(
             elif hedef != sorted(eski):
                 kayit.section_ids = hedef
                 kayit.save(update_fields=["section_ids", "updated_at"])
+
+    # Raporda geçen öğrencinin seçim bekleyişi kapanır (07.10.2026): e-Okul hangi
+    # seçmeliyi aldığını söyledi. Raporda HİÇ geçmeyen bekleyen öğrenciye
+    # dokunulmaz — rapor öğrencinin şube değişikliğinden önce alınmış olabilir,
+    # "hiçbirini almıyor" çıkarımı sessiz düşmeyi geri getirirdi.
+    raporlananlar = {pk for yeni in ders_ogrencileri.values() for pk in yeni}
+    if raporlananlar:
+        rapor.pending_resolved, _ = (
+            PendingElectiveChoice.all_objects.get_queryset()
+            .filter(school_year=year, student_id__in=sorted(raporlananlar))
+            .hard_delete()
+        )
 
     kapsanan = sorted(
         (s for s in subeler.values() if int(s.pk) in kapsam),

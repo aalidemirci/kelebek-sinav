@@ -4,6 +4,54 @@ Paketler GitHub Releases'ta ve indir.okulapp.org'dadır. En yeni sürüm en üst
 yayımlanmamış değişiklikler "Yayımlanmadı (taslak)" başlığı altında toplanır ve
 sürüm çıkarılırken bu başlık sürüm numarası ve tarihle değiştirilir.
 
+## Yayımlanmadı (taslak)
+
+Bu sürüm veritabanında değişiklik yapar; güncelleme ilk açılışta kendiliğinden
+uygulanır, yapmanız gereken bir işlem yoktur.
+
+### Şubesi değişen ve nakil gelen öğrenciler
+
+- **Öğrencinin şubesi değişince seçmeli ders listeleri de toparlanır.** Zorunlu
+  dersler ve şubenin tamamının aldığı seçmeliler zaten yeni şubeye geçiyordu;
+  artık eski şubenin öğrenci listelerinden de çıkar.
+- **Bölünerek okutulan seçmelide seçim sorulur.** Yeni şube bir seçmeliyi
+  bölünerek okutuyorsa (dersi şubenin yalnız bir kısmı alıyorsa) öğrenci
+  "seçmeli ders seçimi bekliyor" olur; nakil gelen öğrenci de öyle. Ders Havuzu
+  ve Kişiler ekranlarında bant çıkar, **Seçimleri yap** penceresinden öğrencinin
+  aldığı dersler işaretlenir (eski şubesinde aldığı ders işaretli gelir). Eskiden
+  öğrenci bu derslerin sınavından sessizce düşüyordu.
+- Seçim yapılana kadar o şubenin bölünmüş dersini içeren sınav oturumu
+  dağıtılamaz; sihirbaz nedenini söyler ve pencereye bağlantı verir.
+- Öğrenci aktarımının önizlemesi kaç öğrencinin seçim bekleyeceğini aktarmadan
+  önce söyler. e-Okul seçmeli raporu yeniden aktarılınca raporda geçen
+  öğrencilerin seçimi kendiliğinden kapanır.
+- Okuldan ayrılan ya da sicilden silinen öğrencinin seçmeli ders kayıtları
+  silinir (fotoğraf ve BEP kaydı gibi). Güncellemeden önce şube değiştirmiş ya da
+  ayrılmış öğrencilerin eski kayıtları ilk açılışta bir kez toparlanır.
+
+### Kalıcı sınav tedbirleri
+
+- Kişiler ekranındaki **BEP** sekmesi **BEP ve tedbirler** oldu. Öğrenciye bir
+  kez tedbir girilir, bütün sınav oturumlarında geçerli olur: **kendi sınıfında**,
+  **ayrı salon** ya da **ön sırada** sınava girme (istenirse salon içinde ön/arka
+  sıra ve sırada tek başına), **ek süre** (dakika), **okuyucu desteği**, **yazıcı
+  desteği**. Gerekçe yalnız kategoridir (BEP, engel durumu, sağlık, diğer); tanı
+  ya da rapor kaydedilmez.
+- Öğrenci adıyla ya da okul numarasıyla eklenir; birden çok öğrenci için okul
+  numaraları yazılarak toplu eklenebilir.
+- Yer tedbiri dağıtımda yerleştirme kuralı gibi uygulanır; o oturumda öğrenciye
+  kural eklenirse kural geçerli olur. Oturumun Yerleştirme Kuralları sekmesinde
+  sınava giren tedbirli öğrenciler görünür. Tedbir oturum dağıtıldıktan sonra
+  girildiyse orada ve idare özetinde "yer tedbiri bu dağıtımda uygulanmadı —
+  oturumu yeniden dağıtın" yazar.
+- Ek süre ile okuyucu ve yazıcı desteği salon evrakına, yoklama listesine ve
+  kitapçığa basılmaz; yalnız oturumun **idare özetinde** (BEP özetiyle birlikte)
+  görünür. Görevli öğretmeni program atamaz.
+- Dağıtım, okuyucu ya da yazıcı desteği alan öğrenci ayrı salonda değilse ya da
+  aynı ayrı salonda iki destekli öğrenci varsa uyarır. Ek süreli öğrencinin iki
+  sınavı arasında süre kalmazsa (aynı gün çakışan oturumlar, takvimde ardışık iki
+  ders saati) uyarılırsınız; uyarılar öğrencinin adını ya da numarasını söylemez.
+
 ## 2026.10.0-beta.1 — 02.10.2026
 
 Bu sürüm veritabanında değişiklik yapmaz; güncellemeden sonra yapmanız gereken

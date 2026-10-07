@@ -151,10 +151,24 @@
   ETMEZ, temizlik `persons.register_student_forget_hook` kancasıyla
   (`SinavConfig.ready`) gelir — ayrıca okumada (`purge_stale`), arşiv
   anonimleştirmesinde, oturum silinince. EKLENMEYECEKLER: tanı/rapor/engel türü/
-  açıklama alanı; salon evrakına, duyuruya, tutanağa, kitapçık bandına öğrenciyi
-  ayıran işaret; gözetmene/salona giden BEP belgesi (kullanıcı kararı: basılı bilgi
-  yalnız idare özeti, o da `REPORT_CODES`e ve "Tümünü indir"e GİRMEZ); ek süre
-  gibi salon evrakına basılacak öğrenciye özgü düzenleme. Hata, günlük ve uç YOLU
+  açıklama ya da herhangi bir serbest metin alanı; salon evrakına, duyuruya,
+  tutanağa, R8'e, kitapçık bandına öğrenciyi ayıran işaret; gözetmene/salona giden
+  BEP ya da tedbir belgesi (kullanıcı kararı: basılı bilgi yalnız idare özeti, o da
+  `REPORT_CODES`e ve "Tümünü indir"e GİRMEZ); okuyucu/yazıcı görevlisi ataması.
+  **Kalıcı sınav tedbirleri (07.10.2026, kullanıcı kararları — tasarım §9 eki):**
+  aynı satır gerekçe KATEGORİSİ (`RuleReason`: BEP/engel durumu/sağlık/diğer —
+  "gerekçeyle herkes") ve tedbirleri taşır (tarihsel ad `IepStudent` korundu); BEP'e
+  özgü işler (hatırlatma, bireysel soru dosyası) YALNIZ gerekçesi BEP olan satıra
+  açılır (`iep_rows`), tedbirler bütün satırlardadır (`accommodation_rows`). YER
+  tedbiri `_effective_rules`in en altında KAYITSIZ kural olarak doğar (oturum kuralı
+  > kalıcı kural > tedbir; `PlacementRule` satırı YAZILMAZ — düz FK şifreli bağı
+  açardı; kayıtsız kural `pk is None`). Ek süre ve okuyucu/yazıcı yerleşimi
+  değiştirmez: YALNIZ idare özetine basılır, dağıtım uyarıları `distribution_params`a
+  YAZILMAZ (R8'e girerdi), çakışma denetimleri (`overlapping_session_conflicts`,
+  takvimde ardışık ders saati) ek süreyi hesaba katar ve yalnız SAYI söyler. Koruma:
+  `test_sinav_tedbirleri.py::test_salon_evrakinda_ve_dogrulama_raporunda_tedbir_izi_yok`,
+  `test_individual_questions.py::test_modelde_serbest_metin_alani_yok` (metin alanı
+  ya şifreli bağdır ya seçenekli). Hata, günlük ve uç YOLU
   öğrenci kimliği taşımaz (Django 4xx yanıtını yoluyla günlüğe yazar): öğrenci
   pk'si gövdede gelir, yoldaki kimlik opak satır kimliğidir; ret metni yalnız SAYI
   söyler. Parola bu özellik için zorunlu DEĞİL (kullanıcı kararı) — kapalıyken
@@ -506,6 +520,20 @@
   özet satırla yazar; şube girilince kendiliğinden açılır. Liste dağıtımdan SONRA
   değişirse yerleşim DEĞİŞMEZ: `participants.placement_drift` snapshot'ı güncel
   çözümle karşılaştırır, oturum sayfası "yeniden dağıtın" bandı gösterir.
+- **Şube değişikliği eski listeyi SİLER, bölünmüş derste SEÇİM BEKLETİR**
+  (07.10.2026, tasarım §7.3 eki): öğrenci aktarımı, elle düzenleme ve yeni kayıt
+  şubesi değişen/yeni gelen/yeniden aktifleşen öğrenciyi
+  `persons.notify_student_section_changes` köprüsüyle bildirir (aktarımda şube
+  kataloğu tohumlandıktan SONRA). Eski şube satırları KATI silinir; yeni şubede
+  liste varsa `dersler.PendingElectiveChoice` yazılır. Bekleyen öğrenci listeli
+  şubede katılımcı SAYILMAZ ve o dersi içeren oturum DAĞITILAMAZ (kullanıcı kararı:
+  uyarı değil engel — `SessionResolution.has_pending_choices`); listesiz ders ve
+  LEVEL satırı etkilenmez. Şubesi değişmeyen öğrenci asla bekletilmez. Kapanış:
+  "Seçimleri yap" (`resolve_elective_choice` — boşalan liste dersi şube kapsamından
+  düşürür, yoksa ders bütün şubeye geçerdi), e-Okul raporunda GEÇMEK (geçmeyen
+  bekleyen kapanmaz), ayrılma/silme (`forget_student_enrollments` forget kancası).
+  Şube değiştiren yeni bir yol yazılırsa köprüyü çağırmalıdır — `QuerySet.update`
+  ile şube değiştirmek bekleyeni yazmaz (okumadaki süzgeç yalnız emniyettir).
 - **Takvim girdisi kapsamın KOPYASINI tutar** (snapshot): katalog sonradan
   değişince onaylanmış takvimin kapsamı geriye dönük kaymaz — küme kuralının
   aynı gerekçesi. `add_calendar_entries_bulk` kapsam GÖNDERİLMEMİŞSE katalogdan

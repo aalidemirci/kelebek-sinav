@@ -19,7 +19,7 @@ import Dialog from "../../ui/Dialog";
 import Icon from "../../ui/Icon";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import type { ElectiveImportIssue, ElectiveImportReport } from "./api";
-import { derslerApi } from "./api";
+import { PENDING_CHOICES_KEY, derslerApi } from "./api";
 
 export default function SecmeliOgrenciAktarDialog({
   onClose,
@@ -63,6 +63,8 @@ export default function SecmeliOgrenciAktarDialog({
             ["course-section-offerings"],
             ["course-sections"],
             ["courses"],
+            // Raporda geçen öğrencinin seçmeli ders seçimi bekleyişi kapanır.
+            [...PENDING_CHOICES_KEY],
           ]) {
             void queryClient.invalidateQueries({ queryKey: key });
           }
@@ -191,6 +193,16 @@ function RaporGorunumu({
       {report.already_imported && (
         <p className="rounded-shape-sm bg-secondary-container px-3 py-2 text-body-small text-on-secondary-container">
           Bu dosya daha önce aktarılmış; yeniden aktarım listeleri aynı içerikle yeniler.
+        </p>
+      )}
+      {(report.pending_resolved ?? 0) > 0 && (
+        <p className="flex items-start gap-2 rounded-shape-sm bg-secondary-container px-3 py-2 text-body-small text-on-secondary-container">
+          <Icon name="task_alt" size="sm" />
+          <span>
+            Seçmeli ders seçimi bekleyen {report.pending_resolved} öğrenci raporda geçiyor;
+            derslerini e-Okul'daki gibi {report.dry_run ? "alacak" : "aldı"}, bekleyen seçimleri{" "}
+            {report.dry_run ? "kapanacak" : "kapandı"}.
+          </span>
         </p>
       )}
       {eklenecekler.length > 0 && (

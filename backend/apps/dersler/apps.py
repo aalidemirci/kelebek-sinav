@@ -14,3 +14,14 @@ class DerslerConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.dersler"
     verbose_name = "Ders havuzu"
+
+    def ready(self) -> None:
+        """Ayrılan/silinen öğrencinin seçmeli listeleri KATI silinsin (KVKK — 07.10.2026).
+
+        Fotoğraf ve BEP kaydının emsali (`persons.register_student_forget_hook`):
+        temizlik okulun öğrenci servisinde AYNI işlemde koşar.
+        """
+        from apps.dersler import services
+        from apps.okul.services import persons
+
+        persons.register_student_forget_hook(services.forget_student_enrollments)

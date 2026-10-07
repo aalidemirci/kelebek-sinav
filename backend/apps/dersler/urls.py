@@ -23,6 +23,16 @@ urlpatterns = [
         name="course-enrollment-counts",
     ),
     path(
+        "courses/elective-choices/",
+        views.PendingElectiveChoicesView.as_view(),
+        name="course-elective-choices",
+    ),
+    path(
+        "courses/elective-choices/resolve/",
+        views.ResolveElectiveChoiceView.as_view(),
+        name="course-elective-choices-resolve",
+    ),
+    path(
         "courses/enrollments/import/preview/",
         views.EnrollmentImportPreviewView.as_view(),
         name="course-enrollments-import-preview",

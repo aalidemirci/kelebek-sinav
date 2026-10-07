@@ -190,6 +190,22 @@ describe("SecmeliOgrenciAktarDialog", () => {
     expect(screen.getByText(/Rapor 9\. Sınıf düzeyinden 1 şubeyi kapsıyor/)).toBeInTheDocument();
   });
 
+  it("raporda geçen ve seçmeli ders seçimi bekleyen öğrencinin bekleyişi kapandığı söylenir", async () => {
+    // 07.10.2026: e-Okul hangi seçmeliyi aldığını söyledi — idarecinin seçimi gerekmez.
+    const user = userEvent.setup();
+    dersler.previewEnrollmentImport.mockResolvedValue(rapor({ pending_resolved: 2 }));
+    dersler.commitEnrollmentImport.mockResolvedValue(
+      rapor({ dry_run: false, pending_resolved: 2 }),
+    );
+    renderDialog();
+
+    await user.upload(screen.getByLabelText("e-Okul OOK10002R010 raporu (PDF)"), PDF);
+    await user.click(screen.getByRole("button", { name: "Önizle" }));
+    expect(await screen.findByText(/bekleyen seçimleri kapanacak/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Aktar" }));
+    expect(await screen.findByText(/bekleyen seçimleri kapandı/)).toBeInTheDocument();
+  });
+
   it("okunamayan rapor gerekçesiyle role=alert basılır; aktarım açılmaz", async () => {
     const user = userEvent.setup();
     dersler.previewEnrollmentImport.mockRejectedValue(

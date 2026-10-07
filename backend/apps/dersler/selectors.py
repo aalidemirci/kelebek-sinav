@@ -10,7 +10,7 @@ kaydını tek başına SQL ile bulamazdı.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from django.db.models import QuerySet
@@ -322,8 +322,11 @@ def course_level_student_ids(
     delerdi, fazla sayım yalnız uyarıyı erken verir.
 
     Küme şubeden bağımsızdır (günlük yük öğrenci başınadır): listedeki, hâlâ
-    aktif ve o sınıf düzeyindeki öğrenciler — şube değiştirmiş öğrenci dersi
-    bırakmış sayılmaz.
+    aktif ve o sınıf düzeyindeki öğrenciler. Şube değiştiren öğrencinin eski
+    şubedeki satırı 07.10.2026'dan beri silinir; yeni şubesi dersi bölünerek
+    alıyorsa öğrenci SEÇİM BEKLER ve kapsamdaki şubede seçim bekleyen varken
+    küme boş döner — listesiz şubeyle aynı gerekçe: dersi alıp almadığı
+    bilinmeyen öğrenciyi saymamak günlük sınırı delebilirdi.
     """
     from apps.okul.models import Student, StudentStatus
 
@@ -337,6 +340,8 @@ def course_level_student_ids(
         liste = index.members(course_id, section_id)
         if liste is None:
             return set()  # listesiz şube: kayıt verisi eksik → bilinmiyor
+        if index.pending_in(section_id) - liste:
+            return set()  # listede olmayan seçim bekleyen: kayıt verisi eksik → bilinmiyor
         uyeler.update(liste)
     return set(
         Student.objects.filter(
@@ -413,10 +418,16 @@ class EnrollmentIndex:
 
     Tek sorguyla kurulur; takvimin otomatik yerleştiricisi gibi döngüde
     `_scope_overlaps` çağıran yollar dizini BİR KEZ kurup geçirir.
+
+    `pending` (07.10.2026): şube → seçmeli ders SEÇİMİ BEKLEYEN öğrenci kümesi
+    (`PendingElectiveChoice`). Bu öğrenciler o şubenin hiçbir listesinde
+    değildir; listeli derse girip girmeyecekleri BİLİNMEZ. Katılımcı çözümü
+    dağıtımı engeller, günlük sınav sayımı kümeyi "bilinmiyor"a çevirir.
     """
 
     school_year_id: int
     lists: dict[tuple[int, int], frozenset[int]]
+    pending: dict[int, frozenset[int]] = field(default_factory=dict)
 
     def members(self, course_id: int, section_id: int) -> frozenset[int] | None:
         """Listeli şubede öğrenci kümesi; listesiz şubede None (= şubenin tamamı)."""
@@ -425,12 +436,21 @@ class EnrollmentIndex:
     def is_listed(self, course_id: int, section_id: int) -> bool:
         return (int(course_id), int(section_id)) in self.lists
 
+    def pending_in(self, section_id: int) -> frozenset[int]:
+        """Şubede seçmeli ders seçimi bekleyen öğrenciler (yoksa boş küme)."""
+        return self.pending.get(int(section_id), frozenset())
+
 
 def enrollment_index(
     school_year_id: int, *, course_ids: Sequence[int] | None = None
 ) -> EnrollmentIndex:
-    """Ders yılının öğrenci listeleri — silinmiş şube/öğrenci satırı hiç girmez."""
-    from apps.dersler.models import CourseEnrollment
+    """Ders yılının öğrenci listeleri — silinmiş şube/öğrenci satırı hiç girmez.
+
+    Seçim bekleyenler (`pending`) ders süzgecinden bağımsızdır: bekleyen öğrenci
+    şubenin BÜTÜN listeli dersleri için belirsizdir.
+    """
+    from apps.dersler.models import CourseEnrollment, PendingElectiveChoice
+    from apps.okul.models import StudentStatus
 
     qs = CourseEnrollment.objects.filter(
         school_year_id=school_year_id,
@@ -444,9 +464,18 @@ def enrollment_index(
         "course_id", "section_id", "student_id"
     ):
         toplama.setdefault((int(course_id), int(section_id)), set()).add(int(student_id))
+    bekleyen: dict[int, set[int]] = {}
+    for section_id, student_id in PendingElectiveChoice.objects.filter(
+        school_year_id=school_year_id,
+        section__deleted_at__isnull=True,
+        student__deleted_at__isnull=True,
+        student__status=StudentStatus.ACTIVE,
+    ).values_list("section_id", "student_id"):
+        bekleyen.setdefault(int(section_id), set()).add(int(student_id))
     return EnrollmentIndex(
         school_year_id=int(school_year_id),
         lists={anahtar: frozenset(ids) for anahtar, ids in toplama.items()},
+        pending={sube: frozenset(ids) for sube, ids in bekleyen.items()},
     )
 
 
@@ -457,6 +486,80 @@ def course_enrollment_counts(school_year_id: int) -> dict[tuple[int, int], int]:
     ekran bunu kullanır, kişisel veri taşımaz.
     """
     return {anahtar: len(ids) for anahtar, ids in enrollment_index(school_year_id).lists.items()}
+
+
+def pending_elective_choices(school_year_id: int) -> list[dict[str, Any]]:
+    """Seçmeli ders seçimi bekleyen öğrenciler + şubelerinde bölünerek okutulan dersler.
+
+    "Seçimleri yap" penceresinin verisidir (07.10.2026). Satır başına öğrenci
+    (kimlik, okul no, ad — ad yalnız EKRAN içindir), şube ve şubenin listeli
+    seçmelileri: listedeki öğrenci sayısı, öğrencinin zaten listede olup olmadığı
+    (`enrolled`) ve eski şubesinde alıp almadığı (`suggested` — öneri). Listeli
+    dersi kalmamış şubedeki bekleyen satır seçim gerektirmez, listeye girmez.
+    Sıra: sınıf düzeyi, şube (Türk alfabesi), okul no (sayısal).
+    """
+    from apps.dersler.models import PendingElectiveChoice
+    from apps.okul import normalize
+    from apps.okul.models import StudentStatus
+
+    index = enrollment_index(school_year_id)
+    sube_dersleri: dict[int, list[int]] = {}
+    for course_id, section_id in index.lists:
+        sube_dersleri.setdefault(section_id, []).append(course_id)
+    adlar = dict(
+        Course.objects.filter(
+            pk__in={cid for ids in sube_dersleri.values() for cid in ids}
+        ).values_list("pk", "name")
+    )
+    satirlar: list[dict[str, Any]] = []
+    for kayit in PendingElectiveChoice.objects.filter(
+        school_year_id=school_year_id,
+        section__deleted_at__isnull=True,
+        student__deleted_at__isnull=True,
+        student__status=StudentStatus.ACTIVE,
+    ).select_related("student", "section"):
+        dersler = sube_dersleri.get(int(kayit.section_id), [])
+        if not dersler:
+            continue
+        ogrenci = kayit.student
+        onerilen = {int(x) for x in kayit.previous_course_ids or []}
+        satirlar.append(
+            {
+                "student_id": int(ogrenci.pk),
+                "student_number": ogrenci.student_number,
+                "full_name": ogrenci.full_name,
+                "class_level": kayit.section.class_level,
+                "class_label": kayit.section.class_label,
+                "section_id": int(kayit.section_id),
+                "courses": [
+                    {
+                        "course_id": cid,
+                        "course_name": adlar.get(cid, ""),
+                        "listed_count": len(index.members(cid, kayit.section_id) or ()),
+                        "enrolled": int(ogrenci.pk) in (index.members(cid, kayit.section_id) or ()),
+                        "suggested": cid in onerilen,
+                    }
+                    for cid in sorted(
+                        dersler, key=lambda c: normalize.tr_sort_key(adlar.get(c, ""))
+                    )
+                ],
+            }
+        )
+
+    def _no(deger: str) -> tuple[int, int, str]:
+        # isdigit() Unicode basamaklarda ('²') True döner, int() patlar — ASCII şartı.
+        if deger.isascii() and deger.isdigit():
+            return (0, int(deger), "")
+        return (1, 0, deger)
+
+    satirlar.sort(
+        key=lambda s: (
+            int(s["class_level"]),
+            normalize.tr_sort_key(s["class_label"]),
+            _no(str(s["student_number"])),
+        )
+    )
+    return satirlar
 
 
 # --------------------------------------------------------------------------- #
