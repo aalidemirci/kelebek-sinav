@@ -4,7 +4,7 @@ Paketler GitHub Releases'ta ve indir.okulapp.org'dadır. En yeni sürüm en üst
 yayımlanmamış değişiklikler "Yayımlanmadı (taslak)" başlığı altında toplanır ve
 sürüm çıkarılırken bu başlık sürüm numarası ve tarihle değiştirilir.
 
-## Yayımlanmadı (taslak)
+## 2026.10.0-beta.2 — 07.10.2026
 
 Bu sürüm veritabanında değişiklik yapar; güncelleme ilk açılışta kendiliğinden
 uygulanır, yapmanız gereken bir işlem yoktur.
