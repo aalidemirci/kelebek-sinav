@@ -311,10 +311,11 @@ describe("KilavuzPage", () => {
     expect(screen.getByText("“Tüm kayıtları sil”")).toBeInTheDocument();
     expect(screen.getByText(/uygulama parolası\s+koymanız önerilir/)).toBeInTheDocument();
     // Dayanak atıfları docs/mevzuat atıf haritalarıyla ve idare özetiyle BİREBİR —
-    // başka madde numarası uydurulmaz.
+    // başka madde numarası uydurulmaz. Kanun ve yönetmelik düzeyi 07.10.2026'da eklendi
+    // (idare özetinde de var — test_individual_questions.test_idare_ozeti_icerigi).
     expect(
       screen.getByText(
-        /Dayanak: Ölçme ve Değerlendirme Yönetmeliği md\. 4\/1-ç, 5\/1-n, 6\/1-d; Yazılı ve Uygulamalı\s+Sınavlar Yönergesi md\. 5\/1-u; Ortaöğretim Kurumları Yönetmeliği md\. 45\/1-ğ; ÖDSHGM'nin\s+10\.09\.2026 tarihli yazısı md\. 8\./,
+        /Dayanak: 573 sayılı Özel Eğitim Hakkında Kanun Hükmünde Kararname md\. 16\/1; Özel Eğitim\s+Hizmetleri Yönetmeliği md\. 24\/1-a, b; Ölçme ve Değerlendirme Yönetmeliği md\. 4\/1-ç, 5\/1-n,\s+6\/1-d; Yazılı ve Uygulamalı\s+Sınavlar Yönergesi md\. 5\/1-u; Ortaöğretim Kurumları\s+Yönetmeliği md\. 45\/1-ğ; ÖDSHGM'nin\s+10\.09\.2026 tarihli yazısı md\. 8\./,
       ),
     ).toBeInTheDocument();
     // "Ortak" yalnız MEB anlamında geçer: bireysel soru dosyasının karşıtı "dersin
@@ -342,6 +343,33 @@ describe("KilavuzPage", () => {
     expect(screen.getByText(/yalnız oturumun “İdare özeti \(PDF\)”/)).toBeInTheDocument();
     expect(screen.getByText(/Görevli öğretmeni program atamaz/)).toBeInTheDocument();
     expect(screen.getByText(/yalnız kaç öğrenci olduğunu/)).toBeInTheDocument();
+    // Dayanak (07.10.2026): alıntı depodaki ÖEHY md. 24/1-b metniyle birebirdir
+    // (docs/mevzuat/meb-ozel-egitim-hizmetleri-yonetmeligi.md); kararı BEP geliştirme
+    // birimi verir, program kaydeder; yönetmelik sağlık/diğer gerekçesini kapsamaz.
+    expect(
+      screen.getByText(
+        /^Tüm ölçme ve değerlendirme süreçlerinde öğrencilerin yetersizlik türü, gelişim özellikleri ve eğitim performansları doğrultusunda süre, ortam, yöntem, cihaz ve materyallerde düzenlemeler yapılarak gerekli tedbirler alınır\.$/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Özel Eğitim Hizmetleri Yönetmeliği md. 24/1")).toBeInTheDocument();
+    expect(screen.getByText("program karar vermez")).toBeInTheDocument();
+    expect(
+      screen.getByText(/sınavlarda refakat edilmesi\s+gereken öğrencileri de bu birim belirler/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/onun kapsamında değildir/)).toBeInTheDocument();
+  });
+
+  it("dayanak metinler kartı alıntı yapılan dört metni sayar", () => {
+    renderPage();
+    const kart = screen.getByRole("heading", { level: 2, name: "Dayanak metinler" }).parentElement;
+    expect(kart).not.toBeNull();
+    const metin = kart?.textContent ?? "";
+    expect(metin).toContain("Millî Eğitim Bakanlığı Ölçme ve Değerlendirme Yönetmeliği");
+    expect(metin).toContain("Millî Eğitim Bakanlığı Yazılı ve Uygulamalı Sınavlar Yönergesi");
+    expect(metin).toContain("Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği");
+    expect(metin).toContain("Özel Eğitim Hizmetleri Yönetmeliği (Resmî Gazete 07.07.2018/30471)");
+    // Metinler programın içinde gelmez (depodadır) — eski "programla birlikte gelen" yanlıştı.
+    expect(metin).not.toMatch(/programla birlikte gelen/);
   });
 
   it("takvim onayını tek “Onayla” adımıyla anlatır", () => {

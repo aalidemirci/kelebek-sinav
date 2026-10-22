@@ -1100,8 +1100,16 @@ uygulanacağını seçebilsek (ayrı salon, ek süre, kendi sınıfında, okuyuc
 yazıcı desteği vb.)". Kararlar: tedbir YALNIZ idare özetinde basılır; okuyucu/yazıcı
 görevlisini program atamaz; liste gerekçeyle herkesi kapsar (BEP / engel durumu /
 sağlık / diğer). Kanun düzeyinde dayanak 573 KHK md. 16/1 ("sınavlarda gerekli önlemler
-alınır ve düzenlemeler yapılır"); tedbirleri ADIYLA sayan bir metin depoda yoktur —
-kılavuzda ya da evrakta bir maddeye bağlanacaksa önce metin `docs/mevzuat/`e alınır.
+alınır ve düzenlemeler yapılır"); yönetmelik düzeyinde Özel Eğitim Hizmetleri Yönetmeliği
+md. 24/1-b ("süre, ortam, yöntem, cihaz ve materyallerde düzenlemeler yapılarak gerekli
+tedbirler alınır") — metin aynı gün depoya alındı
+(`docs/mevzuat/meb-ozel-egitim-hizmetleri-yonetmeligi.md`, atıf haritasıyla), idare
+özetinin dayanağı ve kılavuz ona bağlandı. Yönetmelik de tedbirleri ADIYLA saymaz (yer =
+ortam, ek süre = süre, okuyucu/yazıcı = yöntem eşlemesi programındır), kararı BEP
+geliştirme birimine verir (md. 47, 48/1-f, ğ) ve yalnız özel eğitim ihtiyacı olan
+öğrencileri kapsar: sağlık/diğer gerekçesinin dayanağı yazılmadı (aday OKY md. 45/1-a —
+kullanıcı kararı bekleniyor). Programda karşılığı OLMAYAN hüküm: md. 24/1-ç yabancı dil
+muafiyeti — öğrenciyi zorunlu bir dersin sınavından çıkaran kayıt yoktur.
 
 * **Tek satır, tek liste.** `IepStudent` (tarihsel ad) gerekçe kategorisi + tedbir
   alanlarını taşır; Kişiler'deki sekme "BEP ve tedbirler" oldu (anahtar `bep` — derin

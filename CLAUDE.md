@@ -300,7 +300,9 @@
   ve AYNI kalmalıdır; ön-sürüm eki doğal sıralanır (`beta.10 > beta.9`).
 - **Mevzuat atfı depodaki metinden doğrulanır:** `docs/mevzuat/` (ÖDY, Yönerge,
   OKY seçilmiş maddeler + atıf haritası, KVKK 6698 seçilmiş maddeler + atıf
-  haritası). Yeni atıf eklerken önce metni ekleyin. Öğrenci fotoğrafı biyometrik
+  haritası; 573 KHK ve Özel Eğitim Hizmetleri Yönetmeliği seçilmiş maddeler +
+  atıf haritası — BEP ve sınav tedbirlerinin kanun/yönetmelik düzeyi). Yeni atıf
+  eklerken önce metni ekleyin. Öğrenci fotoğrafı biyometrik
   İŞLENMEDİĞİ için KVKK md. 5 kapsamındadır ve evrak dipnotlarındaki md. 5/2-ç
   dayanağı buna bağlıdır: programa yüz tanıma, otomatik fotoğraf eşleştirme ya
   da fotoğraftan özellik çıkarımı EKLENMEZ — eklenirse veri md. 6'ya girer ve

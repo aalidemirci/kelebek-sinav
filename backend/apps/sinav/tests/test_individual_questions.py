@@ -554,6 +554,11 @@ def test_idare_ozeti_icerigi() -> None:
     # Dayanak depodaki metinlerden; md. 6/3 bendi BİLİNÇLE gösterilmez.
     assert "md. 4/1-ç" in text and "md. 5/1-u" in text and "md. 45/1-ğ" in text
     assert "6/3" not in text and "5/2" not in text
+    # Kanun ve yönetmelik düzeyi (07.10.2026): 573 KHK md. 16/1 + Özel Eğitim Hizmetleri
+    # Yönetmeliği md. 24/1-a, b — metinler docs/mevzuat'ta; kılavuzun BEP dayanak satırı
+    # aynı listedir (KilavuzPage.test.tsx).
+    assert "Kararname md. 16/1" in text
+    assert "Özel Eğitim Hizmetleri Yönetmeliği md. 24/1-a, b" in text
 
 
 def test_idare_ozeti_kapilari() -> None:

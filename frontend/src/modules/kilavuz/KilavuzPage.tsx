@@ -2,16 +2,16 @@
 // Kalıp HakkindaPage'den: max-w-4xl kap, üstbaşlık üçlüsü, bölüm başına Card +
 // 44px ikon rozeti. Ekranlara `Link` ile atlanır (ham <a href> YOK).
 //
-// Mevzuat atıfları DEPODAKİ tam metinlerden alınmıştır
-// (docs/mevzuat/meb-olcme-ve-degerlendirme-yonetmeligi.md ve
-// docs/mevzuat/meb-yazili-ve-uygulamali-sinavlar-yonergesi.md). Madde numarası
-// UYDURULMAZ: evrak şablonlarındaki kural burada da geçerli — numara kayarsa
-// metin yanlışlar, bu yüzden yalnız kanıtlı maddeler anılır ve bent harfi
+// Mevzuat atıfları DEPODAKİ metinlerden alınmıştır (docs/mevzuat: ÖDY, Yönerge,
+// OKY, Özel Eğitim Hizmetleri Yönetmeliği ve 573 sayılı KHK dosyaları). Madde
+// numarası UYDURULMAZ: evrak şablonlarındaki kural burada da geçerli — numara
+// kayarsa metin yanlışlar, bu yüzden yalnız kanıtlı maddeler anılır ve bent harfi
 // verilmez. İstisna "BEP kapsamındaki öğrenciler ve bireysel soru dosyası"
-// başlığının dayanak cümlesidir (20.09.2026): atıflar docs/mevzuat atıf
-// haritalarındaki bentlerle BİREBİR yazılır (ÖDY md. 4/1-ç, 5/1-n, 6/1-d ·
-// Yönerge md. 5/1-u · OKY md. 45/1-ğ · ÖDSHGM 10.09.2026 yazısı md. 8) — idare
-// özetinin dayanak satırıyla aynı liste; biri değişirse öteki de değişir.
+// başlığının dayanak cümlesidir (20.09.2026; kanun ve yönetmelik düzeyi
+// 07.10.2026): atıflar docs/mevzuat atıf haritalarındaki bentlerle BİREBİR yazılır
+// (573 KHK md. 16/1 · ÖEHY md. 24/1-a, b · ÖDY md. 4/1-ç, 5/1-n, 6/1-d · Yönerge
+// md. 5/1-u · OKY md. 45/1-ğ · ÖDSHGM 10.09.2026 yazısı md. 8) — idare özetinin
+// dayanak satırıyla aynı liste; biri değişirse öteki de değişir.
 
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
@@ -940,6 +940,21 @@ export default function KilavuzPage() {
           <strong>“Kalıcı sınav tedbirleri”</strong> bölümü o sınava giren tedbirli öğrencileri
           gösterir.
         </p>
+        <Mevzuat kaynak="Özel Eğitim Hizmetleri Yönetmeliği md. 24/1">
+          Tüm ölçme ve değerlendirme süreçlerinde öğrencilerin yetersizlik türü, gelişim özellikleri
+          ve eğitim performansları doğrultusunda süre, ortam, yöntem, cihaz ve materyallerde
+          düzenlemeler yapılarak gerekli tedbirler alınır.
+        </Mevzuat>
+        <p>
+          Hangi öğrenciye hangi tedbirin uygulanacağına <strong>program karar vermez</strong>;
+          okulun kararını kaydeder. Kaynaştırma/bütünleştirme yoluyla eğitim gören öğrencide tedbir
+          BEP'in parçasıdır: BEP'te değerlendirmede kullanılacak yöntem ve teknikler ile eğitim
+          ortamına ilişkin düzenlemeler yer alır. BEP'i okul müdürünün ya da görevlendireceği müdür
+          yardımcısının başkanlığındaki BEP geliştirme birimi hazırlar; sınavlarda refakat edilmesi
+          gereken öğrencileri de bu birim belirler (Özel Eğitim Hizmetleri Yönetmeliği md. 20, 47 ve
+          48). Bu yönetmelik özel eğitim ihtiyacı olan öğrenciler içindir; sağlık ya da diğer
+          gerekçeyle girdiğiniz tedbirler onun kapsamında değildir.
+        </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
           Kız ve erkek öğrencileri ayrı oturtma
@@ -1084,9 +1099,10 @@ export default function KilavuzPage() {
           oturumdaki bölümde hatırlatır.
         </p>
         <p className="text-body-small">
-          Dayanak: Ölçme ve Değerlendirme Yönetmeliği md. 4/1-ç, 5/1-n, 6/1-d; Yazılı ve Uygulamalı
-          Sınavlar Yönergesi md. 5/1-u; Ortaöğretim Kurumları Yönetmeliği md. 45/1-ğ; ÖDSHGM'nin
-          10.09.2026 tarihli yazısı md. 8.
+          Dayanak: 573 sayılı Özel Eğitim Hakkında Kanun Hükmünde Kararname md. 16/1; Özel Eğitim
+          Hizmetleri Yönetmeliği md. 24/1-a, b; Ölçme ve Değerlendirme Yönetmeliği md. 4/1-ç, 5/1-n,
+          6/1-d; Yazılı ve Uygulamalı Sınavlar Yönergesi md. 5/1-u; Ortaöğretim Kurumları
+          Yönetmeliği md. 45/1-ğ; ÖDSHGM'nin 10.09.2026 tarihli yazısı md. 8.
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
@@ -1391,12 +1407,15 @@ export default function KilavuzPage() {
           <div>
             <h2 className="text-title-large font-semibold text-on-surface">Dayanak metinler</h2>
             <p className="mt-2 text-body-medium text-on-surface-variant">
-              Bu kılavuzdaki alıntılar, programla birlikte gelen iki mevzuat metninden alınmıştır:
-              <strong> Millî Eğitim Bakanlığı Ölçme ve Değerlendirme Yönetmeliği</strong> (Resmî
-              Gazete 09.09.2023/32304) ve{" "}
+              Bu kılavuzdaki alıntılar şu mevzuat metinlerinden alınmıştır:{" "}
+              <strong>Millî Eğitim Bakanlığı Ölçme ve Değerlendirme Yönetmeliği</strong> (Resmî
+              Gazete 09.09.2023/32304),{" "}
               <strong>Millî Eğitim Bakanlığı Yazılı ve Uygulamalı Sınavlar Yönergesi</strong>{" "}
-              (11.10.2023). Mevzuat değişebilir; resmî evrak hazırlarken yürürlükteki metni esas
-              alın.
+              (11.10.2023),{" "}
+              <strong>Millî Eğitim Bakanlığı Ortaöğretim Kurumları Yönetmeliği</strong> (Resmî
+              Gazete 07.09.2013/28758) ve <strong>Özel Eğitim Hizmetleri Yönetmeliği</strong> (Resmî
+              Gazete 07.07.2018/30471). Mevzuat değişebilir; resmî evrak hazırlarken yürürlükteki
+              metni esas alın.
             </p>
           </div>
         </div>

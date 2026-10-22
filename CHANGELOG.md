@@ -4,6 +4,19 @@ Paketler GitHub Releases'ta ve indir.okulapp.org'dadır. En yeni sürüm en üst
 yayımlanmamış değişiklikler "Yayımlanmadı (taslak)" başlığı altında toplanır ve
 sürüm çıkarılırken bu başlık sürüm numarası ve tarihle değiştirilir.
 
+## Yayımlanmadı (taslak)
+
+### Sınav tedbirlerinin dayanağı
+
+- **İdare özetinin dayanağına Özel Eğitim Hizmetleri Yönetmeliği eklendi.** Tedbirlerin
+  yönetmelikteki karşılığı md. 24/1'dir: tüm ölçme ve değerlendirme süreçlerinde "süre,
+  ortam, yöntem, cihaz ve materyallerde düzenlemeler yapılarak gerekli tedbirler alınır".
+- **Kılavuz tedbirlerin dayanağını anlatır.** "Kalıcı sınav tedbirleri" başlığında bu
+  maddenin alıntısı ve kararı kimin verdiği yer alır: tedbir BEP'in parçasıdır, BEP'i ve
+  sınavda refakat gereken öğrencileri okulun BEP geliştirme birimi belirler; program
+  kararı kaydeder. BEP başlığındaki dayanak satırı idare özetininkiyle yeniden aynıdır;
+  "Dayanak metinler" kartı alıntı yapılan dört metni sayar.
+
 ## 2026.10.0-beta.2 — 07.10.2026
 
 Bu sürüm veritabanında değişiklik yapar; güncelleme ilk açılışta kendiliğinden

@@ -880,6 +880,13 @@ class IepStudent(BaseModel):
     hazırlanır (ÖDSHGM 10.09.2026 yazısı md. 8); engellilik durumu ve özellikleri
     dikkate alınarak sınavlarda gerekli önlemler alınır ve düzenlemeler yapılır
     (573 sayılı KHK md. 16/1). Tedbirler bu "düzenleme"nin kaydıdır — tanının değil.
+    Düzenlemenin İÇERİĞİ yönetmeliktedir: ölçme ve değerlendirmede "süre, ortam,
+    yöntem, cihaz ve materyallerde düzenlemeler yapılarak gerekli tedbirler alınır"
+    (Özel Eğitim Hizmetleri Yönetmeliği md. 24/1-b — yer = ortam, ek süre = süre,
+    okuyucu/yazıcı = yöntem; eşleme programındır). Kararı okulun BEP geliştirme
+    birimi verir (md. 47, 48/1-f, ğ); program kaydeder. Yönetmelik özel eğitim
+    ihtiyacı olan öğrenciler içindir: sağlık/diğer gerekçesi onun kapsamında değildir
+    (metin ve atıf haritası `docs/mevzuat/meb-ozel-egitim-hizmetleri-yonetmeligi.md`).
 
     Tedbirler: YER (`placement` — kendi sınıfında / ayrı salon / ön sırada; salon
     içi tercih ve "sırada tek başına" ile) her oturumda yerleştirme kuralı olarak

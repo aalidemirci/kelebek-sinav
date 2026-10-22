@@ -15,20 +15,24 @@ etiketler: [ozel-egitim, bep, kaynastirma, bireysellestirilmis-egitim-plani, sin
 > gibi). Dipnot işaretleri ([1], [2]) resmî metindeki gibidir; dipnot metinleri
 > dosyanın sonundadır.
 >
-> **Programdaki karşılığı (20.09.2026):**
+> **Programdaki karşılığı (20.09.2026; 07.10.2026'da güncellendi):**
 >
 > | Programdaki yer | Atıf | Hüküm |
 > |---|---|---|
-> | `docs/mevzuat/kvkk-6698.md` "Değerlendirme notları — BEP" (md. 6/3-b tartışması) | md. 16/1 | Akranlarıyla birlikte eğitim gören öğrencinin sınavlarında engellilik durumu ve özellikleri dikkate alınarak gerekli önlemler alınır ve düzenlemeler yapılır |
+> | İdare özetinin dayanağı (`bep_idare_ozeti.html`, 07.10.2026) · kılavuz "BEP kapsamındaki öğrenciler ve bireysel soru dosyası" dayanak satırı (ikisi aynı listedir) · `IepStudent` model açıklaması | md. 16/1 | Akranlarıyla birlikte eğitim gören öğrencinin sınavlarında engellilik durumu ve özellikleri dikkate alınarak gerekli önlemler alınır ve düzenlemeler yapılır |
+> | `docs/mevzuat/kvkk-6698.md` "Değerlendirme notları — BEP" (md. 6/3-b tartışması) | md. 16/1 | Aynı hüküm |
 > | Aynı not | md. 4/d, f · md. 12 | Uyarlama yapılarak birlikte eğitim; bireyselleştirilmiş eğitim planı esastır; kaynaştırma bireysel eğitim planları doğrultusunda yürür |
 > | Aynı not | md. 24 | Resmî ve özel okullar özel eğitim hizmeti sağlamakla ve gerekli tedbirleri almakla yükümlüdür |
 > | Aynı not (açık rıza seçeneği — ailenin sürece katılımı) | md. 4/g · md. 5/2 | Ailenin sürecin her boyutuna katılımı; tanılama-değerlendirme-yerleştirmede ailenin görüşü |
 > | Aynı not (verinin niteliği) | md. 3/b, d | Özel eğitim "engellilik durumu ve özelliklerine" bağlanır; tanılama "eğitsel amaçla" yapılır |
 >
-> **Evrak ve arayüz metinlerinde bu KHK'ya ATIF YAPILMAZ** (kullanıcı kararı
-> bekleniyor — bkz. KVKK dosyasındaki not). İdare özetinin dayanak dipnotu ÖDY,
-> Yönerge, OKY ve ÖDSHGM yazısını gösterir; bu dosya o atıfların arkasındaki
-> kanun düzeyini belgelemek ve KVKK md. 6/3 değerlendirmesine girdi olmak içindir.
+> **07.10.2026'dan beri** idare özetinin DAYANAK satırı md. 16/1'i sınav
+> düzenlemesinin kanun düzeyindeki dayanağı olarak gösterir (kalıcı sınav tedbirleri —
+> kullanıcıya bildirildi); yönetmelik düzeyi Özel Eğitim Hizmetleri Yönetmeliği md. 24/1-a,
+> b'dir (`meb-ozel-egitim-hizmetleri-yonetmeligi.md`). Eskiden burada yazan "bu KHK'ya
+> atıf yapılmaz" kaydı bununla kalktı. Açık kalan karar KVKK md. 6/3'ün BENDİDİR: bent
+> hâlâ hiçbir evrak ve arayüz metninde gösterilmez (KVKK dosyasındaki not); bu dosya o
+> değerlendirmeye de girdidir.
 
 ## BİRİNCİ KISIM — Genel Hükümler
 
