@@ -1146,6 +1146,35 @@ değişkenlerini yok sayar (ölçüldü).
 Kitapçık invariantları: bant üst 4mm + 32mm ≤ 40mm; soru PDF'i **ölçeklenmez**
 (1:1); A4 dikey ±6pt yükleme doğrulaması; ≤2 sayfa→bant yalnız 1. sayfada,
 >2→tek sayfalarda; salon başına tek WeasyPrint render (90×4 sayfa < 30 sn).
+OYSS kâğıdında bant ve sayfa numarası YOK; aynı sayfa kuralıyla alanlar + kimlik satırı.
+
+**22.10.2026 — OYSS soru kâğıdına öğrenci bilgisi (kullanıcı isteği).** İstek: "EBA
+OYSS sisteminin ürettiği soru kâğıdı bu formatta; bunun üstüne isim basabilir miyiz; A4'e
+çıktı alındığında karışmaması için 3. sayfaların üst kısmına da sınıf, numara, ad soyad."
+Bakanlığın Ortak Yazılı Sınav Sistemi (OYSS; 2026-2027'den itibaren Maarif Modeli'nin
+uygulandığı düzeylerde okul geneli ortak yazılı sınavlar — `docs/mevzuat/meb-2026-2027-oyss.md`)
+kâğıdı kendi başlığıyla üretir: logo, yıl/dönem/ders/okul satırları, TEK satırda üç alan
+etiketi, altta kendi "Sayfa x / y" numarası. Programın bandı bu başlığı örterdi.
+* **Tanıma.** `oyss_paper.detect`: 1. sayfada "Ortak Yazılı Sınav" + aynı satırda "Adı ve
+  Soyadı / Sınıfı/Şubesi / Öğrenci Numarası". Konum kendi içerik akışı okuyucumuzdan gelir
+  (pypdf `ContentStream`; ToUnicode + glif genişliği; döndürülmüş filigran atlanır) —
+  pypdf'in hazır konum yolları gerçek kâğıtta (Chrome "PDF olarak kaydet") yanlış matris
+  verdi ya da özyineleme sınırına çarptı. Yeni bağımlılık eklenmedi (PyMuPDF AGPL'dir;
+  pdfminer paket ve spec yükü getirirdi).
+* **Basım.** Bant yerine zeminsiz metin kutuları: 1. sayfada değer kendi alanına, etiketle
+  aynı taban çizgisine (DejaVu Sans 11 pt; sığmazsa 6 pt'ye kadar küçülür, kutu taşmaz);
+  tek numaralı sayfaların (3, 5…) üst boşluğuna kimlik satırı "Sınıfı/Şubesi · Öğrenci
+  Numarası · Adı ve Soyadı" (kullanıcının saydığı sıra; sayfanın ilk metnine 4 pt'den
+  fazla yaklaşmaz). Sayfa kuralı bandınkiyle aynıdır (`_header_page_indices`): çift yüzlü
+  A4 basımda her yaprağın önü kimlik taşır. İsimsiz yedekte hiçbir şey basılmaz. Metinden
+  OYSS diye tanınıp alan satırı konumlanamayan kâğıtta kimlik satırı 1. sayfaya da basılır.
+* **Gösterim.** `QuestionDocument` / `IndividualQuestionDocument.paper_format` (göç
+  `sinav/0020`) yüklemede yazılır; panel "OYSS soru kâğıdı" der ve puan bölümünü
+  söylemez. Üretim biçimi PDF'ten yeniden tanır — alan yalnız gösterimdir.
+* **Bilinçli olarak yapılmayanlar.** Sabah/öğle oturum kâğıdı denetimi (kâğıt "SABAH
+  OTURUMU" basıyor; öğle kâğıdının yazımı ve tam gün okulun ne aldığı bilinmiyor — yanlış
+  alarm riski); A3 kitapçık dizimi (istenmedi); okulun kendi kâğıdındaki ad alanlarını
+  doldurmak (Bakanlık işareti şart — program şablonunun 4 cm sözleşmesi geçerli kalır).
 
 ## 10. Mevzuat invariantları (testlerle sabitlenecek)
 
@@ -1172,7 +1201,19 @@ varsayılan, ayarla değiştirilebilir" ilkesi.
   saati idareci düzeltir (kullanıcı kararı; havuzda bekletme seçeneği reddedildi,
   çünkü o zaman gün okul sınavlarına ancak elle yerleştirmeden sonra kapanırdı).
   Yönerge md. 5 gereği o gün o düzeye otomatik okul sınavı konmaz (mevcut üst
-  makam kuralı).
+  makam kuralı). **22.10.2026 eki — OYSS uygulama takvimi (kullanıcı isteği:
+  "bakanlığın güncel OYSS sınav takvimini ve sınav yapılacak ders saatlerini
+  programa entegre edebilir miyiz?"):** Maarif Modeli düzeylerinde (lisede 9-11) on
+  derste okul geneli ortak yazılı sınavın GÜNÜ ve DERS SAATİ Bakanlıktan gelir
+  (Ortak Yazılı Sınav Sistemi; metin `docs/mevzuat/meb-2026-2027-oyss.md`). Veri
+  `official_windows.OYSS_SCHEDULES`, uygulama `apply_oyss_schedule` (takvim
+  oluşturulurken ülke geneliden SONRA; eski taslakta bandın tek "Takvime uygula"sı
+  ikisini birlikte uygular). Kararlar: sınav okul sınavı kalır (makam değişmez) ve
+  resmî gün + saate sabitlenir; iki sınavlı günde tablo sırası (önce gelen 2. saat);
+  10 Kasım = 4. saat (belge izin verir, anma programı sabahı kaplar); "İngilizce"
+  birinci yabancı dile, 11. sınıfın zorunlusu olmayan beş dersi "Seçmeli X"e bağlanır
+  (seçmeli girdi kapsamsız yaratılmaz); başka gün = UYARI; saat değişikliği uyarılmaz
+  (okul müdürlüğü planlayabilir); mazeret haftası (23-27 Kasım) yalnız bilgidir.
 - Günlük sınav limiti **öğrenci-bazlı**: 3. sınav = uyarı (OKY md. 45),
   ≥4 = sert hata; kayıt verisi olmayan ders "seviyenin tamamı" sayılır
   (konservatif düşüş korunmalı).

@@ -55,6 +55,7 @@ function makeDoc(overrides: Partial<IndividualDocument> = {}): IndividualDocumen
     page_count: 2,
     score_mode: "SINGLE_BOX",
     question_count: null,
+    paper_format: "TEMPLATE",
     ...overrides,
   };
 }
@@ -259,6 +260,19 @@ describe("BireyselSorularBolumu — satır durumları", () => {
     renderBolum();
 
     expect(await screen.findByText("2 sayfa · tek puan kutusu")).toBeInTheDocument();
+  });
+
+  it("OYSS kâğıdı olan bireysel dosyanın özeti puan bölümü değil kâğıdın alanlarıdır", async () => {
+    individual.list.mockResolvedValue({
+      rows: [makeRow({ document: makeDoc({ paper_format: "OYSS", page_count: 4 }) })],
+    });
+    renderBolum();
+
+    expect(
+      await screen.findByText(
+        "4 sayfa · OYSS soru kâğıdı — bilgiler kâğıdın kendi alanlarına basılır",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("yetim satır (yerleşimde yok): yalnız “Seçimi kaldır” gösterilir", async () => {

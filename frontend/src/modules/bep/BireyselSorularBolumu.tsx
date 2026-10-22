@@ -31,7 +31,10 @@ import { useConfirm } from "../../ui/ConfirmProvider";
 import Dialog from "../../ui/Dialog";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import type { ExamSession } from "../oturumlar/api";
-import SoruYuklemeDialog from "../oturumlar/SoruYuklemeDialog";
+import SoruYuklemeDialog, {
+  OYSS_KAGIDI_OZETI,
+  OYSS_YUKLENDI_MESAJI,
+} from "../oturumlar/SoruYuklemeDialog";
 import type { IndividualDocument, IndividualQuestionRow } from "./api";
 import { individualQuestionApi } from "./api";
 import BepParolaUyarisi from "./BepParolaUyarisi";
@@ -48,9 +51,11 @@ function yerEtiketi(row: IndividualQuestionRow): string {
 /** "2 sayfa · tek puan kutusu" — dersin soru dosyası satırıyla AYNI biçim. */
 function dosyaOzeti(doc: IndividualDocument): string {
   const puan =
-    doc.score_mode === "SINGLE_BOX"
-      ? "tek puan kutusu"
-      : `${doc.question_count ?? "?"} soruluk puan tablosu`;
+    doc.paper_format === "OYSS"
+      ? OYSS_KAGIDI_OZETI
+      : doc.score_mode === "SINGLE_BOX"
+        ? "tek puan kutusu"
+        : `${doc.question_count ?? "?"} soruluk puan tablosu`;
   return `${doc.page_count ?? "?"} sayfa · ${puan}`;
 }
 
@@ -87,9 +92,11 @@ function BireyselSatir({
   const yukle = useMutation({
     mutationFn: ({ documentId, form }: { documentId: number; form: FormData }) =>
       individualQuestionApi.uploadFile(documentId, form),
-    onSuccess: () => {
+    onSuccess: (doc) => {
       setUploadOpen(false);
-      snackbar.success("Bireysel soru dosyası yüklendi.");
+      snackbar.success(
+        doc.paper_format === "OYSS" ? OYSS_YUKLENDI_MESAJI : "Bireysel soru dosyası yüklendi.",
+      );
       onChanged();
     },
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Yükleme başarısız."),

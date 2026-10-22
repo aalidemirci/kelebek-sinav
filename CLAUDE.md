@@ -124,6 +124,22 @@
   (fotoğraflı plan) alt ağaçlarına verilir. GLOBAL verilirse sütunlar daralır,
   metin sarar ve evrak ikinci sayfaya taşar (denendi — o gün R1 yoklama + R4
   duyuru, beş test kırmızı) — öteki tablolar content-box'a göre kalibre edildi.
+- **OYSS soru kâğıdı kendi başlığını taşır, bant BASILMAZ (22.10.2026, tasarım §9):**
+  `oyss_paper.detect` 1. sayfada "Ortak Yazılı Sınav" + AYNI satırda üç etiket (Adı ve
+  Soyadı / Sınıfı/Şubesi / Öğrenci Numarası) arar. Konum kendi okuyucumuzdandır
+  (pypdf'in AÇIK `ContentStream` API'si): `extract_text` ziyaretçisi Chrome'un "PDF olarak
+  kaydet" (Skia) çıktısında boşlukla başlayan parçalara sıfırlanmış matris verir, layout
+  kipi özyineleme sınırına çarpar — ikisi de gerçek kâğıtta denendi. Dizeler
+  `ContentStream(..., "bytes")` ile HAM okunur: pypdf 2 baytlık CID dizesini UTF-16 sanar
+  ve `get_original_bytes()` başına BOM ekler. Basım `booklet._oyss_marks`: 1. sayfada
+  alanlara (DejaVu Sans; sığmazsa küçülür, kutu taşmaz), tek numaralı sayfaların (3, 5…)
+  üstüne kimlik satırı; bant ve "Sayfa x / y" YOK (kâğıdın kendi numarası var). Taban
+  çizgisi CSS'te `_OYSS_BASELINE_RATIO` ile kurulur; test etiketle 0,5 pt'ye kilitler.
+  `paper_format` alanı yalnız GÖSTERİMDİR, üretim biçimi PDF'ten yeniden tanır. Tanıma
+  hata yutar: tanınamayan kâğıt eskisi gibi bant alır (başlığı örter) ve arayüzde "tek
+  puan kutusu" görünür — üreticisi değişmiş bir kâğıt gelirse önce `oyss_paper`a bakılır.
+  Gerçek OYSS kâğıdı (gizli sınav sorusu) depoya GİRMEZ: test kâğıdı WeasyPrint'le
+  çalışma anında taklit edilir (`test_oyss_kagidi.py`).
 - **Öğrenci fotoğrafı KVKK verisidir (19.09.2026, tasarım §6 + §9):**
   `okul.StudentPhoto` — tek alan `EncryptedTextField` (base64 JPEG); parola
   açıkken şifreli, `encrypted_field_map` parola geçişine kendiliğinden katar,
@@ -681,6 +697,25 @@
   takvim aralığı dışındaysa YERLEŞTİRMEZ (ızgarada görünmeyen güne konmaz), girdi
   MINISTRY olarak havuzda bekler. Plan okulun AKTİF ÖĞRENCİSİ olan düzeylerden
   kurulur, derslerden değil — aksi hâlde havuzda olmayan ders sessizce kaybolurdu.
+- **OYSS uygulama takvimi gün VE ders saati verir, sınav OKUL sınavı kalır**
+  (22.10.2026, kullanıcı isteği; metin `docs/mevzuat/meb-2026-2027-oyss.md`): veri
+  `official_windows.OYSS_SCHEDULES` (sonraki turlar Bakanlık yayımladıkça eklenir —
+  önce metin `docs/mevzuat/`e). `apply_oyss_schedule` ülke geneliden SONRA koşar
+  (`_seed_pool` ve `national-exams` POST → `apply_ministry_schedules`): girdi SCHOOL
+  kalır, `place_entry(pin=True)` ile resmî gün + takvimin saatine SABİTLENİR. Saat
+  düzey + gündeki EŞLEŞEN OYSS sınavı sayısından çıkar: 1 → 2., 2 → TABLO SIRASIYLA
+  2. ve 4. (belge sırayı söylemez); 10.11 → 4 ("uygulanabilecektir" — varsayılanımız).
+  Aynı turun ülke geneli (düzey, ders) çifti OYSS satırını düşürür; `excluded` (7. ve
+  11. sınıf İngilizce) hiç uygulanmaz. Eşleştirme önce Bakanlığın adıyla, sonra
+  `pool_names` ile ("İngilizce" → "Birinci Yabancı Dil"/"Yabancı Dil"; 11. sınıfta
+  Matematik/Fizik/Kimya/Biyoloji/Coğrafya → "Seçmeli X" — TTK 2025 çizelgeleri).
+  Seçmeli girdi YARATILMAZ (kapsamsız girdi düzeyin tamamını sınava sokardı —
+  `needs_pool`); karşılıksız satırlar tek özet satırıdır (9. sınıfta Felsefe olağan).
+  İdempotent: resmî gününde duran girdinin SAATİNE dokunmaz (okul müdürlüğü başka
+  saat planlayabilir); başka gündeki girdiyi "Takvime uygula" resmî güne geri çeker.
+  Başka gün `calendar_validation` UYARISIDIR (ret değil). Kural cümleleri sunucudadır
+  (`oyss_info.notes`) — arayüzde kopya kural yazılmaz. Ülke geneli sınavın ders saati
+  22.10.2026'da hâlâ yayımlanmamıştı (yukarıdaki madde geçerli).
 - **Salon yeterliliği KOLTUKLA değil SIRAYLA ölçülür** (20.09.2026, kullanıcı
   vakası): kelebek sert kısıtı sıra başınadır — bir sıra her sınavdan EN ÇOK BİR
   öğrenci alır, yani ikili sırada koltuk ölçüsü ihtiyacı İKİ KATI gösterir. Tek

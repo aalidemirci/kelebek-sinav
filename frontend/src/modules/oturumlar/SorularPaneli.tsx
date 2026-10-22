@@ -4,7 +4,8 @@
 // (Celery yok): "Kitapçıkları üret" tek istekte tamamlanmış koşu döner —
 // OYS'deki 4 sn'lik koşu polling'i kalktı. Soru dosyaları sınav öncesi
 // gizlilik sınıfındadır; dosyalar yalnız yerel API'den (X-KS-Token) sunulur.
-// Bant sabit 4 cm üst alana basılır (ölçekleme yok — OYS Tur 236).
+// Bant sabit 4 cm üst alana basılır (ölçekleme yok — OYS Tur 236). OYSS soru
+// kâğıdında bant yoktur: bilgiler kâğıdın kendi alanlarına basılır (22.10.2026).
 //
 // 20.09.2026: ders satırlarıyla kitapçık üretimi arasına BEP kapsamındaki
 // öğrencilerin bireysel soru dosyaları bölümü girdi (`bep/BireyselSorularBolumu`);
@@ -25,7 +26,7 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import BireyselSorularBolumu from "../bep/BireyselSorularBolumu";
 import type { BookletRun, ExamSession, ExamSessionCourseRow } from "./api";
 import { BOOKLETS_ZIP_FILE_TITLE, examSessionApi } from "./api";
-import SoruYuklemeDialog from "./SoruYuklemeDialog";
+import SoruYuklemeDialog, { OYSS_KAGIDI_OZETI, OYSS_YUKLENDI_MESAJI } from "./SoruYuklemeDialog";
 
 /**
  * Soru dosyası satırı: olağan durumda bir oturum dersi satırı; "aynı kitapçık"
@@ -110,9 +111,11 @@ function CourseQuestionRow({ group, locked }: { group: QuestionGroup; locked: bo
   const upload = useMutation({
     // Form (dosya + puan bölümü) ortak diyalogda kurulur — `SoruYuklemeDialog`.
     mutationFn: (form: FormData) => examSessionApi.uploadQuestion(carrier.id, form),
-    onSuccess: () => {
+    onSuccess: (doc) => {
       setUploadOpen(false);
-      snackbar.success("Soru dosyası yüklendi.");
+      snackbar.success(
+        doc.paper_format === "OYSS" ? OYSS_YUKLENDI_MESAJI : "Soru dosyası yüklendi.",
+      );
       invalidateGroup();
     },
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Yükleme başarısız."),
@@ -153,9 +156,11 @@ function CourseQuestionRow({ group, locked }: { group: QuestionGroup; locked: bo
       {meta ? (
         <span className="text-body-small text-on-surface-variant">
           {meta.page_count} sayfa ·{" "}
-          {meta.score_mode === "SINGLE_BOX"
-            ? "tek puan kutusu"
-            : `${meta.question_count ?? "?"} soruluk puan tablosu`}
+          {meta.paper_format === "OYSS"
+            ? OYSS_KAGIDI_OZETI
+            : meta.score_mode === "SINGLE_BOX"
+              ? "tek puan kutusu"
+              : `${meta.question_count ?? "?"} soruluk puan tablosu`}
         </span>
       ) : (
         <span className="text-body-small text-error">Soru dosyası yüklenmedi</span>

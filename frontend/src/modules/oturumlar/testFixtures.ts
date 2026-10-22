@@ -70,6 +70,7 @@ export function makeQuestionMeta(
     sha256: "a".repeat(64),
     score_mode: "SINGLE_BOX",
     question_count: null,
+    paper_format: "TEMPLATE",
     created_at: "2026-06-01T09:00:00+03:00",
     ...overrides,
   };

@@ -31,6 +31,13 @@ etiketler: [ortak-yazili-sinav, sinav-takvimi, sinav-haftasi, gunluk-sinav-sayis
 >   yoktur (uygulama esasları ayrıca duyurulacak — yazının son paragrafı), saati
 >   idareci düzeltir. Eski taslak takvimlerde takvim sayfasındaki "Takvime
 >   uygula" (`services_calendar.apply_national_exams`, 19.09.2026).
+> - Madde 1-5 (okul geneli ortak yazılı sınavlar) → 22.10.2026'dan beri okul geneli
+>   sınavların GÜNÜ ve ders saati de Bakanlıktan gelir: Ortak Yazılı Sınav Sistemi
+>   (OYSS) uygulama takvimi — metni ve programdaki karşılığı `meb-2026-2027-oyss.md`.
+>   OYSS takviminin notları bu yazının ekiyle aynıdır (6. sınıf Matematik 11.11,
+>   10. sınıf TDE 12.11 ülke geneli); ülke geneli sınavların ders saati hâlâ
+>   yayımlanmadı (22.10.2026), program onları okulun ilk sınav saatiyle koymaya
+>   devam eder.
 
 ---
 

@@ -334,6 +334,11 @@ export interface ProctorExemptionRow {
 // --- Soru dosyası + kitapçık (F5) ---
 
 export type ScoreModeCode = "SINGLE_BOX" | "QUESTION_TABLE";
+/**
+ * Soru PDF'inin biçimi (22.10.2026) — yüklemede backend tanır. OYSS kâğıdına bant
+ * basılmaz; öğrenci bilgisi kâğıdın kendi alanlarına basılır, puan bölümü kullanılmaz.
+ */
+export type PaperFormatCode = "TEMPLATE" | "OYSS";
 export type BookletRunStatusCode = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "FAILED";
 
 export interface QuestionDocumentMeta {
@@ -343,6 +348,7 @@ export interface QuestionDocumentMeta {
   sha256: string;
   score_mode: ScoreModeCode;
   question_count: number | null;
+  paper_format: PaperFormatCode;
   created_at: string;
 }
 

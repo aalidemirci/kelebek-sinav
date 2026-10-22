@@ -476,6 +476,25 @@ export default function KilavuzPage() {
           <strong>“Takvime uygula”</strong> düğmesini kullanın.
         </p>
         <p>
+          2026-2027'den itibaren okul geneli ortak yazılı sınavların bir bölümü{" "}
+          <strong>Ortak Yazılı Sınav Sistemi (OYSS)</strong> üzerinden yapılır ve bunların günü ile
+          ders saatini de Bakanlık belirler. 1. dönem 1. yazılıda lisede 9, 10 ve 11. sınıfların
+          Biyoloji, Kimya, Tarih, Matematik, Fizik, Felsefe, Coğrafya, Türk Dili ve Edebiyatı, Din
+          Kültürü ve Ahlak Bilgisi ve İngilizce sınavları 3-13 Kasım 2026 arasındadır. Günde tek
+          sınav 2. ders saatinde, iki sınav 2. ve 4. ders saatlerinde yapılır; 10 Kasım'daki sınav
+          4. ders saatinde yapılabilir. Takvim oluşturulurken program bu sınavları{" "}
+          <strong>okul sınavı</strong> olarak resmî gününe ve ders saatine sabitler; aynı gün iki
+          sınav varsa Bakanlık tablosunda önce gelen ders 2. saate konur. Okul müdürlüğü ihtiyaç
+          hâlinde başka ders saati planlayabilir: saati <strong>Yerleştirme</strong> sekmesinde
+          değiştirin, “Takvime uygula” resmî gününde duran sınavın saatine dokunmaz. 11. sınıfta bu
+          derslerden seçmeli okutulanların sınavı, şubeleri Ders Havuzu'nda girilmişse yerleşir;
+          İngilizce sınavı birinci yabancı dil dersine bağlanır (okulunuzda birinci yabancı dil
+          İngilizce değilse girdiyi havuza geri alın). 7. ve 11. sınıf İngilizcede OYSS uygulanmaz;
+          10. sınıf Türk Dili ve Edebiyatı bu turda ülke geneli sınavdır (12 Kasım). OYSS sınavı
+          başka güne konursa takvim doğrulaması uyarır. Mazeret sınavları 23-27 Kasım 2026 arasında,
+          okul müdürlüğünün planlamasıyla OYSS üzerinden yapılır.
+        </p>
+        <p>
           Takvimin dört sekmesi vardır: <strong>Havuz</strong> (hangi ders hangi sınıf düzeyinde
           sınav olacak), <strong>Yerleştirme</strong> (hangi gün, hangi ders saati),{" "}
           <strong>Süreç Takip</strong> (soru teslimi, basım, puan girişi gibi kalemler) ve{" "}
@@ -1015,6 +1034,16 @@ export default function KilavuzPage() {
           bölümü basılır. “Kitapçıkları üret” düğmesi salon salon ZIP paketi çıkarır: her öğrenciye
           oturma sırasında, adına basılı bir kitapçık. İsimsiz yedek kopya sayısı salon başına
           eklenir.
+        </p>
+        <p>
+          <strong>OYSS soru kâğıdı.</strong> Ortak Yazılı Sınav Sistemi'nden (EBA) indirdiğiniz soru
+          kâğıdını olduğu gibi yükleyin. Program kâğıdı tanır ve bant basmaz: Bakanlığın başlığı ve
+          kâğıdın kendi sayfa numarası yerinde kalır. Öğrencinin adı, sınıfı/şubesi ve numarası 1.
+          sayfadaki kendi alanlarına basılır. A4'e çift yüzlü basımda ikinci yaprak karışmasın diye
+          3. sayfanın (varsa 5. sayfanın) üstüne de aynı bilgilerle bir kimlik satırı eklenir. Bu
+          kâğıtta puan bölümü seçimi kullanılmaz; isimsiz yedeklerde alanlar boş kalır. İkili
+          öğretimde sabahçı ve öğlenci gruplar aynı sınıf düzeyinde farklı sorular alır: her oturuma
+          kendi grubunun kâğıdını yükleyin.
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">

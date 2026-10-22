@@ -35,6 +35,7 @@ from apps.sinav import (
     booklet,
     engine,
     layout,
+    oyss_paper,
     participants,
     question_pdf,
     reports,
@@ -2891,6 +2892,7 @@ def upload_question_document(
     page_count = question_pdf.validate_question_pdf(
         file_bytes, score_mode=score_mode, question_count=question_count
     )
+    paper_format = question_pdf.paper_format(file_bytes)
 
     with transaction.atomic():
         _retire_question_documents(sc)
@@ -2900,6 +2902,7 @@ def upload_question_document(
             sha256=hashlib.sha256(file_bytes).hexdigest(),
             score_mode=score_mode,
             question_count=question_count if score_mode == ScoreMode.QUESTION_TABLE else None,
+            paper_format=paper_format,
         )
         doc.file.save(f"soru_{sc.pk}.pdf", ContentFile(file_bytes), save=False)
         doc.save()
@@ -2994,6 +2997,8 @@ def _course_docs(session: ExamSession) -> dict[str, booklet.CourseDoc]:
             pdf_bytes=pdf_bytes,
             score_mode=qd.score_mode,
             question_count=qd.question_count,
+            # Biçim dosyadan yeniden tanınır (22.10.2026): `paper_format` yalnız gösterimdir.
+            oyss_paper=oyss_paper.detect(pdf_bytes),
         )
     return docs
 
@@ -3049,6 +3054,7 @@ def _individual_docs(
             score_mode=row.score_mode,
             question_count=row.question_count,
             backup=False,
+            oyss_paper=oyss_paper.detect(pdf_bytes),
         )
     return keys, docs
 

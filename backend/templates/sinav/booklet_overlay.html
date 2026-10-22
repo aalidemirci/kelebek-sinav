@@ -13,6 +13,12 @@ sayfanın üst 4 cm'i sisteme ayrılır (Word şablonu üst marjı 4 cm bırakı
        soru-tablolu modda altında soru puan tablosu.
   SAĞ  çift çerçeveli PUAN kutusu (24×16mm; yalnız SINGLE_BOX modunda).
 Salt siyah (#000), dolgu yok, text-transform YOK (WeasyPrint TR "i" tuzağı).
+
+OYSS KÂĞIDI (22.10.2026): ov.oyss_mode sayfasında bant ve "Sayfa x / y" YOK —
+kâğıdın kendi başlığı ve numarası var. Yalnız booklet._oyss_marks'ın verdiği
+metin kutuları basılır (konumlar pt, sayfanın sol-üst köşesinden; ZEMİNSİZ —
+kâğıttaki alan çizgisi görünür kalır). Kutu taşmaz (sığdırma tahmini kaçarsa
+yazı komşu etikete binmek yerine kırpılır).
 {% endcomment %}<!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -97,11 +103,22 @@ Salt siyah (#000), dolgu yok, text-transform YOK (WeasyPrint TR "i" tuzağı).
     background: #fff;
     padding: 0 1mm;
   }
+
+  /* OYSS kâğıdı — alan yazısı ve kimlik satırı */
+  .oyss-mark {
+    position: absolute;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+  }
 </style>
 </head>
 <body>
 {% for ov in pages %}
 <div class="overlay-page">
+  {% if ov.oyss_mode %}
+  {% for m in ov.oyss_marks %}<div class="oyss-mark" style="left: {{ m.left }}pt; top: {{ m.top }}pt; width: {{ m.width }}pt; font-size: {{ m.size }}pt;">{{ m.text }}</div>{% endfor %}
+  {% else %}
   {% if ov.header %}
   <div class="band">
     <table class="band-grid">
@@ -153,6 +170,7 @@ Salt siyah (#000), dolgu yok, text-transform YOK (WeasyPrint TR "i" tuzağı).
   </div>
   {% endif %}
   <div class="pageno">Sayfa {{ ov.page_no }} / {{ ov.page_total }}</div>
+  {% endif %}
 </div>
 {% endfor %}
 </body>

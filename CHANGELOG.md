@@ -4,6 +4,36 @@ Paketler GitHub Releases'ta ve indir.okulapp.org'dadır. En yeni sürüm en üst
 yayımlanmamış değişiklikler "Yayımlanmadı (taslak)" başlığı altında toplanır ve
 sürüm çıkarılırken bu başlık sürüm numarası ve tarihle değiştirilir.
 
+## Yayımlanmadı (taslak)
+
+Bu sürüm veritabanında değişiklik yapar; güncelleme ilk açılışta kendiliğinden
+uygulanır, yapmanız gereken bir işlem yoktur.
+
+### Ortak Yazılı Sınav Sistemi (OYSS)
+
+- **OYSS uygulama takvimi programda.** 2026-2027 1. dönem 1. yazılıda lisede 9, 10 ve 11.
+  sınıfların on dersi (Biyoloji, Kimya, Tarih, Matematik, Fizik, Felsefe, Coğrafya, Türk
+  Dili ve Edebiyatı, Din Kültürü ve Ahlak Bilgisi, İngilizce) takvim oluşturulurken resmî
+  gününe ve ders saatine yerleşir: günde tek sınav 2., iki sınav 2. ve 4. ders saati,
+  10 Kasım'da 4. ders saati. Sınavlar okul sınavı olarak kalır; okul müdürlüğü gerekirse
+  saati Yerleştirme sekmesinde değiştirir.
+- **Bakanlık bandı OYSS sınavlarını da gösterir.** Takvim sayfasındaki bant her sınavın
+  gününü, ders saatini ve takvimdeki durumunu söyler; daha önce oluşturulmuş taslak
+  takvimde "Takvime uygula" ülke geneli ve OYSS sınavlarını birlikte uygular.
+- **Ders adları eşleştirilir.** İngilizce sınavı birinci yabancı dil dersine, 11.
+  sınıfta seçmeli okutulan Matematik, Fizik, Kimya, Biyoloji ve Coğrafya seçmeli derse
+  bağlanır. 7. ve 11. sınıf İngilizce OYSS dışındadır; 10. sınıf Türk Dili ve Edebiyatı
+  bu turda ülke geneli sınavdır (12 Kasım).
+- **OYSS sınavı başka güne konursa takvim doğrulaması uyarır.** Mazeret haftası (23-27
+  Kasım 2026) bantta yazar.
+- **OYSS soru kâğıdına öğrenci bilgisi basılır.** EBA'dan indirilen OYSS soru kâğıdı
+  olduğu gibi yüklenir; program kâğıdı tanır ve Bakanlığın başlığını örten bant yerine
+  öğrencinin adını, sınıfını/şubesini ve numarasını 1. sayfadaki kendi alanlarına basar.
+  A4'e çift yüzlü basımda yapraklar karışmasın diye 3. sayfanın (varsa 5. sayfanın)
+  üstüne de aynı bilgilerle bir kimlik satırı eklenir. Kâğıdın kendi sayfa numarası
+  korunur; isimsiz yedeklerde alanlar boş kalır. Sorular panelinde dosya "OYSS soru
+  kâğıdı" olarak görünür.
+
 ## 2026.10.0-beta.2 — 07.10.2026
 
 Bu sürüm veritabanında değişiklik yapar; güncelleme ilk açılışta kendiliğinden

@@ -559,6 +559,7 @@ class QuestionDocumentSerializer(serializers.ModelSerializer[QuestionDocument]):
             "sha256",
             "score_mode",
             "question_count",
+            "paper_format",
             "created_at",
         )
         read_only_fields = fields

@@ -14,6 +14,13 @@ Sayfa kuralları (yol haritası §6, madde 5):
 Performans: overlay sayfaları SALON BAŞINA TEK WeasyPrint render'ında üretilir
 (öğrenci başına render edilmez) — 90 öğrenci × 4 sayfa hedefi < 30 sn.
 
+OYSS kâğıdı (22.10.2026): Bakanlığın Ortak Yazılı Sınav Sistemi'nden gelen kâğıt
+kendi başlığını taşır; bant onu örterdi. `CourseDoc.oyss_paper` verilmişse bant ve
+"Sayfa x / y" BASILMAZ (kâğıdın kendi numarası var): ad, sınıf/şube ve numara
+1. sayfadaki kendi alanlarına, kimlik satırı 3., 5. … sayfaların üst boşluğuna
+basılır (A4'e çift yüzlü basımda ikinci yaprak sahipsiz kalmasın). Konumlar
+`oyss_paper` modülünden gelir; sayfa kuralı bandınkiyle aynıdır (tek numaralı).
+
 Bu modül saf veri sınıflarıyla çalışır; DB erişimi services katmanındadır.
 """
 
@@ -22,6 +29,8 @@ from __future__ import annotations
 import io
 import zipfile
 from dataclasses import dataclass, field
+
+from apps.sinav.oyss_paper import FieldSlot, OyssPaper
 
 
 @dataclass(frozen=True)
@@ -48,6 +57,10 @@ class CourseDoc:
     doküman sözlüğüne kendi anahtarıyla girer ve isimsiz yedek döngüsüne
     KATILMAZ — aksi hâlde salona tek öğrenciye özgü sınavın adsız bir kopyası
     basılır ve o salonda "farklı sınav çözen biri var" bilgisi açığa çıkardı.
+
+    `oyss_paper` (22.10.2026 — aynı varsayılanlı genişletme deseni): dosya OYSS
+    soru kâğıdıysa tanıma sonucu; verilirse bant yerine kâğıdın kendi alanlarına
+    basılır (modül belgesi). None → eski davranış birebir.
     """
 
     group_key: str
@@ -56,6 +69,7 @@ class CourseDoc:
     score_mode: str  # ScoreMode değeri
     question_count: int | None
     backup: bool = True
+    oyss_paper: OyssPaper | None = None
 
 
 @dataclass(frozen=True)
@@ -98,6 +112,100 @@ def _header_page_indices(page_count: int) -> set[int]:
     return {i for i in range(page_count) if i % 2 == 0}  # 1, 3, 5... (tek numaralı)
 
 
+#: OYSS kâğıdına basılan metin (DejaVu Sans, pt): alan yazısı ve kimlik satırı
+#: en çok bu puntoda, sığmazsa en az alt sınıra kadar küçülür.
+_OYSS_FIELD_PT, _OYSS_STRIP_PT, _OYSS_MIN_PT = 11.0, 9.0, 6.0
+#: `line-height: 1` kutusunda DejaVu Sans taban çizgisinin kutu üstüne uzaklığı
+#: (punto oranı; hhea yükseliş 0,928 − yarım satır aralığı 0,082). Test, basılan
+#: yazının taban çizgisini etiketinkiyle karşılaştırarak bunu SINAR.
+_OYSS_BASELINE_RATIO = 0.846
+#: Kimlik satırının taban çizgisi sayfa üstünden en çok/en az bu kadar aşağıda
+#: (pt): ~10,5 mm'de durur (gerçek kâğıtta ilk soru 15,8 mm'de başlıyor — arada
+#: hava kalır), sayfanın ilk metnine 4 pt'den fazla yaklaşmaz; sayfa çok doluysa
+#: en az 5 mm'ye çıkar (yazıcının basamadığı kenar ~4 mm).
+_OYSS_STRIP_BASELINE_MAX, _OYSS_STRIP_BASELINE_MIN = 30.0, 14.0
+
+#: DejaVu Sans glif genişlikleri (em) — sığdırma için tahmin; kesin sınır CSS
+#: kırpmasıdır (`.oyss-mark` taşmaz, komşu etikete binmez).
+_DEJAVU_EM: dict[str, float] = {
+    **dict.fromkeys("IİJÎıijlî", 0.30),
+    **dict.fromkeys("ft", 0.40),
+    **dict.fromkeys(" .:,;'·/", 0.34),
+    **dict.fromkeys("-()r", 0.42),
+    **dict.fromkeys("sşzc", 0.56),
+    **dict.fromkeys("çkvxy", 0.60),
+    **dict.fromkeys("aâbdeghnopqğöuüû0123456789", 0.64),
+    **dict.fromkeys("LFPTYSŞ", 0.64),
+    **dict.fromkeys("EKZBAÂVXRCÇ", 0.70),
+    **dict.fromkeys("UÜÛHNDGĞOÖQ", 0.79),
+    **dict.fromkeys("wM", 0.87),
+    **dict.fromkeys("mW", 0.99),
+}
+
+
+def _fit_size(text: str, width_pt: float, largest: float) -> float:
+    """Metnin `width_pt` genişliğe sığdığı en büyük punto (alt sınır `_OYSS_MIN_PT`)."""
+    em = sum(_DEJAVU_EM.get(char, 0.72) for char in text) * 1.04  # %4 güvenlik payı
+    if em <= 0:
+        return largest
+    return max(_OYSS_MIN_PT, min(largest, width_pt / em))
+
+
+def _mark(
+    text: str, left: float, baseline_from_top: float, width: float, largest: float
+) -> dict[str, str]:
+    """Şablona tek metin kutusu: konumlar pt, ondalık NOKTAYLA (CSS; TR yerel ayarı virgül basardı)."""
+    size = _fit_size(text, width, largest)
+    return {
+        "text": text,
+        "left": f"{left:.2f}",
+        "top": f"{baseline_from_top - _OYSS_BASELINE_RATIO * size:.2f}",
+        "width": f"{max(width, 0.0):.2f}",
+        "size": f"{size:.2f}",
+    }
+
+
+def _oyss_identity_line(spec: BookletSpec) -> str:
+    """Kimlik satırı: sınıf/şube, numara, ad (kullanıcı isteğindeki sıra); boş parça düşer."""
+    parts = (
+        ("Sınıfı/Şubesi", spec.class_label),
+        ("Öğrenci Numarası", spec.student_number),
+        ("Adı ve Soyadı", spec.full_name),
+    )
+    return " · ".join(f"{label}: {value}" for label, value in parts if value)
+
+
+def _oyss_marks(
+    paper: OyssPaper, spec: BookletSpec, idx: int, page_total: int
+) -> list[dict[str, str]]:
+    """OYSS kâğıdının bir sayfasına basılacak metinler (isimsiz yedekte hiçbiri)."""
+    if not (spec.full_name or spec.class_label or spec.student_number):
+        return []
+    if idx == 0 and paper.has_fields:
+        fields: tuple[tuple[FieldSlot | None, str], ...] = (
+            (paper.name, spec.full_name),
+            (paper.class_label, spec.class_label),
+            (paper.number, spec.student_number),
+        )
+        return [
+            _mark(value, slot.x0, _A4_H - slot.baseline, slot.x1 - slot.x0, _OYSS_FIELD_PT)
+            for slot, value in fields
+            if slot is not None and value
+        ]
+    if idx not in _header_page_indices(page_total):
+        return []  # bandın sayfa kuralı: yalnız tek numaralı sayfalar (1. sayfa alanlıysa yukarıda)
+    text = _oyss_identity_line(spec)
+    width = paper.right - paper.left
+    size = _fit_size(text, width, _OYSS_STRIP_PT)
+    baseline = _OYSS_STRIP_BASELINE_MAX
+    top_y = paper.text_top(idx)
+    if top_y is not None:
+        # Sayfanın ilk metninin üstünde, alt çıkıntı payı (0,24 em) + 4 pt boşlukla.
+        baseline = min(baseline, (_A4_H - top_y) - 4.0 - 0.24 * size)
+    baseline = max(baseline, _OYSS_STRIP_BASELINE_MIN)
+    return [_mark(text, paper.left, baseline, width, _OYSS_STRIP_PT)]
+
+
 def _overlay_pages_context(
     specs: list[BookletSpec],
     docs: dict[str, CourseDoc],
@@ -110,6 +218,15 @@ def _overlay_pages_context(
         page_total = page_counts[spec.group_key]
         headers = _header_page_indices(page_total)
         for idx in range(page_total):
+            if doc.oyss_paper is not None:
+                # OYSS kâğıdı: bant ve sayfa numarası yok — yalnız kâğıdın alanları.
+                pages.append(
+                    {
+                        "oyss_mode": True,
+                        "oyss_marks": _oyss_marks(doc.oyss_paper, spec, idx, page_total),
+                    }
+                )
+                continue
             pages.append(
                 {
                     "header": idx in headers,

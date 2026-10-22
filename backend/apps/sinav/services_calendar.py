@@ -51,7 +51,14 @@ from apps.sinav.models import (
     ExamTrackMarkStatus,
     ParticipantType,
 )
-from apps.sinav.official_windows import NationalExam, national_exams, official_window
+from apps.sinav.official_windows import (
+    NationalExam,
+    OyssExam,
+    OyssSchedule,
+    national_exams,
+    official_window,
+    oyss_schedule,
+)
 
 if TYPE_CHECKING:
     from apps.dersler.selectors import EnrollmentIndex
@@ -286,12 +293,16 @@ def _seed_pool(calendar: ExamCalendar) -> None:
         # Tohumlama bir KOLAYLIKTIR; başarısızlığı takvim yaratmayı düşürmez.
         return
     # Bakanlığın ülke geneli sınavları havuzdaki karşılıklarını devralır ve resmî
-    # gününe yerleşir (kullanıcı kararı 19.09.2026). Aynı sertlik: hata yutulur.
-    try:
-        with transaction.atomic():
-            apply_national_exams(calendar)
-    except ValidationError:
-        return
+    # gününe yerleşir (kullanıcı kararı 19.09.2026); ardından OYSS uygulama takvimi
+    # okul geneli sınavları resmî gün + ders saatine koyar (22.10.2026). Sıra
+    # bilinçli: ülke geneli sınav aynı (düzey, ders) OYSS satırını düşürür. Aynı
+    # sertlik — her adım kendi savepoint'inde, hatası öbürünü düşürmez.
+    for adim in (apply_national_exams, apply_oyss_schedule):
+        try:
+            with transaction.atomic():
+                adim(calendar)
+        except ValidationError:
+            continue
 
 
 # ---------------------------------------------------------------------------
@@ -471,6 +482,384 @@ def apply_national_exams(calendar: ExamCalendar) -> dict[str, list[str]]:
         else:
             skipped.append(f"{etiket}: o gün boş ders saati bulunamadı — elle yerleştirin")
     return {"placed": placed, "unchanged": unchanged, "skipped": skipped}
+
+
+# ---------------------------------------------------------------------------
+# OYSS — okul geneli ortak yazılı sınav uygulama takvimi (22.10.2026)
+# ---------------------------------------------------------------------------
+#: Girdinin notu: gün Bakanlığın takviminden, saat okulun planlamasına açık.
+OYSS_NOTE = (
+    "OYSS okul geneli ortak yazılı sınavı — gün Bakanlığın uygulama takviminden; okul "
+    "müdürlüğü ihtiyaç hâlinde başka ders saati planlayabilir."
+)
+
+
+@dataclass(frozen=True)
+class _OyssRow:
+    """OYSS takviminin okuldaki karşılığı: (sınav, sınıf düzeyi) + havuz dersi + ders saati."""
+
+    exam: OyssExam
+    level: int
+    course_id: int | None
+    #: Havuzdaki dersin adı ("Seçmeli Matematik", "Birinci Yabancı Dil"); eşleşmediyse boş.
+    pool_course_name: str
+    #: Eşleşen ders seçmeli mi — seçmeli girdi takvim havuzuna KAPSAMIYLA girer
+    #: (`fill_calendar_pool`); kapsamı bilinmeden yaratılırsa sınıf düzeyinin tamamı
+    #: sınava giriyor sanılırdı.
+    elective: bool
+    #: Takvimin bu satıra verdiği ders saati; eşleşmeyen satırda None.
+    period_no: int | None
+
+
+def _oyss_key(calendar: ExamCalendar) -> tuple[int, int, int]:
+    """Takvimin (ders yılı başlangıç yılı, dönem, tur) anahtarı."""
+    semester = calendar.semester
+    return _school_year_start(semester), _semester_donem(semester), int(calendar.round)
+
+
+def _oyss_plan_rows(calendar: ExamCalendar) -> tuple[OyssSchedule | None, list[_OyssRow]]:
+    """Takvimin dönem + turundaki OYSS sınavları × okulun ders havuzu × ders saati.
+
+    Satırlar okulun AKTİF ÖĞRENCİSİ olan sınıf düzeylerinden kurulur
+    (`_national_plan_rows` emsali); OYSS uygulanmayan çiftler (7. ve 11. sınıf
+    İngilizce) ve aynı turun ülke geneli sınavı (10. sınıf TDE) düşer. Ders önce
+    Bakanlığın adıyla, yoksa takvimin verdiği havuz adlarıyla aranır; bulunamazsa
+    satır `course_id=None` ile kalır ve bantta TEK özet satırında görünür (Bakanlık
+    tablosu dersleri düzey bloğuyla verir; 9. sınıfta Felsefe okutulmaz — satır
+    satır "eksik" demek gürültü olurdu, hiç göstermemek sessiz düşme). e-Okul
+    raporuna göre bu yıl AÇILMAYAN seçmeli de karşılıksız sayılır.
+
+    Ders saati sınıf düzeyi + gün başına sayılır: o gün düzeyde EŞLEŞEN kaç OYSS
+    sınavı varsa takvimin kuralı ona uygulanır (9. sınıfta Felsefe okutulmuyorsa 6
+    Kasım'da Fizik tek sınavdır → 2. ders saati). Aynı gün iki sınavda tablo sırası
+    belirleyicidir; belge sırayı söylemez, idareci saatleri takasla değiştirir.
+    """
+    from dataclasses import replace
+
+    from apps.dersler import selectors as ders_selectors
+    from apps.dersler.models import CourseExamMode, CourseType
+
+    yil, donem, tur = _oyss_key(calendar)
+    schedule = oyss_schedule(yil, donem, tur)
+    if schedule is None:
+        return None, []
+    okul_duzeyleri = {
+        level for level, count in okul_selectors.active_student_counts_by_level().items() if count
+    }
+    ulke_geneli = {(s.level, _name_key(s.course_name)) for s in national_exams(yil, donem, tur)}
+    haric = {(level, _name_key(ad)) for level, ad in schedule.excluded}
+    yil_id = calendar.semester.school_year_id
+    acilmayan = ders_selectors.elective_offer_status(yil_id).not_offered_pairs
+    # (ad anahtarı, düzey) → (ders, havuzdaki ad, seçmeli mi); zorunlu ders önce gelir.
+    havuz: dict[tuple[str, int], tuple[int, str, bool]] = {}
+    for secmeli, ders_turu in ((False, CourseType.COMMON), (True, CourseType.ELECTIVE)):
+        for pair in ders_selectors.taught_course_levels(
+            yil_id, course_types=[ders_turu], exam_modes=[CourseExamMode.WRITTEN]
+        ):
+            if secmeli and (pair.course_id, pair.level) in acilmayan:
+                continue
+            havuz.setdefault(
+                (_name_key(pair.course_name), pair.level),
+                (pair.course_id, pair.course_name, secmeli),
+            )
+    rows: list[_OyssRow] = []
+    for exam in schedule.exams:
+        anahtar = _name_key(exam.course_name)
+        for level in exam.levels:
+            if level not in okul_duzeyleri or (level, anahtar) in haric:
+                continue
+            if (level, anahtar) in ulke_geneli:
+                continue
+            eslesme = next(
+                (
+                    havuz[(_name_key(ad), level)]
+                    for ad in (exam.course_name, *exam.pool_names)
+                    if (_name_key(ad), level) in havuz
+                ),
+                None,
+            )
+            course_id, havuz_adi, secmeli = eslesme or (None, "", False)
+            rows.append(
+                _OyssRow(
+                    exam=exam,
+                    level=level,
+                    course_id=course_id,
+                    pool_course_name=havuz_adi,
+                    elective=secmeli,
+                    period_no=None,
+                )
+            )
+    # Ders saati: düzey + gün başına eşleşen satırlar TABLO SIRASIYLA.
+    gunluk: dict[tuple[int, date], list[int]] = {}
+    for i, row in enumerate(rows):
+        if row.course_id is not None:
+            gunluk.setdefault((row.level, row.exam.on_date), []).append(i)
+    for (_, gun), siralar in gunluk.items():
+        saatler = schedule.periods_for(gun, len(siralar))
+        for sira, i in enumerate(siralar):
+            if sira < len(saatler):
+                rows[i] = replace(rows[i], period_no=saatler[sira])
+    return schedule, rows
+
+
+#: Ders saati kuralı cümlesindeki sayı adları ("günde tek sınav …, iki sınav …").
+_SAYI_ADI = {1: "tek", 2: "iki", 3: "üç"}
+
+
+def _saatler_metni(saatler: tuple[int, ...]) -> str:
+    """(2,) → "2. ders saatinde"; (2, 4) → "2. ve 4. ders saatlerinde"."""
+    adlar = [f"{no}." for no in saatler]
+    if len(adlar) == 1:
+        return f"{adlar[0]} ders saatinde"
+    return f"{', '.join(adlar[:-1])} ve {adlar[-1]} ders saatlerinde"
+
+
+def _oyss_info(schedule: OyssSchedule | None, rows: list[_OyssRow]) -> dict[str, Any] | None:
+    """Bandın açıklama satırları — kural metni TEK yerde (ön yüz kopya kural yazmaz)."""
+    if schedule is None:
+        return None
+    kural = ", ".join(
+        f"{_SAYI_ADI.get(adet, str(adet))} sınav {_saatler_metni(saatler)}"
+        for adet, saatler in schedule.periods_by_count
+    )
+    notlar = [
+        f"Günde {kural} uygulanır; süre {schedule.duration_minutes} dakikadır. Aynı gün iki "
+        "sınavda Bakanlık tablosunda önce gelen ders önceki saate konur. Okul müdürlüğü "
+        "ihtiyaç hâlinde başka ders saati planlayabilir — saati Yerleştirme sekmesinde "
+        "değiştirebilirsiniz."
+    ]
+    for gun, saat in schedule.day_periods:
+        notlar.append(
+            f"{gun.strftime('%d.%m.%Y')} {_TR_WEEKDAYS[gun.weekday()]} günkü sınav "
+            f"{saat}. ders saatinde uygulanabilir; program bu saati kullanır."
+        )
+    notlar.append(
+        f"Mazeret sınavları {schedule.makeup_start.strftime('%d.%m.%Y')} – "
+        f"{schedule.makeup_end.strftime('%d.%m.%Y')} arasında, okul müdürlüğünün "
+        "planlamasıyla OYSS üzerinden yapılır."
+    )
+    # Havuzda başka adla eşleşen dersin notu (yabancı dil, 11. sınıf seçmelisi) —
+    # yalnız o eşleşme gerçekten olduysa ve bir kez.
+    notlar.extend(
+        dict.fromkeys(
+            row.exam.pool_note
+            for row in rows
+            if row.exam.pool_note
+            and row.pool_course_name
+            and _name_key(row.pool_course_name) != _name_key(row.exam.course_name)
+        )
+    )
+    return {
+        "source": schedule.source,
+        "duration_minutes": schedule.duration_minutes,
+        "makeup_start": schedule.makeup_start.isoformat(),
+        "makeup_end": schedule.makeup_end.isoformat(),
+        "notes": notlar,
+    }
+
+
+def _oyss_plan_dicts(calendar: ExamCalendar, rows: list[_OyssRow]) -> list[dict[str, Any]]:
+    """Bant satırları: sınav, gün, ders saati ve takvimdeki durumu (bkz. `oyss_plan`)."""
+    ids = {row.course_id for row in rows if row.course_id is not None}
+    girdiler = {
+        (e.course_id, e.level): e
+        for e in ExamCalendarEntry.objects.filter(
+            calendar=calendar, exam_kind=ExamKind.WRITTEN, course_id__in=ids
+        )
+    }
+    satirlar = []
+    for row in rows:
+        entry = girdiler.get((row.course_id, row.level)) if row.course_id is not None else None
+        if row.course_id is None:
+            durum = "missing_course"
+        elif entry is None and row.elective:
+            durum = "needs_pool"
+        elif entry is not None and entry.placed_date == row.exam.on_date:
+            durum = "placed"
+        else:
+            durum = "pending"
+        satirlar.append(
+            {
+                "level": row.level,
+                "level_label": _level_display(row.level),
+                "course_name": row.exam.course_name,
+                "pool_course_name": row.pool_course_name,
+                "date": row.exam.on_date.isoformat(),
+                # Gün adı sunucuda: FE'de ISO'dan gün türetmek saat dilimi tuzağıdır.
+                "weekday_label": _TR_WEEKDAYS[row.exam.on_date.weekday()],
+                "period_no": row.period_no,
+                "course_id": row.course_id,
+                "entry_id": entry.pk if entry is not None else None,
+                "entry_date": (
+                    entry.placed_date.isoformat()
+                    if entry is not None and entry.placed_date is not None
+                    else None
+                ),
+                "entry_period_no": entry.period_no if entry is not None else None,
+                "status": durum,
+            }
+        )
+    return satirlar
+
+
+def oyss_plan(calendar: ExamCalendar) -> list[dict[str, Any]]:
+    """Takvim sayfasının OYSS bandı: sınav, gün, ders saati ve takvimdeki durumu.
+
+    `status`: `placed` (resmî gününde — saati idareci değiştirmiş olabilir) ·
+    `pending` (uygulanmadı ya da başka günde) · `missing_course` (ders havuzunda o
+    sınıf düzeyinde karşılığı yok — bant tek özet satırında gösterir) · `needs_pool`
+    (seçmeli ders takvim havuzunda yok — şube kapsamı Ders Havuzu'nda girilince
+    havuz doldurmasıyla girer).
+    """
+    _, rows = _oyss_plan_rows(calendar)
+    return _oyss_plan_dicts(calendar, rows)
+
+
+def oyss_band(calendar: ExamCalendar) -> dict[str, Any]:
+    """Uç gövdesinin OYSS parçası: `{"oyss": satırlar, "oyss_info": bilgi | None}`.
+
+    Satırlar TEK kez hesaplanır (plan birkaç sorgu koşar); bilgi o tur için takvim
+    yayımlanmadıysa None'dır ve bant OYSS bölümünü hiç çizmez.
+    """
+    schedule, rows = _oyss_plan_rows(calendar)
+    return {"oyss": _oyss_plan_dicts(calendar, rows), "oyss_info": _oyss_info(schedule, rows)}
+
+
+def _oyss_period_candidates(row: _OyssRow, schedule: OyssSchedule) -> list[int]:
+    """Denenecek ders saatleri: takvimin saati, öteki OYSS saatleri, okulun sınav saatleri, tümü."""
+    oyss_saatleri = sorted(
+        {no for _, saatler in schedule.periods_by_count for no in saatler}
+        | {no for _, no in schedule.day_periods}
+    )
+    adaylar = [row.period_no] if row.period_no is not None else []
+    adaylar += oyss_saatleri + exam_period_numbers() + [int(p["no"]) for p in _bell_periods()]
+    return list(dict.fromkeys(adaylar))
+
+
+@transaction.atomic
+def apply_oyss_schedule(calendar: ExamCalendar) -> dict[str, list[str]]:
+    """OYSS uygulama takvimini takvime uygular — resmî gününe, takvimin ders saatine.
+
+    `apply_national_exams` deseni, üç farkla: girdi OKUL sınavı kalır (OYSS sınavı
+    okul geneli ortak yazılı sınavdır — makam değişmez); saat takvimden gelir
+    (dolu ya da tanımsızsa öteki OYSS saati, okulun sınav saatleri, sonra tüm ders
+    saatleri denenir ve sapma rapora yazılır); seçmeli ders havuzda yoksa
+    YARATILMAZ (kapsamı bilinmeden sınıf düzeyinin tamamı sınava giriyor sanılırdı).
+    Yerleştirme `place_entry` ile (tek kural motoru) ve SABİTLENEREK yapılır.
+    İdempotent: resmî gününde duran girdiye dokunulmaz — saati idarecinindir
+    (takvim: "İhtiyaç hâlinde okul müdürlüğünün planlaması doğrultusunda farklı bir
+    ders saatinde de sınav uygulaması yapılabilecektir").
+    """
+    _ensure_draft(calendar)
+    placed: list[str] = []
+    unchanged: list[str] = []
+    skipped: list[str] = []
+    schedule, rows = _oyss_plan_rows(calendar)
+    if schedule is None:
+        return {"placed": placed, "unchanged": unchanged, "skipped": skipped}
+    karsiliksiz = 0
+    for row in rows:
+        gun = row.exam.on_date.strftime("%d.%m.%Y")
+        etiket = (
+            f"{_level_display(row.level)} {row.pool_course_name or row.exam.course_name} ({gun})"
+        )
+        if row.course_id is None:
+            karsiliksiz += 1
+            continue
+        entry = ExamCalendarEntry.objects.filter(
+            calendar=calendar, course_id=row.course_id, level=row.level, exam_kind=ExamKind.WRITTEN
+        ).first()
+        if entry is None:
+            if row.elective:
+                skipped.append(
+                    f"{etiket}: seçmeli ders takvim havuzunda yok — Ders Havuzu ekranında "
+                    "şubelerini girin, sonra havuzu doldurup yeniden uygulayın"
+                )
+                continue
+            try:
+                entry = add_calendar_entry(
+                    calendar=calendar, course_id=row.course_id, level=row.level, note=OYSS_NOTE
+                )
+            except ValidationError as exc:
+                skipped.append(f"{etiket}: {_validation_text(exc)}")
+                continue
+        if entry.placed_date == row.exam.on_date:
+            unchanged.append(etiket)
+            continue
+        if has_live_session(entry):
+            skipped.append(f"{etiket}: bu girdinin oturumu üretilmiş — önce oturumu kaldırın")
+            continue
+        if not (calendar.start_date <= row.exam.on_date <= calendar.end_date):
+            skipped.append(
+                f"{etiket}: gün takvim aralığı dışında — takvim tarihlerini Bakanlık "
+                "haftasına çekip yeniden uygulayın"
+            )
+            continue
+        for saat in _oyss_period_candidates(row, schedule):
+            try:
+                with transaction.atomic():
+                    place_entry(entry, on_date=row.exam.on_date, period_no=saat, pin=True)
+            except ValidationError:
+                continue
+            if not entry.note.strip():
+                entry.note = OYSS_NOTE
+                entry.save(update_fields=["note", "updated_at"])
+            ek = ""
+            if row.period_no is not None and saat != row.period_no:
+                ek = f" — takvimdeki {row.period_no}. ders saati kullanılamadı"
+            placed.append(f"{etiket}: {saat}. ders saati{ek}")
+            break
+        else:
+            skipped.append(f"{etiket}: o gün boş ders saati bulunamadı — elle yerleştirin")
+    if karsiliksiz:
+        # Tek özet satırı: ayrıntı bantta listelenir (düzeyde okutulmayan ders olağandır).
+        skipped.append(
+            f"{karsiliksiz} OYSS sınavının ders havuzunda o sınıf düzeyinde karşılığı yok — "
+            "ders o düzeyde okutulmuyorsa işlem gerekmez"
+        )
+    return {"placed": placed, "unchanged": unchanged, "skipped": skipped}
+
+
+@transaction.atomic
+def apply_ministry_schedules(calendar: ExamCalendar) -> dict[str, dict[str, list[str]]]:
+    """Takvim sayfasının "Takvime uygula"sı: önce ülke geneli, sonra OYSS (tek işlem)."""
+    return {"national": apply_national_exams(calendar), "oyss": apply_oyss_schedule(calendar)}
+
+
+def _oyss_day_warnings(calendar: ExamCalendar) -> list[str]:
+    """OYSS sınavı resmî gününden başka güne yerleştirilmişse uyarı (22.10.2026).
+
+    UYARIDIR: takvim tarihi idarecinin kararıdır (sınav haftaları emsali) — mücbir
+    sebepte yeni tarihi il millî eğitim müdürlüğü belirler (kılavuz Genel
+    Açıklamalar d). Ders saati farkı uyarılmaz; saat okulun planlamasına açıktır.
+    """
+    schedule, rows = _oyss_plan_rows(calendar)
+    if schedule is None:
+        return []
+    resmi = {(row.course_id, row.level): row for row in rows if row.course_id is not None}
+    if not resmi:
+        return []
+    uyarilar: list[str] = []
+    for entry in (
+        ExamCalendarEntry.objects.filter(
+            calendar=calendar,
+            exam_kind=ExamKind.WRITTEN,
+            placed_date__isnull=False,
+            course_id__in={course_id for course_id, _ in resmi},
+        )
+        .select_related("course")
+        .order_by("placed_date", "level", "pk")
+    ):
+        row = resmi.get((entry.course_id, entry.level))
+        if row is None or entry.placed_date is None or entry.placed_date == row.exam.on_date:
+            continue
+        uyarilar.append(
+            f"{entry.course.name} — {_level_display(entry.level)}: OYSS uygulama takviminde "
+            f"sınav günü {row.exam.on_date.strftime('%d.%m.%Y')}, takvimde "
+            f"{entry.placed_date.strftime('%d.%m.%Y')} — OYSS sınavları belirlenen günde "
+            "yapılır (OYSS Uygulama Kılavuzu, Genel Açıklamalar d)."
+        )
+    return uyarilar
 
 
 @transaction.atomic
@@ -2473,6 +2862,7 @@ def calendar_validation(calendar: ExamCalendar) -> dict[str, list[str]]:
                 f"{_level_display(level)} {day}: bir öğrenciye aynı gün {max_load} sınav "
                 "— üst sınır aşıldı."
             )
+    warnings.extend(_oyss_day_warnings(calendar))
     warnings.extend(_extra_time_warnings(calendar, list(placed)))
     return {"errors": errors, "warnings": warnings}
 

@@ -70,6 +70,58 @@ export interface NationalExamApplyResult {
   skipped: string[];
 }
 
+/**
+ * OYSS uygulama takviminin okuldaki karşılığı (22.10.2026): Bakanlık okul geneli
+ * ortak yazılı sınavın GÜNÜNÜ ve ders saatini verir; sınav okul sınavı kalır.
+ */
+export interface OyssExamRow {
+  level: number;
+  level_label: string;
+  /** Bakanlık takvimindeki ders adı. */
+  course_name: string;
+  /** Ders havuzundaki karşılığı ("Seçmeli Matematik", "Birinci Yabancı Dil"); yoksa boş. */
+  pool_course_name: string;
+  /** Bakanlık takvimindeki gün (ISO). */
+  date: string;
+  weekday_label: string;
+  /** Takvimin verdiği ders saati (karşılığı olmayan satırda null). */
+  period_no: number | null;
+  course_id: number | null;
+  entry_id: number | null;
+  /** Girdinin takvimdeki yeri (idareci saati değiştirmiş olabilir). */
+  entry_date: string | null;
+  entry_period_no: number | null;
+  /**
+   * placed: resmî gününde · pending: uygulanmadı ya da başka günde ·
+   * missing_course: ders havuzunda o sınıf düzeyinde karşılığı yok ·
+   * needs_pool: seçmeli ders takvim havuzunda yok.
+   */
+  status: "placed" | "pending" | "missing_course" | "needs_pool";
+}
+
+export interface OyssInfo {
+  /** Dayanak: Bakanlığın uygulama takvimi. */
+  source: string;
+  duration_minutes: number;
+  makeup_start: string;
+  makeup_end: string;
+  /** Bandın açıklama satırları — kural metni sunucudadır, ön yüz kopya kural yazmaz. */
+  notes: string[];
+}
+
+/** Takvim sayfasının Bakanlık bandı: ülke geneli sınavlar + OYSS uygulama takvimi. */
+export interface MinistryExamsPlan {
+  exams: NationalExamRow[];
+  oyss?: OyssExamRow[];
+  /** O tur için OYSS takvimi yayımlanmadıysa null. */
+  oyss_info?: OyssInfo | null;
+}
+
+export interface MinistryExamsApplyResponse extends MinistryExamsPlan {
+  result: NationalExamApplyResult;
+  oyss_result?: NationalExamApplyResult;
+}
+
 export interface DefaultWindow {
   start_date: string;
   end_date: string;
@@ -357,13 +409,12 @@ export const examCalendarApi = {
   defaultDescription: () => api.get<{ text: string }>("/exam-calendars/default-description/"),
   defaultFootnote: () => api.get<{ text: string }>("/exam-calendars/default-footnote/"),
   fillPool: (id: number) => api.post<FillPoolResult>(`/exam-calendars/${id}/fill-pool/`, {}),
+  /** Bakanlık bandı: ülke geneli sınavlar + OYSS uygulama takvimi (uç adı tarihsel). */
   nationalExams: (id: number) =>
-    api.get<{ exams: NationalExamRow[] }>(`/exam-calendars/${id}/national-exams/`),
+    api.get<MinistryExamsPlan>(`/exam-calendars/${id}/national-exams/`),
+  /** İkisini tek işlemde uygular (yalnız taslak takvimde). */
   applyNationalExams: (id: number) =>
-    api.post<{ result: NationalExamApplyResult; exams: NationalExamRow[] }>(
-      `/exam-calendars/${id}/national-exams/`,
-      {},
-    ),
+    api.post<MinistryExamsApplyResponse>(`/exam-calendars/${id}/national-exams/`, {}),
   entries: (id: number) =>
     api.get<{ results: ExamCalendarEntryRow[] }>(`/exam-calendars/${id}/entries/`),
   addEntry: (

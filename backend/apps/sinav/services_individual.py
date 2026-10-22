@@ -659,6 +659,7 @@ def upload_individual(
     row.sha256 = hashlib.sha256(file_bytes).hexdigest()
     row.score_mode = score_mode
     row.question_count = question_count if score_mode == ScoreMode.QUESTION_TABLE else None
+    row.paper_format = question_pdf.paper_format(file_bytes)
     row.file.save(f"soru_b_{uuid.uuid4().hex}.pdf", ContentFile(file_bytes), save=False)
     row.save()
     _delete_files_on_commit(old)
@@ -832,6 +833,7 @@ def document_payload(document: IndividualQuestionDocument) -> dict[str, Any]:
         "page_count": document.page_count,
         "score_mode": document.score_mode,
         "question_count": document.question_count,
+        "paper_format": document.paper_format,
     }
 
 
