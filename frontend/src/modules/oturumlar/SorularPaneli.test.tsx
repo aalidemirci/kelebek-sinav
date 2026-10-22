@@ -254,6 +254,34 @@ describe("SorularPaneli", () => {
     expect(await screen.findByText("Soru dosyası yüklendi.")).toBeInTheDocument();
   });
 
+  it("OYSS soru kâğıdı: satırda bant yerine kâğıdın alanları söylenir, yüklemede tanındığı bildirilir", async () => {
+    const user = userEvent.setup();
+    sessionApi.question.mockResolvedValue(
+      makeQuestionMeta({ paper_format: "OYSS", page_count: 4 }),
+    );
+    sessionApi.bookletRuns.mockResolvedValue(paginated([]));
+    sessionApi.uploadQuestion.mockResolvedValue(makeQuestionMeta({ paper_format: "OYSS" }));
+    renderPanel(dagitilmisOturum({ courses: [makeCourseRow()] }));
+
+    expect(
+      await screen.findByText(
+        /4 sayfa · OYSS soru kâğıdı — bilgiler kâğıdın kendi alanlarına basılır/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/tek puan kutusu/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Değiştir" }));
+    const dialog = await screen.findByRole("dialog");
+    // Diyalog OYSS'den indirilen PDF'in olduğu gibi yüklenebileceğini söyler.
+    expect(within(dialog).getByText(/OYSS'den indirdiğiniz soru kâğıdını/)).toBeInTheDocument();
+    await user.upload(
+      within(dialog).getByLabelText(/Soru PDF dosyası/),
+      new File(["%PDF-"], "oyss.pdf", { type: "application/pdf" }),
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Yükle" }));
+    expect(await screen.findByText(/OYSS soru kâğıdı tanındı/)).toBeInTheDocument();
+  });
+
   it("Word şablonu indirilir (üst boşluk 4 cm)", async () => {
     const user = userEvent.setup();
     sessionApi.question.mockRejectedValue(

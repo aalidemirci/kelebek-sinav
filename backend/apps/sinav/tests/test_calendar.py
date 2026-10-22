@@ -2193,7 +2193,9 @@ def test_takvim_yaratilinca_bakanlik_sinavi_resmi_gunune_sabitlenir() -> None:
     SchoolConfig.objects.create(pk=SchoolConfig.SINGLETON_PK, exam_period_nos=[1, 2, 3])
     sube(10, "A", students=2, start_no=101)
     tde = ders("Türk Dili ve Edebiyatı", levels=[10])
-    matematik = ders("Matematik", levels=[10])
+    # OYSS takviminde OLMAYAN ders (Matematik 22.10.2026'dan beri OYSS'yle 5 Kasım'a
+    # kendiliğinden yerleşir — test_oyss_takvim.py).
+    okul_dersi = ders("Sağlık Bilgisi ve Trafik Kültürü", levels=[10])
 
     calendar = _bakanlik_takvimi()
 
@@ -2202,8 +2204,8 @@ def test_takvim_yaratilinca_bakanlik_sinavi_resmi_gunune_sabitlenir() -> None:
     assert (girdi.placed_date, girdi.period_no) == (date(2026, 11, 12), 1)
     assert girdi.is_pinned is True
     assert "ders saati Bakanlığın uygulama esaslarıyla kesinleşir" in girdi.note
-    # O turda Bakanlık sınavı olmayan ders okul sınavı olarak havuzda kalır.
-    okul = ExamCalendarEntry.objects.get(calendar=calendar, course=matematik, level=10)
+    # O turda Bakanlık takviminde olmayan ders okul sınavı olarak havuzda kalır.
+    okul = ExamCalendarEntry.objects.get(calendar=calendar, course=okul_dersi, level=10)
     assert okul.authority == ExamAuthority.SCHOOL and okul.placed_date is None
     # Otomatik yerleştirme o günü 10. sınıfın okul sınavına kapatır (Yönerge md. 5).
     takvim.auto_place_entries(calendar)
@@ -2320,6 +2322,13 @@ def _ikili_plan(satir: int, sutun: int) -> dict[str, Any]:
     }
 
 
+def _oyss_disi(uyarilar: list[str]) -> list[str]:
+    """OYSS gün uyarısı bu senaryoların konusu değil: Coğrafya ve Tarih 2026-2027 1.
+    yazılıda OYSS takvimindedir (10 ve 4 Kasım), senaryo onları 26-27 Ekim'e koyar —
+    uyarı doğrudur ama sıra bütçesinin sessizliğini ölçen iddiayı bulandırır."""
+    return [u for u in uyarilar if "OYSS uygulama takviminde" not in u]
+
+
 def _sira_kurulumu() -> dict[str, Any]:
     """10. sınıfın tamamı (iki şube) + 9. sınıfın tek şubesi; her şubeye derslik.
 
@@ -2384,7 +2393,7 @@ def test_dengeli_mevcutta_sira_uyarisi_cikmaz() -> None:
     sonuc = takvim.place_entry(e9, on_date=gun, period_no=1)
 
     assert not [u for u in sonuc.warnings if "yan yana" in u]
-    assert takvim.calendar_validation(calendar)["warnings"] == []
+    assert _oyss_disi(takvim.calendar_validation(calendar)["warnings"]) == []
 
 
 def test_otomatik_yerlestirme_sinavlari_mevcut_dengesine_gore_eslestirir() -> None:
@@ -2511,7 +2520,7 @@ def test_otomatik_yerlestirme_bayat_sira_uyarisi_basmaz() -> None:
     e9.refresh_from_db()
     assert e10.placed_date == e9.placed_date  # 16 ↔ 16: dengeli eşleşme
     assert not [u for u in sonuc.warnings if "yan yana" in u]
-    assert takvim.calendar_validation(calendar)["warnings"] == []
+    assert _oyss_disi(takvim.calendar_validation(calendar)["warnings"]) == []
 
 
 def test_otomatik_yerlestirme_cozulemeyen_acigi_gunuyle_bildirir() -> None:

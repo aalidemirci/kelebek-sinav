@@ -11,7 +11,7 @@
 // Bu yüzden buraya öğrenci pk'siyle yol kuran bir uç EKLEMEYİN.
 
 import { api } from "../../lib/api";
-import type { RuleReason, ScoreModeCode, SeatPreference } from "../oturumlar/api";
+import type { PaperFormatCode, RuleReason, ScoreModeCode, SeatPreference } from "../oturumlar/api";
 
 // ---------------------------------------------------------------------------
 // Kalıcı sınav tedbirleri (07.10.2026) — aynı satır BEP üyeliğini ve tedbirleri
@@ -95,6 +95,7 @@ export interface IndividualDocument {
   page_count: number | null;
   score_mode: ScoreModeCode;
   question_count: number | null;
+  paper_format: PaperFormatCode;
 }
 
 /** Oturum paneli satırı: o oturuma giren BEP kapsamındaki öğrenci. */

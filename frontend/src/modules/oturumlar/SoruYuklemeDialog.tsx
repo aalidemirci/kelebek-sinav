@@ -7,6 +7,10 @@
 // açılışta dosya seçimi sıfırdan başlar (kapatılan diyaloğun dosya alanı DOM'dan
 // kalkar; seçim durumda kalsaydı boş görünen alanla "Yükle" açık kalırdı). Puan
 // bölümü, yüklü dosyanınkiyle ön-dolar — "Değiştir"de yeniden seçtirmemek için.
+//
+// OYSS kâğıdı (22.10.2026): Bakanlığın Ortak Yazılı Sınav Sistemi'nden indirilen
+// PDF olduğu gibi yüklenir; biçimi backend tanır (`paper_format`). İki yükleme
+// yerinin AYNI metinleri burada durur.
 
 import { useState } from "react";
 
@@ -15,6 +19,13 @@ import Dialog from "../../ui/Dialog";
 import Select from "../../ui/Select";
 import TextField from "../../ui/TextField";
 import type { ScoreModeCode } from "./api";
+
+/** Yüklü OYSS kâğıdının satır özeti — ders dosyası ve bireysel dosya AYNI. */
+export const OYSS_KAGIDI_OZETI = "OYSS soru kâğıdı — bilgiler kâğıdın kendi alanlarına basılır";
+
+/** OYSS kâğıdı yüklenince gösterilen bildirim. */
+export const OYSS_YUKLENDI_MESAJI =
+  "OYSS soru kâğıdı tanındı: ad, sınıf/şube ve numara kâğıdın kendi alanlarına, 3. sayfanın üstüne de kimlik satırı olarak basılacak.";
 
 interface SoruYuklemeDialogProps {
   title: string;
@@ -78,6 +89,11 @@ export default function SoruYuklemeDialog({
             className="min-h-9 rounded-shape-xs border border-outline bg-surface px-3 py-1.5 text-body-medium text-on-surface file:mr-3 file:rounded-shape-sm file:border-0 file:bg-secondary-container file:px-3 file:py-1 file:text-label-large file:text-on-secondary-container"
           />
         </label>
+        <p className="text-body-small text-on-surface-variant">
+          OYSS&apos;den indirdiğiniz soru kâğıdını olduğu gibi yükleyebilirsiniz: program kâğıdı
+          tanır, öğrencinin adını, sınıfını ve numarasını kâğıdın kendi alanlarına, 3. sayfanın
+          üstüne de kimlik satırı olarak basar. OYSS kâğıdında puan bölümü seçimi kullanılmaz.
+        </p>
         <Select
           label="Puan bölümü"
           options={[

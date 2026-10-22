@@ -750,6 +750,18 @@ class ScoreMode(models.TextChoices):
     QUESTION_TABLE = "QUESTION_TABLE", "Soru bazlı puan tablosu"
 
 
+class QuestionPaperFormat(models.TextChoices):
+    """Soru PDF'inin biçimi — kitapçıkta öğrenci bilgisinin nereye basılacağı (22.10.2026).
+
+    Yüklemede `oyss_paper.detect` ile belirlenir ve arayüzde gösterilir. Kitapçık
+    üretimi biçimi PDF'ten YENİDEN tanır (tek doğruluk kaynağı dosyanın kendisi);
+    bu alan yalnız gösterimdir — eski yüklemelerde varsayılan değerde kalır.
+    """
+
+    TEMPLATE = "TEMPLATE", "Program şablonu (üst 4 cm bant)"
+    OYSS = "OYSS", "OYSS soru kâğıdı"
+
+
 class QuestionDocument(BaseModel):
     """Oturum dersinin soru dosyası (F5 — OYS §4.5/T7'den UYARLA).
 
@@ -774,6 +786,12 @@ class QuestionDocument(BaseModel):
     )
     question_count = models.PositiveSmallIntegerField(
         "soru sayısı", null=True, blank=True, help_text="Puan tablosu için (K5)."
+    )
+    paper_format = models.CharField(
+        "kâğıt biçimi",
+        max_length=8,
+        choices=QuestionPaperFormat.choices,
+        default=QuestionPaperFormat.TEMPLATE,
     )
     # scaling_enabled alanı OYS Tur 239'da kaldırılmıştı; KS'ye hiç girmedi —
     # ölçekleme yok, bant sabit 4 cm.
@@ -989,6 +1007,12 @@ class IndividualQuestionDocument(BaseModel):
         "puan bölümü", max_length=14, choices=ScoreMode.choices, default=ScoreMode.SINGLE_BOX
     )
     question_count = models.PositiveSmallIntegerField("soru sayısı", null=True, blank=True)
+    paper_format = models.CharField(
+        "kâğıt biçimi",
+        max_length=8,
+        choices=QuestionPaperFormat.choices,
+        default=QuestionPaperFormat.TEMPLATE,
+    )
 
     class Meta:
         verbose_name = "bireysel soru dosyası"

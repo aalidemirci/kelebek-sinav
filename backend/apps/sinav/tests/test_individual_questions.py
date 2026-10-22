@@ -220,6 +220,9 @@ def test_modelde_serbest_metin_alani_yok() -> None:
         "sha256",
         "score_mode",
         "question_count",
+        # Kâğıt biçimi (22.10.2026, OYSS): seçenekli alan, dosyanın biçimidir — öğrenciye
+        # dair bilgi taşımaz.
+        "paper_format",
     }
 
 
@@ -590,6 +593,7 @@ def test_panel_satirlari_ve_yetim_satir() -> None:
         "page_count",
         "score_mode",
         "question_count",
+        "paper_format",
     }
 
     # Öğrenci yerleşimden düşerse satır GÖRÜNÜR kalır (kaldırılabilsin) ve üretimi etkilemez.

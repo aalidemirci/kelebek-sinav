@@ -72,3 +72,18 @@ def validate_question_pdf(file_bytes: bytes, *, score_mode: str, question_count:
             "indirilen Word şablonunu kullanmanız önerilir."
         )
     return page_count
+
+
+def paper_format(file_bytes: bytes) -> str:
+    """Soru PDF'inin biçimi (22.10.2026): OYSS soru kâğıdı mı, program şablonu mu?
+
+    Doğrulamadan SONRA çağrılır. OYSS kâğıdı kendi başlığını taşıdığı için kitapçıkta
+    bant yerine kâğıdın alanlarına basılır (`booklet`); tanıma hatası yüklemeyi
+    düşürmez (`oyss_paper.detect` hata yutar → program şablonu sayılır).
+    """
+    from apps.sinav import oyss_paper
+    from apps.sinav.models import QuestionPaperFormat
+
+    if oyss_paper.detect(file_bytes) is not None:
+        return QuestionPaperFormat.OYSS
+    return QuestionPaperFormat.TEMPLATE
