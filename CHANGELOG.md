@@ -4,6 +4,26 @@ Paketler GitHub Releases'ta ve indir.okulapp.org'dadır. En yeni sürüm en üst
 yayımlanmamış değişiklikler "Yayımlanmadı (taslak)" başlığı altında toplanır ve
 sürüm çıkarılırken bu başlık sürüm numarası ve tarihle değiştirilir.
 
+## Yayımlanmadı (taslak)
+
+Bu sürüm veritabanında değişiklik yapmaz; güncellemeden sonra yapmanız gereken
+bir işlem yoktur.
+
+### Dağıtım doğrulama raporu
+
+- **Kural ihlali olmayan oturumda "kaçınılmaz oldu" uyarısı artık çıkmaz.**
+  Program dağıtım sırasında bir öğrenciyi geçici olarak aynı sınava giren
+  biriyle aynı sıraya koyup sonra başka bir sıraya alsa da uyarı listede
+  kalıyor, dağıtım doğrulama raporuna "KURAL İHLALİ YOKTUR" ile yan yana
+  basılıyordu. Uyarılar artık öğrencilerin son oturduğu yerlerden üretilir:
+  yalnız gerçekten aynı sıraya düşen öğrenciler için ve sıra başına bir kez
+  yazılır.
+- Oturma düzeni değişmez: aynı dağıtım numarası yine aynı yerleşimi verir.
+  Bu sürümden önce dağıtılmış bir oturumun raporu eski uyarıları taşımaya
+  devam eder; temiz rapor isterseniz oturumu Yerleşim sekmesinde yazan
+  dağıtım numarasıyla yeniden dağıtın. Yeniden dağıtımda elle yapılan koltuk
+  değişiklikleri ve gözetmen görevlendirmeleri yeniden yapılır.
+
 ## 2026.10.0-beta.3 — 23.10.2026
 
 Bu sürüm veritabanında değişiklik yapar; güncelleme ilk açılışta kendiliğinden

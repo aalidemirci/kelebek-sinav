@@ -246,6 +246,35 @@ def test_random_scenarios_zero_hard_violations() -> None:
             )
 
 
+def _ayni_sinav_ayni_sirada(result: engine.DistributionResult) -> int:
+    """Son yerleşimde aynı sınavdan iki öğrencinin oturduğu SIRA sayısı."""
+    masa: dict[tuple[int, int, int], list[str]] = {}
+    for pl in result.placements:
+        masa.setdefault((pl.room_id, pl.seat.desk_row, pl.seat.desk_col), []).append(
+            pl.participant.conflict_group
+        )
+    return sum(1 for gruplar in masa.values() if len(gruplar) != len(set(gruplar)))
+
+
+def test_kacinilmaz_uyarisi_son_yerlesimi_anlatir() -> None:
+    """'Kaçınılmaz' uyarısı = SON yerleşimde aynı sınavın aynı sırada kaldığı sıra (24.10.2026).
+
+    Kurucu faz çakışmayı koyduğu an uyarıyordu; yerel arama çifti sonra ayırsa da
+    uyarı kalıyor, R8'e "KURAL İHLALİ YOKTUR" ile yan yana bayat satır basılıyordu.
+    Bu senaryo kümesinde eski motorun 120 koşusundan 19'u tutarsızdı (ölçüldü).
+    """
+    rng = random.Random(2410)  # noqa: S311 — test senaryosu üretimi
+    for senaryo in range(120):
+        rows, cols = rng.randint(3, 6), rng.randint(2, 4)
+        room = _grid_room(1, rows, cols, DeskType.DOUBLE)
+        n_groups = rng.randint(1, 3)
+        n = rng.randint(n_groups, len(room.seats))
+        students = [_participant(i, f"{(i % n_groups) + 1}:9") for i in range(1, n + 1)]
+        result = engine.distribute_butterfly(students, [room], seed=rng.randint(1, 999_999))
+        uyari = sum(1 for w in result.warnings if "kaçınılmaz" in w)
+        assert uyari == _ayni_sinav_ayni_sirada(result), f"senaryo {senaryo}"
+
+
 def test_two_groups_enough_space_zero_first_ring() -> None:
     """İki eşit grup + bol kapasite: 1. halka aynı-grup çifti = 0 hedefi."""
     room = _grid_room(1, 4, 4, DeskType.SINGLE)  # 16 koltuk

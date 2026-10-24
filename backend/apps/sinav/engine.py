@@ -451,25 +451,9 @@ def _constructive_fill(
             if penalty < best_penalty:
                 best_idx, best_penalty = idx, penalty
         if chosen_idx is None:
+            # Sert çakışma burada UYARILMAZ: yerel arama (Faz 2) çifti çoğu kez
+            # ayırır. Uyarı son yerleşimden üretilir — `_desk_conflict_warnings`.
             chosen_idx = best_idx
-            if math.isinf(best_penalty[0]):
-                # Kaçınılmaz ihlalin SEBEBİ söylenir: aynı sınav mı, ayrışma mı?
-                # Motor ayrışmanın ne olduğunu bilmediği için metin nötrdür;
-                # somut cümleyi doğrulayıcı etiketlerle kurar (CLAUDE.md §3).
-                ayrisma = any(
-                    _separation_conflict(seat, o_seat, queue[best_idx].separation_key, o_sep)
-                    for o_seat, _o_group, o_sep in occupied
-                )
-                sebep = (
-                    "ayrı oturması gereken iki öğrencinin aynı sıraya oturması"
-                    if ayrisma
-                    else "aynı sınava giren iki öğrencinin aynı sıraya oturması"
-                )
-                warnings.append(
-                    f"{_room_text(room)}, {desk_position_label(seat.desk_row, seat.desk_col)}: "
-                    f"{sebep} kaçınılmaz oldu "
-                    "(yerleştirilecek başka uygun öğrenci kalmadı)."
-                )
         student = queue.pop(chosen_idx)
         occupied.append((seat, student.conflict_group, student.separation_key))
         placements.append(Placement(participant=student, room_id=room.room_id, seat=seat))
@@ -478,6 +462,58 @@ def _constructive_fill(
             f"{_room_text(room)}: {len(queue)} öğrenci koltuk bulamadı (salonun payı doldu)."
         )
     return placements
+
+
+def _desk_conflict_warnings(
+    room: RoomSeats,
+    placements: list[Placement],
+    *,
+    strict: bool,
+    fixed: list[Occupant] | None = None,
+) -> list[str]:
+    """SON yerleşimde hâlâ duran sert çakışmalar — sıra başına bir uyarı.
+
+    Kurucu faz (Faz 1) çakışmayı koyduğu anda uyarıyordu; yerel arama (Faz 2)
+    çifti sonra ayırsa da uyarı listede kalıyor ve R8'e "KURAL İHLALİ YOKTUR"
+    ile yan yana bayat bir "kaçınılmaz oldu" basılıyordu (24.10.2026, 47 şubelik
+    gerçek okul kurulumu: ihlalsiz 18 oturumun hepsinde 16-73 satır). Ölçüt
+    kurucu fazınkiyle AYNIDIR (`_placement_penalty`'nin sonsuz cezası: aynı
+    sırada aynı sınav ya da farklı ayrışma anahtarı; `strict`te 1. halka da).
+    Yalnız motorun yerleştirdiği öğrenciler denetlenir — sabit (pinli) iki
+    öğrencinin çakışmasını servis kendi pin uyarısıyla söyler.
+    """
+    fixed_occupants = list(fixed or [])
+    occupants: list[Occupant] = [
+        (p.seat, p.participant.conflict_group, p.participant.separation_key) for p in placements
+    ]
+    warned: set[tuple[int, int]] = set()
+    out: list[str] = []
+    for i, (seat, group, separation) in enumerate(occupants):
+        desk = (seat.desk_row, seat.desk_col)
+        if desk in warned:
+            continue
+        others = fixed_occupants + occupants[:i] + occupants[i + 1 :]
+        penalty = _placement_penalty(
+            seat, group, others, strict=strict, focus=room.focus, separation=separation
+        )
+        if not math.isinf(penalty[0]):
+            continue
+        # Kaçınılmaz ihlalin SEBEBİ söylenir: aynı sınav mı, ayrışma mı? Motor
+        # ayrışmanın ne olduğunu bilmediği için metin nötrdür (CLAUDE.md §3).
+        ayrisma = any(
+            _separation_conflict(seat, o_seat, separation, o_sep) for o_seat, _g, o_sep in others
+        )
+        sebep = (
+            "ayrı oturması gereken iki öğrencinin aynı sıraya oturması"
+            if ayrisma
+            else "aynı sınava giren iki öğrencinin aynı sıraya oturması"
+        )
+        out.append(
+            f"{_room_text(room)}, {desk_position_label(seat.desk_row, seat.desk_col)}: "
+            f"{sebep} kaçınılmaz oldu (yerleştirilecek başka uygun öğrenci kalmadı)."
+        )
+        warned.add(desk)
+    return out
 
 
 def _student_penalty_at(
@@ -702,6 +738,9 @@ def distribute_butterfly(
             prev_seats=prev,
         )
         _local_search(placements, room=room, rng=rng, fixed=fixed, prev_seats=prev)
+        result.warnings.extend(
+            _desk_conflict_warnings(room, placements, strict=strict, fixed=fixed)
+        )
         result.placements.extend(placements)
     return result
 
