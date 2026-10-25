@@ -11,7 +11,7 @@
 
 import { api } from "../../lib/api";
 import type { Paginated } from "../../lib/pagination";
-import type { SeparationMode } from "../okul/api";
+import type { SectionSpreadMode, SeparationMode } from "../okul/api";
 
 export type { Paginated };
 
@@ -129,6 +129,11 @@ export interface ExamSession {
    * yalnız TASLAKken değiştirilir; "Kendi dersliğinde" düzeninde uygulanmaz.
    */
   separation_mode: SeparationMode;
+  /**
+   * Şube dağılımı (25.10.2026) — aynı düzen: okul varsayılanıyla açılır, yalnız
+   * TASLAKken değişir; "Kendi dersliğinde" düzeninde anlamı yoktur.
+   */
+  section_spread: SectionSpreadMode;
   /** Gözetmen ayarı (K2) — R6 yalnız açıkken kataloglanır; atama F7'de. */
   proctors_enabled: boolean;
   term_id: number;
@@ -153,6 +158,7 @@ export interface ExamSessionPayload {
   session_type?: ExamSessionTypeCode;
   layout_mode?: LayoutModeCode;
   separation_mode?: SeparationMode;
+  section_spread?: SectionSpreadMode;
   term_id?: number;
 }
 

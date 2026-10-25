@@ -25,6 +25,7 @@ export function makeSession(overrides: Partial<ExamSession> = {}): ExamSession {
     session_type: "SCHOOL",
     layout_mode: "BUTTERFLY",
     separation_mode: "NONE",
+    section_spread: "TOGETHER",
     proctors_enabled: false,
     term_id: 3,
     term_label: "2025-2026 Ders Yılı 1. Dönem",

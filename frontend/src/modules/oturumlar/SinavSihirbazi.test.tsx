@@ -758,3 +758,50 @@ describe("SinavSihirbazi — kız/erkek ayrışması (20.09.2026)", () => {
     expect(screen.queryByLabelText("Kız/erkek ayrışması")).not.toBeInTheDocument();
   });
 });
+
+describe("SinavSihirbazi — şube dağılımı (25.10.2026)", () => {
+  const BILGI_ADIMI = { transfer_check_confirmed_at: ONAY_ZAMANI };
+
+  it("iki seçim de varsayılandayken şube dağılımı 'Ayrıntılı ayarlar' içinde durur", async () => {
+    const user = userEvent.setup();
+    renderWizard(makeSession(BILGI_ADIMI));
+    await screen.findByRole("heading", { name: "Oturum Bilgileri" });
+
+    const secim = screen.getByLabelText("Şube dağılımı");
+    expect(secim).not.toBeVisible();
+    await user.click(screen.getByText("Ayrıntılı ayarlar"));
+    expect(secim).toBeVisible();
+    expect(secim).toHaveValue("TOGETHER");
+  });
+
+  it("okul varsayılanı 'dağıtılır' ise seçim doğrudan görünür ve kaydedilir", async () => {
+    const user = userEvent.setup();
+    sessionApi.update.mockResolvedValue(makeSession());
+    renderWizard(makeSession({ ...BILGI_ADIMI, section_spread: "SPREAD" }));
+    await screen.findByRole("heading", { name: "Oturum Bilgileri" });
+
+    const secim = screen.getByLabelText("Şube dağılımı");
+    expect(secim).toBeVisible();
+    expect(secim).toHaveValue("SPREAD");
+    // Ayrışma seçimi de katlanmadan yanında durur (ikisi tek bölümdür).
+    expect(screen.getByLabelText("Kız/erkek ayrışması")).toBeVisible();
+    await user.selectOptions(secim, "TOGETHER");
+    await user.click(screen.getByRole("button", { name: "Kaydet ve devam et" }));
+
+    await waitFor(() =>
+      expect(sessionApi.update).toHaveBeenCalledWith(
+        5,
+        expect.objectContaining({ section_spread: "TOGETHER" }),
+      ),
+    );
+  });
+
+  it("'Kendi dersliğinde' düzeninde seçim gösterilmez", async () => {
+    renderWizard(
+      makeSession({ ...BILGI_ADIMI, layout_mode: "HOME_CLASSROOM", section_spread: "SPREAD" }),
+    );
+    await screen.findByRole("heading", { name: "Oturum Bilgileri" });
+
+    expect(screen.queryByLabelText("Şube dağılımı")).not.toBeInTheDocument();
+  });
+});

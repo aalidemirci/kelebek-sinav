@@ -304,3 +304,29 @@ def test_anonimlestirme_ayrisma_anahtarini_bosaltir() -> None:
     services.anonymize_exam_session(session)
 
     assert {a.separation_key for a in SeatAssignment.all_objects.filter(session=session)} == {""}
+
+
+def test_ayri_salonlar_uyarisi_ders_adini_soyler() -> None:
+    """Ayrı salonlar yolu motora grup etiketlerini geçirir (25.10.2026): sıra
+    yetmediğinde uyarı iç anahtarı ("12:10") değil ders adını söyler — eskiden
+    bu yol etiket geçirmiyordu (CLAUDE.md: iç kimlik kullanıcı metninde geçmez)."""
+    from dataclasses import replace
+
+    from apps.sinav.tests.test_engine import _grid_room, _participant
+
+    kizlar = [replace(_participant(i, "12:10", level=10), separation_key="K") for i in range(8)]
+    erkekler = [
+        replace(_participant(100 + i, "13:9", level=9), separation_key="E") for i in range(2)
+    ]
+    result = services._distribute_separate_rooms(
+        kizlar + erkekler,
+        [_grid_room(1, 2, 2), _grid_room(2, 2, 2)],  # 2 × (4 ikili sıra)
+        seed=1,
+        strict=False,
+        preplaced=[],
+        previous={},
+        group_labels={"12:10": "Coğrafya — 10. Sınıf", "13:9": "Tarih — 9. Sınıf"},
+    )
+
+    assert any("Coğrafya — 10. Sınıf sınavına 8 öğrenci" in w for w in result.warnings)
+    assert not any("12:10" in w for w in result.warnings)

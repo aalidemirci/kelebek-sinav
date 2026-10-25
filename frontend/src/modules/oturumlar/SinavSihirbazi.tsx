@@ -29,8 +29,14 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import type { Course } from "../dersler/api";
 import { derslerApi } from "../dersler/api";
 import { SECIM_BEKLEYENLER_YOLU } from "../dersler/SecimBekleyenler";
-import { SEPARATION_HINTS, SEPARATION_LABELS, okulApi } from "../okul/api";
-import type { SeparationMode } from "../okul/api";
+import {
+  SECTION_SPREAD_HINTS,
+  SECTION_SPREAD_LABELS,
+  SEPARATION_HINTS,
+  SEPARATION_LABELS,
+  okulApi,
+} from "../okul/api";
+import type { SectionSpreadMode, SeparationMode } from "../okul/api";
 import { examRoomApi, examRoomGroupApi } from "../salonlar/api";
 import DagitimSecenekleri, {
   BOS_DAGITIM_SECENEKLERI,
@@ -275,6 +281,7 @@ function InfoStep({
     duration_minutes: String(session.duration_minutes),
     layout_mode: session.layout_mode as LayoutModeCode,
     separation_mode: session.separation_mode,
+    section_spread: session.section_spread,
     proctors_enabled: session.proctors_enabled,
   });
 
@@ -287,6 +294,7 @@ function InfoStep({
         duration_minutes: Number(form.duration_minutes),
         layout_mode: form.layout_mode,
         separation_mode: form.separation_mode,
+        section_spread: form.section_spread,
         proctors_enabled: form.proctors_enabled,
       }),
     onSuccess: () => {
@@ -310,6 +318,24 @@ function InfoStep({
       helperText={`${SEPARATION_HINTS[form.separation_mode]} Varsayılanı Ayarlar → Okul Bilgileri'nden değiştirebilirsiniz.`}
     />
   );
+
+  const subeDagilimiSecimi = (
+    <Select
+      label="Şube dağılımı"
+      options={(Object.keys(SECTION_SPREAD_LABELS) as SectionSpreadMode[]).map((kip) => ({
+        value: kip,
+        label: SECTION_SPREAD_LABELS[kip],
+      }))}
+      value={form.section_spread}
+      onChange={(e) =>
+        setForm((f) => ({ ...f, section_spread: e.target.value as SectionSpreadMode }))
+      }
+      helperText={`${SECTION_SPREAD_HINTS[form.section_spread]} Varsayılanı Ayarlar → Okul Bilgileri'nden değiştirebilirsiniz.`}
+    />
+  );
+  // İki seçim de okul varsayılanında duruyorsa katlanır; biri değişmişse ikisi de açık görünür.
+  const ayrintiliVarsayilanda =
+    session.separation_mode === "NONE" && session.section_spread === "TOGETHER";
 
   return (
     <Card elevation={1} className="flex flex-col gap-3 p-5">
@@ -349,20 +375,27 @@ function InfoStep({
         onChange={(e) => setForm((f) => ({ ...f, layout_mode: e.target.value as LayoutModeCode }))}
         helperText="“Kendi dersliğinde” düzeninde salon seçilmez; her şube kendi şube dersliğine yerleşir."
       />
-      {/* Kız/erkek ayrışması (K2): kural OKUL ayarından gelir, burada oturuma
-          özel değiştirilebilir. Okul varsayılanı kapalıysa seçim "Ayrıntılı
-          ayarlar" içinde durur — ihtiyacı olmayan okulda göze batmasın. Klasik
-          düzende hiç gösterilmez: orada kural UYGULANMAZ (K6). */}
+      {/* Kız/erkek ayrışması (K2) ve şube dağılımı (25.10.2026): ikisi de OKUL
+          ayarından gelir, burada oturuma özel değiştirilebilir. İkisi de
+          varsayılandaysa seçimler "Ayrıntılı ayarlar" içinde durur — ihtiyacı
+          olmayan okulda göze batmasın. Klasik düzende hiç gösterilmez: orada
+          ikisinin de anlamı yoktur (K6). */}
       {form.layout_mode !== "HOME_CLASSROOM" &&
-        (session.separation_mode === "NONE" ? (
+        (ayrintiliVarsayilanda ? (
           <details className="rounded-shape-sm border border-outline-variant p-3">
             <summary className="cursor-pointer text-label-large text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
               Ayrıntılı ayarlar
             </summary>
-            <div className="mt-3">{ayrismaSecimi}</div>
+            <div className="mt-3 flex flex-col gap-3">
+              {ayrismaSecimi}
+              {subeDagilimiSecimi}
+            </div>
           </details>
         ) : (
-          ayrismaSecimi
+          <>
+            {ayrismaSecimi}
+            {subeDagilimiSecimi}
+          </>
         ))}
       <label className="flex min-h-9 items-center gap-2 text-body-medium text-on-surface">
         <input

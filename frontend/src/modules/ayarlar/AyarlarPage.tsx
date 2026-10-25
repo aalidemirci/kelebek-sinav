@@ -35,6 +35,8 @@ import CizelgeAtamaMatrisi from "../okul/CizelgeAtamaMatrisi";
 import {
   MAKS_GUNLUK_DERS_SAATI,
   MESLEKI_TURLER,
+  SECTION_SPREAD_HINTS,
+  SECTION_SPREAD_LABELS,
   SEPARATION_HINTS,
   SEPARATION_LABELS,
   VARSAYILAN_GUNLUK_DERS_SAATI,
@@ -49,6 +51,7 @@ import type {
   SchoolType,
   SchoolTypeOption,
   SchoolYear,
+  SectionSpreadMode,
   SeparationMode,
 } from "../okul/api";
 
@@ -708,6 +711,7 @@ function OkulBilgileriPanel() {
   const [gunlukDersSaati, setGunlukDersSaati] = useState(VARSAYILAN_GUNLUK_DERS_SAATI);
   const [sinavSaatleri, setSinavSaatleri] = useState<number[]>([]);
   const [ayrisma, setAyrisma] = useState<SeparationMode>("NONE");
+  const [subeDagilimi, setSubeDagilimi] = useState<SectionSpreadMode>("TOGETHER");
   // Cinsiyeti bilinmeyen öğrenci SAYISI (kimlik değil) — yalnız kural açıkken çekilir.
   const [cinsiyetEksik, setCinsiyetEksik] = useState<number | null>(null);
   const [okulTurleri, setOkulTurleri] = useState<SchoolTypeOption[]>([]);
@@ -733,6 +737,7 @@ function OkulBilgileriPanel() {
         setGunlukDersSaati(c.daily_period_count || VARSAYILAN_GUNLUK_DERS_SAATI);
         setSinavSaatleri(c.exam_period_nos ?? []);
         setAyrisma(c.default_separation_mode ?? "NONE");
+        setSubeDagilimi(c.default_section_spread ?? "TOGETHER");
         setError(null);
       })
       .catch((e: unknown) =>
@@ -794,6 +799,7 @@ function OkulBilgileriPanel() {
         // gönderilen liste sessizce kırpılmaz" kuralı hata döndürürdü.
         exam_period_nos: sinavSaatleri.filter((no) => no <= gunlukDersSaati),
         default_separation_mode: ayrisma,
+        default_section_spread: subeDagilimi,
       });
       snackbar.success("Okul bilgileri kaydedildi. Ders havuzu çizelgeye göre güncellendi.");
     } catch (err) {
@@ -929,6 +935,18 @@ function OkulBilgileriPanel() {
               e-Okul sınıf listesini yeniden aktarın (Kişiler → İçe aktar).
             </p>
           )}
+        </div>
+        <div className="sm:col-span-2">
+          <Select
+            label="Şube dağılımı"
+            value={subeDagilimi}
+            onChange={(e) => setSubeDagilimi(e.target.value as SectionSpreadMode)}
+            options={(Object.keys(SECTION_SPREAD_LABELS) as SectionSpreadMode[]).map((kip) => ({
+              value: kip,
+              label: SECTION_SPREAD_LABELS[kip],
+            }))}
+            helperText={`${SECTION_SPREAD_HINTS[subeDagilimi]} Yeni sınav oturumları bu seçimle açılır; her oturumda ayrıca değiştirilebilir. “Kendi dersliğinde” düzeninde uygulanmaz.`}
+          />
         </div>
         <div className="sm:col-span-2">
           <CizelgeAtamaMatrisi

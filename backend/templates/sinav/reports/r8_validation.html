@@ -65,6 +65,8 @@ sözleşmesi değişmedi: sayı basılır, etiketi Türkçedir.{% endcomment %}
         <td class="v">{{ report.params.strict|yesno:"Açık,Kapalı" }}</td></tr>
     <tr><td class="k">Dönüşümlü oturma (iki sınavlı salonda satranç düzeni)</td>
         <td class="v">{{ report.params.checkerboard|yesno:"Uygulandı,Uygulanmadı" }}</td></tr>
+    <tr><td class="k">Şube dağılımı</td>
+        <td class="v">{{ report.params.section_spread_label }}</td></tr>
     {% endif %}
     <tr><td class="k">Yerleşen öğrenci / yeri kuralla sabitlenen</td>
         <td class="v">{{ report.params.placed }} / {{ report.params.pinned }}</td></tr>

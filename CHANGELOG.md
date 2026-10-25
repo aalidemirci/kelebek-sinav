@@ -6,8 +6,28 @@ sürüm çıkarılırken bu başlık sürüm numarası ve tarihle değiştirilir
 
 ## Yayımlanmadı (taslak)
 
-Bu sürüm veritabanında değişiklik yapmaz; güncellemeden sonra yapmanız gereken
-bir işlem yoktur.
+Bu sürüm veritabanında değişiklik yapar; güncelleme ilk açılışta kendiliğinden
+uygulanır, yapmanız gereken bir işlem yoktur.
+
+### Kelebek dağıtımı
+
+- **Yeni seçenek: şube dağılımı.** Program bir şubenin aynı sınava giren
+  öğrencilerini olabildiğince az salonda toplar; bu bilinçli bir tercihtir
+  (kâğıtlar şube şube kolay ayrılır, tekrarlanan sınavlarda bütün sınıf düzeyi
+  birbirine karışmaz). Şubelerin salonlarda olabildiğince karışmasını isteyen
+  okullar için Ayarlar → Okul Bilgileri'ne **"Şube dağılımı"** seçeneği eklendi:
+  **Şubeler salonlara dağıtılır** seçildiğinde her şubenin öğrencileri oturumdaki
+  bütün salonlara paylaştırılır. Varsayılan **Şubeler bir arada**dır; ayarı
+  değiştirmeyen okulda dağıtım eskisiyle birebir aynıdır.
+- Yeni açılan oturumlar okulun seçimiyle gelir; tek bir sınav için sihirbazın
+  1. adımındaki "Ayrıntılı ayarlar"dan değiştirilebilir (dağıtılmış oturumda önce
+  taslağa alınır). Kelebek kuralı, salon doluluk dengesi ve "aynı dağıtım numarası
+  aynı yerleşimi verir" kuralı iki seçimde de aynıdır. "Kendi dersliğinde"
+  düzeninde seçenek yoktur.
+- Dağıtım doğrulama raporu hangi seçimle dağıtıldığını yazar ("Şube dağılımı").
+- Kız/erkek ayrışmasında "Ayrı salonlar" seçiliyken, sıra yetmediğini söyleyen
+  uyarı dersin adı yerine programın iç kodunu ("12:10" gibi) gösteriyordu;
+  artık dersin adını yazar.
 
 ### Salon sınav evrakı
 

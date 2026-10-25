@@ -10,7 +10,9 @@ Algoritma:
   mevcudu salon kotalarına oranla bölünür; (3) grup içi ŞUBELER first-fit-
   decreasing ile salonlara bütün olarak paketlenir — şube başına salon sayısı
   asgariye iner ("kaynaşma" riski; eski global dilimleme şubeyi 4-6 salona
-  serpiyordu). Salon-içi karışım `_deal_order` harmanıyla korunur.
+  serpiyordu). Seçimlik "şubeler salonlara dağıtılır" kipinde (3) tersine
+  döner: her şube salonlara payı oranında DAĞITILIR (`_spread_section_chunks`).
+  Salon-içi karışım `_deal_order` harmanıyla korunur.
 - Faz 1 — kurucu: koltuklar S-ROTA sırasında gezilir; her koltuğa, akışta
   uygun ilk öğrenci (kuyruk rotasyonu) yerleştirilir. Komşuluk denetimi rota
   sırasından DEĞİL 2D geometriden yapılır (kritik tuzak: rotada uzak iki
@@ -300,6 +302,40 @@ def _pack_section_chunks(
                 chunks[j].extend(students[i : i + take])
                 remaining[j] -= take
                 i += take
+    return chunks
+
+
+def _spread_section_chunks(
+    participants: list[Participant],
+    group_quotas: dict[str, list[int]],
+    room_count: int,
+) -> list[list[Participant]]:
+    """Şubeleri salonlara DAĞITAN Faz 0 kademe 3 (seçimlik kip, 25.10.2026).
+
+    `_pack_section_chunks`ın tersi — kullanıcı isteği: bazı okullar şubelerin
+    salonlarda olabildiğince karışmasını ister. Her grubun içinde şube mevcutları,
+    grubun salon kotalarına oranla en-büyük-kalan ile bölünür (`_group_room_quotas`
+    ın aynısı, anahtar şube): her şube her salona payı kadar öğrenci verir, salon ve
+    grup kotaları TAM korunur (kelebek fizibilitesi değişmez). Şube içi okul no
+    sırası korunur; rng yok, deterministik.
+    """
+    chunks: list[list[Participant]] = [[] for _ in range(room_count)]
+    by_group: dict[str, list[Participant]] = {}
+    for p in participants:
+        by_group.setdefault(p.conflict_group, []).append(p)
+    for key in sorted(by_group, key=lambda k: (-len(by_group[k]), k)):
+        by_section: dict[str, list[Participant]] = {}
+        for p in by_group[key]:
+            by_section.setdefault(f"{p.class_level}/{p.class_section}", []).append(p)
+        shares = _group_room_quotas(
+            {skey: len(students) for skey, students in by_section.items()}, group_quotas[key]
+        )
+        for skey in sorted(by_section):
+            students = by_section[skey]
+            start = 0
+            for j, count in enumerate(shares[skey]):
+                chunks[j].extend(students[start : start + count])
+                start += count
     return chunks
 
 
@@ -645,8 +681,13 @@ def distribute_butterfly(
     preplaced: list[Placement] | None = None,
     previous_seats: PrevSeats | None = None,
     group_labels: Mapping[str, str] | None = None,
+    spread_sections: bool = False,
 ) -> DistributionResult:
     """Kelebek dağıtımı — iki fazlı, seed'li deterministik.
+
+    `spread_sections` (25.10.2026, seçimlik kip): Faz 0'da şubeler salonlara
+    bütün paketlenmek yerine payları oranında DAĞITILIR (`_spread_section_chunks`).
+    Varsayılan kapalıdır ve kapalıyken çıktı bit bit eskisidir (`test_altin_kayit`).
 
     `preplaced` (T6): kural pinli yerleşimler — koltukları kullanım dışıdır,
     komşuluk cezasına girerler, motor onları ASLA taşımaz; sonuç listesine
@@ -721,10 +762,12 @@ def distribute_butterfly(
     # şube-hizalı paketleme. Eski "global akıştan sıralı dilim" yaklaşımı
     # bir şubeyi 4-6 salona serpiyordu; yeni kademeler şubeyi olabildiğince
     # az salonda toplar. Salon-içi grup karışımı _deal_order ile korunur —
-    # kelebek ayrışma fizibilitesi değişmez.
+    # kelebek ayrışma fizibilitesi değişmez. Seçimlik kipte (spread_sections)
+    # yalnız üçüncü kademe değişir: şube salonlara payı oranında dağılır.
     quotas = _room_quotas(n, [_available(r) for r in rooms]) if n else [0] * len(rooms)
     group_quotas = _group_room_quotas(group_sizes, quotas)
-    chunks = _pack_section_chunks(participants, group_quotas, len(rooms))
+    pack = _spread_section_chunks if spread_sections else _pack_section_chunks
+    chunks = pack(participants, group_quotas, len(rooms))
 
     rng = random.Random(seed)  # noqa: S311 — kripto değil; seed'li deterministik arama
     for room, chunk in zip(rooms, chunks, strict=True):

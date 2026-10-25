@@ -78,6 +78,21 @@ class SeparationMode(models.TextChoices):
     ROOM = "ROOM", "Ayrı salonlar"
 
 
+class SectionSpreadMode(models.TextChoices):
+    """Kelebek dağıtımında şubelerin salonlara dağılışı (25.10.2026 kullanıcı isteği).
+
+    "Bir arada" motorun OYS'den gelen davranışıdır: bir sınavın içinde şubeler
+    salonlara BÜTÜN paketlenir (`sinav.engine._pack_section_chunks`); "dağıtılır"
+    her şubeyi oturumdaki salonlara payı oranında böler. Okul varsayılanı burada
+    (`SchoolConfig.default_section_spread`), oturum değeri
+    `sinav.ExamSession.section_spread` alanındadır — seçeneklerin burada durma
+    gerekçesi `SeparationMode` ile aynı. Etiketler docs/sozluk.md'ye tabidir.
+    """
+
+    TOGETHER = "TOGETHER", "Şubeler bir arada"
+    SPREAD = "SPREAD", "Şubeler salonlara dağıtılır"
+
+
 class SchoolType(models.TextChoices):
     """Okul türü — ders havuzunun çizelge kaynağı ve seviye kümesi bundan türetilir (U4).
 
@@ -180,6 +195,15 @@ class SchoolConfig(BaseModel):
         max_length=8,
         choices=SeparationMode.choices,
         default=SeparationMode.NONE,
+    )
+    # Şube dağılımının OKUL varsayılanı (25.10.2026 kullanıcı kararı): ayrışma
+    # kuralıyla aynı düzen — yeni oturum bu değerle açılır, oturumda (yalnız
+    # taslakken) değiştirilir. Varsayılan bugünkü davranıştır (bir arada).
+    default_section_spread = models.CharField(
+        "şube dağılımı varsayılanı",
+        max_length=10,
+        choices=SectionSpreadMode.choices,
+        default=SectionSpreadMode.TOGETHER,
     )
     setup_completed = models.BooleanField("kurulum tamamlandı", default=False)
     app_password_hash = models.CharField(

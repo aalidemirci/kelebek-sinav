@@ -598,6 +598,79 @@ def test_oversized_section_overflows_to_next_room() -> None:
 
 
 # ===========================================================================
+# Şube dağılımı (25.10.2026) — seçimlik "şubeler salonlara dağıtılır" kipi
+# ===========================================================================
+
+
+def _sube_salon_paylari(result: engine.DistributionResult) -> dict[str, list[int]]:
+    """Şube → salon başına öğrenci sayısı (salon kimliği sırasında)."""
+    oda_kimlikleri = sorted({pl.room_id for pl in result.placements})
+    paylar: dict[str, list[int]] = {}
+    for pl in result.placements:
+        label = f"{pl.participant.class_level}/{pl.participant.class_section}"
+        paylar.setdefault(label, [0] * len(oda_kimlikleri))
+        paylar[label][oda_kimlikleri.index(pl.room_id)] += 1
+    return paylar
+
+
+def test_spread_sections_reach_every_room_evenly() -> None:
+    """Dağıtma kipinde her şube HER salona payı kadar öğrenci verir (fark ≤ 1)."""
+    participants = _level_cohort(
+        "1:9", level=9, sections=["A", "B", "C", "D", "E"], per_section=20, base=1
+    ) + _level_cohort(
+        "2:10", level=10, sections=["A", "B", "C", "D", "E"], per_section=20, base=1000
+    )
+    rooms = [_grid_room(rid, 6, 3) for rid in range(1, 7)]  # 6 salon × 36 koltuk
+    result = engine.distribute_butterfly(participants, rooms, seed=42, spread_sections=True)
+
+    assert len(result.placements) == 200
+    for label, paylar in _sube_salon_paylari(result).items():
+        assert min(paylar) >= 1, f"{label} bir salona hiç düşmedi: {paylar}"
+        assert max(paylar) - min(paylar) <= 1, f"{label} dengesiz dağıldı: {paylar}"
+    # Kelebek ayrışması korunur: bağımsız doğrulayıcı sert ihlal görmez.
+    assert validator.validate_seating(_placed(result)).is_valid
+
+
+def test_spread_preserves_room_quotas() -> None:
+    """Dağıtma kipi salon kotalarını bozamaz (E2 doluluk dengesi aynen)."""
+    participants = _level_cohort(
+        "1:9", level=9, sections=["A", "B", "C"], per_section=20, base=1
+    ) + _level_cohort("2:10", level=10, sections=["A", "B"], per_section=15, base=500)
+    rooms = [_grid_room(rid, 5, 3) for rid in range(1, 4)]  # 3 salon × 30 koltuk
+    quotas = engine._room_quotas(len(participants), [len(r.seats) for r in rooms])
+
+    result = engine.distribute_butterfly(participants, rooms, seed=7, spread_sections=True)
+    by_room: dict[int, int] = {}
+    for pl in result.placements:
+        by_room[pl.room_id] = by_room.get(pl.room_id, 0) + 1
+    assert [by_room.get(r.room_id, 0) for r in rooms] == quotas
+
+
+def test_spread_deterministic_and_differs_from_default() -> None:
+    """Aynı seed → aynı yerleşim; kip açıkken şube yayılımı varsayılandan büyüktür."""
+    participants = _level_cohort(
+        "1:9", level=9, sections=["A", "B", "C", "D"], per_section=25, base=1
+    )
+    rooms = [_grid_room(rid, 5, 3) for rid in range(1, 5)]
+    r1 = engine.distribute_butterfly(participants, rooms, seed=11, spread_sections=True)
+    r2 = engine.distribute_butterfly(participants, rooms, seed=11, spread_sections=True)
+
+    def key(pl: engine.Placement) -> tuple[int, int, int, int, int]:
+        return (
+            pl.participant.student_id,
+            pl.room_id,
+            pl.seat.desk_row,
+            pl.seat.desk_col,
+            pl.seat.slot,
+        )
+
+    assert sorted(map(key, r1.placements)) == sorted(map(key, r2.placements))
+    bir_arada = engine.distribute_butterfly(participants, rooms, seed=11)
+    assert max(_rooms_per_section(bir_arada).values()) <= 2
+    assert min(_rooms_per_section(r1).values()) == len(rooms)
+
+
+# ===========================================================================
 # Kaçınılmaz komşuluklar odağa (öğretmen masasına) çekilir — Ö1, 31.08.2026
 # ===========================================================================
 
