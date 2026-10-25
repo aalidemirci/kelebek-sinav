@@ -572,6 +572,27 @@ def test_r1_gozetmen_listesi_teslim_akisi() -> None:
     assert "Yoklama ve tutanaklar nöbetçi müdür yardımcısına verildi." in metin
     assert "Raporlu veya izinli öğrenci sınava alınmadı." in metin
     assert "Evrak ve tutanaklar müdür yardımcısına" not in metin
+    # Zincirin son halkası (kullanıcı talimatı): zümre temsilcisi topladığı evrakı
+    # nöbetçi müdür yardımcısına teslim eder — teslim zincirinde saat + imza satırı.
+    assert "Nöbetçi müdür yrd. — evrakı zümreden teslim alan" in metin
+
+
+def test_r7_tutanak_ogrencinin_kagidiyla_teslim_edilir() -> None:
+    """Kopya/ihlal tutanağı ÖĞRENCİNİN kâğıdıyla birlikte nöbetçi müdür yardımcısına
+    gider (25.10.2026 kullanıcı kararı); salonun sınav evrakı zümreye gider (R1)."""
+    pdf = reports.render_pdf(
+        "sinav/reports/r7_tutanak.html",
+        {
+            "header": _BASLIK,
+            "title": reports.REPORT_TITLES["r7"][0],
+            "sheets": reports.build_tutanak_sheets(_satirlar(4, dersler=("Coğrafya",))),
+        },
+    )
+    metin = " ".join(_pdf_text(pdf).split())
+    # "Tutanak" PDF metninde "T utanak" çıkar (T-u çifti yazı tipi aralığı; basılı
+    # evrakta görünmez) — cümle ikinci sözcükten aranır.
+    assert "öğrencinin sınav kâğıdıyla birlikte nöbetçi müdür yardımcısına teslim edildi." in metin
+    assert "sınav evrakıyla birlikte" not in metin
 
 
 def test_r4_ders_adi_seviyesiz_ve_tek_satir() -> None:

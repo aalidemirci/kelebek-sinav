@@ -1035,6 +1035,21 @@ export default function KilavuzPage() {
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Salon tam dolmadığında boş koltuklar neden önde kalır?
+        </h3>
+        <p>
+          Program boş kalan koltukları rastgele bırakmaz; onları aynı sınava giren öğrencileri
+          birbirinden ayıran <strong>tampon</strong> olarak kullanır. Bu yüzden boşluklar çoğunlukla
+          ön ve orta sıralarda (örneğin 2. ve 4. sırada) şerit gibi toplanır, en arka sıra ise dolu
+          görünebilir. Boşluklar arkaya toplansaydı, komşu sıralara (yan, ön, arka, çapraz) düşen
+          aynı sınav çifti belirgin biçimde artardı: 40 koltuklu bir salonda 24-34 öğrenciyle
+          yapılan denemelerde artış %37 ile üç kat arasındaydı. Salon neredeyse doluysa fark kalmaz.
+          Dağıtım doğrulama raporundaki “Komşu sıralara düşen aynı sınav çifti” satırı bu ölçüyü
+          gösterir. Tek tek değiştirmek isterseniz bir öğrenciyi Yerleşim sekmesinden boş bir
+          koltuğa taşıyabilirsiniz; program kelebek kuralını yine denetler.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
           Başka oturumdan kopyalama
         </h3>
         <p>

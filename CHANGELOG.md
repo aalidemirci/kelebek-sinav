@@ -4,6 +4,29 @@ Paketler GitHub Releases'ta ve indir.okulapp.org'dadır. En yeni sürüm en üst
 yayımlanmamış değişiklikler "Yayımlanmadı (taslak)" başlığı altında toplanır ve
 sürüm çıkarılırken bu başlık sürüm numarası ve tarihle değiştirilir.
 
+## Yayımlanmadı (taslak)
+
+Bu sürüm veritabanında değişiklik yapmaz; güncellemeden sonra yapmanız gereken
+bir işlem yoktur.
+
+### Salon sınav evrakı ve tutanak
+
+- **Teslim zincirine son halka eklendi.** Salon evrakının "Evrak teslim zinciri"
+  bölümünde yeni bir satır var: "Nöbetçi müdür yrd. — evrakı zümreden teslim
+  alan". Zümre temsilcisi salonlardan topladığı sınav evrakını nöbetçi müdür
+  yardımcısına teslim eder; saat ve imza bu satıra yazılır.
+- **İhlal ve kopya tutanağı:** "Tutanak, öğrencinin sınav kâğıdıyla birlikte nöbetçi
+  müdür yardımcısına teslim edildi." Eskiden "sınav evrakıyla birlikte" yazıyordu;
+  salonun sınav evrakı ise zümre temsilcisine teslim edilir.
+
+### Kılavuz
+
+- **"Salon tam dolmadığında boş koltuklar neden önde kalır?"** Program boş kalan
+  koltukları aynı sınava giren öğrencileri ayıran tampon olarak kullanır; bu yüzden
+  boşluklar çoğunlukla ön ve orta sıralarda toplanır. Bölüm bunun nedenini ve
+  boşluklar arkaya toplansaydı komşu sıralardaki aynı sınav çiftinin ne kadar
+  artacağını anlatır.
+
 ## 2026.10.0-beta.5 — 25.10.2026
 
 Bu sürüm veritabanında değişiklik yapar; güncelleme ilk açılışta kendiliğinden

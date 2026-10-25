@@ -1015,6 +1015,14 @@ değiştiyse" ve "bilinçli olarak yapılmayanlar" bu düzende şöyle karşıla
   öncesine "Raporlu veya izinli öğrenci sınava alınmadı" eklendi (md. 12/1-e;
   OKY md. 48/5). Öncesi sütunu bir madde uzundur, sonunda sütununun son hücresi
   boş kalır. Koruma: `test_reports.test_r1_gozetmen_listesi_teslim_akisi`.
+  Aynı gün iki kullanıcı kararı daha: (1) teslim zincirinin SON halkası — zümre
+  temsilcisi topladığı evrakı nöbetçi müdür yardımcısına teslim eder (E bölümünde
+  saat + imza satırı). Kaynak yönerge md. 11/5 bunu YAZMAZ ("zümre başkanınca ders
+  öğretmenlerine dağıtılır"); kullanıcı okul belgelerinin şimdilik değişmemesini,
+  adımın yalnız programda olmasını seçti (çelişki evrakmotoru İŞ 6 brifinde açık iş).
+  (2) R7 "Tutanak, öğrencinin sınav kâğıdıyla birlikte nöbetçi müdür yardımcısına
+  teslim edildi" — eski "sınav evrakıyla birlikte" md. 13/1 ile gerilimliydi;
+  evrakmotoru FR-007 aynı cümleye çekildi.
 * **Kart geometrisi hesaplanır** (`photo_plan_metrics`, kroki deseni): masalı
   satırlar kalan yüksekliği paylaşır, ön cephe bandı ince şerittir. İki düzen
   vardır ve BÜYÜK fotoğraf veren seçilir: DİKEY (fotoğraf üstte — tipik 5×4
