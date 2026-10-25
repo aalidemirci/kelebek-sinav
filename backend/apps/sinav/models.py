@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from django.db import models
 
-from apps.okul.models import SeparationMode
+from apps.okul.models import SectionSpreadMode, SeparationMode
 from shared.crypto import EncryptedCharField
 from shared.models import BaseModel
 
@@ -235,6 +235,16 @@ class ExamSession(BaseModel):
         max_length=8,
         choices=SeparationMode.choices,
         default=SeparationMode.NONE,
+    )
+    # Şube dağılımı (25.10.2026): ayrışma kuralıyla aynı düzen — okul varsayılanıyla
+    # açılır (`SchoolConfig.default_section_spread`), yalnız TASLAKken değiştirilir,
+    # dağıtımda `distribution_params`a yazılır (R8 adını basar). Klasik düzende
+    # anlamı yoktur: şube zaten kendi dersliğindedir.
+    section_spread = models.CharField(
+        "şube dağılımı",
+        max_length=10,
+        choices=SectionSpreadMode.choices,
+        default=SectionSpreadMode.TOGETHER,
     )
     proctors_enabled = models.BooleanField(
         "gözetmen modülü", default=False, help_text="U2 — varsayılan kapalı."

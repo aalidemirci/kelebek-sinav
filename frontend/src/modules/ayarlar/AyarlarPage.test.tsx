@@ -102,6 +102,7 @@ beforeEach(() => {
     has_prep_class: false,
     level_programs: {},
     default_separation_mode: "NONE",
+    default_section_spread: "TOGETHER",
     setup_completed: true,
   });
   oapi.genderCoverage.mockResolvedValue({ missing: 0, total: 0 });
@@ -237,6 +238,8 @@ describe("AyarlarPage — okul bilgileri", () => {
         exam_period_nos: [],
         // Kız/erkek ayrışması varsayılanı (20.09.2026) — dokunulmadıysa "Kapalı".
         default_separation_mode: "NONE",
+        // Şube dağılımı varsayılanı (25.10.2026) — dokunulmadıysa "bir arada".
+        default_section_spread: "TOGETHER",
       }),
     );
     // Hazırlık değişince plan yeni seçimle önizlenir.
@@ -267,6 +270,27 @@ describe("AyarlarPage — okul bilgileri", () => {
     await waitFor(() =>
       expect(oapi.updateSchoolConfig).toHaveBeenCalledWith(
         expect.objectContaining({ default_separation_mode: "DESK" }),
+      ),
+    );
+  });
+
+  it("şube dağılımı varsayılanı seçilir ve kaydedilir", async () => {
+    oapi.updateSchoolConfig.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("tab", { name: /Okul Bilgileri/ }));
+    const secim = await screen.findByLabelText("Şube dağılımı");
+    expect(secim).toHaveValue("TOGETHER");
+    // İç kod kullanıcıya gösterilmez; seçenek adı sözlükten gelir.
+    expect(screen.getByRole("option", { name: "Şubeler bir arada" })).toBeInTheDocument();
+
+    await user.selectOptions(secim, "SPREAD");
+    expect(screen.getByText(/bütün salonlara paylaştırılır/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() =>
+      expect(oapi.updateSchoolConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ default_section_spread: "SPREAD" }),
       ),
     );
   });

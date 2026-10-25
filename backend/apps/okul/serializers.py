@@ -73,6 +73,7 @@ class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
             "bell_flow",
             "afternoon_bell_flow",
             "default_separation_mode",
+            "default_section_spread",
             "setup_completed",
         ]
         read_only_fields = ["setup_completed"]

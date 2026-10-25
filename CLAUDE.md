@@ -576,6 +576,19 @@
   seed = `seed + bölüm sırası`) — motor tek salon bilir. Motor çıktısının
   kural KAPALIYKEN değişmediği `test_altin_kayit.py` ile bit bit kilitlidir;
   o kaydı yenilemek AYRI bir karardır.
+- **Şube dağılımı seçimliktir, varsayılan "bir arada"dır** (25.10.2026 kullanıcı
+  kararları; kip `okul.SectionSpreadMode`, okul varsayılanı
+  `SchoolConfig.default_section_spread`, oturum alanı `ExamSession.section_spread` —
+  ayrışma kuralının düzeni): şubenin az salonda toplanması BİLİNÇLİDİR (OYS Tur 243
+  talep 6 — "kaynaşma" riski; `_pack_section_chunks`). "Şubeler salonlara dağıtılır"
+  yalnız Faz 0'ın üçüncü kademesini değiştirir (`_spread_section_chunks`: şube mevcudu
+  grubun salon kotalarına `_group_room_quotas` ile bölünür) — salon/grup kotaları,
+  kelebek fizibilitesi, Faz 1-2 ve "aynı seed → aynı dağıtım" aynıdır; varsayılan
+  kip `test_altin_kayit.py` kilidinin altındadır. Klasik düzende etkisizdir
+  (`effective_section_spread`), değer yalnız taslakta değişir, dağıtım anındaki kip
+  `distribution_params["section_spread"]`a yazılır ve R8'e ADI basılır; anahtarı
+  olmayan eski dağıtım "bir arada" okunur (kip yokken motorun tek davranışı).
+  "Ayrı salonlar" yolu (`_distribute_separate_rooms`) kipi her bölüme geçirir.
 - **Koltuk sabitleme koordinattır:** `(desk_row, desk_col, slot)` — `seat_no`
   numaralandırma düzeni değişince kayar. "Tek başına" kardeş koltukları motor
   girdisinden düşürür; sahte `SeatAssignment` yazılmaz.

@@ -1011,6 +1011,30 @@ export default function KilavuzPage() {
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Şubelerin salonlara dağılışı
+        </h3>
+        <p>
+          Kelebek dağıtımında program, bir şubenin aynı sınava giren öğrencilerini olabildiğince az
+          salonda toplar: tipik bir okulda bir şube bir ya da iki salona gider, salonun içinde ise
+          sınavlar yine karışık oturur. Böylece sınav sonunda kâğıtlar şube şube kolay ayrılır ve
+          tekrarlanan sınavlarda bütün sınıf düzeyi birbirine karışmaz. Bazı okullar ise bir şubenin
+          öğrencilerinin olabildiğince farklı salonlara dağılmasını ister. Bunun için{" "}
+          <Ekran to="/ayarlar?tab=okul">Ayarlar → Okul Bilgileri</Ekran> sayfasındaki{" "}
+          <strong>“Şube dağılımı”</strong> seçeneğini <strong>Şubeler salonlara dağıtılır</strong>{" "}
+          yapın: her şubenin öğrencileri oturumdaki salonlara, salonların büyüklüğüne göre
+          paylaştırılır (eşit büyüklükte 16 salonlu bir oturumda 32 kişilik bir şube her salona
+          ikişer öğrenci verir). Varsayılan <strong>Şubeler bir arada</strong>dır.
+        </p>
+        <p>
+          Yeni açtığınız her sınav oturumu bu seçimle gelir; tek bir sınav için sihirbazın 1.
+          adımındaki “Ayrıntılı ayarlar”dan değiştirebilirsiniz. Seçim yalnız öğrencilerin hangi
+          salona gideceğini değiştirir: kelebek kuralı, salonların doluluk dengesi ve “aynı dağıtım
+          numarası aynı yerleşimi verir” kuralı iki seçimde de aynıdır. Dağıtılmış bir oturumda
+          değiştirmek için oturumu önce taslağa alın. Dağıtım doğrulama raporu hangi seçimle
+          dağıtıldığını yazar. <strong>“Kendi dersliğinde”</strong> düzeninde seçenek gösterilmez.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
           Başka oturumdan kopyalama
         </h3>
         <p>

@@ -30,7 +30,13 @@ from apps.dersler import selectors as ders_selectors
 from apps.dersler import services as ders_services
 from apps.okul import normalize as okul_normalize
 from apps.okul import selectors as okul_selectors
-from apps.okul.models import ClassSection, Personnel, SchoolConfig, SeparationMode
+from apps.okul.models import (
+    ClassSection,
+    Personnel,
+    SchoolConfig,
+    SectionSpreadMode,
+    SeparationMode,
+)
 from apps.sinav import (
     booklet,
     engine,
@@ -507,17 +513,23 @@ def create_exam_session(
     layout_mode: str = LayoutMode.BUTTERFLY,
     proctors_enabled: bool = False,
     separation_mode: str | None = None,
+    section_spread: str | None = None,
 ) -> ExamSession:
     """Yeni TASLAK oturum oluşturur (Adım 1).
 
-    `separation_mode` verilmezse OKUL VARSAYILANI uygulanır (K2 kullanıcı
-    kararı): ihtiyacı olan okul ayarı bir kez yapar, her oturumda seçmez.
+    `separation_mode` ve `section_spread` verilmezse OKUL VARSAYILANI uygulanır
+    (K2 kullanıcı kararı; şube dağılımı 25.10.2026'da aynı düzene katıldı):
+    ihtiyacı olan okul ayarı bir kez yapar, her oturumda seçmez.
     """
     cleaned = " ".join((name or "").split())
     if not cleaned:
         raise ValidationError("Oturum adı boş olamaz.")
-    if separation_mode is None:
-        separation_mode = SchoolConfig.load().default_separation_mode
+    if separation_mode is None or section_spread is None:
+        config = SchoolConfig.load()
+        if separation_mode is None:
+            separation_mode = config.default_separation_mode
+        if section_spread is None:
+            section_spread = config.default_section_spread
     session: ExamSession = ExamSession.objects.create(
         name=cleaned,
         exam_date=exam_date,
@@ -528,6 +540,7 @@ def create_exam_session(
         layout_mode=layout_mode,
         proctors_enabled=proctors_enabled,
         separation_mode=separation_mode,
+        section_spread=section_spread,
     )
     return session
 
@@ -547,6 +560,7 @@ def update_exam_session(session: ExamSession, **fields: Any) -> ExamSession:
         "layout_mode",
         "proctors_enabled",
         "separation_mode",
+        "section_spread",
     }
     unknown = set(fields) - allowed - {"term_id"}
     if unknown:
@@ -1165,6 +1179,17 @@ def effective_separation_mode(session: ExamSession) -> str:
     return session.separation_mode or SeparationMode.NONE
 
 
+def effective_section_spread(session: ExamSession) -> str:
+    """Oturumda GERÇEKTEN uygulanacak şube dağılımı (25.10.2026).
+
+    Yalnız kelebek düzeninde anlamlıdır: klasik düzende şube zaten kendi
+    dersliğindedir, etkin değer "bir arada"dır (ayrışma kuralının K6 deseni).
+    """
+    if session.layout_mode != LayoutMode.BUTTERFLY:
+        return SectionSpreadMode.TOGETHER
+    return session.section_spread or SectionSpreadMode.TOGETHER
+
+
 def _with_separation_keys(
     pool: list[participants.Participant],
 ) -> tuple[list[participants.Participant], int]:
@@ -1250,18 +1275,29 @@ def _distribute_separate_rooms(
     strict: bool,
     preplaced: list[engine.Placement],
     previous: engine.PrevSeats,
+    group_labels: dict[str, str],
+    spread_sections: bool = False,
 ) -> engine.DistributionResult:
     """AYRI SALON kipi: her bölüm kendi salonlarında AYRI dağıtılır, sonuç birleşir.
 
     Alt seed'ler ana seed'den TÜRETİLİR (`seed + bölüm sırası`) — "aynı seed →
     aynı dağıtım" sözleşmesi korunur. Jokerler (anahtarı boş) kapasitesi en
     boş bölüme eklenir (K4); tek anahtar varsa kip fiilen devre dışıdır ve
-    dağıtım olağan yolundan geçer.
+    dağıtım olağan yolundan geçer. Şube dağılımı her bölümün İÇİNDE uygulanır.
+    `group_labels` uyarı metnindeki grup anahtarını ders adına çevirir (bu yol
+    eskiden etiket geçirmiyor, uyarıda ham anahtar basılıyordu).
     """
     bolumler = _allocate_rooms_by_separation(pool, rooms, preplaced)
     if len(bolumler) < 2:
         return engine.distribute_butterfly(
-            pool, rooms, seed=seed, strict=strict, preplaced=preplaced, previous_seats=previous
+            pool,
+            rooms,
+            seed=seed,
+            strict=strict,
+            preplaced=preplaced,
+            previous_seats=previous,
+            group_labels=group_labels,
+            spread_sections=spread_sections,
         )
 
     havuzlar: dict[str, list[participants.Participant]] = {k: [] for k in bolumler}
@@ -1291,6 +1327,8 @@ def _distribute_separate_rooms(
             strict=strict,
             preplaced=bolum_pinleri,
             previous_seats=previous,
+            group_labels=group_labels,
+            spread_sections=spread_sections,
         )
         birlesik.placements.extend(parca.placements)
         birlesik.warnings.extend(parca.warnings)
@@ -1335,6 +1373,9 @@ def distribute_session(
     bilinmeyen_cinsiyet = 0
     if separation != SeparationMode.NONE:
         pool, bilinmeyen_cinsiyet = _with_separation_keys(pool)
+    # Şube dağılımı (25.10.2026): yalnız motorun Faz 0'ını değiştirir; kip DAĞITIM
+    # ANINDAKİ değeriyle `distribution_params`a yazılır (R8 adını basar).
+    spread = effective_section_spread(session)
 
     if seed is None:
         seed = random.randrange(1, 1_000_000)  # noqa: S311 — kripto değil; dağıtım seed'i
@@ -1370,6 +1411,8 @@ def distribute_session(
         pinned_ids = {pl.participant.student_id for pl in preplaced}
         free_pool = [p for p in pool if p.student_id not in pinned_ids]
         previous = _previous_seats_map(session, [p.student_id for p in free_pool])
+        etiketler = conflict_group_labels({p.conflict_group for p in pool})
+        dagit = spread == SectionSpreadMode.SPREAD
         try:
             if separation == SeparationMode.ROOM:
                 result = _distribute_separate_rooms(
@@ -1379,6 +1422,8 @@ def distribute_session(
                     strict=strict,
                     preplaced=preplaced,
                     previous=previous,
+                    group_labels=etiketler,
+                    spread_sections=dagit,
                 )
             else:
                 result = engine.distribute_butterfly(
@@ -1388,7 +1433,8 @@ def distribute_session(
                     strict=strict,
                     preplaced=preplaced,
                     previous_seats=previous,
-                    group_labels=conflict_group_labels({p.conflict_group for p in pool}),
+                    group_labels=etiketler,
+                    spread_sections=dagit,
                 )
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
@@ -1475,6 +1521,7 @@ def distribute_session(
         "layout_mode": session.layout_mode,
         # R8 kuralın ADINI buradan basar; arşiv oturumun kipi canlı ayara bağlı kalmaz.
         "separation_mode": separation,
+        "section_spread": spread,
         "placed": len(result.placements),
         "pinned": len(pinned_ids),
         "rooms_per_section": {
@@ -2810,6 +2857,11 @@ def _validation_report_context(
             # ihlal listesinde). Cinsiyet, sayım ya da öğrenci işareti BASILMAZ.
             "separation_label": SeparationMode(
                 str(params.get("separation_mode") or SeparationMode.NONE)
+            ).label,
+            # Şube dağılımı (25.10.2026): kipin ADI. Anahtarı olmayan eski dağıtım
+            # "bir arada" yapılmıştır (kip yokken motorun tek davranışı buydu).
+            "section_spread_label": SectionSpreadMode(
+                str(params.get("section_spread") or SectionSpreadMode.TOGETHER)
             ).label,
         },
         group_labels=group_labels,

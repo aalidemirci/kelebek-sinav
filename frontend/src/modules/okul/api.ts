@@ -132,6 +132,8 @@ export interface SchoolConfig {
   exam_period_nos: number[];
   /** Kız/erkek ayrışmasının OKUL varsayılanı; yeni oturumlar bununla açılır. */
   default_separation_mode: SeparationMode;
+  /** Şube dağılımının OKUL varsayılanı; yeni oturumlar bununla açılır. */
+  default_section_spread: SectionSpreadMode;
   /** Eğitim modeli — ikili eğitimde aynı ders saati iki farklı zamana denk gelir. */
   education_model: EducationModel;
   /** Ders saati listesi (sabah / tam gün); boşsa backend varsayılanı üretir. */
@@ -198,6 +200,25 @@ export const SEPARATION_HINTS: Record<SeparationMode, string> = {
   NONE: "Kız ve erkek öğrenciler için ayrı bir kural uygulanmaz.",
   DESK: "Kız ve erkek öğrenciler aynı sıraya oturtulmaz; salonlar karışıktır.",
   ROOM: "Kız ve erkek öğrenciler ayrı salonlara yerleştirilir; daha çok salon gerekebilir.",
+};
+
+/**
+ * Şube dağılımı (25.10.2026) — kelebek dağıtımında bir şubenin öğrencileri
+ * salonlarda toplanır mı, salonlara mı dağıtılır. Etiketler docs/sozluk.md'ye
+ * tabidir; iç kod (TOGETHER/SPREAD) kullanıcıya GÖSTERİLMEZ.
+ */
+export type SectionSpreadMode = "TOGETHER" | "SPREAD";
+
+export const SECTION_SPREAD_LABELS: Record<SectionSpreadMode, string> = {
+  TOGETHER: "Şubeler bir arada",
+  SPREAD: "Şubeler salonlara dağıtılır",
+};
+
+export const SECTION_SPREAD_HINTS: Record<SectionSpreadMode, string> = {
+  TOGETHER:
+    "Bir şubenin öğrencileri olabildiğince az salonda toplanır; kâğıtlar şube şube kolay ayrılır.",
+  SPREAD:
+    "Her şubenin öğrencileri oturumdaki bütün salonlara paylaştırılır; kâğıtlar salonlardan karışık döner.",
 };
 
 /** Cinsiyet — YALNIZ kız/erkek ayrışması kuralı için; hiçbir belgeye basılmaz. */

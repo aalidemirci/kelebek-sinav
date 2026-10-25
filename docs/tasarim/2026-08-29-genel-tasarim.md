@@ -319,6 +319,15 @@ FK DEĞİL şifreli metindir ve satırlar KATI silinir.
 **Motor sözleşmeleri (aynen korunur):**
 - Çakışma birimi `(course, level)`; anahtar `"<course_id>:<level>"`, ortak
   kitapçıkta `"<course_id>:*"`. Şube kısıt DEĞİL; motor yalnız grup anahtarı görür.
+- **Şube dağılımı (25.10.2026, kullanıcı isteği):** Faz 0 şubeyi salonlara BÜTÜN
+  paketler (OYS Tur 243 talep 6 — tekrarlanan sınavlarda düzey genelinde
+  "kaynaşma" riski; yan kazancı kâğıdın şube şube kolay ayrılması). Karışım
+  isteyen okul için seçimlik kip: "Şubeler salonlara dağıtılır" — şube mevcudu
+  grubun salon kotalarına oranla bölünür (`engine._spread_section_chunks`).
+  Kullanıcı kararları: ayar okul varsayılanı + oturumda (ayrışma kuralının
+  düzeni), varsayılan "bir arada" (güncelleyen okulun dağıtımı değişmez). Yalnız
+  üçüncü kademe değişir; kotalar, kelebek fizibilitesi ve determinizm aynıdır.
+  R8 seçimin adını basar.
 - Sert kısıt: aynı gruptan iki öğrenci **aynı masada** oturamaz — denetim
   `(desk_row, desk_col)` kimliğinden, mesafeden değil. Katı mod 1. halkayı
   (Chebyshev ≤ 1) serte çevirir.
