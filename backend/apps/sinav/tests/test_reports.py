@@ -561,6 +561,19 @@ def test_r1_karisik_salonda_ders_kodu_ve_aciklamasi() -> None:
     assert "DERS KODLARI:" not in tek
 
 
+def test_r1_gozetmen_listesi_teslim_akisi() -> None:
+    """Gözetmen kontrol listesi teslim akışını imza bloğuyla AYNI anlatır (25.10.2026):
+    sınav evrakı sayılarak zümre temsilcisine, yoklama ve tutanaklar nöbetçi müdür
+    yardımcısına gider. Eski "Evrak ve tutanaklar müdür yardımcısına" maddesi okul
+    uygulama yönergesiyle (md. 11/3, 13/1) ve yaprağın kendi imza bloğuyla çelişiyordu.
+    Raporlu/izinli öğrenci sınava alınmaz (OKY md. 48/5) maddesi sınav öncesindedir."""
+    metin = " ".join(_pdf_text(_r1_pdf(12, 3, 2, ("Coğrafya",))).split())
+    assert "Evrak, zümre temsilcisiyle sayılıp ona teslim edildi." in metin
+    assert "Yoklama ve tutanaklar nöbetçi müdür yardımcısına verildi." in metin
+    assert "Raporlu veya izinli öğrenci sınava alınmadı." in metin
+    assert "Evrak ve tutanaklar müdür yardımcısına" not in metin
+
+
 def test_r4_ders_adi_seviyesiz_ve_tek_satir() -> None:
     """Şube duyurusunda ders adı SEVİYESİZ basılır (şube tek seviyededir) —
     `course_plain` doluysa o kullanılır; aynı yalın ada inen satırlar Ders sütunu açmaz."""

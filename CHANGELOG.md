@@ -4,6 +4,24 @@ Paketler GitHub Releases'ta ve indir.okulapp.org'dadır. En yeni sürüm en üst
 yayımlanmamış değişiklikler "Yayımlanmadı (taslak)" başlığı altında toplanır ve
 sürüm çıkarılırken bu başlık sürüm numarası ve tarihle değiştirilir.
 
+## Yayımlanmadı (taslak)
+
+Bu sürüm veritabanında değişiklik yapmaz; güncellemeden sonra yapmanız gereken
+bir işlem yoktur.
+
+### Salon sınav evrakı
+
+- **Gözetmen işlemleri listesi teslim akışını doğru anlatır.** "Sınav sonunda"
+  sütunundaki "Evrak ve tutanaklar müdür yardımcısına teslim edildi" maddesi,
+  aynı yaprağın imza bloğuyla çelişiyordu: sınav evrakı sayılarak zümre
+  temsilcisine teslim edilir, nöbetçi müdür yardımcısına yalnız yoklama ve
+  tutanaklar verilir. Maddeler artık "Evrak, zümre temsilcisiyle sayılıp ona
+  teslim edildi." ve "Yoklama ve tutanaklar nöbetçi müdür yardımcısına verildi."
+  biçimindedir.
+- **"Sınav öncesi" sütununa yeni madde:** "Raporlu veya izinli öğrenci sınava
+  alınmadı." (Ortaöğretim Kurumları Yönetmeliği md. 48/5). Evrak yine çift yüz
+  basıldığında salon başına tek kâğıttır.
+
 ## 2026.10.0-beta.4 — 24.10.2026
 
 Bu sürüm veritabanında değişiklik yapmaz; güncellemeden sonra yapmanız gereken

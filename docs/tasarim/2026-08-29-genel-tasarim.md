@@ -999,6 +999,13 @@ değiştiyse" ve "bilinçli olarak yapılmayanlar" bu düzende şöyle karşıla
   gözetmen kontrol listesi, sayım ve teslim zincirini taşır; kontrol listesi
   maddeleri plana göre yeniden yazıldı ("Öğrenciler fotoğrafla eşleştirilip
   oturtuldu", "Plandaki imzalar alındı; girmeyenler işaretlendi").
+  25.10.2026: listenin teslim akışı imza bloğuyla eşitlendi — sınav evrakı
+  sayılarak ZÜMRE temsilcisine, yoklama ve tutanaklar NÖBETÇİ müdür
+  yardımcısına (eski "Evrak ve tutanaklar müdür yardımcısına" maddesi kaynak
+  yönergeyle çelişiyordu: evrakmotoru SAL-SNV-YN-001 md. 11/3, 13/1); sınav
+  öncesine "Raporlu veya izinli öğrenci sınava alınmadı" eklendi (md. 12/1-e;
+  OKY md. 48/5). Öncesi sütunu bir madde uzundur, sonunda sütununun son hücresi
+  boş kalır. Koruma: `test_reports.test_r1_gozetmen_listesi_teslim_akisi`.
 * **Kart geometrisi hesaplanır** (`photo_plan_metrics`, kroki deseni): masalı
   satırlar kalan yüksekliği paylaşır, ön cephe bandı ince şerittir. İki düzen
   vardır ve BÜYÜK fotoğraf veren seçilir: DİKEY (fotoğraf üstte — tipik 5×4
