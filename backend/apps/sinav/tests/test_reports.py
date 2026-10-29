@@ -165,7 +165,13 @@ def test_karma_seviyeli_oturumda_ders_adi_seviyeli_basilir() -> None:
     for code in ("r1", "r7"):
         text = " ".join(_pdf_text(services.render_session_report(session, code).content).split())
         assert "Coğrafya — 9. Sınıf" in text, f"{code}: 9. sınıf etiketi yok"
-        assert "Coğrafya — 10. Sınıf" in text, f"{code}: 10. sınıf etiketi yok"
+        # R7 künyesi aynı dersin seviyelerini tek başlıkta toplar (29.10.2026):
+        # "Coğrafya — 9. Sınıf (n), 10. Sınıf (m)" — seviyeler yine AYRI görünür.
+        assert re.search(
+            r"Coğrafya — (?:9\. Sınıf \(\d+\), )?10\. Sınıf", text
+        ), f"{code}: 10. sınıf etiketi yok"
+    tutanak = " ".join(_pdf_text(services.render_session_report(session, "r7").content).split())
+    assert "Coğrafya (" not in tutanak, "iki seviyenin kitapçık grupları tek satırda birleşti"
 
 
 def test_evrakta_sinav_suresi_basilir() -> None:
@@ -722,6 +728,40 @@ def test_r4_sube_duyurusu_tek_yaprak() -> None:
         assert _sayfa_sayisi(pdf) == 1, f"{len(dersler)} derslik duyuru tek sayfa değil"
 
 
+@pytest.mark.parametrize("ogrenci", [27, 40])
+@pytest.mark.parametrize("salon_sayisi", [4, 13, 24])
+@pytest.mark.parametrize(
+    "dersler", [("Coğrafya",), ("Seçmeli Matematik", "Temel Matematik")], ids=["tek", "iki-ders"]
+)
+def test_r4_cok_salona_dagilan_sube_tek_yaprak(
+    ogrenci: int, salon_sayisi: int, dersler: tuple[str, ...]
+) -> None:
+    """Şube çok salona dağılınca salon dağılımı özeti SARAR; duyuru yine tek yaprak.
+
+    29.10.2026 saha bulgusu: 13 salona dağılan 27 öğrencilik şubede özet dört satıra
+    çıktı, imza satırı ikinci sayfaya taştı — bütçe özeti tek satır sayıyordu. Salon
+    adları şube dersliği biçimindedir ("11/A Dersliği"): kısa "D-201" adlarıyla
+    sınayan eski test özeti hiç sardırmıyordu. Kırılırsa bakılacak yer:
+    `reports._ANN_SPREAD_CHARS_PER_LINE` / `_ANN_SPREAD_LINE_PX`.
+    """
+    salonlar = [f"{9 + i // 6}/{'ABCDEF'[i % 6]} Dersliği" for i in range(salon_sayisi)]
+    satirlar = [
+        reports.SeatRow(
+            **{**vars(r), "class_label": "11/G", "room_name": salonlar[i % salon_sayisi]}
+        )
+        for i, r in enumerate(_satirlar(ogrenci, dersler=dersler))
+    ]
+    sheets = reports.build_announcements(satirlar)
+    assert str(sheets[0]["room_summary"]).count("Dersliği") == min(salon_sayisi, ogrenci)
+    pdf = reports.render_pdf(
+        "sinav/reports/r4_announcement.html",
+        {"header": _BASLIK, "title": reports.REPORT_TITLES["r4"][0], "sheets": sheets},
+    )
+    assert (
+        _sayfa_sayisi(pdf) == 1
+    ), f"{salon_sayisi} salona dağılan şubenin duyurusu tek sayfa değil"
+
+
 def test_r1_birlesik_evrak_dort_belgenin_isini_tasir() -> None:
     """Birleşik evrak eski R1 + R2 + R7 + R9'un işlerini TEK belgede taşımalı.
 
@@ -755,6 +795,69 @@ def test_r7_tutanak_bos_formdur() -> None:
     assert "D-201 Dersliği" in metin  # salon künyesi basılı gelir
     for ad in _UZUN_ADLAR:
         assert ad not in metin, "tutanak boş formdur — öğrenci verisi basılmaz"
+
+
+#: Seviye ekli dört ders × iki düzey + tek seviyeli iki uzun seçmeli (29.10.2026 saha
+#: vakası: 05.11 oturumunda altı, 11.11'de dört seviye ekli etiket tutanağı taşırdı).
+_SEVIYELI_DERSLER: tuple[str, ...] = tuple(
+    f"{ad} — {duzey}. Sınıf"
+    for ad in ("Din Kültürü ve Ahlak Bilgisi", "Matematik", "Seçmeli Matematik", "Temel Matematik")
+    for duzey in (9, 10)
+) + ("Seçmeli Peygamberimizin Hayatı", "Seçmeli Türk Dili ve Edebiyatı")
+#: Gruplanamayan (birbirinden farklı) on altı uzun ders — tek salonda uç durum.
+_FARKLI_UZUN_DERSLER: tuple[str, ...] = (
+    "Seçmeli Peygamberimizin Hayatı",
+    "Seçmeli Türk Dili ve Edebiyatı",
+    "Seçmeli İkinci Yabancı Dil",
+    "Seçmeli Birinci Yabancı Dil",
+    "T.C. İnkılap Tarihi ve Atatürkçülük",
+    "Sağlık Bilgisi ve Trafik Kültürü",
+    "Proje Tasarımı ve Uygulamaları",
+    "Astronomi ve Uzay Bilimleri",
+    "Türk Kültür ve Medeniyet Tarihi",
+    "Kur'an-ı Kerim'in Anlam Dünyası",
+    "İklim, Çevre ve Yenilikçi Çözümler",
+    "Sürdürülebilir Tarım ve Gıda Güvenliği",
+    "Türk Sosyal Hayatında Aile",
+    "Bilişim Teknolojileri ve Yazılım",
+    "Demokrasi ve İnsan Hakları",
+    "Klasik Ahlak Metinleri",
+)
+
+
+def test_r7_ders_ozeti_seviyeleri_ders_basina_toplar() -> None:
+    """Aynı dersin seviyeleri tutanak künyesinde TEK başlık altındadır (29.10.2026)."""
+    dersler = ("Coğrafya — 9. Sınıf", "Coğrafya — 10. Sınıf", "Seçmeli Peygamberimizin Hayatı")
+    sheet = reports.build_tutanak_sheets(_satirlar(9, dersler=dersler))[0]
+    assert sheet["course_summary"] == (
+        "Coğrafya — 9. Sınıf (3), 10. Sınıf (3) · Seçmeli Peygamberimizin Hayatı (3)"
+    )
+    assert sheet["summary_dense"] is False
+
+
+@pytest.mark.parametrize(
+    "dersler",
+    [_SEVIYELI_DERSLER, _FARKLI_UZUN_DERSLER[:10], _FARKLI_UZUN_DERSLER],
+    ids=["seviye-ekli-on-etiket", "on-farkli-ders", "on-alti-farkli-ders"],
+)
+def test_r7_uzun_ders_listesinde_tutanak_tek_yaprak(dersler: tuple[str, ...]) -> None:
+    """Ders listesi uzayınca tutanak ikinci yaprağa TAŞMAZ (29.10.2026 saha bulgusu).
+
+    Liste dörtte bir genişlikteki hücrede dokuz satıra sarıyordu; artık tam genişlikte
+    kendi satırında, seviyeleri ders başına toplar, çok uzunsa küçük puntoya iner.
+    Kırılırsa bakılacak yer: `reports._R7_DENSE_SUMMARY_CHARS` ve r7 şablonunun A bölümü.
+    """
+    pdf = reports.render_pdf(
+        "sinav/reports/r7_tutanak.html",
+        {
+            "header": _BASLIK,
+            "title": reports.REPORT_TITLES["r7"][0],
+            "sheets": reports.build_tutanak_sheets(_satirlar(40, dersler=dersler)),
+        },
+    )
+    assert _sayfa_sayisi(pdf) == 1, f"{len(dersler)} dersli salonda tutanak tek yaprak değil"
+    metin = " ".join(_pdf_text(pdf).split())
+    assert "Nöbetçi Müdür Yardımcısı" in metin  # imza üçlüsü aynı yaprakta
 
 
 def test_kaldirilan_rapor_kodlari_geri_gelmedi() -> None:

@@ -20,6 +20,8 @@ bilinemez — kişisel veri de basılmaz).{% endcomment %}
   .tur td { height: 12pt; }
   .islem td { height: 12pt; }
   .pre { font-weight: bold; color: var(--pr-ink); }
+  /* Çok uzun ders listesi (reports._R7_DENSE_SUMMARY_CHARS) — tutanak tek yaprak kalsın. */
+  .pre.dense { font-size: 7.4pt; line-height: 1.1; }
 </style>
 {% endblock %}
 {% block content %}
@@ -44,8 +46,14 @@ bilinemez — kişisel veri de basılmaz).{% endcomment %}
       <td class="pre" colspan="3">{{ header.exam_name }} · {{ header.exam_date }} · {{ header.start_time }}</td>
     </tr>
     <tr>
-      <td class="k">Salon</td><td class="pre">{{ sheet.room_name }}</td>
-      <td class="k">Sınavı yapılan ders(ler)</td><td class="pre">{{ sheet.course_summary }}</td>
+      <td class="k">Salon</td><td class="pre" colspan="3">{{ sheet.room_name }}</td>
+    </tr>
+    {% comment %}Ders listesi TAM GENİŞLİKTE kendi satırında (29.10.2026): dörtte bir
+    genişlikteki hücrede altı derslik salonun listesi dokuz satıra sarıp tutanağı
+    ikinci yaprağa taşırıyordu (reports._course_summary_by_course).{% endcomment %}
+    <tr>
+      <td class="k">Sınavı yapılan ders(ler)</td>
+      <td class="pre{% if sheet.summary_dense %} dense{% endif %}" colspan="3">{{ sheet.course_summary }}</td>
     </tr>
     <tr>
       <td class="k">Öğrencinin adı soyadı</td><td class="fill"></td>

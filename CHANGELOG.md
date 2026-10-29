@@ -4,6 +4,23 @@ Paketler GitHub Releases'ta ve indir.okulapp.org'dadır. En yeni sürüm en üst
 yayımlanmamış değişiklikler "Yayımlanmadı (taslak)" başlığı altında toplanır ve
 sürüm çıkarılırken bu başlık sürüm numarası ve tarihle değiştirilir.
 
+## Yayımlanmadı (taslak)
+
+Bu sürüm veritabanında değişiklik yapmaz; güncellemeden sonra yapmanız gereken
+bir işlem yoktur.
+
+### Sınav evrakı
+
+- **Şube sınav duyurusu tek sayfada kalıyor.** Şubenin öğrencileri çok sayıda
+  salona dağıldığında üstteki "şube aşağıdaki salonlara dağıtılmıştır" satırı
+  birkaç satıra uzuyor ve duyurunun imza satırı ikinci sayfaya taşıyordu. Öğrenci
+  listesi artık bu satırın uzunluğuna göre sıklaşır; duyuru tek sayfa kalır.
+- **İhlal ve kopya tutanağı salon başına tek yaprak.** Salonda dört-altı ayrı sınav
+  (örneğin aynı dersin birkaç sınıf düzeyi) olduğunda "Sınavı yapılan ders(ler)"
+  listesi dar bir hücrede sarıyor, tutanak ikinci yaprağa taşıyordu. Liste artık
+  kendi satırında, tam genişlikte; aynı dersin sınıf düzeyleri tek başlıkta toplanır
+  ("Matematik — 9. Sınıf (7), 10. Sınıf (5)"), çok uzun listede yazı küçülür.
+
 ## 2026.10.0-beta.6 — 25.10.2026
 
 Bu sürüm veritabanında değişiklik yapmaz; güncellemeden sonra yapmanız gereken

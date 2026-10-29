@@ -964,6 +964,16 @@ garanti `test_reports.py::test_r1_salon_evraki_iki_yaprak` ile sabittir.
 Birim uyarısı: WeasyPrint iç birimi CSS px'tir (1 pt = 4/3 px) ve tablo
 hücresine `height` vermek satırı kısaltmaz, UZATIR.
 
+**29.10.2026 — veriye bağlı uzunluk bütçeye girer (saha bulgusu).** Gerçek bir okulun
+kurulumunda iki taşma çıktı: R4'ün salon dağılımı özeti şube 13 salona dağılınca dört
+satıra sardı (bütçe onu tek satır sayıyordu), R7'nin "Sınavı yapılan ders(ler)" listesi
+dörtte bir genişlikteki hücrede altı seviye ekli dersle dokuz satıra sardı. Çözüm:
+R4'te özetin sardığı satırlar liste bütçesinden düşülür (`reports._spread_extra_px`,
+kestirim güvenli yönde); R7'de liste tam genişlikte kendi satırındadır, aynı dersin
+seviyelerini tek başlıkta toplar ve çok uzunsa küçük puntoya iner. Testler gerçek
+biçimli adlarla koşar ("11/A Dersliği", seviye ekli ders): kısa "D-201" adı özeti hiç
+sardırmadığı için taşma görünmüyordu.
+
 **18.09.2026 evrak revizyonu (değerlendirme belgesi §3).** Örnek PDF'ler gerçek
 uzunlukta ders adlarıyla yeniden üretilip gözle incelendi; bulgular ve kararlar:
 

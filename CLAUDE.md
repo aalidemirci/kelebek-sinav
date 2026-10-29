@@ -68,7 +68,12 @@
   `reports.py` (`PHOTO_PLAN_BOX_PX` — R1 fotoğraflı plan, `KROKI_BOX_LAYOUT_PX`,
   `_ANN_FIXED_PX`) — ÖLÇÜLEREK bulundu; garanti
   `test_reports.py::test_r1_salon_evraki_iki_yaprak` (bir derslikte 40 öğrenci
-  sığar, fazlası kontrolsüz taşmaz).
+  sığar, fazlası kontrolsüz taşmaz). Uzunluğu veriye bağlı metin sabit bütçeye
+  SAYILMAZ (29.10.2026 saha bulgusu): R4'ün salon dağılımı özeti şube 13 salona
+  dağılınca dört satıra sardı — sardığı satırlar liste bütçesinden düşülür
+  (`_spread_extra_px`); R7'nin ders listesi tam genişlikte kendi satırındadır.
+  Bütçe testleri GERÇEK biçimli adlarla koşar ("11/A Dersliği", seviye ekli ders):
+  kısa "D-201" adı özeti hiç sardırmadığı için taşmayı göstermiyordu.
 - **PDF üretimi TEK kapıdan ve SIRAYLA (19.09.2026 çöküş tanısı):** WeasyPrint'e
   yalnız `shared.pdf.html_to_pdf` ile gidilir — süreç genelinde kilit + paylaşılan
   `FontConfiguration`. Pango/fontconfig C katmanı aynı süreçte EŞZAMANLI basımda

@@ -40,6 +40,7 @@ bölünmezliği listeyi düzgün akıtır. Sayfa sayısı garantileri testte sab
 from __future__ import annotations
 
 import io
+import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -495,6 +496,15 @@ def build_photo_plan(
 #: (R1'in koltuk sırasındaki yoklama listesi 19.09.2026'da kalktı — yoklama ve
 #: imza fotoğraflı oturma planının kartlarında; ölçüsü `photo_plan_metrics`.)
 _ANN_FIXED_PX = 292.0
+#: R4 salon dağılımı özeti ("11/A Dersliği (8) · 11/B Dersliği (5) · …") şube kaç
+#: salona dağıldıysa o kadar uzar ve SARAR; `_ANN_FIXED_PX` onu TEK satır sayar.
+#: 29.10.2026 saha bulgusu: 13 salona dağılan 27 öğrencilik şubede özet dört satıra
+#: çıktı, imza satırı ikinci sayfaya taştı. Fazladan her satır liste bütçesinden
+#: düşülür. ÖLÇÜLDÜ: satır 19,8 px; 11 pt kalın metinde 73 karakter tek satıra
+#: sığdı, 92'si sardı. Kestirim sözcük kırılması payıyla 62 karakterde keser — yön
+#: GÜVENLİ: fazla sayılan satır listeyi biraz sıklaştırır, sayfayı taşırmaz.
+_ANN_SPREAD_LINE_PX = 20.0
+_ANN_SPREAD_CHARS_PER_LINE = 62
 
 #: Karışık salonda oturma planının üstüne basılan DERS KODU açıklaması (iki
 #: satıra kadar) — plan kutusundan düşülür, kartlar ona göre küçülür.
@@ -646,6 +656,49 @@ def _course_summary(courses: list[dict[str, object]], *, coded: bool = False) ->
     return " · ".join(f"{c['course_name']} ({c['count']})" for c in courses) or "—"
 
 
+#: Evrak ders etiketinin seviye eki ("Matematik — 9. Sınıf") — biçim
+#: `services.session_course_label`, düzey etiketi `dersler.text.level_label`.
+_LEVEL_SUFFIX = re.compile(r"^(?:\d{1,2}\. Sınıf|Hazırlık)$")
+#: R7 ders listesi bu uzunluğu aşınca hücre küçük puntoya iner. ÖLÇÜLDÜ (29.10.2026):
+#: tam genişlikteki satırda on farklı uzun ders (366 karakter) olağan puntoda tek
+#: yaprağa sığdı, on iki ders (452) taştı.
+_R7_DENSE_SUMMARY_CHARS = 300
+
+
+def _course_summary_by_course(courses: list[dict[str, object]]) -> str:
+    """R7 künyesi: aynı dersin seviyeleri TEK başlık altında toplanır —
+    "Matematik — 9. Sınıf (7), 10. Sınıf (5) · Temel Matematik — 11. Sınıf (2)".
+
+    Seviye ekli etiket her seviyede adı yineliyordu ("Din Kültürü ve Ahlak Bilgisi
+    — 9. Sınıf (7) · Din Kültürü ve Ahlak Bilgisi — 10. Sınıf (5) · …"); dört-altı
+    ders saati olan salonda künye tutanağı ikinci yaprağa taşırıyordu (29.10.2026
+    saha bulgusu). Sıra `_course_breakdown`un doğal sırasıdır.
+    """
+    groups: dict[str, list[str]] = {}
+    for c in courses:
+        name = str(c["course_name"])
+        base, sep, suffix = name.rpartition(" — ")
+        if sep and _LEVEL_SUFFIX.match(suffix):
+            groups.setdefault(base, []).append(f"{suffix} ({c['count']})")
+        else:
+            groups.setdefault(name, []).append(f"({c['count']})")
+    return (
+        " · ".join(
+            f"{base} {entries[0]}"
+            if entries[0].startswith("(")
+            else f"{base} — {', '.join(entries)}"
+            for base, entries in groups.items()
+        )
+        or "—"
+    )
+
+
+def _spread_extra_px(summary: str) -> float:
+    """R4 salon dağılımı özetinin ilk satırdan SONRAKİ satırları (px, kestirim)."""
+    lines = max(1, math.ceil(len(summary) / _ANN_SPREAD_CHARS_PER_LINE))
+    return (lines - 1) * _ANN_SPREAD_LINE_PX
+
+
 def _announcement_columns(name_chars: int, course_chars: int) -> dict[str, str]:
     """R4 karışık şubede AD ve DERS sütun oranları — ikisi de TEK SATIR kalsın.
 
@@ -738,6 +791,10 @@ def build_announcements(rows: list[SeatRow]) -> list[dict[str, object]]:
         room_counts: dict[str, int] = {}
         for row in ordered:
             room_counts[row.room_name] = room_counts.get(row.room_name, 0) + 1
+        room_summary = " · ".join(
+            f"{name} ({count})"
+            for name, count in sorted(room_counts.items(), key=lambda kv: room_name_sort_key(kv[0]))
+        )
         sheets.append(
             {
                 "class_label": class_label,
@@ -745,15 +802,11 @@ def build_announcements(rows: list[SeatRow]) -> list[dict[str, object]]:
                     {**vars(row), "course_label": label}
                     for row, label in zip(ordered, labels, strict=True)
                 ],
-                "room_summary": " · ".join(
-                    f"{name} ({count})"
-                    for name, count in sorted(
-                        room_counts.items(), key=lambda kv: room_name_sort_key(kv[0])
-                    )
-                ),
+                "room_summary": room_summary,
                 "row": list_row_metrics(
                     len(ordered),
-                    fixed_px=_ANN_FIXED_PX,
+                    # Dağılım özeti sardıkça liste bütçesi o kadar daralır.
+                    fixed_px=_ANN_FIXED_PX + _spread_extra_px(room_summary),
                     name_col_ratio=(float(columns["name"]) / 100.0 if mixed else _ANN_NAME_RATIO),
                     # Ders sütunu da TEK SATIR kalmalı: punto en uzun ders adına
                     # göre de sınırlanır ("Seçmeli Peygamberimizin Hayatı" ≈ 30 kr.).
@@ -776,19 +829,24 @@ def build_tutanak_sheets(
     """R7: salon başına BİR boş ihlal/kopya tutanağı (salon zarfına konur).
 
     Öğrenci alanları BOŞTUR — olay önceden bilinemez ve kişisel veri basılmaz;
-    yalnız salon/ders künyesi ve (varsa) gözetmen adı basılı gelir.
+    yalnız salon/ders künyesi ve (varsa) gözetmen adı basılı gelir. Ders listesi
+    şablonda tam genişlikte kendi satırındadır ve seviyeleri ders başına toplar.
     """
     names = proctor_names or {}
-    return [
-        {
-            "room_name": room_name,
-            "course_summary": _course_summary(_course_breakdown(group)),
-            "proctor_name": names.get(room_name, ""),
-        }
-        for room_name, group in _grouped(
-            rows, key=lambda r: r.room_name, sort_key=room_name_sort_key
-        ).items()
-    ]
+    sheets: list[dict[str, object]] = []
+    for room_name, group in _grouped(
+        rows, key=lambda r: r.room_name, sort_key=room_name_sort_key
+    ).items():
+        summary = _course_summary_by_course(_course_breakdown(group))
+        sheets.append(
+            {
+                "room_name": room_name,
+                "course_summary": summary,
+                "summary_dense": len(summary) > _R7_DENSE_SUMMARY_CHARS,
+                "proctor_name": names.get(room_name, ""),
+            }
+        )
+    return sheets
 
 
 def _grouped(
