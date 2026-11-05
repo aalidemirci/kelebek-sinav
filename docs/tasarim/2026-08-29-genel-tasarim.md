@@ -340,7 +340,30 @@ FK DEĞİL şifreli metindir ve satırlar KATI silinir.
   verir → ihlal sayısı (birincilin ∞ olduğu çift sayısı) YAPISAL OLARAK artamaz.
   Yeni rng çekilişi yoktur; determinizm korunur.
 - Çift denetim: motorun her çıktısı **bağımsız `validator.py`**'den geçer;
-  onay yalnız ihlal=0 ise.
+  onay ihlal=0'da doğrudan verilir, ihlalli yerleşimde yalnız idarenin AÇIK
+  kabulüyle (31.10.2026'ya kadar "onay yalnız ihlal=0 ise" idi — aşağıdaki not).
+- **Onay kapısı (31.10.2026, saha bulgusu + kullanıcı kararı):** "Onay yalnız
+  ihlal=0" OYS'den aynen taşınmıştı; keşifteki gerekçesi "sessiz onay mevzuat
+  riski"ydi (kelebek düzeni kanonik mevzuatta yoktur, dönemlik kılavuzlardan
+  gelir). Sahada sınıf düzeyleri ya da derslerin mevcutları dengesiz olduğunda
+  komşuluk ihlali matematiksel olarak kaçınılmazdı (`engine.butterfly_fit.deficit`)
+  ve oturum HİÇ onaylanamıyordu; kullanıcı "yerleştirilmeyen öğrenci yoksa uyar,
+  isterse onaylasın" dedi. Kural artık şudur: kelebek komşuluğu ihlali onay
+  penceresinde listelenir, onay ayrı bir kutu işaretiyle (`accept_violations`)
+  verilir, ihlal sayısı `approved_violation_count`a yazılır ve R8 "idarenin
+  kararıyla onaylanmıştır" basar — sessiz onay yine yoktur, karar kayıtlıdır.
+  Kabulle de geçilemeyenler doğrulayıcının `blocking_violations` listesidir
+  (kayıt bütünlüğü + kız/erkek ayrışması — K3 kararı korundu; ihlal satırı okul
+  numarası taşır ve onaylı R8 idarede dosyalanır) ve yerleşimde koltuğu olmayan
+  katılımcı. Kapasite yetmezse motor dağıtımı reddeder; koltuksuz katılımcı pratikte
+  dağıtımdan sonra değişen listeden doğar (`placement_drift.added`). Motorun "koltuk
+  bulamadı" dalı savunmadır: 04.11.2026'da 1.902'si tam dolu 6.000 rastgele dağıtımda
+  tetiklenmedi, tetiklense de aynı sayım yakalar. Bu denetim eskiden onayda HİÇ yoktu
+  (ihlalsiz oturum koltuksuz öğrenciyle onaylanabiliyordu); yoklaması alınmış oturumda
+  uygulanmaz, çünkü o yerleşim yeniden dağıtılamaz ve kapı onayı kalıcı kilitlerdi.
+  R8 onay dayanağı olduğu için motorun sıra başına "kaçınılmaz oldu" satırları D
+  bölümüne basılmaz: ihlalin dağıtım anındaki kopyasıydılar, raporu ikiye katlıyor ve
+  "kural ihlali değildir" başlığıyla çelişiyorlardı (04.11.2026, 12 ihlalli vaka).
 
 ---
 
@@ -1262,7 +1285,8 @@ varsayılan, ayarla değiştirilebilir" ilkesi.
 - Sınav süresi varsayılan 40 dk; tavan bir ders saati (md. 5/1-l).
 - Mazeret bildirimi 5 iş günü (md. 5/1-y) → yoklama mazereti **arşivde de**
   güncellenebilir.
-- Onay yalnız ihlal=0'da; APPROVED kilidi + onay damgası (tek kullanıcıda da).
+- Onay ihlal=0'da doğrudan, kelebek ihlalinde yalnız idarenin açık kabulüyle
+  (31.10.2026 — §4 "Onay kapısı"); APPROVED kilidi + onay damgası (tek kullanıcıda da).
 - Nakil ön kontrolü beyanı (md. 5/1-v) damgalı.
 - Uyarı/hata metinlerinde öğrenci ADI asla — okul no kullanılır.
 - **Sınavı hazırlayan makam** (30.08.2026): ülke geneli sınavlar Bakanlıkça,

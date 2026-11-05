@@ -17,6 +17,14 @@ Kısıt modeli (K8):
   (Chebyshev mesafe ≤ 1: yan/ön/arka/çapraz) aynı gruptan öğrenci içeremez.
 - ESNEK: toplam yakınlık skoru Σ 1/d² (aynı-grup çiftleri; d = Öklid, grid
   birimi) minimize edilmesi hedeflenir; doğrulayıcı yalnız ölçer.
+
+Onay kapısı (31.10.2026, kullanıcı kararı): kelebek komşuluğu ihlali (aynı sıra;
+katı dağıtımda komşu sıra) öğrenci sayıları karışmaya elverişsizken matematiksel
+olarak kaçınılmazdır — idare AÇIKÇA kabul ederek onaylayabilir. Kabulle de
+GEÇİLEMEYENLER `blocking_violations`a ayrıca yazılır: kayıt bütünlüğü (çifte
+koltuk, iki koltukta öğrenci) ve kız/erkek ayrışması (K3 — kuralın güvencesi).
+Sınıflandırma burada yapılır çünkü ihlalin TÜRÜNÜ yalnız doğrulayıcı bilir;
+onay kararını servis verir.
 """
 
 from __future__ import annotations
@@ -60,6 +68,9 @@ class SeatingReport:
     """Doğrulama sonucu + R8 mesafe metrikleri."""
 
     hard_violations: list[str] = field(default_factory=list)
+    # `hard_violations`ın ALT KÜMESİ: idarenin kabulüyle de onaylanamayan ihlaller
+    # (bütünlük + kız/erkek ayrışması). Ekranda ve R8'de liste yine `hard_violations`tır.
+    blocking_violations: list[str] = field(default_factory=list)
     # Birinci halkada (komşu sıra, Chebyshev ≤1) aynı-grup çift sayısı.
     first_ring_same_group_pairs: int = 0
     # Grup başına en yakın aynı-grup komşu mesafesi (Öklid; tek üyeli grup hariç).
@@ -81,6 +92,16 @@ class SeatingReport:
     @property
     def is_valid(self) -> bool:
         return not self.hard_violations
+
+    @property
+    def acceptable(self) -> bool:
+        """İhlallerin hepsi (varsa) idarenin kabulüyle onaylanabilir mi?"""
+        return not self.blocking_violations
+
+    def add_blocking(self, message: str) -> None:
+        """Kabulle geçilemeyen ihlal — iki listeye birden yazılır."""
+        self.hard_violations.append(message)
+        self.blocking_violations.append(message)
 
 
 def _where(p: PlacedStudent) -> str:
@@ -145,13 +166,13 @@ def _check_separation(placed: list[PlacedStudent], report: SeatingReport, *, mod
         a = uyeler[0]
         b = next(u for u in uyeler if u.separation_key != a.separation_key)
         if mode == SEPARATION_DESK:
-            report.hard_violations.append(
+            report.add_blocking(
                 f"Ayrı oturma ihlali: {_separation_text(a)} ve {_separation_text(b)} öğrenci "
                 f"aynı sırada oturuyor ({_where(a)}; {_who(a)} ve {_who(b)})."
             )
         else:
             salon = a.room_label or f"salon {a.room_id}"
-            report.hard_violations.append(
+            report.add_blocking(
                 f"Ayrı salon ihlali: {salon} salonunda hem {_separation_text(a)} hem "
                 f"{_separation_text(b)} öğrenci var ({len(uyeler)} öğrenci)."
             )
@@ -185,13 +206,13 @@ def validate_seating(
     for p in placed:
         key = (p.room_id, p.desk_row, p.desk_col, p.slot)
         if key in seat_keys:
-            report.hard_violations.append(
+            report.add_blocking(
                 f"Koltuk çifte dolu: {_where(p)}, {p.slot + 1}. koltuğa iki öğrenci yazılmış."
             )
         seat_keys[key] = p.student_id
         if p.student_id in student_seen:
             # KVKK: ihlal metninde öğrenci ADI geçmez; okul numarası yeter.
-            report.hard_violations.append(f"Öğrenci iki koltukta: {_who(p)}.")
+            report.add_blocking(f"Öğrenci iki koltukta: {_who(p)}.")
         student_seen.add(p.student_id)
         # Doluluk sayacı (K1) — her düzende dolar (klasik dahil).
         report.room_counts[p.room_id] = report.room_counts.get(p.room_id, 0) + 1

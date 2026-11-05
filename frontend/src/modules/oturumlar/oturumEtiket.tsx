@@ -29,6 +29,18 @@ export function StatusBadge({ status }: { status: ExamSessionStatusCode }) {
   );
 }
 
+/**
+ * İhlalle onay rozeti (31.10.2026): oturum, onay anındaki kural ihlalleri idarece
+ * kabul edilerek onaylandı. Kırmızı ton bilinçlidir — panelde "ihlal" okunur.
+ */
+export function ViolationApprovalBadge({ count }: { count: number }) {
+  return (
+    <span className="rounded-full bg-error-container px-3 py-1 text-label-small text-on-error-container">
+      {count} kural ihlaliyle onaylandı
+    </span>
+  );
+}
+
 /** Mazeret sınavı oturumu rozeti (19.09.2026) — liste satırında ve detay başlığında ortak. */
 export function MakeupBadge() {
   return (

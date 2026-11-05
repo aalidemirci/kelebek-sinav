@@ -130,6 +130,16 @@ describe("KilavuzPage", () => {
     expect(screen.getByText(/Dördüncü sınavı hiç kabul etmez/)).toBeInTheDocument();
   });
 
+  it("ihlalli yerleşimin kabulle onaylanmasını ve kabulle geçilemeyenleri anlatır (31.10.2026)", () => {
+    renderPage();
+    expect(screen.getByText("kural ihlali varsa program uyarır")).toBeInTheDocument();
+    expect(
+      screen.getByText("“İhlalleri gördüm; oturumu bu hâliyle onaylıyorum”"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Kabulle de geçilemeyen durumlar vardır/)).toBeInTheDocument();
+    expect(screen.queryByText(/kural ihlali varsa onay verilmez/)).not.toBeInTheDocument();
+  });
+
   it("küme, koltuk sabitleme ve kopyalama adımlarını anlatır", () => {
     renderPage();
     expect(screen.getByText(/İkili eğitim yapıyorsanız salonları kümeleyin/)).toBeInTheDocument();

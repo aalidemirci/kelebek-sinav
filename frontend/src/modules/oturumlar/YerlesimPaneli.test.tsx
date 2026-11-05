@@ -138,7 +138,7 @@ describe("YerlesimPaneli", () => {
     ).toBeInTheDocument();
   });
 
-  it("kural ihlali varken özet 'onaylanamaz' der ve ihlalleri listeler", async () => {
+  it("kelebek ihlali varken özet onayın kabul istediğini söyler ve ihlalleri listeler", async () => {
     sessionApi.seating.mockResolvedValue(
       makeSeating({
         report: makeReport({
@@ -151,8 +151,27 @@ describe("YerlesimPaneli", () => {
     renderPanel(makeSession({ status: "DISTRIBUTED" }));
 
     const uyari = await screen.findByRole("alert");
-    expect(uyari).toHaveTextContent("2 kural ihlali var — onaylanamaz.");
+    expect(uyari).toHaveTextContent(
+      "2 kural ihlali var — onaylamak için ihlalleri kabul etmeniz gerekir.",
+    );
     expect(within(uyari).getByText("101 ile 102 aynı sırada.")).toBeInTheDocument();
+  });
+
+  it("kabulle geçilemeyen ihlal varken özet 'onaylanamaz' der", async () => {
+    const ayrisma = "Ayrı oturma ihlali: örnek.";
+    sessionApi.seating.mockResolvedValue(
+      makeSeating({
+        report: makeReport({
+          is_valid: false,
+          hard_violations: [ayrisma],
+          blocking_violations: [ayrisma],
+        }),
+      }),
+    );
+    roomApi.list.mockResolvedValue(paginated([makeRoomGeometry()]));
+    renderPanel(makeSession({ status: "DISTRIBUTED" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("1 kural ihlali var — onaylanamaz.");
   });
 
   it("'Kendi dersliğinde' düzeninde dağıtım numarası satırı gösterilmez (karıştırma yok, hep 0)", async () => {
@@ -212,7 +231,7 @@ describe("YerlesimPaneli", () => {
 
     expect(
       await screen.findByText(
-        "Takas yapıldı ama 1 kural ihlali oluştu; bu hâliyle oturum onaylanamaz.",
+        "Takas yapıldı ama 1 kural ihlali oluştu; onaylamak için ihlalleri kabul etmeniz gerekir.",
       ),
     ).toBeInTheDocument();
   });
@@ -324,6 +343,30 @@ describe("YerlesimPaneli", () => {
     sessionApi.moveSeat.mockResolvedValue({
       moved: {},
       report: makeReport({ is_valid: false, hard_violations: ["101 ile 102 aynı sırada."] }),
+    });
+    renderPanel(makeSession({ status: "DISTRIBUTED" }));
+
+    const kaynak = await screen.findByRole("button", { name: /Ayşe Yılmaz/ });
+    surukleBirak(kaynak, screen.getAllByRole("button", { name: /^Boş koltuk/ })[0]);
+
+    expect(
+      await screen.findByText(
+        "Öğrenci taşındı ama 1 kural ihlali oluştu; onaylamak için ihlalleri kabul etmeniz gerekir.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("kabulle geçilemeyen ihlal oluşan taşıma 'onaylanamaz' diye duyurulur", async () => {
+    const ayrisma = "Ayrı oturma ihlali: örnek.";
+    sessionApi.seating.mockResolvedValue(makeSeating());
+    roomApi.list.mockResolvedValue(paginated([bosKoltukluGeometri()]));
+    sessionApi.moveSeat.mockResolvedValue({
+      moved: {},
+      report: makeReport({
+        is_valid: false,
+        hard_violations: [ayrisma],
+        blocking_violations: [ayrisma],
+      }),
     });
     renderPanel(makeSession({ status: "DISTRIBUTED" }));
 

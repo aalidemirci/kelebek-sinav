@@ -57,6 +57,10 @@ Penalty = tuple[float, float]
 
 _ZERO_PENALTY: Penalty = (0.0, 0.0)
 
+#: Sıra başına çakışma uyarısının SONU (`_desk_conflict_warnings`). R8 bu satırları
+#: uyarı bölümüne basmaz: aynı bilgiyi doğrulayıcının güncel ihlal listesi verir.
+DESK_CONFLICT_WARNING_TAIL = "kaçınılmaz oldu (yerleştirilecek başka uygun öğrenci kalmadı)."
+
 
 def _add(a: Penalty, b: Penalty) -> Penalty:
     return (a[0] + b[0], a[1] + b[1])
@@ -546,7 +550,7 @@ def _desk_conflict_warnings(
         )
         out.append(
             f"{_room_text(room)}, {desk_position_label(seat.desk_row, seat.desk_col)}: "
-            f"{sebep} kaçınılmaz oldu (yerleştirilecek başka uygun öğrenci kalmadı)."
+            f"{sebep} {DESK_CONFLICT_WARNING_TAIL}"
         )
         warned.add(desk)
     return out

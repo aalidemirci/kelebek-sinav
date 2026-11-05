@@ -285,6 +285,9 @@ def _report_payload(report: Any) -> dict[str, Any]:
     return {
         "is_valid": report.is_valid,
         "hard_violations": report.hard_violations,
+        # Kabulle de onaylanamayan ihlaller (alt küme — 31.10.2026): arayüz özet
+        # cümlesini buna göre kurar ("onaylanamaz" / "kabulünüzle onaylanabilir").
+        "blocking_violations": report.blocking_violations,
         "first_ring_same_group_pairs": report.first_ring_same_group_pairs,
         "min_same_group_distance": report.min_same_group_distance,
         "proximity_score": round(report.proximity_score, 4),
@@ -300,8 +303,8 @@ def _report_payload(report: Any) -> dict[str, Any]:
 class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
     """Sınav oturumları — sihirbaz + dağıtım + durum makinesi uçları.
 
-    Taslak dışı oturum services._ensure_draft ile korunur; onay yalnız
-    İHLALSİZ yerleşimde (servis guard'ı).
+    Taslak dışı oturum services._ensure_draft ile korunur; onay kapısı
+    `services.approval_check` (ihlalli yerleşim yalnız açık kabulle onaylanır).
     """
 
     serializer_class = ExamSessionSerializer
@@ -722,14 +725,38 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
             raise drf_serializers.ValidationError(exc.messages) from exc
         return Response(ExamSessionSerializer(session).data)
 
+    @action(detail=True, methods=["get"], url_path="approval-check")
+    def approval_check(self, request: Request, pk: str | None = None) -> Response:
+        """Onay penceresinin ön denetimi — onay ucuyla AYNI hesap (`services.approval_check`).
+
+        `blocking_message` doluysa onay verilemez; `needs_acceptance` ise ihlaller
+        ancak açık kabulle (`accept_violations`) onaylanır. İhlal metinleri adsızdır.
+        """
+        check = services.approval_check(self.get_object())
+        return Response(
+            {
+                "violation_count": len(check.violations),
+                "violations": list(check.violations),
+                "blocking_message": check.blocking_message,
+                "needs_acceptance": check.needs_acceptance,
+            }
+        )
+
     @action(detail=True, methods=["post"])
     def approve(self, request: Request, pk: str | None = None) -> Response:
-        """Oturumu onaylar — yerleşim ihlalsizse DAĞITILDI → ONAYLANDI (kilit)."""
+        """Oturumu onaylar — DAĞITILDI → ONAYLANDI (kilit).
+
+        Kural ihlali varsa gövdede `accept_violations: true` (idarenin açık kabulü)
+        gerekir; kabulle de geçilemeyen durumlar 400 döner (31.10.2026).
+        """
         session = self.get_object()
         try:
             session = services.approve_session(
                 session,
                 approved_by_name=str(request.data.get("approved_by_name") or ""),
+                # Yalnız gerçek doğru değer kabuldür: form gövdesindeki "false" dizgesi
+                # Python'da doğru sayılırdı.
+                accept_violations=request.data.get("accept_violations") in (True, "true"),
             )
         except DjangoValidationError as exc:
             raise drf_serializers.ValidationError(exc.messages) from exc

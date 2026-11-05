@@ -229,7 +229,12 @@ def test_ayni_seed_ayni_dagitim_kural_acikken_de() -> None:
 
 
 def test_ihlalli_yerlesim_onaylanamaz() -> None:
-    """K3 SERT: kural sağlanamamışsa oturum onaylanamaz."""
+    """K3 SERT: kural sağlanamamışsa oturum onaylanamaz — idarenin kabulüyle DE.
+
+    31.10.2026'dan beri kelebek komşuluğu ihlali kabulle onaylanabilir; kız/erkek
+    ayrışması bu gevşemenin DIŞINDADIR (kuralın güvencesi; ihlal satırı okul
+    numarası taşır ve onaylı R8 idarede dosyalanır).
+    """
     session = _oturum(separation=SeparationMode.DESK)
     _cinsiyet_ata()
     session, _result, _report = services.distribute_session(session, seed=42)
@@ -247,10 +252,12 @@ def test_ihlalli_yerlesim_onaylanamaz() -> None:
     )
 
     rapor = services.seating_report(session)
-    assert not rapor.is_valid
-    assert any("aynı sırada oturuyor" in v for v in rapor.hard_violations)
-    with pytest.raises(ValidationError, match="kural ihlali var"):
+    assert not rapor.is_valid and not rapor.acceptable
+    assert any("aynı sırada oturuyor" in v for v in rapor.blocking_violations)
+    with pytest.raises(ValidationError, match="onayla kabul edilemeyen"):
         services.approve_session(session)
+    with pytest.raises(ValidationError, match="kuralı değiştirin"):
+        services.approve_session(session, accept_violations=True)
 
 
 def test_evrakta_cinsiyet_izi_yok() -> None:

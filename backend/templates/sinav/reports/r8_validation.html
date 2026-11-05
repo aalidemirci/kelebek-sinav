@@ -1,7 +1,7 @@
 {% extends "sinav/reports/base.html" %}
 {% load l10n %}
-{% comment %}R8 — Dağıtım Doğrulama Raporu. Tek yaprak: ihlal=0 beyanı (veya
-adsız ihlal listesi — doğrulayıcı kişisel veri üretmez), dağıtım parametreleri
+{% comment %}R8 — Dağıtım Doğrulama Raporu. İhlal=0 beyanı (veya ihlal listesi ve onay
+hükmü; liste uzadıkça rapor tek yaprağı aşar), dağıtım parametreleri
 (seed dâhil — "aynı seed → aynı dağıtım" sözleşmesinin yazılı kanıtı), kısıt
 metrikleri ve salon doluluğu. İdare imza bloğu: oturum onayının dayanağıdır.
 
@@ -40,9 +40,20 @@ sözleşmesi değişmedi: sayı basılır, etiketi Türkçedir.{% endcomment %}
       bağımsız doğrulamadan geçmiştir; oturum onaya uygundur.</div>
   </div>
   {% else %}
+  {% comment %}Hüküm cümlesi üç hâllidir (31.10.2026): kelebek komşuluğu ihlali idarenin
+  açık kabulüyle onaylanabilir ve kabul kalıcı kayıttır (`approved_violation_count`);
+  kız/erkek ayrışması ve bozuk kayıt kabulle de geçilemez.{% endcomment %}
   <div class="verdict bad">
     <div class="head">DİKKAT: {{ report.violation_count }} KURAL İHLALİ TESPİT EDİLDİ</div>
-    <div class="sub">İhlaller giderilmeden oturum onaylanmamalıdır.</div>
+    {% if report.accepted_violations %}
+    <div class="sub">Oturum, onay anında yerleşimde bulunan {{ report.accepted_violations }} kural
+      ihlaliyle idarenin kararıyla onaylanmıştır.</div>
+    {% elif report.acceptable %}
+    <div class="sub">Yeniden dağıtımla giderilemeyen ihlaller ancak idare kabul ederek onaylayabilir;
+      bu rapor o kararın dayanağıdır.</div>
+    {% else %}
+    <div class="sub">Bu ihlaller giderilmeden oturum onaylanamaz.</div>
+    {% endif %}
   </div>
   <ul class="violations">
     {% for violation in report.hard_violations %}<li>{{ violation }}</li>{% endfor %}

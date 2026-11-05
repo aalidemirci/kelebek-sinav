@@ -34,6 +34,7 @@ export function makeSession(overrides: Partial<ExamSession> = {}): ExamSession {
     transfer_check_confirmed_at: null,
     approved_by_name: "",
     approved_at: null,
+    approved_violation_count: 0,
     is_makeup: false,
     courses: [],
     rooms: [],
@@ -94,6 +95,7 @@ export function makeReport(overrides: Partial<ValidationReport> = {}): Validatio
   return {
     is_valid: true,
     hard_violations: [],
+    blocking_violations: [],
     first_ring_same_group_pairs: 0,
     min_same_group_distance: {},
     proximity_score: 0,

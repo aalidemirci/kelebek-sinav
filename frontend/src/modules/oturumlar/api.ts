@@ -143,6 +143,11 @@ export interface ExamSession {
   transfer_check_confirmed_at: string | null;
   approved_by_name: string;
   approved_at: string | null;
+  /**
+   * Onay anındaki kural ihlali sayısı (31.10.2026). >0 ise oturum idarenin açık
+   * kabulüyle, ihlallerle onaylanmıştır; yeniden açmada sıfırlanır.
+   */
+  approved_violation_count: number;
   /** Mazeret sınavı oturumu — dersleri "Mazeretli öğrenciler" satırlarıdır (Mazeret Takibi). */
   is_makeup: boolean;
   courses: ExamSessionCourseRow[];
@@ -241,6 +246,11 @@ export interface ButterflyFit {
 export interface ValidationReport {
   is_valid: boolean;
   hard_violations: string[];
+  /**
+   * `hard_violations`ın alt kümesi: idarenin kabulüyle de onaylanamayan ihlaller
+   * (kız/erkek ayrışması, bozuk yerleşim kaydı). Boşsa ihlaller kabulle onaylanabilir.
+   */
+  blocking_violations: string[];
   first_ring_same_group_pairs: number;
   min_same_group_distance: Record<string, number>;
   proximity_score: number;
@@ -248,6 +258,29 @@ export interface ValidationReport {
   cross_group_same_section_first_ring_pairs: number;
   /** Salon id (string — JSON sözleşmesi) → yerleşen öğrenci sayısı. */
   room_counts: Record<string, number>;
+}
+
+/**
+ * İhlalli yerleşimde onayın ne istediği (31.10.2026) — yerleşim özeti, dağıtım
+ * sonucu ve takas bildirimi AYNI ifadeyi kullanır. Kelebek ihlali idarenin açık
+ * kabulüyle onaylanır; kız/erkek ayrışması ve bozuk kayıt kabulle de geçilemez.
+ */
+export function violationApprovalNote(report: ValidationReport): string {
+  return report.blocking_violations.length > 0
+    ? "onaylanamaz"
+    : "onaylamak için ihlalleri kabul etmeniz gerekir";
+}
+
+/**
+ * Onay penceresinin ön denetimi (`services.approval_check` — onay ucuyla AYNI hesap).
+ * `blocking_message` doluysa onay verilemez; `needs_acceptance` ise ihlaller ancak
+ * açık kabulle (`accept_violations`) onaylanır.
+ */
+export interface ApprovalCheck {
+  violation_count: number;
+  violations: string[];
+  blocking_message: string;
+  needs_acceptance: boolean;
 }
 
 /** Salon doluluk özeti (K1) — yerleşim paneli çipleri. */
@@ -558,7 +591,8 @@ export const examSessionApi = {
     ),
 
   // --- Durum makinesi ---
-  approve: (id: number, payload: { approved_by_name?: string } = {}) =>
+  approvalCheck: (id: number) => api.get<ApprovalCheck>(`/exam-sessions/${id}/approval-check/`),
+  approve: (id: number, payload: { approved_by_name?: string; accept_violations?: boolean } = {}) =>
     api.post<ExamSession>(`/exam-sessions/${id}/approve/`, payload),
   reopen: (id: number) => api.post<ExamSession>(`/exam-sessions/${id}/reopen/`),
   archive: (id: number) => api.post<ExamSession>(`/exam-sessions/${id}/archive/`),

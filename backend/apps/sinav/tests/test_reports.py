@@ -28,7 +28,7 @@ from pypdf import PdfReader
 from rest_framework.test import APIClient
 
 from apps.okul.models import ClassSection, SchoolConfig, Student
-from apps.sinav import layout, reports, services
+from apps.sinav import engine, layout, reports, services
 from apps.sinav.models import (
     ExamRoom,
     ExamSession,
@@ -38,7 +38,14 @@ from apps.sinav.models import (
     RuleType,
     SeatAssignment,
 )
-from apps.sinav.tests.oturum_yardim import dagitilmis_oturum, ders, oturum, salon, sube
+from apps.sinav.tests.oturum_yardim import (
+    ayni_siraya_oturt,
+    dagitilmis_oturum,
+    ders,
+    oturum,
+    salon,
+    sube,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -223,6 +230,76 @@ def test_r8_idareci_diliyle_yazilir() -> None:
     assert "Düzenleyen — Müdür Yardımcısı" in text
     for jargon in ("SERT KISIT", "halka", "Σ", "Satranç modu", "Sınav Komisyonu", "tohum"):
         assert jargon not in text, f"R8'de jargon kaldı: {jargon}"
+
+
+def test_r8_ihlalle_onayi_kayda_gecirir() -> None:
+    """31.10.2026: kelebek ihlali kabulle onaylanabilir — R8 bunu iki aşamada söyler.
+
+    Onaydan önce ihlallerin ancak idarenin kabulüyle onaylanabileceğini, kabulle
+    onaydan sonra oturumun kaç ihlalle, idarenin kararıyla onaylandığını basar.
+    Yeniden açma kaydı siler ve hüküm onay öncesine döner.
+    """
+    session = _evrak_oturumu()
+    ayni_siraya_oturt(session)
+
+    def r8_metni() -> str:
+        return " ".join(_pdf_text(services.render_session_report(session, "r8").content).split())
+
+    once = r8_metni()
+    assert "KURAL İHLALİ TESPİT EDİLDİ" in once
+    assert "ancak idare kabul ederek onaylayabilir" in once
+    assert "idarenin kararıyla onaylanmıştır" not in once
+
+    ihlal = len(services.approval_check(session).violations)
+    session = services.approve_session(session, accept_violations=True)
+    sonra = r8_metni()
+    assert (
+        f"Oturum, onay anında yerleşimde bulunan {ihlal} kural ihlaliyle idarenin kararıyla "
+        "onaylanmıştır." in sonra
+    )
+
+    session = services.reopen_session(session)
+    assert "idarenin kararıyla onaylanmıştır" not in r8_metni()
+
+
+def test_dengesiz_mevcutta_motorun_ihlali_kabulle_onaylanir_r8_tekrar_etmez() -> None:
+    """Kullanıcı vakası (31.10.2026): düzey mevcutları karışmaya elverişsizken ihlali
+    MOTOR üretir; herkes yerleşir ve oturum kabulle onaylanır.
+
+    R8 onay dayanağıdır: ihlaller yalnız üstteki listede basılır. Motorun sıra başına
+    "kaçınılmaz oldu" satırı da basılsaydı D bölümünün "kural ihlali değildir" başlığıyla
+    çelişir, raporu ikiye katlardı (12 ihlalde 2 sayfa ölçüldü). Mevcut uyarısı D
+    bölümünde kalır; kayıttaki satır silinmez, yalnız evraka girmez.
+    """
+    _okul()
+    sube(9, "A", students=6, start_no=101)
+    sube(10, "A", students=2, start_no=201)
+    course = ders("Coğrafya", levels=[9, 10])
+    session = oturum()
+    for level in (9, 10):
+        services.add_session_course(
+            session, course_id=course.pk, participant_type=ParticipantType.LEVEL, level=level
+        )
+    services.set_session_rooms(session, [{"room_id": salon("D-201").pk}])
+
+    session, result, report = services.distribute_session(session, seed=42)
+    assert len(result.placements) == 8
+    assert not report.is_valid and report.acceptable
+    ihlal = len(report.hard_violations)
+    assert any(
+        str(w).endswith(engine.DESK_CONFLICT_WARNING_TAIL)
+        for w in session.distribution_params["warnings"]
+    )
+
+    session = services.approve_session(session, accept_violations=True)
+    assert session.approved_violation_count == ihlal
+
+    pdf = services.render_session_report(session, "r8").content
+    assert len(PdfReader(io.BytesIO(pdf)).pages) == 1
+    metin = " ".join(_pdf_text(pdf).split())
+    assert metin.count("Bitişik masa ihlali") == ihlal
+    assert "kaçınılmaz oldu" not in metin
+    assert "6 öğrenci giriyor" in metin
 
 
 def test_r8_baglami_karistirma_bilgisini_varsayilanla_tasir() -> None:

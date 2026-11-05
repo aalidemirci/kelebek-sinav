@@ -1,8 +1,10 @@
 // Oturum detayı (F3-F5): TASLAK'ta sihirbaz; sonrasında sekmeli paneller
 // (Yerleşim + Gözetmenler + Sorular ve Kitapçıklar + Evrak + koşullu Yoklama) + yaşam
 // döngüsü eylemleri (onayla → kilit; yeniden aç; arşivle → salt-okunur,
-// evrak yeniden basılabilir). Onay İHLAL=0 şartına bağlıdır (backend approve
-// guard'ı). OYS T11 OturumDetayPage'den UYARLANDI:
+// evrak yeniden basılabilir). Onay penceresi backend'in ön denetimini gösterir
+// (`approval-check`): kural ihlali varsa uyarır ve onay ancak "ihlalleri kabul
+// ediyorum" işaretiyle verilir (31.10.2026 — eski kural "onay yalnız İHLAL=0").
+// OYS T11 OturumDetayPage'den UYARLANDI:
 // - Rapor Merkezi'nin karşılığı Evrak (F4), Soru Yükleme'nin karşılığı
 //   Sorular ve Kitapçıklar (F5); Gözetmenler sekmesi F7 ile geldi (kapalı
 //   ayarda panel bilgi mesajı basar — sekme OYS gibi koşulsuz);
@@ -29,11 +31,11 @@ import { SkeletonList } from "../../ui/Skeleton";
 import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import TextField from "../../ui/TextField";
 import { useSnackbar } from "../../ui/SnackbarProvider";
-import type { ExamSession } from "./api";
+import type { ApprovalCheck, ExamSession } from "./api";
 import { examSessionApi } from "./api";
 import EvrakPaneli from "./EvrakPaneli";
 import GozetmenlerPaneli from "./GozetmenlerPaneli";
-import { formatDate, MakeupBadge, StatusBadge } from "./oturumEtiket";
+import { formatDate, MakeupBadge, StatusBadge, ViolationApprovalBadge } from "./oturumEtiket";
 import SinavSihirbazi from "./SinavSihirbazi";
 import SorularPaneli from "./SorularPaneli";
 import KurallarPaneli from "./KurallarPaneli";
@@ -51,9 +53,14 @@ export default function OturumDetayPage() {
   const [tab, setTab] = useState("yerlesim");
   const [approveOpen, setApproveOpen] = useState(false);
   const [approvedBy, setApprovedBy] = useState("");
+  const [acceptViolations, setAcceptViolations] = useState(false);
   const [redistributeOpen, setRedistributeOpen] = useState(false);
-  // Dialog odak efekti onClose kimliğine bağlı — sabit referans şart.
-  const closeApprove = useCallback(() => setApproveOpen(false), []);
+  // Dialog odak efekti onClose kimliğine bağlı — sabit referans şart. Kabul işareti
+  // her açılışta sıfırdan verilir (önceki pencerenin kararı taşınmaz).
+  const closeApprove = useCallback(() => {
+    setApproveOpen(false);
+    setAcceptViolations(false);
+  }, []);
   const closeRedistribute = useCallback(() => setRedistributeOpen(false), []);
 
   const session = useQuery({
@@ -61,6 +68,16 @@ export default function OturumDetayPage() {
     queryFn: () => examSessionApi.get(sessionId),
     enabled: Number.isFinite(sessionId),
   });
+
+  // Onay ön denetimi pencere her açıldığında TAZE sorulur (takas/taşıma sonrası
+  // önbellekteki eski sonuçla onaylanmasın); sorgu sürerken düğme kapalıdır.
+  const approvalCheck = useQuery({
+    queryKey: ["exam-session-approval-check", sessionId],
+    queryFn: () => examSessionApi.approvalCheck(sessionId),
+    enabled: approveOpen,
+    staleTime: 0,
+  });
+  const check = approvalCheck.isFetching ? undefined : approvalCheck.data;
 
   // Oturum değişince ona BAĞLI sorgular da bayatlar: dağıtım/taslağa alma
   // yerleşimi ve gözetmen görevlendirmelerini siler. Önbellek 30 sn taze
@@ -99,18 +116,32 @@ export default function OturumDetayPage() {
   });
 
   // Onay ayrı mutasyondur: onaylayan adını taşır. Ad boşsa backend kurulumdaki
-  // okul müdürünün adını damgalar (`services.approve_session`). Ret hâlinde
-  // (kural ihlali) diyalog açık kalır — kullanıcı gerekçeyi snackbar'da okur.
+  // okul müdürünün adını damgalar (`services.approve_session`). Kabul bayrağı
+  // YALNIZ işaretlendiyse gider. Ret hâlinde diyalog açık kalır — kullanıcı
+  // gerekçeyi snackbar'da okur.
   const approve = useMutation({
-    mutationFn: () => examSessionApi.approve(sessionId, { approved_by_name: approvedBy.trim() }),
+    mutationFn: () =>
+      examSessionApi.approve(sessionId, {
+        approved_by_name: approvedBy.trim(),
+        ...(acceptViolations ? { accept_violations: true } : {}),
+      }),
     onSuccess: (updated) => {
-      setApproveOpen(false);
+      closeApprove();
       setApprovedBy("");
       refresh();
-      snackbar.success(TRANSITION_MESSAGES[updated.status]);
+      snackbar.success(
+        updated.approved_violation_count > 0
+          ? `Oturum ${updated.approved_violation_count} kural ihlaliyle onaylandı — yerleşim kilitlendi.`
+          : TRANSITION_MESSAGES[updated.status],
+      );
     },
     onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Oturum onaylanamadı."),
   });
+  // Ön denetim hata verirse onay kapatılmaz: karar yine backend'indir.
+  const approveBlocked =
+    approvalCheck.isFetching ||
+    (check !== undefined &&
+      (check.blocking_message !== "" || (check.needs_acceptance && !acceptViolations)));
 
   const removeDraft = useMutation({
     mutationFn: () => examSessionApi.remove(sessionId),
@@ -245,6 +276,9 @@ export default function OturumDetayPage() {
           {formatDate(data.exam_date)} · {data.start_time.slice(0, 5)} · {data.term_label}
         </span>
         <StatusBadge status={data.status} />
+        {data.approved_violation_count > 0 && (
+          <ViolationApprovalBadge count={data.approved_violation_count} />
+        )}
         {data.is_makeup && <MakeupBadge />}
       </div>
 
@@ -278,14 +312,23 @@ export default function OturumDetayPage() {
             <Button variant="text" onClick={closeApprove}>
               Vazgeç
             </Button>
-            <Button icon="verified" onClick={() => approve.mutate()} disabled={approve.isPending}>
+            <Button
+              icon="verified"
+              onClick={() => approve.mutate()}
+              disabled={approve.isPending || approveBlocked}
+            >
               {approve.isPending ? "Onaylanıyor…" : "Onayla"}
             </Button>
           </>
         }
       >
         <div className="flex flex-col gap-3">
-          <p>Onay yerleşimi kilitler; yerleşimde kural ihlali varsa reddedilir.</p>
+          <OnayDenetimi
+            check={check}
+            pending={approvalCheck.isFetching}
+            accepted={acceptViolations}
+            onAcceptChange={setAcceptViolations}
+          />
           <TextField
             label="Onaylayan (boş bırakılırsa okul müdürü)"
             value={approvedBy}
@@ -303,6 +346,73 @@ export default function OturumDetayPage() {
           onDistributed={refresh}
         />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Onay penceresinin gövdesi (31.10.2026): backend ön denetiminin üç sonucu.
+ *
+ * - Kabulle de geçilemeyen durum (koltuğu olmayan öğrenci, kız/erkek ayrışması,
+ *   bozuk kayıt) → gerekçe; düğme kapalıdır.
+ * - Kural ihlali → uyarı + ilk beş ihlal + "kabul ediyorum" kutusu. Düzey ya da
+ *   ders mevcutları karışmaya elverişsizken ihlal kaçınılmazdır; karar idarenin,
+ *   ama sessiz onay yok: kabul ayrıca işaretlenir ve R8'e basılır.
+ * - İhlal yok → kilit cümlesi.
+ */
+function OnayDenetimi({
+  check,
+  pending,
+  accepted,
+  onAcceptChange,
+}: {
+  check: ApprovalCheck | undefined;
+  pending: boolean;
+  accepted: boolean;
+  onAcceptChange: (value: boolean) => void;
+}) {
+  if (pending) {
+    return <p className="text-on-surface-variant">Yerleşim denetleniyor…</p>;
+  }
+  if (check?.blocking_message) {
+    return (
+      <p role="alert" className="flex items-start gap-2 text-error">
+        <Icon name="error" size="lg" className="shrink-0" />
+        <span>{check.blocking_message}</span>
+      </p>
+    );
+  }
+  if (!check?.needs_acceptance) {
+    return <p>Onay yerleşimi kilitler; değiştirmek için önce onayı geri almanız gerekir.</p>;
+  }
+  const kalan = check.violation_count - 5;
+  return (
+    <div role="alert" className="flex flex-col gap-2 rounded-shape-md border border-error p-3">
+      <p className="flex items-center gap-2 font-medium text-error">
+        <Icon name="warning" size="lg" />
+        Yerleşimde {check.violation_count} kural ihlali var.
+      </p>
+      <ul className="list-disc pl-5 text-body-small">
+        {check.violations.slice(0, 5).map((v) => (
+          <li key={v}>{v}</li>
+        ))}
+        {kalan > 0 && <li>… ve {kalan} ihlal daha (tam liste Dağıtım Doğrulama Raporu'nda).</li>}
+      </ul>
+      <p className="text-body-small text-on-surface-variant">
+        Sınıf düzeyleri ya da derslerin öğrenci sayıları karışmaya elverişli değilse aynı sınava
+        giren öğrencilerin yan yana düşmesi kaçınılmaz olabilir; önce “Yeniden dağıt”ı deneyin. Bu
+        hâliyle onaylarsanız ihlal sayısı onay kaydına geçer ve Dağıtım Doğrulama Raporu oturumun
+        idarenin kararıyla onaylandığını yazar.
+      </p>
+      <label className="flex min-h-9 cursor-pointer items-center gap-3 text-body-medium text-on-surface">
+        <input
+          type="checkbox"
+          checked={accepted}
+          onChange={(e) => onAcceptChange(e.target.checked)}
+          className="h-5 w-5 accent-primary"
+        />
+        İhlalleri gördüm; oturumu bu hâliyle onaylıyorum.
+      </label>
     </div>
   );
 }

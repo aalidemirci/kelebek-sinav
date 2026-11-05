@@ -10,6 +10,7 @@
 import Icon from "../../ui/Icon";
 import TextField from "../../ui/TextField";
 import type { DistributeResult } from "./api";
+import { violationApprovalNote } from "./api";
 
 export interface DagitimSecenekleriDegeri {
   /** Metin alanının değeri — boş = rastgele numara. */
@@ -68,8 +69,9 @@ export function DagitimSonucu({
       ) : (
         <p role="alert" className="flex items-center gap-2 text-error">
           <Icon name="error" size="lg" />
-          {result.report.hard_violations.length} kural ihlali var — onaylanamaz.
-          {numarali && " Farklı bir dağıtım numarasıyla yeniden dağıtın."}
+          {result.report.hard_violations.length} kural ihlali var —{" "}
+          {violationApprovalNote(result.report)}.
+          {numarali && " Farklı bir dağıtım numarasıyla yeniden dağıtmayı deneyin."}
         </p>
       )}
       {result.warnings.length > 0 && (

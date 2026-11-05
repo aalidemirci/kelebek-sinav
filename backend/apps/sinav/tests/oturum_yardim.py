@@ -14,7 +14,7 @@ from apps.dersler import services as ders_services
 from apps.dersler.models import Course, CourseExamMode, CourseType
 from apps.okul.models import ClassSection, SchoolTerm, SchoolYear, Student
 from apps.sinav import services
-from apps.sinav.models import DeskType, ExamRoom, ExamSession, ParticipantType
+from apps.sinav.models import DeskType, ExamRoom, ExamSession, ParticipantType, SeatAssignment
 
 #: 8 koltuklu (4 ikili sıra, 2x2 yerleşim) standart test planı.
 PLAN_8: dict[str, Any] = {
@@ -156,3 +156,42 @@ def dagitilmis_oturum(
     session, _result, report = services.distribute_session(session, seed=seed)
     assert report.is_valid, report.hard_violations
     return session
+
+
+def ayni_siraya_oturt(session: ExamSession) -> None:
+    """Aynı sınavdan iki öğrenciyi aynı sıraya oturtur — YALNIZ kelebek ihlali üretir.
+
+    Kelebek ihlali idarenin kabulüyle onaylanabilir (31.10.2026); aynı koltuğa iki
+    öğrenci yazmak ise kabulle geçilemeyen bir kayıt hatasıdır. Bu yüzden sıra
+    arkadaşı varsa onunla YER DEĞİŞTİRİLİR (çifte koltuk doğmaz), sıra yarı boşsa
+    boş koltuğa taşınır. Doğrudan kayıt yazar — elle düzeltme uçlarının kapılarını
+    atlar; amacı doğrulayıcının ve onay kapısının ihlali nasıl karşıladığını sınamaktır.
+    """
+    canli = SeatAssignment.objects.filter(session=session)
+    first = canli.order_by("seat_no").first()
+    assert first is not None
+    sira = {"room_id": first.room_id, "desk_row": first.desk_row, "desk_col": first.desk_col}
+    other = canli.filter(conflict_group=first.conflict_group).exclude(**sira).first()
+    assert other is not None
+    mate = canli.filter(**sira).exclude(pk=first.pk).first()
+    if mate is None:
+        other.room_id, other.desk_row, other.desk_col = (
+            first.room_id,
+            first.desk_row,
+            first.desk_col,
+        )
+        other.slot = 0 if first.slot == 1 else 1
+        other.seat_no = 99  # salon içi numara tekilliği korunur
+        other.save()
+        return
+    alanlar = ("room_id", "desk_row", "desk_col", "slot", "seat_no")
+    mate_yeri = {a: getattr(mate, a) for a in alanlar}
+    other_yeri = {a: getattr(other, a) for a in alanlar}
+    other.seat_no = 9999  # numara tekilliği takas boyunca korunur
+    other.save()
+    for alan, deger in other_yeri.items():
+        setattr(mate, alan, deger)
+    mate.save()
+    for alan, deger in mate_yeri.items():
+        setattr(other, alan, deger)
+    other.save()

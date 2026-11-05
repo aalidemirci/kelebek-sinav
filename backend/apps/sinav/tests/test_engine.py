@@ -105,6 +105,41 @@ def test_validator_detects_double_booking() -> None:
     assert any("çifte dolu" in v for v in report.hard_violations)
 
 
+def test_validator_kabulle_gecilemeyenleri_ayirir() -> None:
+    """Onay kapısı sınıflandırması (31.10.2026): kelebek komşuluğu (aynı sıra, katı
+    dağıtımda komşu sıra) kabulle onaylanabilir; bütünlük ve kız/erkek ayrışması
+    ihlali `blocking_violations`a da yazılır. Liste yine `hard_violations`tır."""
+    ayni_sira = validator.validate_seating(
+        [
+            validator.PlacedStudent(1, "g", 1, 0, 0, 0, -0.25, 0.0),
+            validator.PlacedStudent(2, "g", 1, 0, 0, 1, 0.25, 0.0),
+            validator.PlacedStudent(3, "g", 1, 0, 1, 0, 1.0, 0.0),
+        ],
+        strict=True,
+    )
+    assert len(ayni_sira.hard_violations) >= 2  # aynı sıra + katı dağıtım komşuluğu
+    assert ayni_sira.acceptable and ayni_sira.blocking_violations == []
+
+    cift_kayit = validator.validate_seating(
+        [
+            validator.PlacedStudent(1, "g1", 1, 0, 0, 0, 0.0, 0.0),
+            validator.PlacedStudent(1, "g2", 1, 1, 0, 0, 0.0, 1.0),  # aynı öğrenci iki koltukta
+        ]
+    )
+    assert not cift_kayit.acceptable
+    assert cift_kayit.blocking_violations == cift_kayit.hard_violations
+
+    karisik_sira = validator.validate_seating(
+        [
+            validator.PlacedStudent(1, "g1", 1, 0, 0, 0, -0.25, 0.0, separation_key="K"),
+            validator.PlacedStudent(2, "g2", 1, 0, 0, 1, 0.25, 0.0, separation_key="E"),
+        ],
+        separation=validator.SEPARATION_DESK,
+    )
+    assert not karisik_sira.acceptable
+    assert any("Ayrı oturma" in v for v in karisik_sira.blocking_violations)
+
+
 def test_validator_etiketli_ihlal_idareci_diliyle_yazilir() -> None:
     """Etiket verilince ihlal metni salon ADI, ders ADI, 1 tabanlı konum ve OKUL NO
     taşır; ham kimlik, çakışma grubu anahtarı ve 0 tabanlı koordinat GEÇMEZ.

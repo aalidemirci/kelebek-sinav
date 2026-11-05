@@ -4,6 +4,31 @@ Paketler GitHub Releases'ta ve indir.okulapp.org'dadır. En yeni sürüm en üst
 yayımlanmamış değişiklikler "Yayımlanmadı (taslak)" başlığı altında toplanır ve
 sürüm çıkarılırken bu başlık sürüm numarası ve tarihle değiştirilir.
 
+## Yayımlanmadı (taslak)
+
+Bu sürüm veritabanında değişiklik yapar; güncelleme ilk açılışta kendiliğinden
+uygulanır, yapmanız gereken bir işlem yoktur.
+
+### Oturum onayı
+
+- **Kural ihlali olan yerleşim de onaylanabiliyor.** Sınıf düzeyleri ya da
+  derslerin öğrenci sayıları karışmaya elverişli olmadığında aynı sınava giren
+  öğrencilerin yan yana düşmesi kaçınılmaz olabiliyor; program bu durumda oturumu
+  hiç onaylatmıyordu. Artık onay penceresi ihlalleri listeler ve **"İhlalleri gördüm;
+  oturumu bu hâliyle onaylıyorum"** kutusu işaretlenince onay verilir. İhlal sayısı
+  onay kaydına geçer, oturum başlığında "N kural ihlaliyle onaylandı" rozeti görünür
+  ve Dağıtım Doğrulama Raporu oturumun bu ihlallerle, idarenin kararıyla onaylandığını
+  yazar. Onayı geri almak kaydı siler.
+- **Dağıtım Doğrulama Raporu ihlalleri iki kez basmıyor.** Aynı ihlaller "Dağıtım
+  uyarıları" bölümünde "kural ihlali değildir" başlığı altında bir kez daha yazılıyor,
+  rapor gereksiz yere uzuyordu. Artık ihlaller yalnız üstteki listede görünür.
+- **Kabulle de onaylanamayan durumlar.** Kız/erkek ayrışması ihlali (kural açıkken),
+  bozuk yerleşim kaydı (aynı koltukta iki öğrenci, salon planı dağıtımdan sonra
+  değişmiş) ve dağıtımdan sonra eklendiği için koltuğu olmayan öğrenci onayı
+  engeller. Sonuncusu yenidir: eskiden ihlal yoksa yerleşimde olmayan öğrenciyle de
+  onay verilebiliyordu, şimdi önce yeniden dağıtmanız istenir (yoklaması alınmış
+  oturum hariç — onun yerleşimi sınavın kaydıdır).
+
 ## 2026.10.0-beta.7 — 29.10.2026
 
 Bu sürüm veritabanında değişiklik yapmaz; güncellemeden sonra yapmanız gereken

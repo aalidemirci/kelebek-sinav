@@ -803,8 +803,9 @@ export default function KilavuzPage() {
         <p>
           Dağıtımı başlattığınızda program öğrencileri salonlara “kelebek” düzende yerleştirir: aynı
           dersi aynı sınıf düzeyinde alan öğrenciler yan yana ve ön arkaya düşmez. Sonuç bağımsız
-          bir denetimden geçer; <strong>kural ihlali varsa onay verilmez</strong>. Aynı dağıtım
-          numarası (seed) aynı dağıtımı üretir ve bu numara dağıtım doğrulama raporuna basılır.
+          bir denetimden geçer; <strong>kural ihlali varsa program uyarır</strong> ve oturum ancak
+          ihlalleri kabul ettiğinizi işaretlerseniz onaylanır. Aynı dağıtım numarası (seed) aynı
+          dağıtımı üretir ve bu numara dağıtım doğrulama raporuna basılır.
         </p>
         <p>
           Öğrenci sayıları karışmaya elverişli değilse — örneğin salonda tek ders varsa — aynı
@@ -812,6 +813,15 @@ export default function KilavuzPage() {
           durumda program o çiftleri <strong>öğretmen masasına en yakın sıralara</strong> çeker;
           gözetim en zor olan yerler öğretmenin önünde kalır. Bu yalnız bir tercihtir: kaçınılmaz
           olmayan hiçbir komşuluğu yaratmaz ve kural ihlali sayısını artırmaz.
+        </p>
+        <p>
+          Yeniden dağıtım ihlali gidermiyorsa yerleşimi olduğu gibi onaylayabilirsiniz: onay
+          penceresi ihlalleri listeler ve{" "}
+          <strong>“İhlalleri gördüm; oturumu bu hâliyle onaylıyorum”</strong> kutusunu
+          işaretlemenizi ister. İhlal sayısı onay kaydına geçer, oturumun başlığında rozet olarak
+          görünür ve dağıtım doğrulama raporu oturumun idarenin kararıyla onaylandığını yazar.
+          Kabulle de geçilemeyen durumlar vardır: kız/erkek ayrışması ihlali ve dağıtımdan sonra
+          eklendiği için koltuğu olmayan öğrenci — ikisinde de önce yeniden dağıtırsınız.
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
@@ -990,11 +1000,12 @@ export default function KilavuzPage() {
         </p>
         <p>
           Kural açıkken dağıtım bunu <em>kesin</em> uygular: sağlanamazsa ihlal olarak listelenir ve{" "}
-          <strong>oturum onaylanamaz</strong>. “Ayrı salonlar” seçiliyken program salonları ikiye
-          böler; salonlar yetmezse kaç koltuk eksik kaldığını söyleyerek dağıtımı yapmaz — salon
-          ekleyebilir ya da kuralı “Aynı sıraya oturtma”ya çevirebilirsiniz.{" "}
-          <strong>“Kendi dersliğinde”</strong> düzeninde kural uygulanmaz (herkes zaten kendi
-          şubesinde, okul numarası sırasıyla oturur) ve seçenek gösterilmez.
+          <strong>oturum onaylanamaz</strong> (kelebek ihlalinden farklı olarak kabul ederek de).
+          “Ayrı salonlar” seçiliyken program salonları ikiye böler; salonlar yetmezse kaç koltuk
+          eksik kaldığını söyleyerek dağıtımı yapmaz — salon ekleyebilir ya da kuralı “Aynı sıraya
+          oturtma”ya çevirebilirsiniz. <strong>“Kendi dersliğinde”</strong> düzeninde kural
+          uygulanmaz (herkes zaten kendi şubesinde, okul numarası sırasıyla oturur) ve seçenek
+          gösterilmez.
         </p>
         <p>
           Cinsiyet bilgisi <strong>e-Okul sınıf listesinden kendiliğinden okunur</strong> (raporun
@@ -1186,12 +1197,12 @@ export default function KilavuzPage() {
         </p>
         <p>
           Her değişiklikten sonra kurallar yeniden denetlenir ve sonuç ekranın üstünde yazar: aynı
-          sınava giren iki öğrenciyi yan yana getirdiyseniz uyarı çıkar ve{" "}
-          <strong>oturum o hâliyle onaylanamaz</strong>. Elle değiştirdiğiniz koltuklar krokide{" "}
-          <strong>“Elle”</strong> diye işaretlenir. <strong>“Sabit”</strong> işaretli öğrenciler
-          yerleştirme kuralıyla oraya konmuştur: sürüklenemezler, yerlerini değiştirmek için
-          Yerleştirme Kuralları sekmesinden kuralı düzenlemeniz gerekir. Bazı boş koltuklar da hedef
-          olamaz ve program nedenini söyleyerek geri çevirir:{" "}
+          sınava giren iki öğrenciyi yan yana getirdiyseniz uyarı çıkar ve oturumu o hâliyle
+          onaylamak için <strong>ihlali ayrıca kabul etmeniz</strong> gerekir. Elle değiştirdiğiniz
+          koltuklar krokide <strong>“Elle”</strong> diye işaretlenir. <strong>“Sabit”</strong>{" "}
+          işaretli öğrenciler yerleştirme kuralıyla oraya konmuştur: sürüklenemezler, yerlerini
+          değiştirmek için Yerleştirme Kuralları sekmesinden kuralı düzenlemeniz gerekir. Bazı boş
+          koltuklar da hedef olamaz ve program nedenini söyleyerek geri çevirir:{" "}
           <strong>tek başına oturan bir öğrencinin sırasındaki boş koltuk</strong> (o sıra ona
           ayrılmıştır) ve salon için <strong>kapasite sınırı</strong> koyduysanız sınırın dışında
           kalan koltuklar. Yerleşime her dokunduğunuzda daha önce ürettiğiniz kitapçık paketleri

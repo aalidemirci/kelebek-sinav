@@ -2,8 +2,9 @@
 
 OYS `test_session_lifecycle.py`'den KS'ye uyarlandı: RBAC/AccessLog düştü
 (authsuz tek kullanıcı), R1-R9/ZIP evrak testleri `test_reports.py`'de (F4);
-onay damgası kullanıcı yerine ad-snapshot'tır (B12). Kabul kriteri çekirdeği
-korunur: onaylı oturum değiştirilemez; onay yalnız İHLAL=0 yerleşimde.
+onay damgası kullanıcı yerine ad-snapshot'tır (B12). Kabul kriteri çekirdeği:
+onaylı oturum değiştirilemez; ihlalli yerleşim SESSİZCE onaylanmaz — yalnız idarenin
+açık kabulüyle (31.10.2026; eski kural "onay yalnız İHLAL=0" idi).
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import pytest
 from django.core.exceptions import ValidationError
 from rest_framework.test import APIClient
 
-from apps.okul.models import SchoolConfig
+from apps.okul.models import SchoolConfig, Student
 from apps.sinav import layout, services
 from apps.sinav.models import (
     ExamRoom,
@@ -24,28 +25,11 @@ from apps.sinav.models import (
     SeatAssignment,
     SeatStatus,
 )
+from apps.sinav.tests.oturum_yardim import ayni_siraya_oturt as _corrupt_with_violation
 from apps.sinav.tests.oturum_yardim import dagitilmis_oturum as _dagitilmis_oturum
 from apps.sinav.tests.oturum_yardim import oturum, salon
 
 pytestmark = pytest.mark.django_db
-
-
-def _corrupt_with_violation(session: ExamSession) -> None:
-    """Aynı çakışma grubundan iki öğrenciyi aynı sıraya taşır (sert ihlal)."""
-    first = SeatAssignment.objects.filter(session=session).order_by("seat_no").first()
-    assert first is not None
-    other = (
-        SeatAssignment.objects.filter(session=session, conflict_group=first.conflict_group)
-        .exclude(pk=first.pk)
-        .first()
-    )
-    assert other is not None
-    other.room_id = first.room_id
-    other.desk_row = first.desk_row
-    other.desk_col = first.desk_col
-    other.slot = 0 if first.slot == 1 else 1
-    other.seat_no = 99  # salon içi tekillik korunur
-    other.save()
 
 
 # ===========================================================================
@@ -91,7 +75,7 @@ def test_approve_guards() -> None:
     with pytest.raises(ValidationError, match="yalnız onaylı"):
         services.archive_session(draft)
 
-    # İhlalli yerleşim onaylanamaz; mesaj SAYI içerir, öğrenci adı ASLA (KVKK).
+    # İhlalli yerleşim KABULSÜZ onaylanamaz; mesaj SAYI içerir, öğrenci adı ASLA (KVKK).
     session = _dagitilmis_oturum()
     _corrupt_with_violation(session)
     with pytest.raises(ValidationError) as exc_info:
@@ -99,6 +83,103 @@ def test_approve_guards() -> None:
     message = str(exc_info.value)
     assert "kural ihlali var" in message and "sert kısıt" not in message
     assert "AD0" not in message and "SOYAD" not in message  # kurucu ad kalıbı sızmadı
+
+
+def test_ihlalli_yerlesim_kabulle_onaylanir() -> None:
+    """31.10.2026 kullanıcı kararı: kelebek ihlali ENGEL değil UYARIDIR.
+
+    Düzey/ders mevcutları karışmaya elverişsizken ihlal kaçınılmazdır; idare kabul
+    ederse oturum onaylanır ve ihlal SAYISI onay kaydına geçer. Yeniden açma sıfırlar.
+    """
+    session = _dagitilmis_oturum()
+    _corrupt_with_violation(session)
+    check = services.approval_check(session)
+    assert check.needs_acceptance and check.blocking_message == ""
+    ihlal = len(check.violations)
+    assert ihlal >= 1
+
+    session = services.approve_session(session, accept_violations=True)
+    assert session.status == ExamSessionStatus.APPROVED
+    assert session.approved_violation_count == ihlal
+
+    session = services.reopen_session(session)
+    assert session.approved_violation_count == 0
+
+
+def test_kabul_bayragi_ihlalsiz_yerlesimde_iz_birakmaz() -> None:
+    session = services.approve_session(_dagitilmis_oturum(), accept_violations=True)
+    assert session.approved_violation_count == 0
+
+
+def test_bozuk_yerlesim_kaydi_kabulle_de_onaylanmaz() -> None:
+    """Aynı koltukta iki öğrenci bir kayıt hatasıdır, kural ihlali değil — kabul edilemez."""
+    session = _dagitilmis_oturum()
+    first, second = list(SeatAssignment.objects.filter(session=session).order_by("seat_no")[:2])
+    second.desk_row, second.desk_col, second.slot = first.desk_row, first.desk_col, first.slot
+    second.seat_no = 99  # salon içi numara tekilliği korunur
+    second.save()
+
+    check = services.approval_check(session)
+    assert check.blocking_message and not check.needs_acceptance
+    with pytest.raises(ValidationError, match="onayla kabul edilemeyen 1 ihlal"):
+        services.approve_session(session, accept_violations=True)
+
+
+def test_yerlesimde_olmayan_ogrenci_varken_onay_verilmez() -> None:
+    """Dağıtımdan sonra katılan öğrencinin koltuğu yoktur: ihlal olsun olmasın onay yok.
+
+    Kabul bayrağı bunu geçemez; yeniden dağıtım kapıyı açar.
+    """
+    session = _dagitilmis_oturum()
+    Student.objects.create(
+        first_name="YENİ",
+        last_name="KAYIT",
+        student_number="150",
+        class_level=9,
+        class_section="A",
+    )
+    check = services.approval_check(session)
+    assert "1 öğrenci yerleşimde yok" in check.blocking_message
+    with pytest.raises(ValidationError, match="yerleşimde yok"):
+        services.approve_session(session, accept_violations=True)
+
+    session, _result, report = services.distribute_session(session, seed=42)
+    assert report.is_valid
+    assert services.approve_session(session).status == ExamSessionStatus.APPROVED
+
+
+def test_koltuk_kaydi_olmayan_katilimci_da_onayi_engeller() -> None:
+    """Motorun "koltuk bulamadı" dalı savunmadır; tetiklense öğrenci yerleşimsiz kalırdı.
+
+    Kapının ölçütü nedeni değil, "katılımcı ama koltuğu yok" olmasıdır.
+    """
+    session = _dagitilmis_oturum()
+    koltuk = SeatAssignment.objects.filter(session=session).first()
+    assert koltuk is not None
+    koltuk.delete()
+    assert "1 öğrenci yerleşimde yok" in services.approval_check(session).blocking_message
+
+
+def test_yoklamasi_alinmis_oturumda_yeni_ogrenci_onayi_kilitlemez() -> None:
+    """Yoklama alındıysa yerleşim sınavın kaydıdır ve yeniden dağıtılamaz (A7).
+
+    Sonradan katılan öğrenci o sınava girmemiştir; kapı orada uygulansa yeniden
+    açılan oturum bir daha hiç onaylanamazdı.
+    """
+    session = services.approve_session(_dagitilmis_oturum())
+    assignment = SeatAssignment.objects.filter(session=session).first()
+    assert assignment is not None
+    services.mark_absent(session, seat_assignment_id=assignment.pk)
+    session = services.reopen_session(session)
+    Student.objects.create(
+        first_name="YENİ",
+        last_name="KAYIT",
+        student_number="150",
+        class_level=9,
+        class_section="A",
+    )
+    assert services.approval_check(session).blocking_message == ""
+    assert services.approve_session(session).status == ExamSessionStatus.APPROVED
 
 
 def test_revert_to_draft_clears_seating_keeps_definitions() -> None:
@@ -180,6 +261,39 @@ def test_api_lifecycle() -> None:
 
     draft = oturum(name="Taslak Oturum")
     assert client.post(f"/api/v1/exam-sessions/{draft.pk}/approve/").status_code == 400
+
+
+def test_api_ihlalli_onay_on_denetim_ve_kabul() -> None:
+    """Onay penceresi ön denetimi + kabul bayrağı (31.10.2026).
+
+    Yalnız gerçek `true` kabuldür: form gövdesindeki "false" dizgesi Python'da
+    doğru sayılırdı ve ihlal sessizce kabul edilmiş olurdu.
+    """
+    session = _dagitilmis_oturum()
+    _corrupt_with_violation(session)
+    client = APIClient()
+    base = f"/api/v1/exam-sessions/{session.pk}"
+
+    check = client.get(f"{base}/approval-check/")
+    assert check.status_code == 200
+    assert check.data["needs_acceptance"] is True and check.data["blocking_message"] == ""
+    assert check.data["violation_count"] == len(check.data["violations"]) >= 1
+
+    seating = client.get(f"{base}/seating/")
+    assert seating.data["report"]["blocking_violations"] == []
+
+    assert client.post(f"{base}/approve/", {}, format="json").status_code == 400
+    assert (
+        client.post(f"{base}/approve/", {"accept_violations": "false"}, format="json").status_code
+        == 400
+    )
+    resp = client.post(f"{base}/approve/", {"accept_violations": True}, format="json")
+    assert resp.status_code == 200 and resp.data["status"] == "APPROVED"
+    assert resp.data["approved_violation_count"] == check.data["violation_count"]
+
+    # Onaylı oturumda ön denetim onayın artık mümkün olmadığını söyler.
+    sonra = client.get(f"{base}/approval-check/")
+    assert "yalnız dağıtılmış oturum" in sonra.data["blocking_message"]
 
 
 def test_api_revert_to_draft() -> None:

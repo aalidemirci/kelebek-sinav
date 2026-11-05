@@ -28,7 +28,7 @@ import { useSnackbar } from "../../ui/SnackbarProvider";
 import { examRoomApi } from "../salonlar/api";
 import { FURNITURE_LABELS, seatPositionLabel } from "../salonlar/planEdit";
 import type { ExamSession, SeatAssignmentRow, ValidationReport } from "./api";
-import { examSessionApi, usesDistributionNumber } from "./api";
+import { examSessionApi, usesDistributionNumber, violationApprovalNote } from "./api";
 
 /** Çakışma grubu → tonal renk sınıfı (M3 token döngüsü — ham renk yok).
  *
@@ -74,7 +74,7 @@ function ReportSummary({
         <Icon name={report.is_valid ? "check_circle" : "error"} size="lg" />
         {report.is_valid
           ? `Kural ihlali yok${approvable ? " — oturum onaylanabilir" : ""}.`
-          : `${count} kural ihlali var${approvable ? " — onaylanamaz" : ""}.`}
+          : `${count} kural ihlali var${approvable ? ` — ${violationApprovalNote(report)}` : ""}.`}
       </p>
       {!report.is_valid && (
         <ul className="mt-1 list-disc pl-5 text-body-small">
@@ -140,7 +140,11 @@ export default function YerlesimPaneli({ session }: { session: ExamSession }) {
       snackbar.success(`${islem}; kural ihlali yok.`);
     } else {
       snackbar.error(
-        `${islem} ama ${result.report.hard_violations.length} kural ihlali oluştu; bu hâliyle oturum onaylanamaz.`,
+        `${islem} ama ${result.report.hard_violations.length} kural ihlali oluştu; ${
+          result.report.blocking_violations.length > 0
+            ? "bu hâliyle oturum onaylanamaz"
+            : violationApprovalNote(result.report)
+        }.`,
       );
     }
   };

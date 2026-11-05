@@ -922,6 +922,8 @@ def build_validation_context(
     warnings: list[str],
     cross_section_pairs: int = 0,
     occupancy: list[dict[str, object]] | None = None,
+    acceptable: bool = False,
+    accepted_violations: int = 0,
 ) -> dict[str, object]:
     """R8 şablon bağlamı — metrik anahtarları ders adına çözülmüş halde.
 
@@ -929,6 +931,11 @@ def build_validation_context(
     ve okul numarası taşır, öğrenci adı taşımaz; burada da kişisel veri eklenmez.
     K1 (Tur 645): `cross_section_pairs` (aynı şube, farklı grup, 1. halka) +
     `occupancy` (salon doluluk tablosu — salon adı + sayı, PII yok).
+
+    Hüküm cümlesi (31.10.2026): ihlalli yerleşimde `acceptable` ihlallerin idarenin
+    kabulüyle onaylanabilir olduğunu, `accepted_violations` (>0) oturumun onay
+    anında o kadar ihlalle, kabulle onaylandığını söyler. Varsayılanlar eski
+    davranıştır ("giderilmeden onaylanamaz").
 
     `params["shuffled"]`: karıştırma yapılan düzen mi (kelebek). Şablon dağıtım
     numarası / katı dağıtım / dönüşümlü oturma satırlarını yalnız o zaman basar.
@@ -944,6 +951,8 @@ def build_validation_context(
         "is_valid": is_valid,
         "hard_violations": hard_violations,
         "violation_count": len(hard_violations),
+        "acceptable": acceptable,
+        "accepted_violations": accepted_violations,
         "first_ring_pairs": first_ring_pairs,
         "min_distances": [
             {"group_label": group_labels.get(key, key), "distance": round(dist, 1)}

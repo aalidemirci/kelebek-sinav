@@ -278,6 +278,11 @@ class ExamSession(BaseModel):
     )
     approved_by_name = models.CharField("onaylayan", max_length=128, blank=True, default="")
     approved_at = models.DateTimeField("onay zamanı", null=True, blank=True)
+    # Onay anındaki kural ihlali SAYISI (31.10.2026): >0 ise oturum idarenin açık
+    # kabulüyle, ihlallerle onaylanmıştır — R8 bunu basar. Kalıcı kayıttır: sonradan
+    # yeniden doğrulama (anonim arşiv) onay anının sonucunu değiştiremez. Yeniden
+    # açmada sıfırlanır.
+    approved_violation_count = models.PositiveIntegerField("onaydaki kural ihlali", default=0)
     # F27: arşiv saklama süresi dolunca snapshot'lar anonimleştirilir (geri
     # dönüşsüz — F8'de elle tetikli); damga doluysa oturum anonimleşmiştir.
     anonymized_at = models.DateTimeField("anonimleştirme zamanı", null=True, blank=True)

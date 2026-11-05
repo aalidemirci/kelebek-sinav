@@ -1828,8 +1828,9 @@ def seating_report(session: ExamSession) -> validator.SeatingReport:
         seat = seat_maps[a.room_id].get((a.desk_row, a.desk_col, a.slot))
         if seat is None:
             # Plan dağıtımdan sonra değişmiş — metrik üretilemez; ihlal olarak raporla.
+            # Kabulle geçilemez: yerleşim kaydı salonun bugünkü planıyla çelişir.
             report = validator.SeatingReport()
-            report.hard_violations.append(
+            report.add_blocking(
                 f"“{a.room.name}” salonunun planı dağıtımdan sonra değişmiş; yeniden dağıtın."
             )
             return report
@@ -1869,29 +1870,109 @@ def seating_report(session: ExamSession) -> validator.SeatingReport:
 # ---------------------------------------------------------------------------
 # Onay / kilit / arşiv (onaylı oturum değiştirilemez)
 # ---------------------------------------------------------------------------
-@transaction.atomic
-def approve_session(session: ExamSession, *, approved_by_name: str = "") -> ExamSession:
-    """Oturumu onaylar (DAĞITILDI → ONAYLANDI) — yerleşim İHLALSİZ olmalı.
+@dataclass(frozen=True)
+class ApprovalCheck:
+    """Onay kapısının TEK hesabı — onay ucu ve onay penceresi aynı sonucu görür.
 
-    R8 doğrulayıcısı sert ihlal bulursa onay reddedilir; mesaj yalnız SAYI
-    içerir (öğrenci adı asla — KVKK). Onay damgası ad + zaman (B12); ad
-    verilmezse kurulumdaki müdür adı basılır.
+    31.10.2026 kullanıcı kararı (eski kural "onay yalnız ihlal=0" — OYS'den, "sessiz
+    onay olmasın" gerekçesiyle): kelebek komşuluğu ihlali, düzey ya da ders mevcutları
+    karışmaya elverişsizken kaçınılmazdır; idare UYARILIR ve isterse açık kabulle
+    onaylar. Kabulle de geçilemeyenler `blocking_message` taşır: yerleşimde koltuğu
+    olmayan katılımcı, kayıt bütünlüğü hatası, kız/erkek ayrışması ihlali (K3).
+    Metinler yalnız SAYI söyler (KVKK).
     """
+
+    violations: tuple[str, ...] = ()
+    blocking_message: str = ""
+
+    @property
+    def needs_acceptance(self) -> bool:
+        return bool(self.violations) and not self.blocking_message
+
+
+def _unplaced_count(session: ExamSession) -> int:
+    """Yerleşimde koltuğu OLMAYAN güncel katılımcı sayısı (onay kapısı).
+
+    Kapasite yetmezse motor dağıtımı reddeder; koltuksuz katılımcı pratikte
+    katılımcılar dağıtımdan SONRA değişince doğar (`placement_drift.added`). Motorun
+    "koltuk bulamadı" dalı savunmadır (04.11.2026 ölçümü: 6000 rastgele senaryoda
+    tetiklenmedi); tetiklense de burada sayılır — ölçüt nedeni değil, "katılımcı ama
+    koltuğu yok" olmasıdır. Yoklaması alınmış oturumda sayılmaz: yerleşim sınavın
+    yapıldığı düzenin kaydıdır ve yeniden dağıtılamaz — kapı orada onayı kalıcı
+    olarak kilitlerdi.
+    """
+    if ExamAttendanceRecord.objects.filter(session=session).exists():
+        return 0
+    drift = participants.placement_drift(session, participants.resolve_session(session))
+    return drift.added if drift is not None else 0
+
+
+def approval_check(session: ExamSession) -> ApprovalCheck:
+    """Oturum onaylanabilir mi, onay ihlal KABULÜ ister mi? (salt okur)."""
     if session.status != ExamSessionStatus.DISTRIBUTED:
-        raise ValidationError(
-            f"Oturum '{session.get_status_display()}' durumunda; yalnız dağıtılmış oturum "
-            "onaylanabilir."
+        return ApprovalCheck(
+            blocking_message=(
+                f"Oturum '{session.get_status_display()}' durumunda; yalnız dağıtılmış oturum "
+                "onaylanabilir."
+            )
         )
     report = seating_report(session)
-    if not report.is_valid:
+    violations = tuple(report.hard_violations)
+    if report.blocking_violations:
+        return ApprovalCheck(
+            violations=violations,
+            blocking_message=(
+                f"Oturum onaylanamaz: yerleşimde onayla kabul edilemeyen "
+                f"{len(report.blocking_violations)} ihlal var (kız/erkek ayrışması ya da "
+                "bozuk yerleşim kaydı). Oturumu yeniden dağıtın; kız/erkek ayrışması "
+                "sağlanamıyorsa salon ekleyin ya da kuralı değiştirin."
+            ),
+        )
+    unplaced = _unplaced_count(session)
+    if unplaced:
+        return ApprovalCheck(
+            violations=violations,
+            blocking_message=(
+                f"Oturum onaylanamaz: {unplaced} öğrenci yerleşimde yok (katılımcılar "
+                "dağıtımdan sonra değişti). Oturumu yeniden dağıtın."
+            ),
+        )
+    return ApprovalCheck(violations=violations)
+
+
+@transaction.atomic
+def approve_session(
+    session: ExamSession, *, approved_by_name: str = "", accept_violations: bool = False
+) -> ExamSession:
+    """Oturumu onaylar (DAĞITILDI → ONAYLANDI) — kapı `approval_check`.
+
+    İhlalsiz yerleşim doğrudan onaylanır. Kural ihlali varsa onay ancak
+    `accept_violations=True` ile verilir ve ihlal SAYISI `approved_violation_count`a
+    yazılır (R8 "idarenin kararıyla onaylanmıştır" basar). Onay damgası ad + zaman
+    (B12); ad verilmezse kurulumdaki müdür adı basılır.
+    """
+    check = approval_check(session)
+    if check.blocking_message:
+        raise ValidationError(check.blocking_message)
+    if check.violations and not accept_violations:
         raise ValidationError(
-            f"Onay reddedildi: yerleşimde {len(report.hard_violations)} kural ihlali var. "
-            "Önce yeniden dağıtın (ayrıntı Yerleşim sekmesinde ve Dağıtım Doğrulama Raporu'nda)."
+            f"Yerleşimde {len(check.violations)} kural ihlali var. Yeniden dağıtım ihlali "
+            "gidermiyorsa onay penceresinde ihlalleri kabul ederek onaylayabilirsiniz "
+            "(ayrıntı Yerleşim sekmesinde ve Dağıtım Doğrulama Raporu'nda)."
         )
     session.status = ExamSessionStatus.APPROVED
     session.approved_by_name = " ".join((approved_by_name or "").split()) or _default_stamp_name()
     session.approved_at = timezone.now()
-    session.save(update_fields=["status", "approved_by_name", "approved_at", "updated_at"])
+    session.approved_violation_count = len(check.violations)
+    session.save(
+        update_fields=[
+            "status",
+            "approved_by_name",
+            "approved_at",
+            "approved_violation_count",
+            "updated_at",
+        ]
+    )
     return session
 
 
@@ -1909,7 +1990,16 @@ def reopen_session(session: ExamSession) -> ExamSession:
     session.status = ExamSessionStatus.DISTRIBUTED
     session.approved_by_name = ""
     session.approved_at = None
-    session.save(update_fields=["status", "approved_by_name", "approved_at", "updated_at"])
+    session.approved_violation_count = 0
+    session.save(
+        update_fields=[
+            "status",
+            "approved_by_name",
+            "approved_at",
+            "approved_violation_count",
+            "updated_at",
+        ]
+    )
     return session
 
 
@@ -2836,6 +2926,9 @@ def _validation_report_context(
     return reports.build_validation_context(
         is_valid=report.is_valid,
         hard_violations=report.hard_violations,
+        acceptable=report.acceptable,
+        # Onay anının kalıcı kaydı (yeniden açmada sıfırlanır) — R8 hükmü buna göre.
+        accepted_violations=session.approved_violation_count,
         first_ring_pairs=report.first_ring_same_group_pairs,
         min_distances=report.min_same_group_distance,
         proximity_score=report.proximity_score,
@@ -2865,7 +2958,14 @@ def _validation_report_context(
             ).label,
         },
         group_labels=group_labels,
-        warnings=[str(w) for w in params.get("warnings", [])],
+        # Motorun sıra başına "kaçınılmaz oldu" satırı basılmaz: ihlalin dağıtım anındaki
+        # kopyasıdır (güncel hâli üstteki listede; elle düzeltmeden sonra bayatlar) ve bu
+        # bölümün başlığı "kural ihlali değildir" der. Kayıttaki uyarı silinmez.
+        warnings=[
+            str(w)
+            for w in params.get("warnings", [])
+            if not str(w).endswith(engine.DESK_CONFLICT_WARNING_TAIL)
+        ],
     )
 
 

@@ -19,6 +19,15 @@ import { makeReport, makeSession } from "./testFixtures";
 
 const exam = vi.hoisted(() => ({
   get: vi.fn(),
+  // Onay penceresinin ön denetimi — varsayılan: ihlal yok, engel yok.
+  approvalCheck: vi.fn(() =>
+    Promise.resolve({
+      violation_count: 0,
+      violations: [] as string[],
+      blocking_message: "",
+      needs_acceptance: false,
+    }),
+  ),
   approve: vi.fn(),
   reopen: vi.fn(),
   archive: vi.fn(),
@@ -80,7 +89,11 @@ function renderPage() {
   );
 }
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  // Ön denetimi değiştiren test sonrakilere sızmasın: vi.fn(impl) varsayılanına döner.
+  exam.approvalCheck.mockReset();
+});
 
 describe("OturumDetayPage", () => {
   it("TASLAK oturumda sihirbaz açılır; sekme yok, 'Taslağı sil' var, 'Onayla' yok", async () => {
@@ -172,14 +185,16 @@ describe("OturumDetayPage", () => {
     renderPage();
 
     await user.click(await screen.findByRole("button", { name: "Onayla" }));
-    // Tek tıkla onay YOK — önce sonuç söylenir (kilit + ihlalde ret).
+    // Tek tıkla onay YOK — önce ön denetim sonucu söylenir (ihlal yok → kilit cümlesi).
     expect(exam.approve).not.toHaveBeenCalled();
     const dialog = await screen.findByRole("dialog", { name: "Oturum onaylansın mı?" });
     expect(
-      within(dialog).getByText(
-        "Onay yerleşimi kilitler; yerleşimde kural ihlali varsa reddedilir.",
+      await within(dialog).findByText(
+        "Onay yerleşimi kilitler; değiştirmek için önce onayı geri almanız gerekir.",
       ),
     ).toBeInTheDocument();
+    expect(exam.approvalCheck).toHaveBeenCalledWith(5);
+    expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
 
     await user.click(within(dialog).getByRole("button", { name: "Onayla" }));
     await waitFor(() => expect(exam.approve).toHaveBeenCalledWith(5, { approved_by_name: "" }));
@@ -199,6 +214,7 @@ describe("OturumDetayPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "Onayla" }));
     const dialog = await screen.findByRole("dialog", { name: "Oturum onaylansın mı?" });
+    await within(dialog).findByText(/Onay yerleşimi kilitler/);
     // KVKK: ad uydurmadır.
     await user.type(
       within(dialog).getByLabelText("Onaylayan (boş bırakılırsa okul müdürü)"),
@@ -221,12 +237,109 @@ describe("OturumDetayPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "Onayla" }));
     const dialog = await screen.findByRole("dialog", { name: "Oturum onaylansın mı?" });
+    await within(dialog).findByText(/Onay yerleşimi kilitler/);
     await user.click(within(dialog).getByRole("button", { name: "Onayla" }));
 
     expect(
       await screen.findByText("Onay reddedildi: yerleşimde 2 kural ihlali var."),
     ).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Oturum onaylansın mı?" })).toBeInTheDocument();
+  });
+
+  it("DAĞITILDI: kural ihlali uyarılır; onay ancak 'kabul ediyorum' işaretiyle verilir", async () => {
+    const user = userEvent.setup();
+    exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
+    exam.approvalCheck.mockResolvedValue({
+      violation_count: 2,
+      violations: [
+        "Bitişik masa ihlali: “Coğrafya — 9. Sınıf” sınavına giren iki öğrenci aynı sırada oturuyor (9-A Dersliği, 1. sıra, 1. sütun).",
+        "Bitişik masa ihlali: “Coğrafya — 9. Sınıf” sınavına giren iki öğrenci aynı sırada oturuyor (9-A Dersliği, 2. sıra, 1. sütun).",
+      ],
+      blocking_message: "",
+      needs_acceptance: true,
+    });
+    exam.approve.mockResolvedValue(
+      makeSession({ status: "APPROVED", approved_violation_count: 2 }),
+    );
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Onayla" }));
+    const dialog = await screen.findByRole("dialog", { name: "Oturum onaylansın mı?" });
+    const uyari = await within(dialog).findByRole("alert");
+    expect(uyari).toHaveTextContent("Yerleşimde 2 kural ihlali var.");
+    expect(uyari).toHaveTextContent(/9-A Dersliği, 2\. sıra, 1\. sütun/);
+    expect(uyari).toHaveTextContent(/idarenin kararıyla onaylandığını yazar/);
+
+    // Sessiz onay yok: kutu işaretlenmeden düğme kapalı.
+    const onayla = within(dialog).getByRole("button", { name: "Onayla" });
+    expect(onayla).toBeDisabled();
+    await user.click(
+      within(dialog).getByRole("checkbox", {
+        name: "İhlalleri gördüm; oturumu bu hâliyle onaylıyorum.",
+      }),
+    );
+    expect(onayla).toBeEnabled();
+    await user.click(onayla);
+
+    await waitFor(() =>
+      expect(exam.approve).toHaveBeenCalledWith(5, {
+        approved_by_name: "",
+        accept_violations: true,
+      }),
+    );
+    expect(
+      await screen.findByText("Oturum 2 kural ihlaliyle onaylandı — yerleşim kilitlendi."),
+    ).toBeInTheDocument();
+  });
+
+  it("DAĞITILDI: kabul işareti pencere kapanınca sıfırlanır", async () => {
+    const user = userEvent.setup();
+    exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
+    exam.approvalCheck.mockResolvedValue({
+      violation_count: 1,
+      violations: ["Bitişik masa ihlali: örnek."],
+      blocking_message: "",
+      needs_acceptance: true,
+    });
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Onayla" }));
+    let dialog = await screen.findByRole("dialog", { name: "Oturum onaylansın mı?" });
+    await user.click(await within(dialog).findByRole("checkbox"));
+    await user.click(within(dialog).getByRole("button", { name: "Vazgeç" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: "Onayla" }));
+    dialog = await screen.findByRole("dialog", { name: "Oturum onaylansın mı?" });
+    expect(await within(dialog).findByRole("checkbox")).not.toBeChecked();
+    expect(within(dialog).getByRole("button", { name: "Onayla" })).toBeDisabled();
+  });
+
+  it("DAĞITILDI: kabulle de geçilemeyen durumda gerekçe yazılır, onay kapalıdır", async () => {
+    const user = userEvent.setup();
+    exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
+    const gerekce =
+      "Oturum onaylanamaz: 3 öğrenci yerleşimde yok (katılımcılar dağıtımdan sonra değişti). " +
+      "Oturumu yeniden dağıtın.";
+    exam.approvalCheck.mockResolvedValue({
+      violation_count: 0,
+      violations: [],
+      blocking_message: gerekce,
+      needs_acceptance: false,
+    });
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Onayla" }));
+    const dialog = await screen.findByRole("dialog", { name: "Oturum onaylansın mı?" });
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(gerekce);
+    expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Onayla" })).toBeDisabled();
+  });
+
+  it("ihlalle onaylanmış oturumun başlığında rozet görünür", async () => {
+    exam.get.mockResolvedValue(makeSession({ status: "APPROVED", approved_violation_count: 3 }));
+    renderPage();
+    expect(await screen.findByText("3 kural ihlaliyle onaylandı")).toBeInTheDocument();
   });
 
   it("DAĞITILDI: 'Yeniden dağıt' sonuçları uyarır, numara + katı dağıtımı gönderir, uyarıları gösterir", async () => {
@@ -274,7 +387,7 @@ describe("OturumDetayPage", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
-  it("DAĞITILDI: yeniden dağıtım ihlalli dönerse sonuç 'onaylanamaz' der", async () => {
+  it("DAĞITILDI: yeniden dağıtım ihlalli dönerse sonuç onayın kabul istediğini söyler", async () => {
     const user = userEvent.setup();
     exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
     exam.distribute.mockResolvedValue({
@@ -296,7 +409,9 @@ describe("OturumDetayPage", () => {
       expect(exam.distribute).toHaveBeenCalledWith(5, { seed: undefined, strict: false }),
     );
     const sonuc = await screen.findByRole("dialog", { name: "Yeniden dağıtım sonucu" });
-    expect(within(sonuc).getByRole("alert")).toHaveTextContent(/2 kural ihlali var — onaylanamaz/);
+    expect(within(sonuc).getByRole("alert")).toHaveTextContent(
+      "2 kural ihlali var — onaylamak için ihlalleri kabul etmeniz gerekir. Farklı bir dağıtım numarasıyla yeniden dağıtmayı deneyin.",
+    );
   });
 
   it("'Kendi dersliğinde' düzeninde yeniden dağıtım numara/katı dağıtım sormaz, sonuçta numara yazmaz", async () => {

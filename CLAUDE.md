@@ -341,7 +341,21 @@
   `"<course_id>:*"` — soru dosyası, kitapçık ve R8 hep bu anahtarla eşleşir.
 - Sert kısıt denetimi `(desk_row, desk_col)` KİMLİĞİNDEN (mesafeden değil).
 - Aynı seed → aynı dağıtım; seed R8'de basılır.
-- Motor çıktısı bağımsız `validator.py`'den geçer; onay yalnız ihlal=0.
+- Motor çıktısı bağımsız `validator.py`'den geçer. **Onay kapısı TEK hesaptır**
+  (`services.approval_check`; 31.10.2026 kullanıcı kararı — eski kural "onay yalnız
+  ihlal=0" OYS'den "sessiz onay olmasın" gerekçesiyle gelmişti): kelebek komşuluğu
+  ihlali (aynı sıra; katı dağıtımda komşu sıra) düzey/ders mevcutları elverişsizken
+  kaçınılmazdır — onay ancak AÇIK kabulle (`accept_violations`, arayüzde kutu) verilir,
+  sayısı `ExamSession.approved_violation_count`a yazılır (R8 "idarenin kararıyla
+  onaylanmıştır" basar, rozet görünür, `reopen` sıfırlar). Motorun sıra başına "kaçınılmaz
+  oldu" uyarısı (`engine.DESK_CONFLICT_WARNING_TAIL`) R8'e basılmaz: ihlalin kopyasıdır ve
+  D bölümü "kural ihlali değildir" der. Kabulle de GEÇİLEMEYENLER:
+  `SeatingReport.blocking_violations` (kayıt bütünlüğü: çifte koltuk, iki koltukta
+  öğrenci, dağıtımdan sonra değişen plan + kız/erkek ayrışması — K3) ve yerleşimde
+  koltuğu olmayan katılımcı (`placement_drift.added`; yoklaması alınmış oturumda
+  sayılmaz — yeniden dağıtılamadığı için onayı kalıcı kilitlerdi). Sınıflandırmayı
+  doğrulayıcı yapar (ihlalin türünü yalnız o bilir), kararı servis verir; yeni bir
+  ihlal türü eklenirse hangi listeye gireceği bilinçle seçilir.
 - SNAPSHOT deseni: SeatAssignment/yoklama/gözetmen kayıtlarındaki ad/no/şube
   kopyaları arşiv evrakının sabitliği içindir — kaldırılmaz.
 - `ExamSessionCourse` tek-seviyeli; kitapçık sözlüğü grup anahtarıyla
@@ -574,7 +588,8 @@
   `EncryptedCharField`) ve HİÇBİR evraka, kitapçığa, dışa aktarıma, listeye ya
   da rozete BASILMAZ — R8'e yalnız kuralın ADI girer; koruma testi
   `test_ayrisma.py::test_evrakta_cinsiyet_izi_yok`. Kural SERTTİR (sağlanamazsa
-  onay engellenir), cinsiyeti bilinmeyen öğrenci JOKER'dir (dağıtım durmaz,
+  onay engellenir — 31.10.2026'dan beri kelebek ihlali kabulle onaylanabilir, bu
+  ihlal kabulle de GEÇİLEMEZ: `blocking_violations`), cinsiyeti bilinmeyen öğrenci JOKER'dir (dağıtım durmaz,
   uyarı SAYI söyler), pin çakışması İHLAL sayılır (doğrulayıcı pin bilmez) ve
   klasik düzende kural HİÇ UYGULANMAZ (`effective_separation_mode`). "Ayrı
   salonlar" bölüşümü servis katmanındadır (`_distribute_separate_rooms`, alt
