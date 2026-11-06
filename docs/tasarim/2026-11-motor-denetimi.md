@@ -227,7 +227,9 @@ Dağıtılan kipte kılavuz %14-22 der. Karar raporundaki %17-29 harmandan önce
   yanlışlarını kurum içinde, anonim karşılaştırmaktır.
 - **Gerçek okul verisi yok.** Kız/erkek dağılımı üç modelle varsayıldı; numara sırasına bloklu
   düzenin ne kadar yaygın olduğu bilinmiyor.
-- **Yayın kapısı koşulmadı.** Paketli Windows'ta süre ve aynı numara aynı plan sözleşmesi sınanmadı.
+- **Paketli Windows denemesi sınırlıdır.** Gerçek paketli programda aynı numara aynı plan yalnız 120 öğrencilik uydurma
+  veride sınandı (06.11.2026). Windows'ta büyük kurulum süreleri ve Docker'la plan eşitliği paketin Python sürümüyle ölçüldü,
+  paketli programın içinde değil. Parolalı veri, fotoğraf, kitapçık ve kurulum dosyası bu denemede yoktu.
 - **Aynı sıra ihlali kimi kümeli senaryoda yüksek kalır.** Kız/erkek ihlali kabulle geçilmediği için
   önce o sağlanır; aynı sınav ihlali idare kabulüne kalır.
 - **Sınırın izin vermediği kurulumda** (eksik sıra var) şube içi tek cinsiyet birden fazla karışık

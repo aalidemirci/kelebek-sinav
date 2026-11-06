@@ -411,7 +411,7 @@
   çözülmüş de sanılmasın): kopya ÖLÇÜLMEDİ, ölçülen oturma geometrisidir, kullanıcı metninde
   "kopya azalır" yazılmaz ve hiçbir katsayı bilimsel sonuç diye sunulmaz (yön sıralaması sınırlı
   kanıta, sayılar varsayıma dayanır); veri sentetiktir, gerçek okulda kız/erkek dağılımı
-  bilinmiyor; paketli Windows'ta süre ve aynı numara aynı plan sınanmadı; tek dağıtımın en iyi
+  bilinmiyor; paketli Windows'ta aynı numara aynı plan yalnız 120 öğrencilik uydurma veride sınandı, büyük kurulumda süre paketin Python'uyla ölçüldü; tek dağıtımın en iyi
   plana açığı (%9,27) düzeltmeden önce ölçüldü, daha güçlü arama gerekçesizdir (ceza ile yakınlık
   aynı yönde olmak zorunda değil); motorda süre bütçesi yok, sınır sayaçladır (ölçülen en kötü:
   3600 öğrenci tam dolu, kız/erkek açık, 11-23 sn; üst sınır bilinmiyor). Arka sıra, köşe, ön
