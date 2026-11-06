@@ -126,14 +126,16 @@ bilgi "paket kişisel veri sızıntısı denetimi"
 python "$DEPO/packaging/veri_sizintisi.py" "$PAKET_KOKU/kelebek-sinav"
 
 # --- 5. Duman testleri (paketlenmiş çalıştırılabilir üzerinden) --------------
+# Üç test de geçici veri klasöründe koşar: KS_APP_HOME verilmezse program, derlemeyi
+# yapan makinenin GERÇEK veri klasörüne yazar.
+GECICI_VERI="$(mktemp -d)"
 bilgi "duman testi: --bagimlilik-duman (K7 hiddenimports)"
-"$UYGULAMA" --bagimlilik-duman
+KS_APP_HOME="$GECICI_VERI" "$UYGULAMA" --bagimlilik-duman
 
 bilgi "duman testi: --pdf-duman"
-"$UYGULAMA" --pdf-duman "$CIKTI/pdf-duman.pdf"
+KS_APP_HOME="$GECICI_VERI" "$UYGULAMA" --pdf-duman "$CIKTI/pdf-duman.pdf"
 
 bilgi "duman testi: --autotest"
-GECICI_VERI="$(mktemp -d)"
 KS_APP_HOME="$GECICI_VERI" "$UYGULAMA" --autotest
 rm -rf "$GECICI_VERI"
 

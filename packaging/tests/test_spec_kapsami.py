@@ -80,6 +80,19 @@ def test_bagimlilik_duman_bayragi_ve_cikis_kodu_sozlesmesi() -> None:
     assert _GIRIS["EXIT_IMPORT_SMOKE_FAILED"] == _ERRORS["EXIT_IMPORT_SMOKE_FAILED"] == 10
 
 
+def test_derleme_dumanlari_gercek_veri_klasorune_yazmaz() -> None:
+    """Derlemedeki her duman testi geçici KS_APP_HOME ile koşar (06.11.2026 bulgusu)."""
+    windows = (REPO / "packaging" / "windows" / "build.ps1").read_text(encoding="utf-8")
+    cagrilar = [s for s in windows.splitlines() if "Invoke-Uygulama $AppExe" in s]
+    assert len(cagrilar) == 3
+    assert all(s.rstrip().endswith("$dumanOrtami") for s in cagrilar), cagrilar
+
+    linux = (REPO / "packaging" / "linux" / "build.sh").read_text(encoding="utf-8")
+    cagrilar = [s for s in linux.splitlines() if '"$UYGULAMA" --' in s]
+    assert len(cagrilar) == 3
+    assert all(s.startswith('KS_APP_HOME="$GECICI_VERI" ') for s in cagrilar), cagrilar
+
+
 def test_bagimlilik_duman_eksik_modulu_yakalar(monkeypatch: pytest.MonkeyPatch) -> None:
     """Kapının GERÇEKTEN kapandığı sabitlenir: eksik modül → sıfır olmayan çıkış.
 

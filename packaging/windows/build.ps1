@@ -154,25 +154,31 @@ Copy-Item -Force $FontsConfKaynak $FontsConfHedef
 # --- 5. Duman testleri ------------------------------------------------------
 # ÖNCE bağımlılık kapısı: eksik bir hiddenimport'u burada yakalamak, sonraki
 # testlerin anlaşılmaz hatalarını okumaktan ucuzdur (K7 — CLAUDE.md §2).
-Write-Adim "duman testi: --bagimlilik-duman (K7 hiddenimports)"
-$kod = Invoke-Uygulama $AppExe @("--bagimlilik-duman")
-if ($kod -ne 0) {
-    throw "Bağımlılık duman testi BAŞARISIZ (çıkış $kod). spec hiddenimports eksik."
-}
-
-Write-Adim "duman testi: --pdf-duman (Türkçe PDF)"
-$pdf = Join-Path $Output "pdf-duman.pdf"
-$kod = Invoke-Uygulama $AppExe @("--pdf-duman", $pdf)
-if ($kod -ne 0) {
-    throw "PDF duman testi BAŞARISIZ (çıkış $kod). WeasyPrint DLL kapanışı veya fontconfig eksik."
-}
-if (-not (Test-Path $pdf)) { throw "PDF üretilmedi: $pdf" }
-
-Write-Adim "duman testi: --autotest"
+# Üç test de geçici veri klasöründe koşar: KS_APP_HOME verilmezse program, derlemeyi
+# yapan makinenin GERÇEK veri klasörüne yazar (06.11.2026: cacheonts.conf yazıldı).
 $gecici = Join-Path ([System.IO.Path]::GetTempPath()) ("ks-" + [Guid]::NewGuid().ToString("N"))
-$kod = Invoke-Uygulama $AppExe @("--autotest") @{ "KS_APP_HOME" = $gecici }
-Remove-Item -Recurse -Force $gecici -ErrorAction SilentlyContinue
-if ($kod -ne 0) { throw "Açılış denetimi BAŞARISIZ (çıkış $kod)." }
+$dumanOrtami = @{ "KS_APP_HOME" = $gecici }
+try {
+    Write-Adim "duman testi: --bagimlilik-duman (K7 hiddenimports)"
+    $kod = Invoke-Uygulama $AppExe @("--bagimlilik-duman") $dumanOrtami
+    if ($kod -ne 0) {
+        throw "Bağımlılık duman testi BAŞARISIZ (çıkış $kod). spec hiddenimports eksik."
+    }
+
+    Write-Adim "duman testi: --pdf-duman (Türkçe PDF)"
+    $pdf = Join-Path $Output "pdf-duman.pdf"
+    $kod = Invoke-Uygulama $AppExe @("--pdf-duman", $pdf) $dumanOrtami
+    if ($kod -ne 0) {
+        throw "PDF duman testi BAŞARISIZ (çıkış $kod). WeasyPrint DLL kapanışı veya fontconfig eksik."
+    }
+    if (-not (Test-Path $pdf)) { throw "PDF üretilmedi: $pdf" }
+
+    Write-Adim "duman testi: --autotest"
+    $kod = Invoke-Uygulama $AppExe @("--autotest") $dumanOrtami
+    if ($kod -ne 0) { throw "Açılış denetimi BAŞARISIZ (çıkış $kod)." }
+} finally {
+    Remove-Item -Recurse -Force $gecici -ErrorAction SilentlyContinue
+}
 
 # --- 6. Taşınabilir zip -----------------------------------------------------
 Write-Adim "taşınabilir zip"
