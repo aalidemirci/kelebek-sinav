@@ -112,6 +112,11 @@
   R4 duyuru +57pt). Çözüm `box-sizing: border-box`'u O TABLOYA vermek; ama o
   zaman ad sütununun içi dolgu kadar daralır — `_NAME_CELL_CHROME_PX` yatay
   dolguyu da içermek ZORUNDA, yoksa adlar sarar ve sayfa bütçesi kırılır.
+- **`.sec .hint` tek satırlıktır (06.11.2026):** ipucu koyu bant içindir, rengi koyu zemine
+  seçildi; satıra sığmayan metin bandın altına, beyaz kâğıda düşer ve okunmaz (PDF metninde
+  yine vardır, metin arayan test geçer). Uzun not bandın altında `.sec-note`tur. Koruma:
+  `test_reports.test_bant_ipucu_tek_satira_sigar`,
+  `test_yakinlik_onceligi.test_r8_acik_renkli_ipucu_yalniz_koyu_bant_icinde_basilir`.
 - **Evrak imzaları TEK bileşendir (01.10.2026 tasarım denetimi):** iki evrak
   ailesi (resmî yazı: `documents/base.html` — takvim, mazeret belgeleri; sınav
   evrakı: `sinav/reports/base.html`) imza hücresini `print/_imza.html` ile, stili
@@ -340,15 +345,97 @@
 - Çakışma grubu anahtarı `"<course_id>:<level>"` / ortak kitapçıkta
   `"<course_id>:*"` — soru dosyası, kitapçık ve R8 hep bu anahtarla eşleşir.
 - Sert kısıt denetimi `(desk_row, desk_col)` KİMLİĞİNDEN (mesafeden değil).
-- Aynı seed → aynı dağıtım; seed R8'de basılır.
+- Aynı seed → aynı dağıtım; seed R8'de basılır. Sözleşmenin birimi motor sürümüdür
+  (`engine.ENGINE_VERSION`, `distribution_params["engine_version"]`, R8'de "Dağıtım
+  yöntemi sürümü"): aynı girdi + aynı numara başka yerleşim verecekse sürüm ARTIRILIR.
+  Girdi yalnız öğrenci ve salon değildir: öğrencinin başka oturumdaki son yeri de
+  (`_previous_seats_map`) girdidir, R8'de görünmez ve araya sınav girince aynı numara başka
+  plan verir. Kullanıcı metni bu yüzden "aynı girdilerle" der, "birebir yeniden üretilir" demez.
+  Geçmiş yerleşim kayıtlıdır, sürüm değişince etkilenmez; alanı olmayan kayıtta R8
+  satırı basılmaz. Sözleşme girdi SIRASINDAN bağımsızdır: motor katılımcı, sabit yerleşim
+  ve salon listesini kanonik sıraya dizer (`_input_key`, salon kimliği), servis de kural
+  pinlerinden ve "Ayrı salonlar" bölüşümünden ÖNCE salonları kimlik sırasına alır. Ders
+  satırı ya da salon seçim sırası plana sızmaz.
+- **Harman her dağıtımda açıktır, kapısı yoktur** (06.11.2026 kullanıcı kararı, tasarım
+  §2.4 eki): `_blend_section_order` şube içi sırayı, `_blend_room_order` salon payının grup
+  içi sırasını numaradan türeyen karıştırmayla bozar; ana rng'ye dokunmazlar. Yani şube
+  içinde okul no sırası KORUNMAZ. Ayrışma kapalıyken VE önceki koltuk yokken grup deseni,
+  ceza, ihlal ve şube-salon sayımı harmansız hâliyle birebirdir (test kilitli). İkinci
+  sınavdan itibaren önceki koltuk vardır: cezalı sıra öğrenciye bağlı olduğu için desen ve
+  yakınlık skoru değişir, ihlal sayısı ölçümde değişmedi ama bunun güvencesi yoktur (sabit
+  veride test edilir, kanıt değildir). Ayrışma açıkken takas sonucu değişebilir.
+  Aynı grup içinde önceki koltuk takası iki yolda da vardır ve yalnız o terimi
+  karşılaştırır. Harman düzenin numaraya bağlandığını gösterir, kopyanın azaldığını DEĞİL;
+  ölçülen şey oturma geometrisidir. Şube salon payına tam oturuyorsa aynı salonda kalma
+  %100 ve halka tekrarı %21-29 kalır.
+- **Sayılı yol** (06.11.2026 kullanıcı kararı, tasarım §2.4 eki): sonsuz ceza ihlal
+  SAYMAZ (iki taraf da ∞ iken karşılaştırma ikincile düşer) ve eski takas iki öğrencinin
+  ortak terimini yanlış ölçer. İki farklı ayrışma anahtarı ya da üçlü sıra varken
+  (`_uses_counted_path`) `_counted_fill` + `_counted_room` koşar: demet `(ayrışma, aynı
+  sıra, yumuşak, odak)`, odak yalnız eşitlik bozar (kullanıcı kararı: kaçınılmaz çiftler
+  masaya ÇEKİLMEZ — odağı yumuşaktan önceye almak halkayı %7-26 artırıyordu). Faz 0'da
+  `_balance_separation` aynı gruptan farklı anahtarlı öğrenciyi salonlar arası takas eder,
+  takas karışık sırayla durursa `_key_targets`in hedeflerine yürür (ikili ve üçlü salon
+  birlikteyken ikili salon çift, üçlü salon 3'ün katı sayı ister; tek takas üç öğrencilik
+  kaydırmaya varamaz). Eşit kaydırmalı hedefler (`_KEY_TARGET_LIMIT`) sırayla denenir:
+  yürüyüş önce aynı grup takası arar, kalmadıysa İKİ AYRI GRUBUN öğrencisini takas eder ve
+  grup kotası değişir (şube içi tek cinsiyette zorunludur; kız/erkek ihlali kabulle
+  geçilemez, aynı sınavın yan yana gelmesi geçilir). En az karışık sıra, sonra en az aynı
+  sıra çifti, sonra en az grup değişimi seçilir, karışık sıra düşmezse geri alınır. Sabit
+  öğrencinin sırası anahtarına KİLİTLİDİR (`separation_locks`): yanındaki boş koltuk serbest
+  tekli sıra sayılmaz; `_room_floor`, `_key_targets`, `separation_desk_gap` ve sihirbazın
+  `session_separation_gap`i kilidi görür (kilit `desk_sizes`in alt kümesidir, sıra ölçüsü
+  aynı histogramdır). Salon hedefin üstünde kalırsa `_rebuild` sıraları anahtara ayırıp yeniden kurar (sabit
+  öğrenciler yerinde kalır, sıralarını kendi anahtarının tarafına çeker; kurulum ihlali
+  düşürmezse geri alınır). `_room_floor` DURMA hedefidir, alt sınır değildir: kullanıcı
+  metninde "kaçınılmaz" diye kullanılmaz; bölüşüm sayısı sıra ölçülerinin çarpımı olduğu
+  için `_FLOOR_SPLIT_BUDGET`le SAYAÇLA sınırlıdır (duvar saati kullanılmaz: aynı numara aynı
+  plan). Sayılı yolda ve karma salonda (`counted or any(size != 2)`) `_fit_quotas_to_desks`
+  grup kotasını salonun sıra sayısına indirir; artımlı hesaptır, hamle başına yalnız iki
+  salon yeniden hesaplanır. Anahtarsız ikili yol bu kodlardan geçmez (`test_altin_kayit`);
+  yeni yolun kalitesini `test_sayili_yol.py` kilitler — altın kayıt ve eski testler bu
+  yolu SINAMAZ (ters çevrilmiş kabul koşulu 681/681 geçmişti). Sabit öğrencinin SINAVI Faz
+  0'a girmez: sıranın boş koltuğuna aynı sınav düşebilir, bu ihlal kabulle geçilir. Sınır izin
+  vermiyorsa (`_key_targets` boş) hedef yürüyüşü koşmaz: tek cinsiyetli şubede karışık sıra
+  eksik sıradan fazla kalabilir; plan onaylanmaz, sihirbaz zaten uyarır. Sıra başına
+  uyarı neden iddia etmez (`DESK_CONFLICT_WARNING_TAIL`); eski kayıtlardaki metin
+  `LEGACY_DESK_CONFLICT_WARNING_TAIL` ile R8'den ayıklanır.
+- **Altın kayıt ne zaman yenilenir:** `test_altin_kayit.py` kırmızıysa önce davranış değişikliğinin
+  bilinçli olup olmadığı sorulur. Aynı girdi + aynı numara başka yerleşim veriyorsa bu kullanıcı
+  kararıdır: `ENGINE_VERSION` artırılır (yayımlanmamış sürüm genişliyorsa aynı kalır), kayıt
+  `_altin_kayit_uret` ile yenilenir, gerekçe commit mesajına ve CHANGELOG'a yazılır ("aynı numara
+  eski sürümden farklı plan verir"). Kaydı yeşile döndürmek için yenilemek yasaktır; kapılı biçim
+  de yasaktır (sorunu testten gizler). Kayıt yalnız anahtarsız ikili yolu kilitler: sayılı yolun
+  kilidi `test_sayili_yol.py`, seçimlik kipin kapalıyken değişmezliği aynı kayıttır.
+- **Motor denetiminin açık sınırları** (`docs/tasarim/2026-11-motor-denetimi.md`, kusur sanılmasın,
+  çözülmüş de sanılmasın): kopya ÖLÇÜLMEDİ, ölçülen oturma geometrisidir, kullanıcı metninde
+  "kopya azalır" yazılmaz ve hiçbir katsayı bilimsel sonuç diye sunulmaz (yön sıralaması sınırlı
+  kanıta, sayılar varsayıma dayanır); veri sentetiktir, gerçek okulda kız/erkek dağılımı
+  bilinmiyor; paketli Windows'ta süre ve aynı numara aynı plan sınanmadı; tek dağıtımın en iyi
+  plana açığı (%9,27) düzeltmeden önce ölçüldü, daha güçlü arama gerekçesizdir (ceza ile yakınlık
+  aynı yönde olmak zorunda değil); motorda süre bütçesi yok, sınır sayaçladır (ölçülen en kötü:
+  3600 öğrenci tam dolu, kız/erkek açık, 11-23 sn; üst sınır bilinmiyor). Arka sıra, köşe, ön
+  sıra cezası ve metreli model denendi ya da incelendi, EKLENMEZ.
+- **Sınav çeşidi yalnız ekrandadır:** `services.room_exam_mix` (`seating` ucunun `exam_mix`i) salon
+  başına sınav çeşidini ve önünde aynı sınav olan öğrenci oranını verir: pay aynı sütunda plandaki
+  bir önceki sırada aynı sınav olan (plana konmamış boş satır atlanır, planda olup boş kalan sıra
+  atlanmaz), payda ilk dolu satırın arkasındakiler. Yan etkisizdir; `room_occupancy` R8'e gittiği
+  için ayrı işlevdir, evraka ve `distribution_params`a girmez: dağıtım ve R8 yolu hesabı hiç
+  çağırmaz, koruma testi çağrıyı yakalar. Oran sınav sayısıyla tek düze inmez (ölçüm: 5 sınav tamda
+  %0,1, 6 sınavda %12): sihirbaz "genellikle artar" der. %100 güvencesi yalnız tam dolu, eşit
+  mevcutlu iki sınavda ve kız/erkek kapalıyken vardır; başka durum için aralık yazılmaz.
+- **"Aynı sıraya oturtma" parite uyarısı:** `engine.separation_desk_gap` (ikili sırada
+  Σceil(n/2) − sıra) sihirbazın salon adımında `butterfly-fit` ucundan gelir. Yalnız
+  eksik SIRA sayısı söylenir; kız/erkek sayısı evraka, R8'e, `distribution_params`a
+  girmez. Motor bunu çözemez ve ihlal kabulle geçilmez: karar idarenindir.
 - Motor çıktısı bağımsız `validator.py`'den geçer. **Onay kapısı TEK hesaptır**
   (`services.approval_check`; 31.10.2026 kullanıcı kararı — eski kural "onay yalnız
   ihlal=0" OYS'den "sessiz onay olmasın" gerekçesiyle gelmişti): kelebek komşuluğu
   ihlali (aynı sıra; katı dağıtımda komşu sıra) düzey/ders mevcutları elverişsizken
   kaçınılmazdır — onay ancak AÇIK kabulle (`accept_violations`, arayüzde kutu) verilir,
   sayısı `ExamSession.approved_violation_count`a yazılır (R8 "idarenin kararıyla
-  onaylanmıştır" basar, rozet görünür, `reopen` sıfırlar). Motorun sıra başına "kaçınılmaz
-  oldu" uyarısı (`engine.DESK_CONFLICT_WARNING_TAIL`) R8'e basılmaz: ihlalin kopyasıdır ve
+  onaylanmıştır" basar, rozet görünür, `reopen` sıfırlar). Motorun sıra başına "bu dağıtımda
+  önlenemedi" uyarısı (`engine.DESK_CONFLICT_WARNING_TAIL`) R8'e basılmaz: ihlalin kopyasıdır ve
   D bölümü "kural ihlali değildir" der. Kabulle de GEÇİLEMEYENLER:
   `SeatingReport.blocking_violations` (kayıt bütünlüğü: çifte koltuk, iki koltukta
   öğrenci, dağıtımdan sonra değişen plan + kız/erkek ayrışması — K3) ve yerleşimde
@@ -449,7 +536,9 @@
   ile aynı genişletme deseni). Konum tek yerden: `layout.desk_position_label` ("3. sıra,
   1. sütun"; ön cephe bandı sayılmaz, FE `planEdit.seatPositionLabel` ile AYNI).
   Yeni bir uyarıya `room_id`, `id=`, `(2,1)` ya da iç kural kodu (`AYRI_SALON`)
-  yazmayın; KVKK gereği öğrenci ADI da yazılmaz, okul numarası yazılır.
+  yazmayın; KVKK gereği öğrenci ADI da yazılmaz, okul numarası yazılır. Tek istisna
+  kız/erkek ayrışması ihlalidir: o satır okul numarası da taşımaz (§3 ayrışma
+  maddesi) — numara kişiyi, kural cinsiyet farkını söylerdi.
 - **Kitapçık üretimi yerleşimin kopyasıdır:** ZIP salon/koltuk/ad taşır. Yerleşim
   sonradan değişirse (yeniden dağıtım, taslağa alma, koltuk takası) üretim
   `is_stale` olur (`selectors.booklet_run_is_stale` — canlı yerleşimin son
@@ -498,9 +587,12 @@
   gün devam sayfasında TARİHSİZ basılırdı). Şablonda `tr` ve `tbody` için
   `break-inside: avoid` ŞART; test şablonu tarar.
 - **Ceza demeti:** `engine._pair_penalty` leksikografik `(birincil, ikincil)`
-  döner. Birincil sert/yumuşak yakınlık cezasıdır (sert kısıt kaynağı);
+  döner. Birincil sert/yumuşak yakınlık cezasıdır (sert kısıt kaynağı; yakınlık önceliği
+  açıkken ağırlığı daralır — aşağıdaki madde);
   ikincil YALNIZ eşitlik bozar (kaçınılmaz komşu çiftin öğretmen masasına
-  uzaklığı). İkincil hiçbir koşulda ihlal sayısını artıramaz.
+  uzaklığı). Birincili sonlu bir hamleyi ikincil değiştirmez; ama iki taraf da ∞ iken
+  eşitlik ikincile düşer ve ∞ ihlal saymadığı için eski yolda ihlal sayısı artabilir.
+  İhlalin sayıldığı yol `_RoomState`tir (aşağıda "Sayılı yol").
 - **Kümeler seçim aracıdır:** şube/derslik kümesi kimliği HİÇBİR oturum
   kaydına yazılmaz; sihirbaz kümeyi somut pk listesine açar.
 - **Takvim girdisi katılımcı kapsamı LEVEL/SECTIONS'tır** (kümeler kuralının
@@ -583,19 +675,51 @@
   varsayılanı `SchoolConfig.default_separation_mode`, oturum alanı
   `ExamSession.separation_mode`. Motor ve doğrulayıcı yalnız VARSAYILANLI
   `separation_key` görür ("K"/"E"/boş=joker); anahtarı SERVİS üretir
-  (`_with_separation_keys`), etiketi ("kız"/"erkek") yalnız METNE girer.
+  (`_with_separation_keys`). İhlal satırı kuralın adı + konumdur ("Ayrı oturma
+  kuralı ihlali: <salon>, <sıra konumu>."; ayrı salonda "<salon>, salon mevcudu N" —
+  sayı jokerler DÂHİL salon mevcududur): okul no ve cinsiyet sözcüğü YOKTUR
+  (06.11.2026) — aynı metin ekrana ve R8'e gider, kişiyle cinsiyeti eşlerdi. KALAN
+  RİSK: sıra kipinde satır, aynı paketteki oturma planıyla okunursa o sıradaki iki
+  adın farklı cinsiyette olduğunu (hangisinin ne olduğunu değil) ele verir; konum
+  idareci için gereklidir, ihlal onayı engellediği için satır yalnız onaysız R8'dedir.
+  "Eşleme tamamen kalktı" DENMEZ. "kız"/"erkek" sözcüğü yalnız "Ayrı salonlar"
+  kapasite reddinde (ekranda, kalıcı değil, SAYI) geçer.
   Cinsiyet kaynağı e-Okul sınıf listesidir (`Student.gender`,
   `EncryptedCharField`) ve HİÇBİR evraka, kitapçığa, dışa aktarıma, listeye ya
-  da rozete BASILMAZ — R8'e yalnız kuralın ADI girer; koruma testi
-  `test_ayrisma.py::test_evrakta_cinsiyet_izi_yok`. Kural SERTTİR (sağlanamazsa
+  da rozete BASILMAZ — liste API yanıtı da alanı taşımaz (`StudentListSerializer`;
+  kart detay ucundan okur, okuyamazsa kayıtta alan gönderilmez). R8'e kuraldan adı
+  ve varsa ihlal satırı girer; cinsiyeti bilinmeyen öğrenci uyarısı R8'de ayıklanır,
+  SAYISI `distribution_params["separation_unknown"]` ile Yerleşim sekmesinde görünür.
+  Koruma testleri `test_ayrisma.py::test_evrakta_cinsiyet_izi_yok` (temiz oturum),
+  `test_ihlalli_onaysiz_oturumun_r8inde_cinsiyet_ve_okul_no_yok`,
+  `test_ihlalli_oturumun_yerlesim_ekraninda_cinsiyet_izi_yok`,
+  `test_ham_ayrisma_anahtari_hicbir_metne_dusmez` (sözcük değil anahtar arar: iz harfi
+  verir) ve `test_persons.py::test_api_ogrenci_listesi_cinsiyet_tasimaz`. Kural SERTTİR (sağlanamazsa
   onay engellenir — 31.10.2026'dan beri kelebek ihlali kabulle onaylanabilir, bu
   ihlal kabulle de GEÇİLEMEZ: `blocking_violations`), cinsiyeti bilinmeyen öğrenci JOKER'dir (dağıtım durmaz,
   uyarı SAYI söyler), pin çakışması İHLAL sayılır (doğrulayıcı pin bilmez) ve
   klasik düzende kural HİÇ UYGULANMAZ (`effective_separation_mode`). "Ayrı
   salonlar" bölüşümü servis katmanındadır (`_distribute_separate_rooms`, alt
-  seed = `seed + bölüm sırası`) — motor tek salon bilir. Motor çıktısının
-  kural KAPALIYKEN değişmediği `test_altin_kayit.py` ile bit bit kilitlidir;
-  o kaydı yenilemek AYRI bir karardır.
+  seed = `seed + bölüm sırası`) — motor tek salon bilir. Aynı motor sürümünde
+  kural KAPALIYKEN çıktı `test_altin_kayit.py` ile bit bit kilitlidir; o kaydı yenilemek
+  AYRI bir karardır (2. sürümde harman için yenilendi, 06.11.2026 kullanıcı kararı).
+- **Yakınlık önceliği seçimliktir, varsayılan kapalıdır** (06.11.2026 kullanıcı kararı;
+  kip `okul.ProximityMode`, okul varsayılanı `SchoolConfig.default_proximity_mode`, oturum
+  alanı `ExamSession.proximity_mode`; düzeni şube dağılımınınkidir: yalnız taslakta değişir,
+  dağıtım anındaki ETKİN değer `distribution_params["proximity_mode"]`a yazılır, R8'e ADI
+  basılır, anahtarı olmayan eski dağıtım varsayılan okunur). "En yakın komşular öncelikli"
+  `_pair_penalty`nin birincilinde birinci halka ağırlığını yalnız `_closest_neighbour` çiftine
+  verir (tam ön-arka, iç çapraz, koridor karşısı; koridor eşiği 0,5 sütun: ikili ve üçlü sıra
+  alır, bir yanı tek kişilik çift almaz). Kusur sanılmayacak üç karar: (1) kip iki arama yoluna
+  da PARAMETREYLE geçer (`narrow`, `_RoomState`), modül düzeyinde durum TUTULMAZ — gömülü sunucu
+  altı iş parçacıklıdır; (2) doğrulayıcı KİPTEN BAĞIMSIZDIR, R8 her kipte bütün komşu sıraları
+  sayar; açıkken o sayının artması beklenir, R8 bunu bandın altındaki notla söyler (`.sec-note`;
+  `.sec .hint` tek satırlıktır ve koyu zemin içindir); (3) kip `ENGINE_VERSION` ARTIRMAZ:
+  kapalıyken plan bit bit aynıdır, kip dağıtımın girdisidir. Etkin değeri
+  `effective_proximity_mode(session, strict=…)` verir: klasik düzende ve katı dağıtımda
+  kapalıdır. Yön sıralaması sınırlı kanıta, +10 varsayıma dayanır: kullanıcı metninde sonuç vaat
+  edilmez, kopyanın azaldığı yazılmaz, sayının artışı için neden uydurulmaz (kazanç vermediği
+  kurulumlar vardır — tasarım "Eki: yakınlık önceliği").
 - **Şube dağılımı seçimliktir, varsayılan "bir arada"dır** (25.10.2026 kullanıcı
   kararları; kip `okul.SectionSpreadMode`, okul varsayılanı
   `SchoolConfig.default_section_spread`, oturum alanı `ExamSession.section_spread` —

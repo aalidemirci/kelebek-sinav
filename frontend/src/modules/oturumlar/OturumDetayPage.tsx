@@ -342,6 +342,7 @@ export default function OturumDetayPage() {
         <YenidenDagitDialog
           sessionId={data.id}
           layoutMode={data.layout_mode}
+          proximityMode={data.proximity_mode}
           onClose={closeRedistribute}
           onDistributed={refresh}
         />

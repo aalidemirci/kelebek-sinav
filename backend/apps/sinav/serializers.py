@@ -231,6 +231,7 @@ class ExamSessionSerializer(serializers.ModelSerializer[ExamSession]):
             "proctors_enabled",
             "separation_mode",
             "section_spread",
+            "proximity_mode",
             "term_id",
             "term_label",
             "status",

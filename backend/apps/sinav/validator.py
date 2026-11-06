@@ -11,8 +11,9 @@ Kısıt modeli (K8):
 - SERT (20.09.2026, kız/erkek ayrışması — `separation` parametresi): AYRIŞMA
   anahtarı farklı iki öğrenci aynı sırada (DESK kipi) ya da aynı salonda (ROOM
   kipi) bulunamaz. Doğrulayıcı anahtarın NE olduğunu bilmez (motorla aynı
-  soyutlama); kullanıcıya görünen sözcük isteğe bağlı ETİKETTEN gelir. Boş
-  anahtar JOKER'dir: denetime hiç girmez.
+  soyutlama). İhlal metni kuralın adı + konumdur: cinsiyet sözcüğü ve okul
+  numarası YAZILMAZ — metin ekrana ve R8'e aynen gider, kişiyle cinsiyeti
+  eşlerdi. Boş anahtar JOKER'dir: denetime hiç girmez.
 - KATI MOD: birinci halka da sert sayılır — komşu sıra grupları
   (Chebyshev mesafe ≤ 1: yan/ön/arka/çapraz) aynı gruptan öğrenci içeremez.
 - ESNEK: toplam yakınlık skoru Σ 1/d² (aynı-grup çiftleri; d = Öklid, grid
@@ -57,10 +58,8 @@ class PlacedStudent:
     desk_label: str = ""
     group_label: str = ""
     student_number: str = ""
-    #: Ayrışma anahtarı ("K"/"E"/boş) ve onun İDARECİ DİLİNDEKİ karşılığı
-    #: ("kız"/"erkek"). Anahtar DENETİME, etiket yalnız METNE girer.
+    #: Ayrışma anahtarı ("K"/"E"/boş). Yalnız DENETİME girer; metne yansımaz.
     separation_key: str = ""
-    separation_label: str = ""
 
 
 @dataclass
@@ -134,11 +133,6 @@ SEPARATION_DESK = "DESK"
 SEPARATION_ROOM = "ROOM"
 
 
-def _separation_text(p: PlacedStudent) -> str:
-    """Ayrışma anahtarının idareci dilindeki karşılığı (etiketsizse ham anahtar)."""
-    return p.separation_label or p.separation_key
-
-
 def _who(p: PlacedStudent) -> str:
     """İhlal metninde öğrenci: KVKK gereği ad değil okul numarası."""
     return f"okul no {p.student_number}" if p.student_number else f"id={p.student_id}"
@@ -151,6 +145,11 @@ def _check_separation(placed: list[PlacedStudent], report: SeatingReport, *, mod
     kararı: cinsiyeti bilinmeyen öğrenci dağıtımı durdurmaz). Her kapsam için
     YALNIZ BİR ihlal satırı yazılır: 40 kişilik bir salonda ROOM kipi
     yüzlerce çift üretirdi, idareciye sayfalarca aynı cümle basılmaz.
+
+    Metin kuralın adı + konumdur; kim olduğu ya da hangi anahtarı taşıdığı
+    söylenmez. ROOM kipinde sayı SALON MEVCUDUDUR (jokerler dâhil): kurala giren
+    öğrenci sayısı jokerleri dışarıda bırakır ve "ihlal o kadar kişiye ait" diye
+    okunurdu. Çağıran `room_counts`u bu fonksiyondan ÖNCE doldurur.
     """
     kapsamlar: dict[tuple[int, int, int] | tuple[int], list[PlacedStudent]] = {}
     for p in placed:
@@ -164,18 +163,12 @@ def _check_separation(placed: list[PlacedStudent], report: SeatingReport, *, mod
         if len(farkli) < 2:
             continue
         a = uyeler[0]
-        b = next(u for u in uyeler if u.separation_key != a.separation_key)
         if mode == SEPARATION_DESK:
-            report.add_blocking(
-                f"Ayrı oturma ihlali: {_separation_text(a)} ve {_separation_text(b)} öğrenci "
-                f"aynı sırada oturuyor ({_where(a)}; {_who(a)} ve {_who(b)})."
-            )
+            report.add_blocking(f"Ayrı oturma kuralı ihlali: {_where(a)}.")
         else:
             salon = a.room_label or f"salon {a.room_id}"
-            report.add_blocking(
-                f"Ayrı salon ihlali: {salon} salonunda hem {_separation_text(a)} hem "
-                f"{_separation_text(b)} öğrenci var ({len(uyeler)} öğrenci)."
-            )
+            mevcut = report.room_counts[a.room_id]
+            report.add_blocking(f"Ayrı salon kuralı ihlali: {salon}, salon mevcudu {mevcut}.")
 
 
 def validate_seating(

@@ -26,15 +26,18 @@ import DagitimSecenekleri, {
   dagitimCumlesi,
   dagitimGovdesi,
 } from "./DagitimSecenekleri";
+import type { ProximityMode } from "../okul/api";
 
 export default function YenidenDagitDialog({
   sessionId,
   layoutMode,
+  proximityMode,
   onClose,
   onDistributed,
 }: {
   sessionId: number;
   layoutMode: LayoutModeCode;
+  proximityMode: ProximityMode;
   onClose: () => void;
   /** Dağıtım yazıldı — oturum, yerleşim ve gözetmen sorguları tazelenmeli. */
   onDistributed: () => void;
@@ -106,6 +109,7 @@ export default function YenidenDagitDialog({
               deger={options}
               onChange={setOptions}
               seedLabel="Dağıtım numarası (boş bırakılırsa yeni rastgele)"
+              yakinlik={proximityMode}
               className="flex flex-col gap-3"
             />
           )}

@@ -385,9 +385,28 @@ function OgrenciFormDialog({
     student?.class_level == null ? "" : String(student.class_level),
   );
   const [section, setSection] = useState(student?.class_section ?? "");
-  // Cinsiyet YALNIZ kız/erkek ayrışması kuralı içindir; liste sütunu YOKTUR.
-  const [gender, setGender] = useState<Gender>(student?.gender ?? "");
+  // Cinsiyet YALNIZ kız/erkek ayrışması kuralı içindir; liste yanıtı alanı taşımaz, kart
+  // açılınca detay ucundan okunur. null = okunmadı: kayıtta alan GÖNDERİLMEZ, yoksa
+  // boş değer kayıtlı cinsiyeti silerdi.
+  const [gender, setGender] = useState<Gender | null>(student ? null : "");
+  const [genderFailed, setGenderFailed] = useState(false);
   const [status, setStatus] = useState<StudentStatus>(student?.status ?? "ACTIVE");
+  const studentId = student?.id;
+  useEffect(() => {
+    if (studentId === undefined) return;
+    let cancelled = false;
+    okulApi
+      .getStudent(studentId)
+      .then((detail) => {
+        if (!cancelled) setGender(detail.gender ?? "");
+      })
+      .catch(() => {
+        if (!cancelled) setGenderFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [studentId]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { errors, setFieldError, clearErrors, applyApiError } = useFormErrors();
@@ -409,7 +428,7 @@ function OgrenciFormDialog({
       student_number: studentNumber.trim(),
       class_level: level ? Number(level) : null,
       class_section: section.trim(),
-      gender,
+      ...(gender === null ? {} : { gender }),
       status,
     };
     setBusy(true);
@@ -514,14 +533,19 @@ function OgrenciFormDialog({
           />
           <Select
             label="Cinsiyet"
-            value={gender}
+            value={gender ?? ""}
+            disabled={gender === null}
             onChange={(e) => setGender(e.target.value as Gender)}
             options={(Object.keys(GENDER_LABELS) as Gender[]).map((g) => ({
               value: g,
               label: GENDER_LABELS[g],
             }))}
             error={errors.gender}
-            helperText="Yalnız kız/erkek ayrışması yerleştirme kuralı için kullanılır; hiçbir belgeye basılmaz."
+            helperText={
+              genderFailed
+                ? "Cinsiyet bilgisi okunamadı; kaydetmek bu alanı değiştirmez."
+                : "Yalnız kız/erkek ayrışması yerleştirme kuralı için kullanılır; hiçbir belgeye basılmaz."
+            }
           />
           <Select
             label="Durum"

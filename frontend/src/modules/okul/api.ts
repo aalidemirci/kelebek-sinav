@@ -134,6 +134,7 @@ export interface SchoolConfig {
   default_separation_mode: SeparationMode;
   /** Şube dağılımının OKUL varsayılanı; yeni oturumlar bununla açılır. */
   default_section_spread: SectionSpreadMode;
+  default_proximity_mode: ProximityMode;
   /** Eğitim modeli — ikili eğitimde aynı ders saati iki farklı zamana denk gelir. */
   education_model: EducationModel;
   /** Ders saati listesi (sabah / tam gün); boşsa backend varsayılanı üretir. */
@@ -221,6 +222,28 @@ export const SECTION_SPREAD_HINTS: Record<SectionSpreadMode, string> = {
     "Her şubenin öğrencileri oturumdaki bütün salonlara paylaştırılır; kâğıtlar salonlardan karışık döner.",
 };
 
+/**
+ * Yakınlık önceliği (06.11.2026) — kelebek dağıtımında aramanın ağır cezası bütün komşu
+ * sıralara mı, yalnız en yakınlara mı gider. Etiketler docs/sozluk.md'ye tabidir; iç kod
+ * kullanıcıya GÖSTERİLMEZ. Yön sıralaması sınırlı kanıta, ceza sayısı varsayıma dayanır:
+ * metinde bu seçimin kopyayı azalttığı YAZILMAZ.
+ */
+export type ProximityMode = "STANDARD" | "CLOSEST";
+
+export const PROXIMITY_LABELS: Record<ProximityMode, string> = {
+  STANDARD: "Bütün komşu sıralar",
+  CLOSEST: "En yakın komşular öncelikli",
+};
+
+/** Komşu sıra çifti sayısının kipteki anlamı: ipucu ve Yerleşim özeti AYNI cümleyi kullanır. */
+export const PROXIMITY_PAIR_NOTE =
+  "Bu sayı en yakın komşuları ayrıca göstermez; artması tek başına kötüleşme sayılmaz, seçimin kazanç sağladığını da göstermez.";
+
+export const PROXIMITY_HINTS: Record<ProximityMode, string> = {
+  STANDARD: "Program bütün komşu sıraları (yan, ön, arka, çapraz) aynı ölçüde gözetir.",
+  CLOSEST: `Program aynı sınava giren öğrencileri önce hemen önündeki ve arkasındaki sıradan, ikili ve üçlü sıralarda koridorun tam karşısından uzak tutar; öteki komşu sıraları geri plana alır. Dağıtım doğrulama raporundaki komşu sıra çifti sayısı artabilir. ${PROXIMITY_PAIR_NOTE} Arka arkaya oturumlarda aynı koltuğa ve aynı komşulara düşme biraz artabilir. Katı dağıtımda uygulanmaz.`,
+};
+
 /** Cinsiyet — YALNIZ kız/erkek ayrışması kuralı için; hiçbir belgeye basılmaz. */
 export type Gender = "" | "K" | "E";
 
@@ -266,8 +289,11 @@ export interface Student {
   class_level: number | null;
   class_section: string;
   class_label: string;
-  /** Kız/erkek ayrışması kuralının girdisi; listede sütun olarak GÖSTERİLMEZ. */
-  gender: Gender;
+  /**
+   * Kız/erkek ayrışması kuralının girdisi. Yalnız tek öğrencinin detay yanıtında
+   * gelir (`getStudent`); liste yanıtı bu alanı TAŞIMAZ.
+   */
+  gender?: Gender;
   status: StudentStatus;
 }
 

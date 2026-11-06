@@ -12,13 +12,18 @@ kurar (fixture dosyası yok).
 from __future__ import annotations
 
 import io
+import json
+import re
+from collections.abc import Callable
 
 import pytest
 from django.core.exceptions import ValidationError
 from pypdf import PdfReader
+from rest_framework.test import APIClient
 
+from apps.okul import selectors as okul_selectors
 from apps.okul.models import SchoolConfig, SeparationMode, Student
-from apps.sinav import services
+from apps.sinav import layout, services
 from apps.sinav.models import (
     ExamSession,
     LayoutMode,
@@ -66,6 +71,63 @@ def _sira_anahtarlari(session: ExamSession) -> list[set[str]]:
     return list(siralar.values())
 
 
+def _karisik_siraya_tasi(session: ExamSession) -> tuple[SeatAssignment, SeatAssignment]:
+    """Elle bozma: bir öğrenciyi farklı anahtarlı birinin sırasına taşır."""
+    satirlar = list(SeatAssignment.objects.filter(session=session).order_by("seat_no"))
+    kaynak = satirlar[0]
+    hedef = next(a for a in satirlar if a.separation_key != kaynak.separation_key)
+    SeatAssignment.objects.filter(pk=kaynak.pk).update(
+        room_id=hedef.room_id,
+        desk_row=hedef.desk_row,
+        desk_col=hedef.desk_col,
+        slot=0 if hedef.slot == 1 else 1,
+        seat_no=99,
+    )
+    return kaynak, hedef
+
+
+def _karisik_salona_tasi(session: ExamSession) -> tuple[SeatAssignment, SeatAssignment]:
+    """Elle bozma: bir öğrenciyi öteki anahtarın salonuna taşır."""
+    satirlar = list(SeatAssignment.objects.filter(session=session).order_by("seat_no"))
+    kaynak = satirlar[0]
+    hedef = next(a for a in satirlar if a.room_id != kaynak.room_id)
+    SeatAssignment.objects.filter(pk=kaynak.pk).update(room_id=hedef.room_id, seat_no=99)
+    return kaynak, hedef
+
+
+def _r8_metni(session: ExamSession) -> str:
+    """R8 PDF'inin boşlukları sadeleştirilmiş metni."""
+    sayfalar = PdfReader(io.BytesIO(services.render_session_report(session, "r8").content)).pages
+    return " ".join(" ".join(s.extract_text() or "" for s in sayfalar).split())
+
+
+def _okul_no_gecmez(metin: str, *satirlar: SeatAssignment) -> None:
+    """Satırların okul numarası metinde yok ("D-201" salon adı numara sayılmaz)."""
+    for satir in satirlar:
+        assert not re.search(rf"(?<![\w-]){satir.student_number}(?!\w)", metin)
+
+
+#: Cinsiyet izi: büyük/küçük harf ve ASCII yazım dâhil ("sekiz" sözcüğü yakalanmaz).
+_CINSIYET_IZI = re.compile(r"\bk[ıi]z|erkek|cinsiyet", re.IGNORECASE)
+
+#: R8 dağıtım bilgilerindeki satırın başlığı — kuralın ADI; izin verilen tek geçiş.
+_KURAL_ADI = "Kız/erkek ayrışması"
+
+#: Ham anahtar yerine kullanılan iz harfleri. "K"/"E" metinde aranamaz (her evrakta geçen
+#: harflerdir, `_CINSIYET_IZI` de yakalamaz); Türkçe evrakta hiç geçmeyen bu iki harf
+#: anahtar sızarsa kesin yakalanır. Alan tek karakterliktir (`max_length=1`).
+_IZ_ANAHTARLARI = ("Ж", "Щ")
+
+
+def _beklenen_ihlal(kip: str, hedef: SeatAssignment) -> str:
+    """Bozulan koltuk için beklenen ihlal satırı — konum kilidi."""
+    if kip == SeparationMode.DESK:
+        konum = layout.desk_position_label(hedef.desk_row, hedef.desk_col)
+        return f"Ayrı oturma kuralı ihlali: {hedef.room.name}, {konum}."
+    mevcut = SeatAssignment.objects.filter(session=hedef.session, room_id=hedef.room_id).count()
+    return f"Ayrı salon kuralı ihlali: {hedef.room.name}, salon mevcudu {mevcut}."
+
+
 # ===========================================================================
 # Varsayılan KAPALI — kural açılmadan hiçbir şey değişmez
 # ===========================================================================
@@ -81,6 +143,7 @@ def test_varsayilan_kapali_cinsiyet_hic_okunmaz() -> None:
     assert report.is_valid, report.hard_violations
     assert {a.separation_key for a in SeatAssignment.objects.filter(session=session)} == {""}
     assert session.distribution_params["separation_mode"] == SeparationMode.NONE
+    assert session.distribution_params["separation_unknown"] == 0
     assert not any("cinsiyet" in w for w in result.warnings)
 
 
@@ -232,28 +295,18 @@ def test_ihlalli_yerlesim_onaylanamaz() -> None:
     """K3 SERT: kural sağlanamamışsa oturum onaylanamaz — idarenin kabulüyle DE.
 
     31.10.2026'dan beri kelebek komşuluğu ihlali kabulle onaylanabilir; kız/erkek
-    ayrışması bu gevşemenin DIŞINDADIR (kuralın güvencesi; ihlal satırı okul
-    numarası taşır ve onaylı R8 idarede dosyalanır).
+    ayrışması bu gevşemenin DIŞINDADIR (kuralın güvencesi).
     """
     session = _oturum(separation=SeparationMode.DESK)
     _cinsiyet_ata()
     session, _result, _report = services.distribute_session(session, seed=42)
 
-    # Elle bozma: bir öğrenciyi farklı anahtarlı birinin sırasına taşı.
-    satirlar = list(SeatAssignment.objects.filter(session=session).order_by("seat_no"))
-    kaynak = satirlar[0]
-    hedef = next(a for a in satirlar if a.separation_key != kaynak.separation_key)
-    SeatAssignment.objects.filter(pk=kaynak.pk).update(
-        room_id=hedef.room_id,
-        desk_row=hedef.desk_row,
-        desk_col=hedef.desk_col,
-        slot=0 if hedef.slot == 1 else 1,
-        seat_no=99,
-    )
+    _kaynak, hedef = _karisik_siraya_tasi(session)
 
     rapor = services.seating_report(session)
     assert not rapor.is_valid and not rapor.acceptable
-    assert any("aynı sırada oturuyor" in v for v in rapor.blocking_violations)
+    konum = layout.desk_position_label(hedef.desk_row, hedef.desk_col)
+    assert f"Ayrı oturma kuralı ihlali: {hedef.room.name}, {konum}." in rapor.blocking_violations
     with pytest.raises(ValidationError, match="onayla kabul edilemeyen"):
         services.approve_session(session)
     with pytest.raises(ValidationError, match="kuralı değiştirin"):
@@ -263,8 +316,9 @@ def test_ihlalli_yerlesim_onaylanamaz() -> None:
 def test_evrakta_cinsiyet_izi_yok() -> None:
     """KORUMA TESTİ: kural açıkken bile öğrenciyi ayıran hiçbir işaret basılmaz.
 
-    R8'e YALNIZ kuralın adı girer (aşağıdaki testte); salon evrakı, duyuru,
-    tutanak ve yoklama cinsiyetten habersizdir.
+    R8'e YALNIZ kuralın adı girer (aşağıdaki testlerde); salon evrakı, duyuru,
+    tutanak ve yoklama cinsiyetten habersizdir. Oturum temiz olduğu için bu test
+    ihlal metnini GÖRMEZ: ihlal satırı R8'de ve ekranda ayrıca sınanır.
     """
     session = _oturum(separation=SeparationMode.DESK)
     _cinsiyet_ata()
@@ -298,6 +352,158 @@ def test_r8de_yalniz_kuralin_adi_basilir() -> None:
     assert "Kız/erkek ayrışması Aynı sıraya oturtma" in metin
     for yasak in ("DESK", "ROOM", "separation"):
         assert yasak not in metin
+
+
+def test_ihlalli_onaysiz_oturumun_r8inde_cinsiyet_ve_okul_no_yok() -> None:
+    """KORUMA TESTİ: ihlal satırı R8'e kuralın adı + konumla girer.
+
+    Eski metin "kız ve erkek öğrenci ... okul no X ve okul no Y" basıyor, kişiyle
+    cinsiyeti eşliyordu; temiz oturumda ihlal listesi boş olduğu için hiçbir test
+    bunu göremedi.
+    """
+    session = _oturum(separation=SeparationMode.DESK)
+    _cinsiyet_ata()
+    session, _result, _report = services.distribute_session(session, seed=42)
+    kaynak, hedef = _karisik_siraya_tasi(session)
+
+    metin = _r8_metni(session)
+
+    konum = layout.desk_position_label(hedef.desk_row, hedef.desk_col)
+    assert f"Ayrı oturma kuralı ihlali: {hedef.room.name}, {konum}." in metin
+    assert metin.count(_KURAL_ADI) == 1
+    assert not _CINSIYET_IZI.search(metin.replace(_KURAL_ADI, ""))
+    assert "okul no" not in metin.lower()
+    _okul_no_gecmez(metin, kaynak, hedef)
+
+
+def test_ayri_salon_ihlali_r8de_salon_ve_sayiyla_basilir() -> None:
+    """Ayrı salonlar kipinde satır salon adı + öğrenci sayısıdır; cinsiyet sözcüğü yok."""
+    session = _oturum(separation=SeparationMode.ROOM, rooms=2, per_level=4)
+    _cinsiyet_ata()
+    session, _result, _report = services.distribute_session(session, seed=42)
+    kaynak, hedef = _karisik_salona_tasi(session)
+
+    (ihlal,) = [
+        v
+        for v in services.seating_report(session).hard_violations
+        if v.startswith("Ayrı salon kuralı")
+    ]
+    adet = SeatAssignment.objects.filter(session=session, room_id=hedef.room_id).count()
+    assert ihlal == f"Ayrı salon kuralı ihlali: {hedef.room.name}, salon mevcudu {adet}."
+
+    metin = _r8_metni(session)
+    assert ihlal in metin
+    assert not _CINSIYET_IZI.search(metin.replace(_KURAL_ADI, ""))
+    _okul_no_gecmez(metin, kaynak, hedef)
+
+
+@pytest.mark.parametrize(
+    ("kip", "salon_sayisi", "bozma"),
+    [
+        (SeparationMode.DESK, 1, _karisik_siraya_tasi),
+        (SeparationMode.ROOM, 2, _karisik_salona_tasi),
+    ],
+)
+def test_ihlalli_oturumun_yerlesim_ekraninda_cinsiyet_izi_yok(
+    kip: str,
+    salon_sayisi: int,
+    bozma: Callable[[ExamSession], tuple[SeatAssignment, SeatAssignment]],
+) -> None:
+    """Ekran yanıtı R8 ile aynı metni taşır: anahtar da sözcük de dışarı çıkmaz."""
+    session = _oturum(separation=kip, rooms=salon_sayisi)
+    _cinsiyet_ata()
+    session, _result, _report = services.distribute_session(session, seed=42)
+    kaynak, hedef = bozma(session)
+
+    client = APIClient()
+    yerlesim = client.get(f"/api/v1/exam-sessions/{session.pk}/seating/")
+    onay = client.get(f"/api/v1/exam-sessions/{session.pk}/approval-check/")
+    assert yerlesim.status_code == 200 and onay.status_code == 200
+
+    ham = json.dumps(yerlesim.json(), ensure_ascii=False)
+    assert not _CINSIYET_IZI.search(ham)
+    assert "separation_key" not in ham
+
+    ihlaller = yerlesim.json()["report"]["hard_violations"]
+    assert onay.json()["violations"] == ihlaller
+    # Konum uçta da kilitli: idareci hangi sırayı düzelteceğini buradan öğrenir.
+    assert _beklenen_ihlal(kip, hedef) in ihlaller
+    metin = " ".join(ihlaller)
+    assert "okul no" not in metin
+    assert not _CINSIYET_IZI.search(metin)
+    _okul_no_gecmez(metin, kaynak, hedef)
+
+
+@pytest.mark.parametrize(
+    ("kip", "salon_sayisi", "bozma"),
+    [
+        (SeparationMode.DESK, 1, _karisik_siraya_tasi),
+        (SeparationMode.ROOM, 2, _karisik_salona_tasi),
+    ],
+)
+def test_ham_ayrisma_anahtari_hicbir_metne_dusmez(
+    monkeypatch: pytest.MonkeyPatch,
+    kip: str,
+    salon_sayisi: int,
+    bozma: Callable[[ExamSession], tuple[SeatAssignment, SeatAssignment]],
+) -> None:
+    """KORUMA TESTİ: anahtar uyarıya, kayda, ekrana ya da R8'e metin olarak geçmez.
+
+    `_CINSIYET_IZI` sözcük arar; "D-201: K" gibi ham anahtarı görmez. Bu yüzden anahtarlar
+    iz harfleriyle değiştirilir (motor ve doğrulayıcı anahtarın ne olduğunu bilmez) ve
+    temiz dağıtımdan ihlalli hâle kadar her çıkış taranır. Veritabanındaki anlık kopya
+    kapsam dışıdır: orası anahtarın meşru yeridir.
+    """
+
+    def iz_ata(ogrenci_idleri: list[int]) -> dict[int, str]:
+        sirali = sorted(ogrenci_idleri)
+        return {pk: _IZ_ANAHTARLARI[i % 2] for i, pk in enumerate(sirali)}
+
+    monkeypatch.setattr(okul_selectors, "student_genders", iz_ata)
+    session = _oturum(separation=kip, rooms=salon_sayisi)
+    session, result, _report = services.distribute_session(session, seed=42)
+    assert {a.separation_key for a in SeatAssignment.objects.filter(session=session)} == set(
+        _IZ_ANAHTARLARI
+    )
+
+    def cikislar() -> str:
+        client = APIClient()
+        yanitlar = [
+            client.get(f"/api/v1/exam-sessions/{session.pk}/seating/").json(),
+            client.get(f"/api/v1/exam-sessions/{session.pk}/approval-check/").json(),
+        ]
+        return " ".join(
+            [json.dumps(yanitlar, ensure_ascii=False), _r8_metni(session), *result.warnings]
+        )
+
+    temiz = cikislar()
+    bozma(session)
+    ihlalli = cikislar()
+
+    assert "kuralı ihlali" in ihlalli  # denetim gerçekten ihlalli hâli gördü
+    for iz in _IZ_ANAHTARLARI:
+        assert iz not in temiz
+        assert iz not in ihlalli
+
+
+def test_cinsiyeti_bilinmeyen_uyarisi_r8e_basilmaz() -> None:
+    """Uyarı ekranda ve kayıtta kalır; R8'e kuraldan yalnız adı girer."""
+    session = _oturum(separation=SeparationMode.DESK)
+    _cinsiyet_ata()
+    eksik = Student.objects.order_by("student_number").first()
+    assert eksik is not None
+    Student.objects.filter(pk=eksik.pk).update(gender="")
+
+    session, result, _report = services.distribute_session(session, seed=42)
+
+    assert any("cinsiyet bilgisi yok" in w for w in result.warnings)
+    assert any("cinsiyet bilgisi yok" in w for w in session.distribution_params["warnings"])
+    # Kalıcı görünürlük: Yerleşim sekmesi bu sayıyı okur; kimlik taşımaz.
+    yerlesim = APIClient().get(f"/api/v1/exam-sessions/{session.pk}/seating/").json()
+    assert yerlesim["distribution_params"]["separation_unknown"] == 1
+    metin = _r8_metni(session)
+    assert metin.count(_KURAL_ADI) == 1
+    assert not _CINSIYET_IZI.search(metin.replace(_KURAL_ADI, ""))
 
 
 def test_anonimlestirme_ayrisma_anahtarini_bosaltir() -> None:

@@ -26,6 +26,7 @@ export function makeSession(overrides: Partial<ExamSession> = {}): ExamSession {
     layout_mode: "BUTTERFLY",
     separation_mode: "NONE",
     section_spread: "TOGETHER",
+    proximity_mode: "STANDARD",
     proctors_enabled: false,
     term_id: 3,
     term_label: "2025-2026 Ders Yılı 1. Dönem",
@@ -151,6 +152,7 @@ export function makeSeating(overrides: Partial<SeatingResponse> = {}): SeatingRe
     ],
     report: makeReport({ room_counts: { "1": 2 } }),
     occupancy: [{ room_id: 1, room_name: "D-204", capacity: 4, placed: 2, percent: 50 }],
+    exam_mix: [{ room_id: 1, exam_count: 2, front_same_percent: 25.5 }],
     ...overrides,
   };
 }

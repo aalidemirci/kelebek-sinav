@@ -34,6 +34,7 @@ UPDATABLE_FIELDS: tuple[str, ...] = (
     "exam_period_nos",
     "default_separation_mode",
     "default_section_spread",
+    "default_proximity_mode",
     "education_model",
     "bell_schedule",
     "afternoon_bell_schedule",

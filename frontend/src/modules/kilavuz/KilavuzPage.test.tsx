@@ -145,7 +145,8 @@ describe("KilavuzPage", () => {
     expect(screen.getByText(/İkili eğitim yapıyorsanız salonları kümeleyin/)).toBeInTheDocument();
     expect(screen.getByText(/kendi dersliğinde, arka sırada ve tek başına/)).toBeInTheDocument();
     expect(screen.getByText(/tanı ya da rapor bilgisi hiç kaydedilmez/)).toBeInTheDocument();
-    expect(screen.getByText(/öğretmen masasına en yakın sıralara/)).toBeInTheDocument();
+    expect(screen.getByText(/masaya uzaklık yalnız eşitlik bozar/)).toBeInTheDocument();
+    expect(screen.queryByText(/öğretmen masasına en yakın sıralara/)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Ayarlar → Şube Kümeleri" })).toHaveAttribute(
       "href",
       "/ayarlar?tab=sube-kumeleri",
@@ -234,7 +235,9 @@ describe("KilavuzPage", () => {
     expect(screen.queryByText(/Yeniden Dağıt/)).not.toBeInTheDocument();
     expect(screen.queryByText(/çekirdek sayı/)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/Aynı dağıtım\s+numarası \(seed\) aynı dağıtımı üretir/),
+      screen.getByText(
+        /Aynı dağıtım\s+numarası \(seed\),\s+programın aynı dağıtım yöntemi sürümünde ve aynı girdilerle aynı dağıtımı\s+üretir/,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -251,6 +254,13 @@ describe("KilavuzPage", () => {
     expect(screen.getByText("e-Okul sınıf listesinden kendiliğinden okunur")).toBeInTheDocument();
     expect(screen.getByText("basılmaz")).toBeInTheDocument();
     expect(screen.getByText(/oturum onaylanamaz/)).toBeInTheDocument();
+    // İhlali elle düzeltme kadar otomatik dağıtım da bırakabilir: "yalnız elle" denmez.
+    expect(screen.getByText(/dağıtımın kendisi de bırakabilir/)).toBeInTheDocument();
+    expect(screen.queryByText(/elle\s+düzeltme sonrası kural ihlali/)).not.toBeInTheDocument();
+    // İhlal satırının neyi yazdığı ve plana bakınca kalan çıkarım açıkça söylenir.
+    expect(
+      screen.getByText(/ihlalin yeri de yazar .* farklı cinsiyette olduğu\s+anlaşılabilir/s),
+    ).toBeInTheDocument();
   });
 
   it("yerleşimi elle düzeltmenin iki yolunu anlatır — sürükleme ve tıklama (20.09.2026)", () => {
@@ -367,6 +377,66 @@ describe("KilavuzPage", () => {
       screen.getByText(/sınavlarda refakat edilmesi\s+gereken öğrencileri de bu birim belirler/),
     ).toBeInTheDocument();
     expect(screen.getByText(/onun kapsamında değildir/)).toBeInTheDocument();
+  });
+
+  it("motorun neyi gözettiğini ve sınırlarını anlatır, sonuç vaat etmez (06.11.2026)", () => {
+    renderPage();
+    expect(screen.getByText("Program yerleşimde neyi gözetir?")).toBeInTheDocument();
+    expect(screen.getByText("Gözetmedikleri de bilinçlidir:")).toBeInTheDocument();
+    // Sert kısıt aynı sıradır; ön-arka yalnız katı dağıtımda yasaktır. Tam dolu iki sınavda
+    // herkesin önünde aynı sınav oturabildiği için "ön arkaya düşmez" denemez.
+    expect(screen.getByText(/aynı sıraya düşmez, komşu sıralardan/)).toBeInTheDocument();
+    expect(screen.getByText(/seçiliyse komşu sıra da yasaktır/)).toBeInTheDocument();
+    expect(screen.queryByText(/ön arkaya düşmez/)).not.toBeInTheDocument();
+    // Harman: okul numarası sırası korunmaz, seçim sırası planı değiştirmez.
+    expect(screen.getByText(/okul\s+numarası sırası korunmaz/)).toBeInTheDocument();
+    // Karar 5: varsayılan kipin bedeli ölçüyle yazılır.
+    expect(
+      screen.getByText("Şubeler bir arada kipinde en yakın komşular çoğunlukla aynı şubedendir."),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/%77-100 çıktı/)).toBeInTheDocument();
+    expect(screen.getByText(/8-12 salonda %14-22/)).toBeInTheDocument();
+    // Kız/erkek sınırı: motorun çözemediği durum açıkça söylenir, cinsiyete göre sayı yazılmaz.
+    expect(screen.getByText("Tam dolu salonun sınırı:")).toBeInTheDocument();
+    // Zorunluluk koşulludur: tekli sıra ya da cinsiyeti bilinmeyen öğrenci varsa kalkabilir.
+    const sinir = screen.getByText("Tam dolu salonun sınırı:").closest("p");
+    expect(sinir).toHaveTextContent("bütün sıralar ikiliyse, her koltuk doluyorsa");
+    expect(sinir).toHaveTextContent("cinsiyeti bilinmeyen öğrenci yoksa");
+    expect(sinir).toHaveTextContent("Tekli sıra ya da cinsiyeti bilinmeyen öğrenci varsa");
+    expect(screen.getByText(/yalnız ekrandadır, evraka basılmaz/)).toBeInTheDocument();
+    // "Herkesin önünde" koşulludur (test_sayili_yol ölçer); koşul dışında sınır gibi okunan
+    // bir aralık yazılmaz: ölçülen aralık mevcuta ve kız/erkek kuralına göre taşıyor.
+    expect(
+      screen.getByText(/mevcutları eşit iki sınav varsa ve kız\/erkek kuralı kapalıysa/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/önceden bir aralık söylenemez/)).toBeInTheDocument();
+    expect(screen.queryByText(/%78-97/)).not.toBeInTheDocument();
+    // Dayanak: kanıtın sınırı yazılır; kopya sonucu vaat edilmez.
+    expect(screen.getByText(/yön sıralaması sınırlı kanıta/)).toBeInTheDocument();
+    expect(screen.getByText(/arama\s+tamamlanamadığı için/)).toBeInTheDocument();
+    expect(screen.getByText(/kopya ölçülmedi/)).toBeInTheDocument();
+    expect(screen.queryByText(/kopya azal/i)).not.toBeInTheDocument();
+  });
+
+  it("yakınlık önceliğini bedeliyle anlatır, sonuç vaat etmez (06.11.2026)", () => {
+    renderPage();
+    expect(screen.getByText("Yakınlık önceliği ne işe yarar?")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Bu sayı en yakın komşuları ayrıca göstermez; artması tek başına/),
+    ).toBeInTheDocument();
+    // Neden uydurulmaz: seçimin kazanç vermediği kurulumlar vardır.
+    expect(screen.queryByText(/uzağa kaydığı için/)).not.toBeInTheDocument();
+    expect(screen.getByText(/sınırlı kanıta, programın kullandığı/)).toBeInTheDocument();
+    // Koridor karşısı ikili ve üçlü sıralarda ağırlık alır; bir yanı tek kişilikse almaz.
+    expect(screen.getByText(/ikili ve üçlü sıralarda koridorun tam karşısına/)).toBeInTheDocument();
+    expect(screen.getByText(/bir yanında tek kişilik sıra varsa/)).toBeInTheDocument();
+    // Etki doluluğa ve mevcut dengesine göre değişir; dengesiz mevcut da söylenir.
+    // Ölçümün kapsamı söylenir; bir kurulumun doluluk eşiği bütün salonlara genellenmez
+    // (azalma üçlü ve karma sıralı iki sınavlı salonda %80 ve üstünde de görüldü).
+    expect(screen.getByText(/iki salon, sınırlı sayıda deneme/)).toBeInTheDocument();
+    expect(screen.getByText(/azalma çoğunlukla sınırlı kaldı/)).toBeInTheDocument();
+    expect(screen.getByText(/Sizin salonlarınızda sonuç başka olabilir/)).toBeInTheDocument();
+    expect(screen.queryByText(/doluluk %70/)).not.toBeInTheDocument();
   });
 
   it("dayanak metinler kartı alıntı yapılan dört metni sayar", () => {

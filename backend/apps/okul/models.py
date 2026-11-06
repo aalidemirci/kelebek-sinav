@@ -93,6 +93,22 @@ class SectionSpreadMode(models.TextChoices):
     SPREAD = "SPREAD", "Şubeler salonlara dağıtılır"
 
 
+class ProximityMode(models.TextChoices):
+    """Kelebek dağıtımında yakınlık önceliği (06.11.2026 kullanıcı kararı).
+
+    "Bütün komşu sıralar" motorun varsayılanıdır: aramanın ağır cezası bütün komşu
+    sıralara eşit gider. "En yakın komşular öncelikli" bu cezayı yalnız önündeki sıraya
+    ve koridorun tam karşısına verir (`sinav.engine._closest_neighbour`); bu yüzden
+    komşu sıra çifti sayısı artabilir. Yön sıralaması sınırlı kanıta, ceza sayısı
+    varsayıma dayanır: seçim okulun tercihidir, varsayılan kapalıdır. Okul varsayılanı
+    `SchoolConfig.default_proximity_mode`, oturum değeri
+    `sinav.ExamSession.proximity_mode`; etiketler docs/sozluk.md'ye tabidir.
+    """
+
+    STANDARD = "STANDARD", "Bütün komşu sıralar"
+    CLOSEST = "CLOSEST", "En yakın komşular öncelikli"
+
+
 class SchoolType(models.TextChoices):
     """Okul türü — ders havuzunun çizelge kaynağı ve seviye kümesi bundan türetilir (U4).
 
@@ -204,6 +220,13 @@ class SchoolConfig(BaseModel):
         max_length=10,
         choices=SectionSpreadMode.choices,
         default=SectionSpreadMode.TOGETHER,
+    )
+    # Yakınlık önceliğinin OKUL varsayılanı (06.11.2026): şube dağılımıyla aynı düzen.
+    default_proximity_mode = models.CharField(
+        "yakınlık önceliği varsayılanı",
+        max_length=10,
+        choices=ProximityMode.choices,
+        default=ProximityMode.STANDARD,
     )
     setup_completed = models.BooleanField("kurulum tamamlandı", default=False)
     app_password_hash = models.CharField(

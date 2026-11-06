@@ -907,7 +907,13 @@ function RoomsStep({
   // sınavdan iki öğrenci oturamaz). Hesap backend'de — ön yüz kopyasını tutmaz.
   const siraSecimi = [...selected].sort((a, b) => a - b);
   const sira = useQuery({
-    queryKey: ["butterfly-fit", session.id, siraSecimi.join(","), session.courses.length],
+    queryKey: [
+      "butterfly-fit",
+      session.id,
+      siraSecimi.join(","),
+      session.courses.length,
+      session.separation_mode,
+    ],
     queryFn: () => examSessionApi.butterflyFit(session.id, siraSecimi),
     enabled: session.courses.length > 0 && siraSecimi.length > 0,
   });
@@ -950,6 +956,18 @@ function RoomsStep({
         {sira.data && !sira.data.fits && (
           <p role="alert" className="mt-1 text-body-small text-error">
             {sira.data.message}
+          </p>
+        )}
+        {/* Geometri bilgisidir, sonuç vaadi değildir: kopya ölçülmedi. */}
+        <p className="mt-1 text-body-small text-on-surface-variant">
+          Bir salonda sınav çeşidi arttıkça aynı sınava giren öğrenciler arasındaki mesafe
+          genellikle artar.
+        </p>
+        {/* Kız/erkek ayrışması da sıra sayısına bağlıdır; hesap sunucudadır (tekli sıra ve
+            cinsiyeti bilinmeyen öğrenci dâhil). Metin yalnız eksik sıra sayısını söyler. */}
+        {sira.data?.separation_message && (
+          <p role="alert" className="mt-1 text-body-small text-error">
+            {sira.data.separation_message}
           </p>
         )}
       </div>
@@ -1038,6 +1056,7 @@ function DistributeStep({
 }: SihirbazProps & { onBack: () => void; onDistributed: () => void }) {
   const snackbar = useSnackbar();
   const [options, setOptions] = useState(BOS_DAGITIM_SECENEKLERI);
+  const [yakinlik, setYakinlik] = useState(session.proximity_mode);
   // Uyarılı sonuç: sekmeli görünüme geçmeden ÖNCE gösterilir. Eskiden `warnings`
   // hiç okunmuyordu — uygulanamayan bir yerleştirme kuralı sessizce geçiyordu.
   const [warned, setWarned] = useState<DistributeResult | null>(null);
@@ -1064,7 +1083,16 @@ function DistributeStep({
   const numarali = usesDistributionNumber(session.layout_mode);
 
   const distribute = useMutation({
-    mutationFn: () => examSessionApi.distribute(session.id, dagitimGovdesi(options)),
+    // Yakınlık önceliği oturum alanıdır ve taslak bu adımda henüz değişebilir; backend kipi
+    // oturumdan okur. Kayıt elimizdeki `session`la KARŞILAŞTIRILMAZ: reddedilen bir dağıtımdan
+    // sonra o nesne bayattır ve kayıt atlanırsa ekrandaki seçimle plan ayrışırdı. "Kendi
+    // dersliğinde" düzeninde seçim sorulmaz, kaydedilecek bir şey de yoktur.
+    mutationFn: async () => {
+      if (numarali) {
+        await examSessionApi.update(session.id, { proximity_mode: yakinlik });
+      }
+      return examSessionApi.distribute(session.id, dagitimGovdesi(options));
+    },
     onSuccess: (result) => {
       snackbar.success(dagitimCumlesi("Dağıtım tamamlandı", result, numarali));
       if (result.warnings.length > 0) {
@@ -1075,7 +1103,12 @@ function DistributeStep({
       }
       onChanged(); // durum DISTRIBUTED → detay sekmeli görünüme geçer
     },
-    onError: (e) => snackbar.error(e instanceof ApiError ? e.message : "Dağıtım başarısız."),
+    onError: (e) => {
+      snackbar.error(e instanceof ApiError ? e.message : "Dağıtım başarısız.");
+      // Seçim kaydedilmiş olabilir: adıma dönüş kayıtlı değerle başlasın diye oturum tazelenir.
+      // Oturum taslakta kaldığı için sihirbaz ekrandan kalkmaz.
+      onChanged();
+    },
   });
 
   if (warned) {
@@ -1118,6 +1151,8 @@ function DistributeStep({
             deger={options}
             onChange={setOptions}
             seedLabel="Dağıtım numarası (boş bırakılırsa rastgele)"
+            yakinlik={yakinlik}
+            onYakinlikChange={setYakinlik}
           />
         </>
       )}

@@ -8,6 +8,8 @@ kurulur. Ortak kurucular `oturum_yardim`'dan gelir.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -15,11 +17,12 @@ from django.core.exceptions import ValidationError
 from rest_framework.test import APIClient
 
 from apps.okul.models import Student
-from apps.sinav import services
+from apps.sinav import reports, services
 from apps.sinav.models import (
     DeskType,
     ExamRoom,
     ExamSession,
+    ExamSessionRoom,
     ExamSessionStatus,
     LayoutMode,
     ParticipantType,
@@ -310,6 +313,200 @@ def test_api_distribute_and_seating_flow() -> None:
     }
     assert "Coğrafya — 9. Sınıf" in labels.values()
     assert "Fizik — 10. Sınıf" in labels.values()
+
+
+def test_onde_ayni_sinav_orani_ilk_dolu_sirayi_saymaz() -> None:
+    """Pay: önündeki sırada aynı sınavdan biri olan; payda: ilk dolu satırın arkasındakiler."""
+    koltuklar = [
+        (1, 0, "a"),  # ilk dolu satır: paydaya girmez
+        (1, 0, "b"),
+        (2, 0, "a"),  # önünde a var
+        (2, 1, "a"),  # önünde sıra yok
+        (3, 0, "b"),  # önünde yalnız a var
+        (3, 1, "b"),  # önünde a var
+    ]
+
+    assert services._front_same_percent(koltuklar) == 25.0
+    # Plan bilinmiyorsa (silinmiş salon) ön sıra bir satır öndedir.
+    assert services._front_same_percent([(1, 0, "a"), (3, 0, "a")]) == 0.0
+
+
+def test_onde_ayni_sinav_orani_plana_konmamis_satiri_atlar() -> None:
+    """Önündeki sıra plandaki bir önceki sıradır: koridor bırakılan satır oranı sıfırlamaz."""
+    koltuklar = [(1, 0, "a"), (3, 0, "a")]
+
+    assert services._front_same_percent(koltuklar, [(1, 0), (3, 0)]) == 100.0
+    # Planda olup boş kalan sıra gerçekten öndedir: üstünden atlanmaz.
+    assert services._front_same_percent(koltuklar, [(1, 0), (2, 0), (3, 0)]) == 0.0
+    # Sütununun ilk sırasındakinin önünde kimse yoktur: ilk dolu satır gibi paydaya girmez.
+    assert services._front_same_percent([(1, 0, "a"), (3, 1, "a")], [(1, 0), (3, 1)]) is None
+
+
+def test_onde_ayni_sinav_orani_bosluksuz_planda_plan_bilgisiyle_degismez() -> None:
+    """Motor denetimi belgesindeki oran tabloları boşluksuz plandadır, geçerli kalmalıdır."""
+    plan = [(satir, sutun) for satir in (1, 2, 3, 4) for sutun in (0, 1)]
+    koltuklar = [
+        (2, 0, "a"),  # 1. satır boş: ilk dolu satır burası
+        (3, 0, "a"),
+        (3, 1, "b"),
+        (4, 0, "b"),
+        (4, 1, "b"),
+    ]
+
+    assert services._front_same_percent(koltuklar, plan) == 50.0
+    assert services._front_same_percent(koltuklar) == 50.0
+
+
+def test_onde_ayni_sinav_orani_tek_ondalikla_yuvarlanir() -> None:
+    """Ekran tek ondalık basar: üçte bir %33 değil %33,3 döner."""
+    koltuklar = [
+        (1, 0, "a"),
+        (1, 1, "b"),
+        (1, 2, "b"),
+        (2, 0, "a"),  # önünde a var
+        (2, 1, "a"),  # önünde yalnız b var
+        (2, 2, "a"),  # önünde yalnız b var
+    ]
+
+    assert services._front_same_percent(koltuklar) == 33.3
+
+
+def test_onde_ayni_sinav_orani_tek_dolu_satirda_hesaplanmaz() -> None:
+    assert services._front_same_percent([(1, 0, "a"), (1, 1, "b")]) is None
+    assert services._front_same_percent([]) is None
+
+
+def test_elle_bos_satir_birakilmis_salonda_oran_sifir_gorunmez() -> None:
+    """Tek sınavlı salonda herkesin önünde aynı sınav vardır; koridor bunu değiştirmez."""
+    sube(9, "A", students=8, start_no=101)
+    c9 = ders("Coğrafya", levels=[9])
+    session = oturum()
+    services.add_session_course(
+        session, course_id=c9.pk, participant_type=ParticipantType.LEVEL, level=9
+    )
+    plan = {
+        "grid": {"rows": 5, "cols": 2},
+        "desks": [{"row": r, "col": c, "type": DeskType.DOUBLE} for r in (2, 4) for c in (0, 1)],
+        "furniture": [],
+    }
+    services.set_session_rooms(session, [{"room_id": salon("D-201", plan=plan).pk}])
+    services.distribute_session(session, seed=42)
+
+    (satir,) = services.room_exam_mix(session)
+
+    assert satir["exam_count"] == 1
+    assert satir["front_same_percent"] == 100.0
+
+
+def _uc_sirali_tek_sinav_oturumu() -> ExamSession:
+    """Üç tekli sıralı salonda üç öğrenci, tek sınav: her sıra doludur."""
+    sube(9, "A", students=3, start_no=101)
+    c9 = ders("Coğrafya", levels=[9])
+    session = oturum()
+    services.add_session_course(
+        session, course_id=c9.pk, participant_type=ParticipantType.LEVEL, level=9
+    )
+    plan = {
+        "grid": {"rows": 4, "cols": 1},
+        "desks": [{"row": r, "col": 0, "type": DeskType.SINGLE} for r in (1, 2, 3)],
+        "furniture": [],
+    }
+    services.set_session_rooms(session, [{"room_id": salon("D-201", plan=plan).pk}])
+    services.distribute_session(session, seed=42)
+    return session
+
+
+def test_planda_olup_bos_kalan_sira_salon_oraninda_atlanmaz() -> None:
+    """Oran salonun PLANINDAN okunur: dolu sıralardan kurulursa boş sıranın üstünden atlar."""
+    session = _uc_sirali_tek_sinav_oturumu()
+    (once,) = services.room_exam_mix(session)
+    assert once["front_same_percent"] == 100.0
+
+    SeatAssignment.objects.get(session=session, desk_row=2).delete()
+
+    (sonra,) = services.room_exam_mix(session)
+    assert sonra["exam_count"] == 1
+    assert sonra["front_same_percent"] == 0.0
+
+
+def test_taslaga_alinan_oturumda_sinav_cesidi_listesi_bostur() -> None:
+    """Silinmiş yerleşim sayılmaz: koltuklar kayıtta durur ama ekranda salon satırı kalmaz."""
+    session = _kelebek_oturumu()
+    services.distribute_session(session, seed=42)
+    assert services.room_exam_mix(session)
+
+    services.revert_session_to_draft(session)
+
+    assert SeatAssignment.all_objects.filter(session=session).exists()
+    assert services.room_exam_mix(session) == []
+    assert APIClient().get(f"{URL}{session.pk}/seating/").data["exam_mix"] == []
+
+
+def test_yerlesim_ucu_salon_basina_sinav_cesidini_verir_kayit_yazmaz() -> None:
+    session = _kelebek_oturumu()
+    services.distribute_session(session, seed=42)
+    onceki = list(
+        SeatAssignment.objects.filter(session=session)
+        .order_by("pk")
+        .values_list("pk", "updated_at")
+    )
+    parametreler = dict(ExamSession.objects.get(pk=session.pk).distribution_params)
+
+    data = APIClient().get(f"{URL}{session.pk}/seating/").data
+
+    (satir,) = data["exam_mix"]
+    assert set(satir) == {"room_id", "exam_count", "front_same_percent"}
+    assert satir["room_id"] == data["occupancy"][0]["room_id"]
+    assert satir["exam_count"] == 2
+    assert 0 <= satir["front_same_percent"] <= 100
+    # Hesap yan etkisizdir ve dağıtım kaydına geçmez.
+    sonraki = list(
+        SeatAssignment.objects.filter(session=session)
+        .order_by("pk")
+        .values_list("pk", "updated_at")
+    )
+    assert sonraki == onceki
+    assert ExamSession.objects.get(pk=session.pk).distribution_params == parametreler
+
+
+def test_sinav_cesidi_doluluk_listesiyle_ayni_salon_sirasinda_gelir() -> None:
+    """İki liste aynı ekranda durur: salon sırası kimliğe göre değil, oturuma göre dizilir."""
+    session = _kelebek_oturumu(student_count=16)
+    birinci = ExamSessionRoom.objects.get(session=session).room
+    ikinci = salon("A-101", plan=PLAN_3X2_DOUBLE)
+    services.set_session_rooms(session, [{"room_id": ikinci.pk}, {"room_id": birinci.pk}])
+    services.distribute_session(session, seed=42)
+    assert birinci.pk < ikinci.pk  # kimlik sırası oturum sırasının tersidir
+
+    data = APIClient().get(f"{URL}{session.pk}/seating/").data
+
+    doluluk = [o["room_id"] for o in data["occupancy"] if o["placed"]]
+    assert doluluk == [ikinci.pk, birinci.pk]
+    assert [satir["room_id"] for satir in data["exam_mix"]] == doluluk
+
+
+def test_sinav_cesidi_ekranda_kalir_evraka_gitmez(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hesap dağıtım ve R8 yolunda HİÇ çağrılmaz: kayda ve evraka giden yol budur.
+
+    Anahtar adına bakmak yetmez: oran iç içe ya da başka adla da yazılabilir. R8
+    `room_occupancy`yi ve `distribution_params`ı basar, bu yüzden ikisi de sınanır.
+    """
+
+    def _cagrilmamali(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("Sınav çeşidi hesabı dağıtım ya da evrak yoluna girdi")
+
+    monkeypatch.setattr(services, "room_exam_mix", _cagrilmamali)
+    monkeypatch.setattr(services, "_front_same_percent", _cagrilmamali)
+    session = _kelebek_oturumu()
+    services.distribute_session(session, seed=42)
+    session = ExamSession.objects.get(pk=session.pk)
+    services.render_session_report(session, "r8")
+
+    assert all("front_same_percent" not in row for row in services.room_occupancy(session))
+    kayit = json.dumps(session.distribution_params)
+    assert not any(iz in kayit for iz in ("front_same", "exam_mix", "exam_count"))
+    kaynak = Path(reports.__file__).read_text(encoding="utf-8")
+    assert "front_same" not in kaynak and "exam_mix" not in kaynak
 
 
 def test_api_distribute_validation_error_turkce() -> None:

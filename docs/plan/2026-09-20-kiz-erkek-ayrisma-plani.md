@@ -214,7 +214,10 @@ eklemeyin) · ceza demeti leksikografik, ikincil bileşen ihlal sayısını art�
 ROOM: aynı salonda iki farklı boş olmayan anahtar → sert ihlal. Metin idareci
 diliyle ve etiket alanlarından (`room_label`, `desk_label`, `student_number`):
 "D-201 salonu, 3. sıra, 1. sütun: kız ve erkek öğrenci aynı sırada (okul no 101 ve
-205)". Öğrenci ADI yazılmaz (CLAUDE.md §1.6). `services.seating_report`,
+205)". Öğrenci ADI yazılmaz (CLAUDE.md §1.6). **06.11.2026 değişikliği:** bu metin
+kişiyle cinsiyeti eşlediği ve R8'e aynen gittiği için kaldırıldı; satır artık
+"Ayrı oturma kuralı ihlali: D-201, 3. sıra, 1. sütun." / "Ayrı salon kuralı ihlali:
+D-201, salon mevcudu 12." biçimindedir. `services.seating_report`,
 `swap_seats` ve `approve_session` kipi oturumdan okuyup geçirir — elle takas sonrası
 ihlal görünür ve onay engellenir (mevcut akış).
 

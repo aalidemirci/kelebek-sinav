@@ -296,6 +296,24 @@ def test_api_ogrenci_duzeltme_ve_silme(client: APIClient) -> None:
     assert kayip.json() == {"code": "not_found", "message": "Kayıt bulunamadı.", "fields": {}}
 
 
+@pytest.mark.parametrize("sorgu", ["", "?only_active=true"])
+def test_api_ogrenci_listesi_cinsiyet_tasimaz(client: APIClient, sorgu: str) -> None:
+    """KORUMA TESTİ: "listede cinsiyet yok" arayüz sütununa bağlı değildir.
+
+    Alan bütün öğrencileri taşıyan liste yanıtında bulunmaz; tek öğrencinin kartı
+    değeri detay ucundan okur, elle kayıt da onu yazar.
+    """
+    ogrenci = _ogrenci(gender="K")
+
+    (satir,) = _sonuclar(client.get(f"{OGRENCI_URL}{sorgu}"))
+    assert satir["id"] == ogrenci.pk
+    assert "gender" not in satir
+
+    assert client.get(f"{OGRENCI_URL}{ogrenci.pk}/").json()["gender"] == "K"
+    duzelt = client.patch(f"{OGRENCI_URL}{ogrenci.pk}/", {"gender": "E"}, format="json")
+    assert duzelt.json()["gender"] == "E"
+
+
 def test_api_ogrenci_listesi_suzgecleri(client: APIClient) -> None:
     """Sicil ekranı ayrılanı da gösterir; `only_active` yalnız seçicilerin opt-in süzgecidir."""
     _ogrenci(student_number="101", class_section="Ş", first_name="IŞIL")

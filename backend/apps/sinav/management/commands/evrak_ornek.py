@@ -30,6 +30,7 @@ from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 
+from apps.okul.models import ProximityMode, SectionSpreadMode
 from apps.sinav import layout, reports
 from shared.letterhead import letterhead_context
 
@@ -296,6 +297,8 @@ class Command(BaseCommand):
                 "placed": 240,
                 "pinned": 3,
                 "separation_label": "Kapalı",
+                "section_spread_label": SectionSpreadMode.TOGETHER.label,
+                "proximity_label": ProximityMode.STANDARD.label,
             },
             group_labels={"7:9": "Coğrafya (9. sınıf)", "7:10": "Coğrafya (10. sınıf)"},
             warnings=["A-205 dersliği %100 doluluğa ulaştı."],

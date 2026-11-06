@@ -16,13 +16,15 @@ from __future__ import annotations
 import importlib
 import io
 import re
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 from types import SimpleNamespace
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 from django.apps import apps as django_apps
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from pypdf import PdfReader
 from rest_framework.test import APIClient
 
@@ -2573,13 +2575,29 @@ def _vardiya_takvimi(*, education_model: str = "FULL_DAY") -> tuple[ExamCalendar
     return calendar, subeler
 
 
+# Altbilgideki düzenleme anı (`print_stamp`): duvar saatine bağlıdır.
+_DUZENLEME_DAMGASI = re.compile(r"Düzenleme: \d{2}\.\d{2}\.\d{4} \d{2}:\d{2}")
+
+
 def _pdf_metni(calendar: ExamCalendar) -> str:
+    """Takvim metni, altbilgi damgası HARİÇ.
+
+    Saat iddiaları ızgaraya bakar: damga kalsaydı koşu anı ders saatine denk gelince
+    "saat basılmadı" iddiası düşer, "saat basıldı" iddiası yanlış geçerdi. Damga
+    bulunamazsa test düşer; biçim değişince süzgeç sessizce boşa dönmesin.
+    """
     ham = takvim.render_calendar_pdf(calendar)
-    return _duz("\n".join(p.extract_text() or "" for p in PdfReader(io.BytesIO(ham)).pages))
+    metin = _duz("\n".join(p.extract_text() or "" for p in PdfReader(io.BytesIO(ham)).pages))
+    assert _DUZENLEME_DAMGASI.search(metin), "altbilgi düzenleme damgası bulunamadı"
+    return _DUZENLEME_DAMGASI.sub("", metin)
 
 
-def test_takvim_pdf_saatleri_secime_bagli_basar() -> None:
+def test_takvim_pdf_saatleri_secime_bagli_basar(monkeypatch: pytest.MonkeyPatch) -> None:
     """`print_period_times` kapalıyken evrakta yalnız ders saati ADI kalır."""
+    # Saat bilerek ders saatine denk getirilir: altbilgi damgası "10:10" basar,
+    # iddialar yine yalnız ızgaradaki saati görmelidir (06.11.2026 rastgele kırmızı).
+    sabit_an = datetime(2026, 10, 27, 10, 10, tzinfo=ZoneInfo("Europe/Istanbul"))
+    monkeypatch.setattr(timezone, "now", lambda: sabit_an)
     calendar, _ = _vardiya_takvimi()
     kurs = ders("Coğrafya", levels=[9])
     entry = takvim.add_calendar_entry(calendar=calendar, course_id=kurs.pk, level=9)

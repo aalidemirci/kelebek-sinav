@@ -1,14 +1,21 @@
 // Dağıtım seçenekleri — sihirbazın "Dağıt" adımı ile DAĞITILDI oturumdaki
 // "Yeniden dağıt" diyaloğu AYNI iki alanı gösterir: dağıtım numarası + katı
 // dağıtım. Metinler docs/sozluk.md'ye bağlıdır ("seed" → "dağıtım numarası";
-// "katı mod (1. halka…)" → "Katı dağıtım: yan, ön ve arka komşuluk da kesinlikle
-// yasak"); tek yerde durur ki iki ekran zamanla ayrışmasın. Dağıtımın SONUCU da
+// "katı mod (1. halka…)" → "Katı dağıtım: yan, ön, arka ve çapraz komşuluk da
+// kesinlikle yasak"); tek yerde durur ki iki ekran zamanla ayrışmasın. Dağıtımın SONUCU da
 // (`DagitimSonucu`) aynı iki ekranda gösterilir: backend uyarıları — uygulanamayan
 // yerleştirme kuralı, sıfırlanan gözetmenler, salon doluluk farkı — okunmadan
 // kaybolmasın diye snackbar'a değil kalıcı bir bloğa yazılır.
+//
+// Yakınlık önceliği oturumun alanıdır, yalnız TASLAKken değişir (şube dağılımı deseni):
+// sihirbaz `onChange` verir ve dağıtmadan önce kaydeder; "Yeniden dağıt" diyaloğu
+// vermez, seçim kilitli görünür. Katı dağıtımda backend kipi uygulamaz, seçim de kapanır.
 
 import Icon from "../../ui/Icon";
+import Select from "../../ui/Select";
 import TextField from "../../ui/TextField";
+import { PROXIMITY_HINTS, PROXIMITY_LABELS } from "../okul/api";
+import type { ProximityMode } from "../okul/api";
 import type { DistributeResult } from "./api";
 import { violationApprovalNote } from "./api";
 
@@ -91,16 +98,31 @@ export function DagitimSonucu({
   );
 }
 
+/** Seçimin altındaki açıklama: uygulanmadığı ya da değişemediği durum önce söylenir. */
+function yakinlikYardimi(kip: ProximityMode, strict: boolean, degisir: boolean): string {
+  if (strict) return "Katı dağıtımda uygulanmaz: bütün komşu sıralar zaten yasaktır.";
+  if (!degisir) {
+    return `${PROXIMITY_HINTS[kip]} Değiştirmek için oturumu önce taslağa alın.`;
+  }
+  return `${PROXIMITY_HINTS[kip]} Varsayılanı Ayarlar → Okul Bilgileri'nden değiştirebilirsiniz.`;
+}
+
 export default function DagitimSecenekleri({
   deger,
   onChange,
   seedLabel,
+  yakinlik,
+  onYakinlikChange,
   className = "grid gap-3 sm:grid-cols-2",
 }: {
   deger: DagitimSecenekleriDegeri;
   onChange: (deger: DagitimSecenekleriDegeri) => void;
   /** Numara alanının etiketi — boş bırakmanın sonucu ekrana göre değişir. */
   seedLabel: string;
+  /** Oturumun yakınlık önceliği. */
+  yakinlik: ProximityMode;
+  /** Verilmezse seçim kilitlidir (dağıtılmış oturum). */
+  onYakinlikChange?: (kip: ProximityMode) => void;
   className?: string;
 }) {
   return (
@@ -113,7 +135,7 @@ export default function DagitimSecenekleri({
         value={deger.seed}
         onChange={(e) => onChange({ ...deger, seed: e.target.value })}
         // Sözlük: "seed" yalnız ilk geçtiği yardım metninde, parantez içinde bir kez.
-        helperText="Dağıtım numarası (seed), karıştırmanın başlangıç değeridir: aynı numara her zaman aynı yerleşimi üretir. Kullanılan numara Yerleşim sekmesinde gösterilir; bir yerleşimi yeniden üretmek için o numarayı girin."
+        helperText="Dağıtım numarası (seed), karıştırmanın başlangıç değeridir: aynı numara, programın aynı dağıtım yöntemi sürümünde ve aynı girdilerle aynı yerleşimi üretir (öğrencilerin başka sınavlardaki son yerleri de girdidir). Kullanılan numara Yerleşim sekmesinde gösterilir; bir yerleşimi yeniden üretmek için o numarayı girin."
       />
       <label className="flex min-h-9 cursor-pointer items-start gap-3 text-body-medium text-on-surface">
         <input
@@ -122,8 +144,20 @@ export default function DagitimSecenekleri({
           onChange={(e) => onChange({ ...deger, strict: e.target.checked })}
           className="mt-0.5 h-5 w-5 shrink-0 accent-primary"
         />
-        <span>Katı dağıtım: yan, ön ve arka komşuluk da kesinlikle yasak</span>
+        <span>Katı dağıtım: yan, ön, arka ve çapraz komşuluk da kesinlikle yasak</span>
       </label>
+      <Select
+        label="Yakınlık önceliği"
+        className="sm:col-span-2"
+        options={(Object.keys(PROXIMITY_LABELS) as ProximityMode[]).map((kip) => ({
+          value: kip,
+          label: PROXIMITY_LABELS[kip],
+        }))}
+        value={yakinlik}
+        disabled={deger.strict || !onYakinlikChange}
+        onChange={(e) => onYakinlikChange?.(e.target.value as ProximityMode)}
+        helperText={yakinlikYardimi(yakinlik, deger.strict, Boolean(onYakinlikChange))}
+      />
     </div>
   );
 }

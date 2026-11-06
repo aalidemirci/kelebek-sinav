@@ -103,6 +103,7 @@ beforeEach(() => {
     level_programs: {},
     default_separation_mode: "NONE",
     default_section_spread: "TOGETHER",
+    default_proximity_mode: "STANDARD",
     setup_completed: true,
   });
   oapi.genderCoverage.mockResolvedValue({ missing: 0, total: 0 });
@@ -240,6 +241,7 @@ describe("AyarlarPage — okul bilgileri", () => {
         default_separation_mode: "NONE",
         // Şube dağılımı varsayılanı (25.10.2026) — dokunulmadıysa "bir arada".
         default_section_spread: "TOGETHER",
+        default_proximity_mode: "STANDARD",
       }),
     );
     // Hazırlık değişince plan yeni seçimle önizlenir.
@@ -291,6 +293,50 @@ describe("AyarlarPage — okul bilgileri", () => {
     await waitFor(() =>
       expect(oapi.updateSchoolConfig).toHaveBeenCalledWith(
         expect.objectContaining({ default_section_spread: "SPREAD" }),
+      ),
+    );
+  });
+
+  it("yakınlık önceliği varsayılanı kapalı gelir, seçilir ve kaydedilir", async () => {
+    oapi.updateSchoolConfig.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("tab", { name: /Okul Bilgileri/ }));
+    const secim = await screen.findByLabelText("Yakınlık önceliği");
+    expect(secim).toHaveValue("STANDARD");
+    expect(screen.getByRole("option", { name: "Bütün komşu sıralar" })).toBeInTheDocument();
+
+    await user.selectOptions(secim, "CLOSEST");
+    expect(
+      screen.getByText(/artması tek başına kötüleşme sayılmaz, seçimin kazanç sağladığını da/),
+    ).toBeVisible();
+    expect(screen.getByText(/ikili ve üçlü sıralarda koridorun tam karşısından/)).toBeVisible();
+    expect(screen.getByText(/Katı dağıtımda uygulanmaz/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() =>
+      expect(oapi.updateSchoolConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ default_proximity_mode: "CLOSEST" }),
+      ),
+    );
+  });
+
+  it("kaydedilmiş yakınlık önceliğini okur, dokunulmadan kaydetmek onu korur", async () => {
+    oapi.getSchoolConfig.mockResolvedValue({
+      ...(await oapi.getSchoolConfig()),
+      default_proximity_mode: "CLOSEST",
+    });
+    oapi.updateSchoolConfig.mockResolvedValue({});
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("tab", { name: /Okul Bilgileri/ }));
+    expect(await screen.findByLabelText("Yakınlık önceliği")).toHaveValue("CLOSEST");
+
+    await user.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() =>
+      expect(oapi.updateSchoolConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ default_proximity_mode: "CLOSEST" }),
       ),
     );
   });

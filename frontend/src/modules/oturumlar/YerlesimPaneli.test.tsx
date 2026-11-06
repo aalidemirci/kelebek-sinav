@@ -121,10 +121,13 @@ describe("YerlesimPaneli", () => {
     expect(ayrinti).not.toBeNull();
     expect(ayrinti).not.toHaveAttribute("open");
     // Ölçütler DOM'dadır ama kapalı bölümün içinde — sade etiketlerle.
+    // Etiket sayının kapsamını söyler: çapraz da sayılır (dağıtım doğrulama raporuyla aynı).
     const olcut = within(ayrinti as HTMLElement).getByText(
-      "Yan yana/ön-arka düşen aynı sınav çifti: 3",
+      /Komşu sıralara düşen aynı sınav çifti \(yan, ön, arka, çapraz\):\s*3/,
     );
     expect(olcut).not.toBeVisible();
+    // Bütün komşu sıralarla dağıtılmış planda seçimin notu görünmez.
+    expect(within(ayrinti as HTMLElement).queryByText(/artabilir/)).not.toBeInTheDocument();
     // Sayılar Türkçe biçimde (ondalık virgül — lib/format.ts).
     expect(
       within(ayrinti as HTMLElement).getByText("Yakınlık puanı (düşük iyidir): 12,5"),
@@ -136,6 +139,33 @@ describe("YerlesimPaneli", () => {
     expect(
       within(ayrinti as HTMLElement).getByText("Matematik — 9. Sınıf: 1,414"),
     ).toBeInTheDocument();
+  });
+
+  it("en yakın komşular öncelikli dağıtımda çift sayısının anlamı yanında söylenir", async () => {
+    // Kip dağıtım kaydından okunur: oturum alanı değil, planın gerçekten dağıtıldığı seçim.
+    sessionApi.seating.mockResolvedValue(
+      makeSeating({ distribution_params: { seed: 1, proximity_mode: "CLOSEST" } }),
+    );
+    roomApi.list.mockResolvedValue(paginated([makeRoomGeometry()]));
+    renderPanel(makeSession({ status: "DISTRIBUTED", proximity_mode: "STANDARD" }));
+
+    const ozet = await screen.findByText("Ayrıntı");
+    const ayrinti = ozet.closest("details") as HTMLElement;
+    expect(
+      within(ayrinti).getByText(/sayı artabilir\. Bu sayı en yakın komşuları ayrıca göstermez/),
+    ).toBeInTheDocument();
+    expect(within(ayrinti).getByText(/artması tek başına kötüleşme sayılmaz/)).toBeInTheDocument();
+  });
+
+  it("anahtarı olmayan eski dağıtımda seçimin notu görünmez", async () => {
+    sessionApi.seating.mockResolvedValue(makeSeating({ distribution_params: { seed: 1 } }));
+    roomApi.list.mockResolvedValue(paginated([makeRoomGeometry()]));
+    renderPanel(makeSession({ status: "DISTRIBUTED", proximity_mode: "CLOSEST" }));
+
+    const ozet = await screen.findByText("Ayrıntı");
+    expect(
+      within(ozet.closest("details") as HTMLElement).queryByText(/artabilir/),
+    ).not.toBeInTheDocument();
   });
 
   it("kelebek ihlali varken özet onayın kabul istediğini söyler ve ihlalleri listeler", async () => {
@@ -157,8 +187,23 @@ describe("YerlesimPaneli", () => {
     expect(within(uyari).getByText("101 ile 102 aynı sırada.")).toBeInTheDocument();
   });
 
+  it("cinsiyeti bilinmeyen öğrenci sayısı dağıtım kaydından sekmede görünür", async () => {
+    sessionApi.seating.mockResolvedValue(
+      makeSeating({ distribution_params: { seed: 1, separation_unknown: 3 } }),
+    );
+    renderPanel(makeSession({ status: "DISTRIBUTED" }));
+    expect(await screen.findByText(/3 öğrencinin cinsiyet bilgisi yoktu/)).toBeInTheDocument();
+  });
+
+  it("eski dağıtımda alan yoksa cinsiyet cümlesi görünmez", async () => {
+    sessionApi.seating.mockResolvedValue(makeSeating());
+    renderPanel(makeSession({ status: "DISTRIBUTED" }));
+    expect(await screen.findByText(/Dağıtım numarası/)).toBeInTheDocument();
+    expect(screen.queryByText(/cinsiyet/i)).not.toBeInTheDocument();
+  });
+
   it("kabulle geçilemeyen ihlal varken özet 'onaylanamaz' der", async () => {
-    const ayrisma = "Ayrı oturma ihlali: örnek.";
+    const ayrisma = "Ayrı oturma kuralı ihlali: örnek.";
     sessionApi.seating.mockResolvedValue(
       makeSeating({
         report: makeReport({
@@ -183,6 +228,42 @@ describe("YerlesimPaneli", () => {
 
     expect(await screen.findByText("Kural ihlali yok — oturum onaylanabilir.")).toBeInTheDocument();
     expect(screen.queryByText(/Dağıtım numarası/)).not.toBeInTheDocument();
+  });
+
+  it("salon başına sınav çeşidini ve önde aynı sınav oranını gösterir, sonuç vaat etmez", async () => {
+    sessionApi.seating.mockResolvedValue(
+      makeSeating({
+        distribution_params: { seed: 7 },
+        exam_mix: [{ room_id: 1, exam_count: 3, front_same_percent: 25.5 }],
+      }),
+    );
+    roomApi.list.mockResolvedValue(paginated([makeRoomGeometry()]));
+    renderPanel(makeSession({ status: "DISTRIBUTED" }));
+
+    const satir = await screen.findByText(/D-204: 3 sınav/);
+    expect(satir).toHaveTextContent(/önünde aynı sınav olan öğrenci %25,5/);
+    expect(screen.getByText(/Yalnız oturma düzenini anlatır/)).toBeInTheDocument();
+    expect(screen.getByText(/plana konmamış\s+boş satır atlanır/)).toBeInTheDocument();
+    expect(screen.queryByText(/kopya/i)).not.toBeInTheDocument();
+  });
+
+  it("tek dolu satırlı salonda oran yazılmaz, yalnız sınav çeşidi kalır", async () => {
+    sessionApi.seating.mockResolvedValue(
+      makeSeating({ exam_mix: [{ room_id: 1, exam_count: 2, front_same_percent: null }] }),
+    );
+    roomApi.list.mockResolvedValue(paginated([makeRoomGeometry()]));
+    renderPanel(makeSession({ status: "DISTRIBUTED" }));
+
+    expect(await screen.findByText(/D-204: 2 sınav/)).not.toHaveTextContent(/önünde/);
+  });
+
+  it("'Kendi dersliğinde' düzeninde sınav çeşidi gösterilmez", async () => {
+    sessionApi.seating.mockResolvedValue(makeSeating());
+    roomApi.list.mockResolvedValue(paginated([makeRoomGeometry()]));
+    renderPanel(makeSession({ status: "DISTRIBUTED", layout_mode: "HOME_CLASSROOM" }));
+
+    expect(await screen.findByText("Kural ihlali yok — oturum onaylanabilir.")).toBeInTheDocument();
+    expect(screen.queryByText("Salonlarda sınav çeşidi")).not.toBeInTheDocument();
   });
 
   it("onaylı oturumda özet 'onaylanabilir' demez (zaten onaylı)", async () => {
@@ -357,7 +438,7 @@ describe("YerlesimPaneli", () => {
   });
 
   it("kabulle geçilemeyen ihlal oluşan taşıma 'onaylanamaz' diye duyurulur", async () => {
-    const ayrisma = "Ayrı oturma ihlali: örnek.";
+    const ayrisma = "Ayrı oturma kuralı ihlali: örnek.";
     sessionApi.seating.mockResolvedValue(makeSeating());
     roomApi.list.mockResolvedValue(paginated([bosKoltukluGeometri()]));
     sessionApi.moveSeat.mockResolvedValue({

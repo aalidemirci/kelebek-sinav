@@ -802,17 +802,22 @@ export default function KilavuzPage() {
         </p>
         <p>
           Dağıtımı başlattığınızda program öğrencileri salonlara “kelebek” düzende yerleştirir: aynı
-          dersi aynı sınıf düzeyinde alan öğrenciler yan yana ve ön arkaya düşmez. Sonuç bağımsız
-          bir denetimden geçer; <strong>kural ihlali varsa program uyarır</strong> ve oturum ancak
-          ihlalleri kabul ettiğinizi işaretlerseniz onaylanır. Aynı dağıtım numarası (seed) aynı
-          dağıtımı üretir ve bu numara dağıtım doğrulama raporuna basılır.
+          dersi aynı sınıf düzeyinde alan öğrenciler aynı sıraya düşmez, komşu sıralardan da
+          olabildiğince uzak tutulur; “Katı dağıtım” seçiliyse komşu sıra da yasaktır. Sonuç
+          bağımsız bir denetimden geçer; <strong>kural ihlali varsa program uyarır</strong> ve
+          oturum ancak ihlalleri kabul ettiğinizi işaretlerseniz onaylanır. Aynı dağıtım numarası
+          (seed), programın aynı dağıtım yöntemi sürümünde ve aynı girdilerle aynı dağıtımı üretir.
+          Öğrencilerin başka sınavlardaki son yerleri de girdidir: araya aynı öğrencilerin başka bir
+          sınavı girdiyse aynı numara başka plan verebilir. Numara da sürüm de dağıtım doğrulama
+          raporuna basılır.
         </p>
         <p>
           Öğrenci sayıları karışmaya elverişli değilse — örneğin salonda tek ders varsa — aynı
-          sınava giren öğrencilerin yan yana düşmesi matematiksel olarak kaçınılmaz olabilir. Bu
-          durumda program o çiftleri <strong>öğretmen masasına en yakın sıralara</strong> çeker;
-          gözetim en zor olan yerler öğretmenin önünde kalır. Bu yalnız bir tercihtir: kaçınılmaz
-          olmayan hiçbir komşuluğu yaratmaz ve kural ihlali sayısını artırmaz.
+          sınava giren öğrencilerin yan yana düşmesi matematiksel olarak kaçınılmaz olabilir.
+          Program bu çiftleri öğretmen masasına çekmek için yerleşimi değiştirmez:{" "}
+          <strong>masaya uzaklık yalnız eşitlik bozar</strong>, yani iki yerleşim başka her bakımdan
+          denkse birini seçtirir. Bu çiftlerin hangi sırada oturduğunu dağıtım doğrulama raporundaki
+          ihlal listesinden görürsünüz.
         </p>
         <p>
           Yeniden dağıtım ihlali gidermiyorsa yerleşimi olduğu gibi onaylayabilirsiniz: onay
@@ -1008,17 +1013,32 @@ export default function KilavuzPage() {
           gösterilmez.
         </p>
         <p>
+          <strong>Tam dolu salonun sınırı:</strong> “Aynı sıraya oturtma” seçiliyken bütün sıralar
+          ikiliyse, her koltuk doluyorsa, cinsiyeti bilinmeyen öğrenci yoksa ve kız ve erkek öğrenci
+          sayısı tek düşüyorsa bir sıra karışık kalmak zorundadır; bu durumda hiçbir dağıtım
+          sıraları ayıramaz. Tekli sıra ya da cinsiyeti bilinmeyen öğrenci varsa bu zorunluluk
+          kalkabilir. Sihirbazın salon adımı bunları hesaba katar: sıralar yetmiyorsa dağıtımdan
+          önce kaç sıra eksik olduğunu söyler (kız ve erkek sayısını yazmaz). Salon
+          ekleyebilirsiniz; bu ihlal kabul ederek geçilmediği için karar idarenindir.
+        </p>
+        <p>
           Cinsiyet bilgisi <strong>e-Okul sınıf listesinden kendiliğinden okunur</strong> (raporun
           “Cinsiyeti” sütunu); ayrıca bir işaretleme yapmanız gerekmez. Programı daha önce
           kullanıyorsanız listeyi bir kez yeniden aktarmanız yeterlidir — eksik kalan öğrenci varsa
-          program sayısını söyler ve o öğrencilere kural uygulanmaz, dağıtım yine yapılır. Tek tek
-          düzeltmek için Kişiler ekranındaki öğrenci kartında “Cinsiyet” alanı vardır.
+          program sayısını söyler (sayı oturumun Yerleşim sekmesinde durur) ve o öğrencilere kural
+          uygulanmaz, dağıtım yine yapılır. Tek tek düzeltmek için Kişiler ekranındaki öğrenci
+          kartında “Cinsiyet” alanı vardır.
         </p>
         <p>
           Bu bilgi <strong>yalnız bu kural için</strong> kullanılır: öğrenci listelerinde sütun
           olarak gösterilmez, oturma planına, yoklama listesine, şube duyurusuna, kitapçığa ve Excel
-          çıktılarına <strong>basılmaz</strong>. Dağıtım doğrulama raporunda yalnız kuralın adı
-          yazar. Uygulama parolası açıkken bu alan da adlar gibi şifrelenir.
+          çıktılarına <strong>basılmaz</strong>. Dağıtım doğrulama raporunda kuralın adı yazar;
+          kural ihlali varsa (tam dolu salonda dağıtımın kendisi de bırakabilir, elle düzeltme de
+          doğurabilir) ihlalin yeri de yazar (salon ve sıra, ayrı salonlarda salon ve salon
+          mevcudu), öğrencinin adı, numarası ve cinsiyeti yazmaz. Yine de bu satır oturma planıyla
+          yan yana okunursa o sıradaki iki öğrencinin farklı cinsiyette olduğu anlaşılabilir; ihlal
+          giderilmeden onay verilemediği için satır yalnız onaysız oturumun raporunda bulunur.
+          Uygulama parolası açıkken bu alan da adlar gibi şifrelenir.
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">
@@ -1039,10 +1059,88 @@ export default function KilavuzPage() {
         <p>
           Yeni açtığınız her sınav oturumu bu seçimle gelir; tek bir sınav için sihirbazın 1.
           adımındaki “Ayrıntılı ayarlar”dan değiştirebilirsiniz. Seçim yalnız öğrencilerin hangi
-          salona gideceğini değiştirir: kelebek kuralı, salonların doluluk dengesi ve “aynı dağıtım
-          numarası aynı yerleşimi verir” kuralı iki seçimde de aynıdır. Dağıtılmış bir oturumda
-          değiştirmek için oturumu önce taslağa alın. Dağıtım doğrulama raporu hangi seçimle
-          dağıtıldığını yazar. <strong>“Kendi dersliğinde”</strong> düzeninde seçenek gösterilmez.
+          salona gideceğini değiştirir: kelebek kuralı, salonların doluluk dengesi ve dağıtım
+          numarasının işleyişi iki seçimde de aynıdır. Dağıtılmış bir oturumda değiştirmek için
+          oturumu önce taslağa alın. Dağıtım doğrulama raporu hangi seçimle dağıtıldığını yazar.{" "}
+          <strong>“Kendi dersliğinde”</strong> düzeninde seçenek gösterilmez.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Program yerleşimde neyi gözetir?
+        </h3>
+        <p>
+          Program şunları gözetir: aynı sınava giren öğrenciler aynı sıraya düşmez; aynı sınava
+          girenler komşu sıralardan da olabildiğince uzak tutulur; kız/erkek kuralı açıksa o
+          sağlanır; salonların doluluğu dengede kalır; bir öğrencinin önceki sınavdaki sırası
+          yinelenmemeye çalışılır. <strong>Gözetmedikleri de bilinçlidir:</strong> arka sıra, köşe
+          ve ön sıra için ayrı bir kural yoktur, öğretmen masasına uzaklık yalnız eşitlik bozar.
+          Atanmış koltukta bunların önemine dair kanıt bulunamadı.
+        </p>
+        <p>
+          <strong>Dağıtım numarası planı belirler.</strong> Aynı sınavın öğrencilerinin kendi
+          aralarında hangi koltuğa düşeceği numaradan türeyen bir karıştırmayla belirlenir; okul
+          numarası sırası korunmaz. Bu yüzden iki farklı numara, iki sınavlı tam dolu salonda bile
+          öğrencileri farklı koltuklara oturtur (sentetik denemede iki numaranın aynı koltuğa
+          oturttuğu öğrenci %100'den %3'e indi). Derslerin ve salonların seçilme sırası planı
+          değiştirmez. Şube salon payına tam oturuyorsa öğrenci aynı salonda kalır, yalnız salonun
+          içindeki yeri değişir.
+        </p>
+        <p>
+          <strong>Şubeler bir arada kipinde en yakın komşular çoğunlukla aynı şubedendir.</strong>{" "}
+          Bir öğrencinin aynı sınava giren en yakın komşusunun aynı şubeden olma oranı sentetik
+          denemelerde %77-100 çıktı; “Şubeler salonlara dağıtılır” seçiminde 8-12 salonda %14-22'ye
+          indi. Bu, seçimin doğal sonucudur, hata değildir: şubeyi az salonda toplamak bunu getirir.
+          Hangisinin okulunuza uygun olduğu sizin kararınızdır; varsayılan “Şubeler bir arada”dır.
+        </p>
+        <p>
+          <strong>Sınav çeşidi:</strong> tam dolu ikili sıralı salonda mevcutları eşit iki sınav
+          varsa ve kız/erkek kuralı kapalıysa ilk dolu sıranın arkasındaki herkesin önünde aynı
+          sınavdan biri oturur. Mevcutlar eşit değilse ya da kız/erkek kuralı açıksa oran salondan
+          salona değişir; önceden bir aralık söylenemez ve mevcut farkı büyüdükçe düzenli olarak da
+          düşmez. Salondaki sınav çeşidi arttıkça bu oran genellikle düşer. Kendi salonunuzun
+          değerini Yerleşim sekmesindeki “Salonlarda sınav çeşidi” bölümünde görürsünüz: her salon
+          için sınav sayısı ve önünde aynı sınav olan öğrenci oranı yazar. Bu bilgi yalnız
+          ekrandadır, evraka basılmaz.
+        </p>
+        <p>
+          <strong>Dayanak:</strong> Bu seçimlerin yön sıralaması sınırlı kanıta, kullanılan sayılar
+          varsayıma dayanır. Araştırmalarda en tutarlı sinyal yakın yan komşudur; bu araştırmalar
+          üniversite sınavlarına aittir. Lise ve ikili sıra için çalışma bulunamadı, ama arama
+          tamamlanamadığı için böyle bir çalışma yoktur denemez. Buradaki oranlar sentetik veriyle
+          ölçülmüş oturma düzenidir: kopya ölçülmedi, bu yüzden hiçbir seçimin sonucu hakkında söz
+          verilmez.
+        </p>
+
+        <h3 className="pt-1 text-title-small font-semibold text-on-surface">
+          Yakınlık önceliği ne işe yarar?
+        </h3>
+        <p>
+          Program aynı sınava giren öğrencileri bütün komşu sıralardan (yan, ön, arka, çapraz) aynı
+          ölçüde uzak tutmaya çalışır.{" "}
+          <Ekran to="/ayarlar?tab=okul">Ayarlar → Okul Bilgileri</Ekran> sayfasındaki{" "}
+          <strong>“Yakınlık önceliği”</strong> seçeneğini{" "}
+          <strong>En yakın komşular öncelikli</strong> yaparsanız program önce hemen önündeki ve
+          arkasındaki sıraya, ikili ve üçlü sıralarda koridorun tam karşısına bakar; öteki komşu
+          sıraları geri plana alır. Koridorun bir yanında tek kişilik sıra varsa karşısındaki koltuk
+          daha uzak sayılır ve geri plandadır. Bu okulun tercihidir: hangi yönün daha önemli olduğu
+          sınırlı kanıta, programın kullandığı sayılar varsayıma dayanır. Varsayılan{" "}
+          <strong>Bütün komşu sıralar</strong>dır.
+        </p>
+        <p>
+          Seçimin bedeli vardır. Dağıtım doğrulama raporundaki ve Yerleşim sekmesinin Ayrıntı
+          bölümündeki “Komşu sıralara düşen aynı sınav çifti” sayısı artabilir. Bu sayı en yakın
+          komşuları ayrıca göstermez; artması tek başına kötüleşme sayılmaz, seçimin kazanç
+          sağladığını da göstermez. Arka arkaya oturumlarda aynı koltuğa ve aynı komşulara düşme de
+          biraz artabilir. Sentetik denemelerde (iki salon, sınırlı sayıda deneme) seçimin etkisi
+          sınav sayısına, doluluğa, sıra türüne ve mevcutların dengesine göre değişti. En yakın
+          komşulara düşen çift en çok mevcutları birbirine yakın üç ve dört sınavlı salonlarda ve
+          salon boşaldıkça azaldı; üç kişilik sıralarda bu etki salon tam dolunca neredeyse
+          kayboldu. İki sınavlı salonlarda ve bir sınavın öğrencilerin yarısından çoğunu oluşturduğu
+          salonlarda azalma çoğunlukla sınırlı kaldı, bazı denemelerde hiç görülmedi. Sizin
+          salonlarınızda sonuç başka olabilir. Yeni oturumlar bu seçimle açılır; sihirbazın Dağıt
+          adımında değiştirebilirsiniz. Dağıtılmış bir oturumda değiştirmek için oturumu önce
+          taslağa alın. Katı dağıtımda ve <strong>“Kendi dersliğinde”</strong> düzeninde uygulanmaz.
+          Dağıtım doğrulama raporu hangi seçimle dağıtıldığını yazar.
         </p>
 
         <h3 className="pt-1 text-title-small font-semibold text-on-surface">

@@ -35,6 +35,8 @@ const sessionApi = vi.hoisted(() => ({
       deficit: 0,
       fits: true,
       message: "",
+      separation_extra_desks: 0,
+      separation_message: "",
     }),
   ),
 }));
@@ -496,6 +498,8 @@ describe("SinavSihirbazi — adım geçişleri", () => {
     // Sonuç cümlesinde anlamsız "dağıtım numarası 0" yazılmaz.
     expect(await screen.findByText("Dağıtım tamamlandı: 30 öğrenci yerleşti.")).toBeInTheDocument();
     expect(onChanged).toHaveBeenCalled();
+    // Yakınlık önceliği bu düzende sorulmaz: kaydedilecek bir seçim de yoktur.
+    expect(sessionApi.update).not.toHaveBeenCalled();
   });
 
   it("dağıtım UYARI döndürürse uyarılar okunmadan sekmeli görünüme geçilmez", async () => {
@@ -585,6 +589,8 @@ describe("SinavSihirbazi — adım geçişleri", () => {
         "Seçili salonlarda 12 sıra var; en kalabalık sınav 16 öğrenci. Kelebek düzeninde " +
         "bir sıraya aynı sınavdan iki öğrenci oturamaz — 4 öğrenci aynı sınavla yan yana " +
         "oturmak zorunda kalır. Salon ekleyin ya da bu saate yakın mevcutlu başka bir sınav koyun.",
+      separation_extra_desks: 0,
+      separation_message: "",
     });
     renderWizard(
       makeSession({
@@ -597,6 +603,9 @@ describe("SinavSihirbazi — adım geçişleri", () => {
     await user.click(await screen.findByRole("button", { name: "Devam" }));
     await screen.findByRole("heading", { name: "Salon Seçimi" });
 
+    // Sınav çeşidi notu mesafeden söz eder, sonuç vaat etmez.
+    expect(screen.getByText(/sınav çeşidi arttıkça aynı sınava giren/)).toBeInTheDocument();
+    expect(screen.queryByText(/kopya/i)).not.toBeInTheDocument();
     // Koltuk denetimi SUSAR (24 ≥ 24) — yanıltıcı yeşil tam buradaydı.
     expect(screen.queryByText(/Kapasite yetersiz/)).not.toBeInTheDocument();
     // Sıra göstergesi + açık uyarısı.
@@ -607,6 +616,44 @@ describe("SinavSihirbazi — adım geçişleri", () => {
     expect(uyari).toHaveAttribute("role", "alert");
     // Seçim BACKEND'e sorulur; ön yüz kendi hesabını yapmaz.
     expect(sessionApi.butterflyFit).toHaveBeenCalledWith(expect.any(Number), [1]);
+  });
+
+  it("KELEBEK salon adımı: kız/erkek için eksik sıra dağıtımdan önce söylenir", async () => {
+    const user = userEvent.setup();
+    sessionApi.participants.mockResolvedValue({ ...makeParticipants(), total_count: 24 });
+    salonlar.list.mockResolvedValue({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [{ id: 1, name: "D-204", capacity: 24, group_id: null }],
+    });
+    sessionApi.butterflyFit.mockResolvedValue({
+      students: 24,
+      seats: 24,
+      desks: 12,
+      largest_group: 12,
+      deficit: 0,
+      fits: true,
+      message: "",
+      separation_extra_desks: 1,
+      separation_message:
+        "Kız/erkek ayrışması (“Aynı sıraya oturtma”) seçili salonlarda tam sağlanamaz: kuralın " +
+        "tutması için en az 1 sıra daha gerekir, yani boş koltuk kalacak biçimde salon " +
+        "eklenmelidir. Bu kural ihlali kabulle de onaylanamaz.",
+    });
+    renderWizard(
+      makeSession({
+        transfer_check_confirmed_at: ONAY_ZAMANI,
+        courses: [makeCourseRow()],
+        rooms: [{ id: 91, room_id: 1, room_name: "D-204", order: 0, capacity_override: null }],
+      }),
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Devam" }));
+    await screen.findByRole("heading", { name: "Salon Seçimi" });
+
+    const uyari = await screen.findByText(/en az 1 sıra daha gerekir/);
+    expect(uyari).toHaveAttribute("role", "alert");
   });
 
   it("KELEBEK salon adımı: sıra yeterken uyarı çıkmaz", async () => {
@@ -626,6 +673,8 @@ describe("SinavSihirbazi — adım geçişleri", () => {
       deficit: 0,
       fits: true,
       message: "",
+      separation_extra_desks: 0,
+      separation_message: "",
     });
     renderWizard(
       makeSession({
@@ -645,7 +694,10 @@ describe("SinavSihirbazi — adım geçişleri", () => {
   });
 
   /** Kelebek oturumu: Ders (2) → Salonlar (3) → Dağıt (4). Seçili salon oturumda hazır. */
-  async function kelebekteDagitAdiminaGit(user: ReturnType<typeof userEvent.setup>) {
+  async function kelebekteDagitAdiminaGit(
+    user: ReturnType<typeof userEvent.setup>,
+    oturum: Parameters<typeof makeSession>[0] = {},
+  ) {
     sessionApi.participants.mockResolvedValue(makeParticipants());
     salonlar.list.mockResolvedValue({
       count: 1,
@@ -654,17 +706,19 @@ describe("SinavSihirbazi — adım geçişleri", () => {
       results: [{ id: 1, name: "D-204", capacity: 40, group_id: null }],
     });
     sessionApi.setRooms.mockResolvedValue({ rooms: [] });
-    renderWizard(
+    const sihirbaz = renderWizard(
       makeSession({
         transfer_check_confirmed_at: ONAY_ZAMANI,
         courses: [makeCourseRow()],
         rooms: [{ id: 91, room_id: 1, room_name: "D-204", order: 0, capacity_override: null }],
+        ...oturum,
       }),
     );
 
     await user.click(await screen.findByRole("button", { name: "Devam" }));
     await user.click(await screen.findByRole("button", { name: "Kaydet ve devam et" }));
     await screen.findByRole("heading", { name: "Dağıt" });
+    return sihirbaz;
   }
 
   it("KELEBEK: seçenekler sözlük diliyle sorulur; numara + katı dağıtım gövdeye gider", async () => {
@@ -682,7 +736,7 @@ describe("SinavSihirbazi — adım geçişleri", () => {
     // Sözlük: "seed" → "dağıtım numarası"; "katı mod (1. halka…)" → "Katı dağıtım…".
     const numara = screen.getByLabelText("Dağıtım numarası (boş bırakılırsa rastgele)");
     const kati = screen.getByRole("checkbox", {
-      name: "Katı dağıtım: yan, ön ve arka komşuluk da kesinlikle yasak",
+      name: "Katı dağıtım: yan, ön, arka ve çapraz komşuluk da kesinlikle yasak",
     });
     expect(kati).not.toBeChecked();
     expect(screen.queryByText(/1\. halka|Katı mod|[Ss]eed \(boş/)).not.toBeInTheDocument();
@@ -697,6 +751,145 @@ describe("SinavSihirbazi — adım geçişleri", () => {
     expect(
       await screen.findByText("Dağıtım tamamlandı: 30 öğrenci yerleşti (dağıtım numarası 4231)."),
     ).toBeInTheDocument();
+  });
+
+  it("KELEBEK: yakınlık önceliği dağıtımdan önce oturuma kaydedilir", async () => {
+    const user = userEvent.setup();
+    sessionApi.update.mockResolvedValue(makeSession());
+    sessionApi.distribute.mockResolvedValue({
+      status: "DISTRIBUTED",
+      seed: 7,
+      checkerboard: false,
+      placed: 30,
+      warnings: [],
+      report: makeReport(),
+    });
+    await kelebekteDagitAdiminaGit(user);
+
+    const secim = screen.getByLabelText("Yakınlık önceliği");
+    expect(secim).toHaveValue("STANDARD");
+    expect(screen.queryByText(/artabilir/)).not.toBeInTheDocument();
+    await user.selectOptions(secim, "CLOSEST");
+    // Bedel seçim anında söylenir; metin bir sonuç vaat etmez.
+    expect(
+      screen.getByText(/artması tek başına kötüleşme sayılmaz, seçimin kazanç sağladığını da/),
+    ).toBeVisible();
+    expect(screen.getByText(/aynı komşulara düşme biraz artabilir/)).toBeVisible();
+    // Koridor karşısı ikili ve üçlü sıralarda ağırlık alır; bir yanı tek kişilikse almaz.
+    expect(screen.getByText(/ikili ve üçlü sıralarda koridorun tam karşısından/)).toBeVisible();
+    expect(screen.queryByText(/halka|[Kk]opya/)).not.toBeInTheDocument();
+    sessionApi.update.mockClear();
+
+    await user.click(screen.getByRole("button", { name: "Dağıt" }));
+
+    await waitFor(() => expect(sessionApi.distribute).toHaveBeenCalled());
+    expect(sessionApi.update).toHaveBeenCalledWith(5, { proximity_mode: "CLOSEST" });
+    expect(sessionApi.update.mock.invocationCallOrder[0]).toBeLessThan(
+      sessionApi.distribute.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("KELEBEK: ekrandaki seçim her dağıtımdan önce kaydedilir", async () => {
+    const user = userEvent.setup();
+    sessionApi.update.mockResolvedValue(makeSession());
+    sessionApi.distribute.mockResolvedValue({
+      status: "DISTRIBUTED",
+      seed: 7,
+      checkerboard: false,
+      placed: 30,
+      warnings: [],
+      report: makeReport(),
+    });
+    await kelebekteDagitAdiminaGit(user);
+    sessionApi.update.mockClear();
+
+    await user.click(screen.getByRole("button", { name: "Dağıt" }));
+
+    await waitFor(() => expect(sessionApi.distribute).toHaveBeenCalled());
+    expect(sessionApi.update.mock.calls).toEqual([[5, { proximity_mode: "STANDARD" }]]);
+  });
+
+  it("KELEBEK: seçim oturumun kaydıyla açılır, dokunulmazsa korunur", async () => {
+    // Okul varsayılanı "En yakın komşular" ise oturum onunla açılır. Ekran başka bir
+    // değerle başlasaydı Dağıt, oturumun seçimini sessizce ezerdi.
+    const user = userEvent.setup();
+    sessionApi.update.mockResolvedValue(makeSession());
+    sessionApi.distribute.mockResolvedValue({
+      status: "DISTRIBUTED",
+      seed: 7,
+      checkerboard: false,
+      placed: 30,
+      warnings: [],
+      report: makeReport(),
+    });
+    await kelebekteDagitAdiminaGit(user, { proximity_mode: "CLOSEST" });
+    sessionApi.update.mockClear();
+
+    expect(screen.getByLabelText("Yakınlık önceliği")).toHaveValue("CLOSEST");
+    await user.click(screen.getByRole("button", { name: "Dağıt" }));
+
+    await waitFor(() => expect(sessionApi.distribute).toHaveBeenCalled());
+    expect(sessionApi.update.mock.calls).toEqual([[5, { proximity_mode: "CLOSEST" }]]);
+  });
+
+  it("KELEBEK: başarısız dağıtımdan sonra varsayılana dönüş de kaydedilir", async () => {
+    // Elimizdeki oturum nesnesi başarısız dağıtımdan sonra bayattır: kayıt ona göre
+    // atlanırsa ekran kapalı gösterirken plan kipli çıkar ve R8 kipin adını basar.
+    const user = userEvent.setup();
+    sessionApi.update.mockResolvedValue(makeSession());
+    sessionApi.distribute.mockRejectedValueOnce(new Error("Salon kapasitesi yetersiz."));
+    sessionApi.distribute.mockResolvedValue({
+      status: "DISTRIBUTED",
+      seed: 7,
+      checkerboard: false,
+      placed: 30,
+      warnings: [],
+      report: makeReport(),
+    });
+    await kelebekteDagitAdiminaGit(user);
+    sessionApi.update.mockClear();
+
+    await user.selectOptions(screen.getByLabelText("Yakınlık önceliği"), "CLOSEST");
+    await user.click(screen.getByRole("button", { name: "Dağıt" }));
+    await waitFor(() => expect(sessionApi.distribute).toHaveBeenCalledTimes(1));
+
+    await user.selectOptions(screen.getByLabelText("Yakınlık önceliği"), "STANDARD");
+    await user.click(screen.getByRole("button", { name: "Dağıt" }));
+    await waitFor(() => expect(sessionApi.distribute).toHaveBeenCalledTimes(2));
+
+    expect(sessionApi.update.mock.calls.map((cagri: unknown[]) => cagri[1])).toEqual([
+      { proximity_mode: "CLOSEST" },
+      { proximity_mode: "STANDARD" },
+    ]);
+  });
+
+  it("KELEBEK: dağıtım reddedilince oturum tazelenir, adıma dönüş kayıtlı seçimle başlar", async () => {
+    const user = userEvent.setup();
+    sessionApi.update.mockResolvedValue(makeSession());
+    sessionApi.distribute.mockRejectedValueOnce(new Error("Salon kapasitesi yetersiz."));
+    const { onChanged } = await kelebekteDagitAdiminaGit(user);
+    onChanged.mockClear();
+
+    await user.selectOptions(screen.getByLabelText("Yakınlık önceliği"), "CLOSEST");
+    await user.click(screen.getByRole("button", { name: "Dağıt" }));
+
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+  });
+
+  it("KELEBEK: katı dağıtım seçilince yakınlık önceliği kapanır ve nedeni söylenir", async () => {
+    const user = userEvent.setup();
+    await kelebekteDagitAdiminaGit(user);
+
+    const secim = screen.getByLabelText("Yakınlık önceliği");
+    expect(secim).toBeEnabled();
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "Katı dağıtım: yan, ön, arka ve çapraz komşuluk da kesinlikle yasak",
+      }),
+    );
+
+    expect(secim).toBeDisabled();
+    expect(screen.getByText(/Katı dağıtımda uygulanmaz/)).toBeVisible();
   });
 
   it("KELEBEK: uç hatasında 'Dağıtım başarısız.' gösterilir, adımda kalınır", async () => {

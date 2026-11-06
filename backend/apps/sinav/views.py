@@ -457,6 +457,7 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
                     {"rooms": "Salon seçimi virgülle ayrılmış tam sayı olmalı."}
                 ) from exc
         fit = services.session_butterfly_fit(session, room_ids=room_ids)
+        ek_sira = services.session_separation_gap(session, room_ids=room_ids)
         return Response(
             {
                 "students": fit.students,
@@ -466,6 +467,8 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
                 "deficit": fit.deficit,
                 "fits": fit.fits,
                 "message": services.butterfly_fit_message(fit),
+                "separation_extra_desks": ek_sira,
+                "separation_message": services.separation_gap_message(ek_sira),
             }
         )
 
@@ -560,6 +563,8 @@ class ExamSessionViewSet(viewsets.ModelViewSet[ExamSession]):
                 "report": _report_payload(report),
                 # K1 (additive): salon doluluk özeti — FE doluluk çipleri.
                 "occupancy": services.room_occupancy(session),
+                # Yalnız ekran: salon başına sınav çeşidi + önde aynı sınav oranı.
+                "exam_mix": services.room_exam_mix(session),
             }
         )
 

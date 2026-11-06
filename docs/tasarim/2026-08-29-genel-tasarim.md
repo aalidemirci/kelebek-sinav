@@ -130,6 +130,143 @@ düşmesin") birleşimle korunur. `section_rooms_for_levels` klasik (kendi
 dersliğinde) düzen eşlemesine kaldı.
 
 
+Aşağıdaki üç ekin ölçümleri, kanıt tablosu, reddedilen seçenekler, açık sınırlar ve kaynak künyeleri
+[motor denetim raporundadır](2026-11-motor-denetimi.md).
+
+#### Eki: sayılı yol ve motor sürümü (06.11.2026 — kullanıcı kararı)
+
+Motorun yakınlık aritmetiği doğrudur; hata ihlal içeren takasların kabulündedir. Sonsuz
+ceza ihlal saymaz, takas iki öğrencinin ortak terimini yanlış ölçer. En çok "aynı sıraya
+oturtma" kipi (72/72 mevcutta 30 dağıtım numarasının 1'inde onaylanabilir plan) ve üçlü
+sıra etkileniyordu. İki farklı ayrışma anahtarı ya da üçlü sıra varken motor artık ihlali
+SAYAR; Faz 0'da aynı gruptan farklı anahtarlı öğrenciyi salonlar arası takas eder, salon
+hedefin üstünde kalırsa sıraları anahtara ayırıp yeniden kurar. Karma salonda grup kotası
+salonun sıra sayısına indirilir (20/1 vakası). Aynı sıra ihlali kimi kümeli senaryoda
+ARTAR: kız/erkek kuralı kabulle geçilmediği için önce o sağlanır, aynı sınav ihlali idare
+kabulüne kalır.
+
+Bütün sıraları ikili, tam dolu ve jokersiz salonda tek sayılı kız/erkek mevcudu bir sırayı
+karışık bırakır; hiçbir motor çözemez. Joker boş kalan koltuğa oturur, tekli sıra bölüşümü
+değiştirir: bu iki durumda zorunluluk kalkabilir (`separation_desk_gap` ikisini de gözetir).
+Bu yüzden sihirbaz dağıtımdan önce eksik sıra sayısını söyler (cinsiyete göre sayı
+söylenmez). Motor sürümü `distribution_params`a yazılır ve R8'de basılır: aynı numara
+yalnız aynı sürümde ve aynı girdilerle aynı yerleşimi verir (öğrencinin başka sınavdaki son
+yeri de girdidir: araya sınav girince aynı numara başka plan verir, R8 bunu söyler); geçmiş
+yerleşimler kayıtlı olduğu için etkilenmez.
+
+Bu ölçümler oturma geometrisine aittir, kopya ölçülmedi. Yön sıralaması sınırlı kanıta,
+sayılar varsayıma dayanır.
+
+#### Eki: girdi sırası ve harman (06.11.2026 — kullanıcı kararı)
+
+İki sınavlı tam salonda sıra deseni tektir; motor grup içi sırayı okul no sırasından
+aldığı için her dağıtım numarası her öğrenciyi aynı koltuğa oturtuyordu. Harman bu sırayı
+numaradan türeyen karıştırmayla bozar ve HER dağıtımda açıktır: kapılı biçim altın kaydı
+korurdu ama sorunu testten gizlerdi. Harman girdi sırasını plana taşıyacağı için önce
+katılımcı, sabit yerleşim ve salon listesi kanonik sıraya dizilir; ders satırı ya da salon
+seçim sırası değişince aynı numara aynı planı verir. Altın kayıt ve sayılı yol kilitleri bu
+sürüm için yenilendi; sözleşme "aynı motor sürümünde"dir ve sürüm hiç yayımlanmadığı için
+2 kaldı.
+
+Ürün koduyla ölçüm (sentetik, 4 salon 5x4, 20 numara, önceki koltuk açık; önce / sonra):
+
+| Senaryo | Farklı numarada aynı koltuk | Sıra arkadaşı tekrarı | Halka tekrarı |
+|---|---|---|---|
+| 2 sınav tam | %100 / %3,06 | %100 / %2,38 | %61,82 / %13,18 |
+| 4 sınav tam | %31,50 / %1,69 | %17,75 / %1,81 | %31,85 / %7,40 |
+| 2 sınav %85 | %44,93 / %2,43 | %27,63 / %2,81 | %31,18 / %10,91 |
+| 4 sınav %85 | %17,68 / %1,58 | %11,87 / %1,44 | %16,79 / %2,98 |
+| 2 sınav, şube = salon payı | %100 / %4,84 | %100 / %5,25 | %61,82 / %29,01 |
+
+Bedeli: aynı salonda kalma %100'den %36-56'ya iner (şube bölünüyorsa, kimin hangi salona
+düştüğü değişir); şube sayımı aynıdır. Şube salon payına tam oturuyorsa öğrenci aynı salonda
+kalır, halka tekrarı %21-29'dadır. Sonuç düzenin numaraya bağlandığını gösterir, kopya
+azaldığını göstermez; kopya ölçülmedi.
+
+Birleşik ölçüm kız/erkek için ayrı bir kusuru ortaya çıkardı: 2 ikili + 2 üçlü tam salonda
+onay 30 numarada 16'dan 12'ye düştü. Neden harman değildi. Başarısız 18 planın hepsinde tek
+bir ikili salon tek sayılıydı, üçlü salonlar 3'ün katındaydı: uyum üç öğrencilik kaydırma
+ister, tek takas cezayı artırdığı için oraya varamaz; harman yalnız başlangıç sayılarının
+hangi tarafa düştüğünü değiştiriyordu. `_key_targets` en yakın uyumlu salon sayılarını bulur:
+onay bağımsız ve numaraya bloklu dağılımda 30/30 oldu.
+
+İlk hedef tek ve yalnız aynı grup takasıyla yürünüyordu; denetim iki açık buldu. Birincisi:
+şubeler tek cinsiyetliyken salonun sayısı aynı grup takasıyla oynamayabilir, eşit kaydırmalı
+hedeflerden yanlışı seçilince iş geri alınıyor ve sınır izin verdiği hâlde karışık sıra
+kalıyordu (360 veride 29'unda hiçbir numara onay vermedi; önceki "29/30" genel oran değildi).
+Şimdi birden çok hedef denenir, aynı grup takası kalmayınca grup kotası değişir: kız/erkek
+ihlali kabulle geçilemez, aynı sınavın yan yana gelmesi geçilir. İkincisi: sabit öğrencinin
+yanındaki boş koltuk serbest tekli sıra sayılıyordu (2 ikili + 2 üçlü tam salon, 6 pin: 30
+veride 3 onay). Sabit öğrencinin sırası artık anahtarına kilitlidir ve sihirbazın eksik sıra
+uyarısı da bunu görür. Yeniden ölçüm (sentetik): sınırın izin verdiği 360 tek cinsiyet
+verisinin hepsinde ilk numara onay verdi; 2 ve 6 pinli tam salonlarda da hepsi onaylandı; aynı
+sıra çifti ortalaması düzeltme öncesinden yüksek çıkan kurulum olmadı. Sınırın izin VERMEDİĞİ
+kurulumda (eksik sıra var) şube içi tek cinsiyet karışık sırayı birden fazla bırakabilir (20
+ikili salon, 6 sınav: eksik 1 sıra, karışık 5); plan zaten onaylanmaz, sihirbaz önceden uyarır.
+
+#### Eki: yakınlık önceliği (06.11.2026 — kullanıcı kararı)
+
+Seçimlik kip `okul.ProximityMode` ("Bütün komşu sıralar" / "En yakın komşular öncelikli"),
+okul varsayılanı `SchoolConfig.default_proximity_mode`, oturum alanı
+`ExamSession.proximity_mode`; düzeni şube dağılımınınkidir (yalnız taslakta değişir, dağıtım
+anındaki etkin değer `distribution_params["proximity_mode"]`a yazılır, R8 adını basar,
+anahtarı olmayan eski dağıtım varsayılan okunur). Varsayılan kapalıdır, kapalıyken plan bit
+bit aynıdır. Etkin değeri `effective_proximity_mode(session, strict=…)` verir: klasik düzende
+ve katı dağıtımda kapalıdır, çünkü katıda bütün komşu sıralar zaten yasaktır. Sihirbazın Dağıt
+adımı seçimi her dağıtımdan önce kaydeder ve elindeki oturum nesnesiyle KARŞILAŞTIRMAZ: dağıtım
+reddedilirse o nesne bayattır, kayıt atlanırsa ekrandaki seçimle plan ayrışırdı. Ret sonrası
+oturum tazelenir; adıma dönüş kayıtlı değerle başlar. "Yeniden dağıt" diyaloğunda seçim kilitli
+görünür.
+
+Kip yalnız `_pair_penalty`nin birincilini değiştirir: +10 yalnız tam ön-arka, iç çapraz ve
+koridor karşısına gider (`_closest_neighbour`), öteki komşu çift 1/d² ile kalır. İkincil ve aynı
+sıra sonsuzu değişmez. Parametre iki yolda da açık geçirilir (eski yol ve `_RoomState`); modül
+düzeyinde durum tutulmaz, gömülü sunucu altı iş parçacıklıdır. Doğrulayıcıya dokunulmadı: R8 her
+kipte bütün komşu sıraları sayar, bu yüzden kip açıkken o sayı artabilir ve R8 bunu söyler. Yeni
+çift türü doğrulayıcıya eklenmedi; özet tek tanımlı kalır. R8'in bu notu bölüm bandının altında
+kendi satırındadır (`.sec-note`, koyu renk): `.sec .hint` koyu bant içindir, satıra sığmayınca
+bandın altına düşer ve açık rengiyle beyaz kâğıtta okunmaz (06.11.2026 denetim bulgusu; aynı
+kusur sürümle uzayan "Aynı dağıtım numarası…" ipucunda da vardı, o da `.sec-note` oldu). Not ölçü
+söyler, yargı söylemez: kipin kazanç vermediği kurulumlar vardır (aşağıda), metin ona göre yazıldı.
+
+Dayanak: yön sıralaması sınırlı kanıta, +10 ve komşu sınırı varsayıma dayanır. Kip bir sonuç
+vaat etmez; metinlerde kopyanın azaldığı yazılmaz. Ürün koduyla ölçüm (sentetik, 4 salon × 40
+koltuk, 20 veri; birim salon başına çift): 4 sınav tam salonda tam ön 11,88'den 0'a, komşu sıra
+37,98'den 45,00'e, koridor çaprazı 5,06'dan 6,96'ya; 3 sınav %85'te tam ön 12,20'den 6,28'e, komşu
+sıra 32,77'den 40,73'e; 2 sınavda %85 ve %100 dolulukta kazanç yok (%100'de aynı plan ölçüleri,
+%85'te tam ön 20,00'den 20,46'ya; düşük doluluk aşağıda). Arka arkaya oturumda bedel: 4 sınav tam salonda iki numaranın aynı koltuğu %1,69'dan
+%3,88'e, komşu tekrarı %7,40'tan %9,39'a çıktı. Katı dağıtımda 20 veride plan birebir aynı kaldı.
+
+İki sınavda sonuç dolulukla değişir (2 salon × 40 koltuk, 20 veri, salon başına çift; tam ön-arka
+ve iç çapraz birlikte; 06.11.2026'da ürün koduyla yeniden ölçüldü): %50'de 3,88'den 0,30'a, %60'ta
+6,12'den 3,35'e, %70'te 12,10'dan 9,10'a; %80'de 16,27'den 16,45'e, %85'te 20,00'den 20,35'e, %100'de
+32,00 ile aynı. Düşük dolulukta bedel büyüktür: ayrı sütundaki bütün komşu sıra çiftleri %50'de
+6,65'ten 17,48'e, %60'ta 13,80'den 25,02'ye çıktı. %50'deki toplamın içinde çapraz çiftler 0,53'ten
+12,55'e çıktı, aynı satırdaki koridor çiftleri 6,13'ten 4,92'ye indi.
+
+Dengesiz mevcutta kazanç küçülür (4 salon × 40 koltuk, 12 numara, salon başına çift, en yakın
+komşu çift, kip kapalı→açık): [70,50,25,15] 17,96'dan 13,98'e, [90,40,30] 26,33'ten 23,21'e,
+[100,30,20] 28,38'den 27,31'e, [110,50] değişmedi. Komşu sıra çiftleri ilk üçünde arttı (54,08'den
+61,31'e; 82,46'dan 85,79'a; 88,29'dan 89,62'ye). İki sınav %85'te en yakın çift 20,56'dan 20,21'e
+inerken komşu sıra 64,00'dan 67,42'ye çıktı: kazanç küçüktür, not bu yüzden yargı söylemez.
+
+Doluluk eşiği sıra türüne bağlıdır (2 salon × 5×4 ızgara, 24 numara, ayrışma anahtarsız; iki salon
+toplamı en yakın çift, kip kapalı→açık): iki denk sınav %80'de ikili 33,46→32,96, üçlü
+83,92→80,54, tek sütunu tekli karma 24,83→21,29; %100'de ikili ve karmada aynı, üçlüde 147,83→128.
+Dengesiz (%70-%30) %80'de üçlü 101,79→90,38, karma 39,50→32,79. Üç denk sınav tam üçlü salonda
+96→96, dört denk 65,88→64: "üç ve dört sınavda belirgin azalır" da tam üçlüde tutmaz. Kılavuz bu
+yüzden doluluk eşiği vermez, eğilimi ve ölçümün kapsamını söyler. Yerleşim sekmesinin Ayrıntı
+bölümü R8 ile aynı etiketi kullanır; plan bu kipte dağıtıldıysa (`distribution_params`) aynı notu
+gösterir.
+
+Koridor karşısı ağırlığı `_closest_neighbour` eşiğiyle (0,5 sütun) belirlenir: ikili-ikili 0,5,
+ikili-üçlü 0,417, üçlü-üçlü 0,333 ağırlık alır; bir yanı tek kişilik olan çift (tekli-üçlü 0,667,
+tekli-ikili 0,75, tekli-tekli 1) almaz. Kullanıcı metni bu yüzden "ikili ve üçlü sıralarda" der.
+Ölçüm (2 salon
+× 30 koltuk, 5×6, 20 veri, yan yana aynı sınav çifti salon başına, tam salon): 2 sınavda 7,05'ten
+0'a, 3 sınavda 3,85'ten 1,40'a, 4 sınavda 0,60'tan 1,00'e. Ön-arka ağırlıklı kalınca yan yana
+çift çoğu kurulumda artmadı; yalnız 4 sınavda küçük bir artış var.
+
 ### 2.5 Ders saatleri ve ikili eğitim (20.09.2026 — kullanıcı isteği)
 
 Üç istek birlikte geldi: (1) takvim evrakında saatlerin yazdırılması seçeneğe
@@ -331,13 +468,15 @@ FK DEĞİL şifreli metindir ve satırlar KATI silinir.
 - Sert kısıt: aynı gruptan iki öğrenci **aynı masada** oturamaz — denetim
   `(desk_row, desk_col)` kimliğinden, mesafeden değil. Katı mod 1. halkayı
   (Chebyshev ≤ 1) serte çevirir.
-- Determinizm: aynı seed → aynı sonuç; seed yoksa üretilip
+- Determinizm: aynı seed → aynı sonuç (aynı motor sürümünde; ders satırı ve salon
+  seçim sırasından bağımsız, §2.4 eki); seed yoksa üretilip
   `distribution_params.seed`'e yazılır ve R8'de basılır.
 - **Ceza demeti (31.08.2026, K18):** `_pair_penalty` LEKSİKOGRAFİK ikili döner
   `(birincil, ikincil)`. Birincil bugünkü skalerin BİT BİT aynısıdır (aynı sıra
   = ∞ sert kısıt); ikincil yalnız komşu çiftlerde çiftin ODAĞA (öğretmen masası,
   `layout.reference_cell`) uzaklığıdır. İkincil ancak birincil TAM EŞİTKEN karar
-  verir → ihlal sayısı (birincilin ∞ olduğu çift sayısı) YAPISAL OLARAK artamaz.
+  verir. İki taraf da ∞ iken eşitlik ikincile düşer ve ∞ ihlal saymadığı için eski
+  yolda ihlal sayısı artabilir; ihlalin sayıldığı yol sayılı yoldur (06.11.2026 eki).
   Yeni rng çekilişi yoktur; determinizm korunur.
 - Çift denetim: motorun her çıktısı **bağımsız `validator.py`**'den geçer;
   onay ihlal=0'da doğrudan verilir, ihlalli yerleşimde yalnız idarenin AÇIK
@@ -353,8 +492,9 @@ FK DEĞİL şifreli metindir ve satırlar KATI silinir.
   verilir, ihlal sayısı `approved_violation_count`a yazılır ve R8 "idarenin
   kararıyla onaylanmıştır" basar — sessiz onay yine yoktur, karar kayıtlıdır.
   Kabulle de geçilemeyenler doğrulayıcının `blocking_violations` listesidir
-  (kayıt bütünlüğü + kız/erkek ayrışması — K3 kararı korundu; ihlal satırı okul
-  numarası taşır ve onaylı R8 idarede dosyalanır) ve yerleşimde koltuğu olmayan
+  (kayıt bütünlüğü + kız/erkek ayrışması — K3 kararı korundu; ayrışma ihlalinin
+  satırı 06.11.2026'dan beri yalnız kuralın adı + konumdur, okul numarası ve
+  cinsiyet sözcüğü taşımaz) ve yerleşimde koltuğu olmayan
   katılımcı. Kapasite yetmezse motor dağıtımı reddeder; koltuksuz katılımcı pratikte
   dağıtımdan sonra değişen listeden doğar (`placement_drift.added`). Motorun "koltuk
   bulamadı" dalı savunmadır: 04.11.2026'da 1.902'si tam dolu 6.000 rastgele dağıtımda
@@ -432,7 +572,10 @@ DD'nin kanıtlı katmanı taşınır: `shared/crypto.py` (Fernet + Argon2id) +
   md. 4/2-ç) şu kısıtlarla sağlanır ve hepsi KORUMA TESTİYLE sabittir: alan
   adlar gibi ŞİFRELİ (`EncryptedCharField`), hiçbir evraka / dışa aktarıma /
   kitapçığa basılmaz, öğrenci listesinde sütun yoktur, ekranda rozet yoktur,
-  R8'e yalnız KURALIN ADI girer, uyarı metinleri yalnız SAYI söyler, öğrenci
+  liste API yanıtı alanı taşımaz (kart detay ucundan okur), R8'e KURALIN ADI girer
+  (ihlal satırı da kuralın adı + konumdur, okul numarası taşımaz; oturma planıyla
+  okunursa o sıradaki iki öğrencinin farklı cinsiyette olduğu anlaşılabilir, bu
+  yüzden "eşleme kalktı" denmez), uyarı metinleri yalnız SAYI söyler, öğrenci
   ayrılınca/silinince kayıtla birlikte gider. Motor ve doğrulayıcı cinsiyeti
   BİLMEZ: soyut `separation_key` görürler.
 - TCKN, veli, sağlık serbest metni **hiç toplanmaz** — en iyi KVKK önlemi
@@ -1288,7 +1431,8 @@ varsayılan, ayarla değiştirilebilir" ilkesi.
 - Onay ihlal=0'da doğrudan, kelebek ihlalinde yalnız idarenin açık kabulüyle
   (31.10.2026 — §4 "Onay kapısı"); APPROVED kilidi + onay damgası (tek kullanıcıda da).
 - Nakil ön kontrolü beyanı (md. 5/1-v) damgalı.
-- Uyarı/hata metinlerinde öğrenci ADI asla — okul no kullanılır.
+- Uyarı/hata metinlerinde öğrenci ADI asla — okul no kullanılır (kız/erkek ayrışması
+  ihlali okul no da taşımaz).
 - **Sınavı hazırlayan makam** (30.08.2026): ülke geneli sınavlar Bakanlıkça,
   il geneli sınavlar il MEM'ce belirlenen tarih/saatte yapılır ve o tarihlerde
   başka sınav yapılmaz (Yönerge md. 5) → takvim girdisinde `authority` alanı;
@@ -1389,7 +1533,9 @@ disiplini, App.test.tsx M3 token bütünlüğü) · updates.py · `shared/crypto
 > çekilmesi (kullanıcı isteği) motorun ceza fonksiyonuna dokunmayı gerektirdi;
 > `layout._reference_cell` public `reference_cell` oldu (ikinci doğruluk
 > kaynağı doğmasın diye). Sert kısıt, determinizm ve doğrulayıcı sözleşmesi
-> DEĞİŞMEDİ — bkz. §4 ceza demeti.
+> DEĞİŞMEDİ — bkz. §4 ceza demeti. Kasım 2026 motor denetiminden beri çiftler masaya
+> ÇEKİLMEZ (kullanıcı kararı): masaya uzaklık yalnız eşitlik bozar
+> (`2026-11-motor-denetimi.md`).
 >
 > **20.09.2026 sapması (`booklet.py` — AYNEN sınıfında KALIR):** `CourseDoc`'a
 > VARSAYILANLI tek alan eklendi (`backup: bool = True`) ve isimsiz yedek döngüsü

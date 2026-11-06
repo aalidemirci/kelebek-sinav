@@ -29,6 +29,58 @@ uygulanır, yapmanız gereken bir işlem yoktur.
   onay verilebiliyordu, şimdi önce yeniden dağıtmanız istenir (yoklaması alınmış
   oturum hariç — onun yerleşimi sınavın kaydıdır).
 
+### Kelebek dağıtımı
+
+- **Önemli: aynı dağıtım numarası artık eski sürümden farklı plan verir.** Dağıtım yöntemi
+  değişti. Daha önce yapılmış dağıtımlar, basılmış evrak ve onaylı oturumlar kayıtlı olduğu için
+  etkilenmez; ama eski bir numarayı bu sürümde yeniden girerseniz başka bir yerleşim çıkar. Dağıtım
+  Doğrulama Raporu artık "Dağıtım yöntemi sürümü" satırını basar: aynı numara, aynı sürümde ve aynı
+  girdilerle aynı yerleşimi verir. Öğrencilerin başka sınavlardaki son yerleri de girdidir.
+- **Kız/erkek "Aynı sıraya oturtma" kuralı artık sağlanabiliyor.** Program bu kuralda kurulabilecek
+  planları çoğu kez bulamıyor, oturum onaylanamıyordu. Sentetik denemelerde, mümkün olan her durumda
+  onaylanabilir plan çıktı. Bedeli, kimi salonda aynı sınavdan yan yana düşen öğrencinin artabilmesidir:
+  kız/erkek ihlali kabulle geçilmediği için önce o sağlanır, öteki ihlali onay penceresinde görürsünüz.
+- **Üçlü sıralı salonlarda aynı sıraya düşen aynı sınav öğrencisi azaldı.**
+- **Tam dolu salonda önceden uyarı.** "Aynı sıraya oturtma" seçiliyken bütün sıralar ikiliyse, her koltuk
+  doluyorsa, cinsiyeti bilinmeyen öğrenci yoksa ve kız ve erkek sayısı tek düşüyorsa bir sıra karışık
+  kalmak zorundadır; bu durumda hiçbir dağıtım sıraları ayıramaz. Tekli sıra ya da cinsiyeti bilinmeyen
+  öğrenci varsa bu zorunluluk kalkabilir. Sihirbazın salon adımı bunları hesaba katar, sıralar yetmiyorsa
+  dağıtımdan önce kaç sıra eksik olduğunu söyler. Kız ve erkek sayısı yazılmaz.
+- **Numara değişince plan gerçekten değişiyor.** İki sınavlı tam dolu salonda her numara herkesi aynı
+  koltuğa oturtuyordu. Artık öğrencinin yeri numaraya bağlıdır, okul numarası sırası korunmaz; şube
+  sayımı aynıdır. Derslerin ve salonların seçilme sırası planı değiştirmez.
+- **Yeni seçenek: yakınlık önceliği.** Ayarlar → Okul Bilgileri ve sihirbazın Dağıt adımında "Bütün
+  komşu sıralar" (varsayılan) ya da "En yakın komşular öncelikli". "Bütün komşu sıralar" seçiliyken
+  bu seçeneğin plana etkisi yoktur; yukarıdaki numara değişikliği iki seçimde de geçerlidir. "En yakın
+  komşular öncelikli"nin bedeli vardır, kazancı salona göre değişir; Kılavuz ayrıntısını yazar. Katı dağıtımda ve "Kendi
+  dersliğinde" düzeninde uygulanmaz.
+- **Salonlarda sınav çeşidi.** Yerleşim sekmesi her salon için sınav sayısını ve önünde aynı sınav olan
+  öğrenci oranını gösterir; sihirbazın salon adımında sınav çeşidinin mesafeye etkisi kısaca yazar.
+  Bu bilgi yalnız ekrandadır, evraka basılmaz.
+- **Kaçınılmaz çiftler masaya çekilmiyor.** Kılavuzdaki eski cümle düzeltildi: öğretmen masasına
+  uzaklık yalnız iki yerleşim başka her bakımdan denkse birini seçtirir.
+- **"Kaçınılmaz oldu" uyarısının metni değişti.** Aynı sırada çakışma kalınca dağıtım uyarısı artık
+  "bu dağıtımda önlenemedi" der: çakışmanın nedeni her zaman sıra yetersizliği değildir.
+
+### Dağıtım Doğrulama Raporu
+
+- **Kız/erkek ihlali satırı yalnız kuralın adını ve yeri yazar;** öğrencinin numarası ve cinsiyeti
+  yazmaz. Cinsiyeti bilinmeyen öğrenci sayısı rapordan çıktı, oturumun Yerleşim sekmesinde görünür.
+- Rapor "Dağıtım yöntemi sürümü" ve "Yakınlık önceliği" satırlarını basar; aynı numara ipucu yukarıdaki
+  kurala göre yenilendi. "Katı dağıtım" satırı çapraz komşuluğu da söyler.
+
+### Öğrenci listesi
+
+- **Öğrenci listesi cinsiyet bilgisini taşımıyor.** Liste ekranı bu bilgiyi zaten göstermiyordu; artık
+  program arka planda da listeyle göndermiyor. Cinsiyet yalnız öğrencinin kartı açılınca okunur. Kart
+  bilgiyi okuyamazsa bunu yazar ve kaydetmek alanı değiştirmez.
+
+### Kılavuz
+
+- **"Program yerleşimde neyi gözetir?"** Programın neyi gözettiği ve gözetmediği, dağıtım numarasının
+  işleyişi, "Şubeler bir arada" seçiminde en yakın komşuların çoğunun aynı şubeden olduğu ve bu
+  bilgilerin dayanağı yazıldı. Oranlar sentetik veriyle ölçülmüş oturma düzenidir; kopya ölçülmedi.
+
 ## 2026.10.0-beta.7 — 29.10.2026
 
 Bu sürüm veritabanında değişiklik yapmaz; güncellemeden sonra yapmanız gereken

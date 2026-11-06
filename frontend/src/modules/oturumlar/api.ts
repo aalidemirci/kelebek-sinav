@@ -11,7 +11,7 @@
 
 import { api } from "../../lib/api";
 import type { Paginated } from "../../lib/pagination";
-import type { SectionSpreadMode, SeparationMode } from "../okul/api";
+import type { ProximityMode, SectionSpreadMode, SeparationMode } from "../okul/api";
 
 export type { Paginated };
 
@@ -134,6 +134,7 @@ export interface ExamSession {
    * TASLAKken değişir; "Kendi dersliğinde" düzeninde anlamı yoktur.
    */
   section_spread: SectionSpreadMode;
+  proximity_mode: ProximityMode;
   /** Gözetmen ayarı (K2) — R6 yalnız açıkken kataloglanır; atama F7'de. */
   proctors_enabled: boolean;
   term_id: number;
@@ -164,6 +165,7 @@ export interface ExamSessionPayload {
   layout_mode?: LayoutModeCode;
   separation_mode?: SeparationMode;
   section_spread?: SectionSpreadMode;
+  proximity_mode?: ProximityMode;
   term_id?: number;
 }
 
@@ -237,6 +239,10 @@ export interface ButterflyFit {
   fits: boolean;
   /** Açık varsa idareci dilinde tek cümle; yoksa boş dizge. */
   message: string;
+  /** "Aynı sıraya oturtma" kuralının tutması için eksik sıra sayısı; kip kapalıyken 0. */
+  separation_extra_desks: number;
+  /** Eksik sıra varsa idareci dilinde tek cümle; yoksa boş dizge. */
+  separation_message: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -292,6 +298,14 @@ export interface RoomOccupancyRow {
   percent: number;
 }
 
+/** Salon başına sınav çeşidi; yalnız Yerleşim sekmesinde görünür, evraka basılmaz. */
+export interface RoomExamMixRow {
+  room_id: number;
+  exam_count: number;
+  /** Önündeki sırada aynı sınava giren biri olan öğrenci yüzdesi; tek dolu satırda null. */
+  front_same_percent: number | null;
+}
+
 export interface SeatAssignmentRow {
   id: number;
   room_id: number;
@@ -316,6 +330,7 @@ export interface SeatingResponse {
   rooms: { room_id: number; room_name: string; assignments: SeatAssignmentRow[] }[];
   report: ValidationReport;
   occupancy: RoomOccupancyRow[];
+  exam_mix: RoomExamMixRow[];
 }
 
 export interface DistributeResult {

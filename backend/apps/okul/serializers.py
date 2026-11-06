@@ -74,6 +74,7 @@ class SchoolConfigSerializer(serializers.ModelSerializer[SchoolConfig]):
             "afternoon_bell_flow",
             "default_separation_mode",
             "default_section_spread",
+            "default_proximity_mode",
             "setup_completed",
         ]
         read_only_fields = ["setup_completed"]
@@ -376,7 +377,8 @@ class StudentSerializer(serializers.ModelSerializer[Student]):
 
         Aktarımla aynı katlama (`normalize_gender`) — "Kız" da "K" da kabul
         edilir. Alan yalnız kız/erkek ayrışması yerleştirme kuralı içindir;
-        listede sütun olarak GÖSTERİLMEZ, hiçbir evraka basılmaz.
+        listede GÖSTERİLMEZ (liste yanıtı alanı taşımaz, aşağıdaki sınıf), hiçbir
+        evraka basılmaz.
         """
         return normalize.normalize_gender(value)
 
@@ -385,6 +387,18 @@ class StudentSerializer(serializers.ModelSerializer[Student]):
         if not value.strip():
             return ""
         return normalize.tr_upper(value.strip())
+
+
+class StudentListSerializer(StudentSerializer):
+    """Liste yanıtı — cinsiyet alanı YOK (06.11.2026).
+
+    "Listede cinsiyet yok" güvencesi yalnız arayüz sütununda durmaz: liste bütün
+    öğrencileri tek yanıtta taşır ve seçiciler de bu ucu çağırır. Değer yalnız tek
+    öğrencinin kartını açan detay ucundan okunur.
+    """
+
+    class Meta(StudentSerializer.Meta):
+        fields = [f for f in StudentSerializer.Meta.fields if f != "gender"]
 
 
 class ImportRequestSerializer(serializers.Serializer[dict[str, Any]]):

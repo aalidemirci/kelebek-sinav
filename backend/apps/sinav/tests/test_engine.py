@@ -237,7 +237,7 @@ def test_motor_uyarisi_salonu_adiyla_anar() -> None:
     result = engine.distribute_butterfly(students, [adli], seed=3)
     adsiz = engine.distribute_butterfly(students, [room], seed=3)
 
-    kacinilmaz = [w for w in result.warnings if "kaçınılmaz" in w]
+    kacinilmaz = [w for w in result.warnings if engine.DESK_CONFLICT_WARNING_TAIL in w]
     assert kacinilmaz and all(w.startswith("Fizik Laboratuvarı, ") for w in kacinilmaz)
     assert all(". sütun" in w and "sert kısıt" not in w for w in kacinilmaz)
     # Ad yalnız METNE girer: yerleşim etiketli ve etiketsiz çağrıda birebir aynıdır.
@@ -274,7 +274,7 @@ def test_random_scenarios_zero_hard_violations() -> None:
         report = validator.validate_seating(_placed(result))
         # Sert ihlal yalnız motor uyarı verdiyse hoş görülür (kaçınılmaz durum);
         # dengeli grup karışımında hiç olmamalı.
-        if not any("kaçınılmaz" in w for w in result.warnings):
+        if not any(engine.DESK_CONFLICT_WARNING_TAIL in w for w in result.warnings):
             assert report.is_valid, (
                 f"senaryo {scenario}: {report.hard_violations[:2]} "
                 f"(grid {rows}x{cols} {desk_type}, {n_groups} grup, {n_students} öğrenci)"
@@ -292,7 +292,7 @@ def _ayni_sinav_ayni_sirada(result: engine.DistributionResult) -> int:
 
 
 def test_kacinilmaz_uyarisi_son_yerlesimi_anlatir() -> None:
-    """'Kaçınılmaz' uyarısı = SON yerleşimde aynı sınavın aynı sırada kaldığı sıra (24.10.2026).
+    """Sıra çakışması uyarısı = SON yerleşimde aynı sınavın aynı sırada kaldığı sıra (24.10.2026).
 
     Kurucu faz çakışmayı koyduğu an uyarıyordu; yerel arama çifti sonra ayırsa da
     uyarı kalıyor, R8'e "KURAL İHLALİ YOKTUR" ile yan yana bayat satır basılıyordu.
@@ -306,7 +306,7 @@ def test_kacinilmaz_uyarisi_son_yerlesimi_anlatir() -> None:
         n = rng.randint(n_groups, len(room.seats))
         students = [_participant(i, f"{(i % n_groups) + 1}:9") for i in range(1, n + 1)]
         result = engine.distribute_butterfly(students, [room], seed=rng.randint(1, 999_999))
-        uyari = sum(1 for w in result.warnings if "kaçınılmaz" in w)
+        uyari = sum(1 for w in result.warnings if engine.DESK_CONFLICT_WARNING_TAIL in w)
         assert uyari == _ayni_sinav_ayni_sirada(result), f"senaryo {senaryo}"
 
 
@@ -395,7 +395,7 @@ def test_single_group_tight_capacity_no_checkerboard() -> None:
     assert not result.checkerboard
     report = validator.validate_seating(_placed(result))
     assert not report.is_valid  # matematiksel olarak kaçınılmaz
-    assert any("kaçınılmaz" in w for w in result.warnings)
+    assert any(engine.DESK_CONFLICT_WARNING_TAIL in w for w in result.warnings)
 
 
 def test_butterfly_fit_ikili_sirada_yarim_kurali() -> None:
@@ -863,7 +863,6 @@ def test_dogrulayici_ayrisma_ihlalini_idareci_diliyle_yazar() -> None:
         desk_label="3. sıra, 1. sütun",
         student_number="101",
         separation_key="K",
-        separation_label="kız",
         **ortak,
     )
     b = validator.PlacedStudent(
@@ -876,16 +875,13 @@ def test_dogrulayici_ayrisma_ihlalini_idareci_diliyle_yazar() -> None:
         desk_label="3. sıra, 1. sütun",
         student_number="205",
         separation_key="E",
-        separation_label="erkek",
         **ortak,
     )
 
     rapor = validator.validate_seating([a, b], separation=validator.SEPARATION_DESK)
     (ihlal,) = rapor.hard_violations
-    assert "kız ve erkek öğrenci aynı sırada oturuyor" in ihlal
-    assert "D-201, 3. sıra, 1. sütun" in ihlal
-    assert "okul no 101" in ihlal and "okul no 205" in ihlal
-    assert "id=" not in ihlal and "DESK" not in ihlal
+    # Kuralın adı + konum; okul numarası ve cinsiyet sözcüğü YOK (metin R8'e de gider).
+    assert ihlal == "Ayrı oturma kuralı ihlali: D-201, 3. sıra, 1. sütun."
 
     # Kip KAPALIYKEN aynı yerleşim temizdir (kural opt-in).
     assert validator.validate_seating([a, b]).is_valid
@@ -907,13 +903,12 @@ def test_dogrulayici_ayri_salon_kipinde_salonu_denetler() -> None:
             room_label=f"D-20{room_id}",
             student_number=str(100 + sid),
             separation_key=key,
-            separation_label="kız" if key == "K" else "erkek",
         )
 
     karisik = [_p(1, 1, "K", 0), _p(2, 1, "E", 1), _p(3, 1, "E", 2)]
     rapor = validator.validate_seating(karisik, separation=validator.SEPARATION_ROOM)
     assert len(rapor.hard_violations) == 1
-    assert "D-201 salonunda" in rapor.hard_violations[0]
+    assert rapor.hard_violations == ["Ayrı salon kuralı ihlali: D-201, salon mevcudu 3."]
 
     # Aynı yerleşim DESK kipinde temizdir (farklı sıralar).
     assert validator.validate_seating(karisik, separation=validator.SEPARATION_DESK).is_valid
@@ -921,6 +916,11 @@ def test_dogrulayici_ayri_salon_kipinde_salonu_denetler() -> None:
     # Salonlar ayrıldığında ROOM kipi de temizdir.
     ayrik = [_p(1, 1, "K", 0), _p(2, 2, "E", 0)]
     assert validator.validate_seating(ayrik, separation=validator.SEPARATION_ROOM).is_valid
+
+    # Sayı SALON MEVCUDUDUR: jokerler kurala girmez ama salonda oturur.
+    jokerli = [*karisik, _p(4, 1, "", 3), _p(5, 1, "", 4)]
+    rapor = validator.validate_seating(jokerli, separation=validator.SEPARATION_ROOM)
+    assert rapor.hard_violations == ["Ayrı salon kuralı ihlali: D-201, salon mevcudu 5."]
 
 
 def test_klasik_duzende_ayrisma_uygulanmaz() -> None:

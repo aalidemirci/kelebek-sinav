@@ -44,6 +44,17 @@ kapi() {
   fi
 }
 
+# Satır sonu kapısı: `.gitattributes` metni LF tutar, ama git normalize ettiği için
+# Windows'ta CRLF'e dönmüş çalışma kopyası `git diff`te görünmez (06.11.2026: dokuz
+# dosya, yalnız prettier yakaladı; prettier Python'a ve Markdown'a bakmaz). Takipsiz
+# yeni dosyalar da denetlenir. Bilerek CRLF tutulan `.bat`/`.cmd` eol=lf taşımaz.
+echo "== satır sonu =="
+if crlf=$( { git ls-files --eol; git ls-files --eol -o --exclude-standard; }   | grep -E 'w/(crlf|mixed)[[:space:]]+attr/.*eol=lf' ); then
+  echo "$crlf" >&2
+  echo "HATA: LF olması gereken dosyada CRLF var" >&2
+  exit 1
+fi
+
 # KVKK kapısı EN BAŞTA: en ucuz denetim (saniyeler) ve en pahalı hata sınıfı —
 # depoya giren kişisel veri `.gitignore` ile geçmişten çıkmaz. Dosya listesini
 # HOST üretir: backend imajında git YOKTUR (denendi), betik listeyi okur.

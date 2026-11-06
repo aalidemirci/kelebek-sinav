@@ -49,6 +49,7 @@ from apps.okul.serializers import (
     SchoolYearSerializer,
     SectionGroupAssignSerializer,
     SectionShiftAssignSerializer,
+    StudentListSerializer,
     StudentSerializer,
     SubjectDepartmentSerializer,
 )
@@ -184,6 +185,10 @@ class SchoolYearActivateView(APIView):
 # ---------------------------------------------------------------------------
 class StudentListCreateView(generics.ListCreateAPIView[Student]):
     serializer_class = StudentSerializer
+
+    def get_serializer_class(self) -> type[StudentSerializer]:
+        """Liste cinsiyet taşımaz; POST kaydedilen formu olduğu gibi döner."""
+        return StudentListSerializer if self.request.method == "GET" else StudentSerializer
 
     def get_queryset(self) -> Any:
         params = self.request.query_params

@@ -99,8 +99,12 @@ taşar. Yoklama satır yüksekliği ÖĞRENCİ SAYISINA GÖRE kademelidir
            font-weight: bold; font-size: 9pt; letter-spacing: 0.3pt;
            padding: 2pt 6pt; margin: 5pt 0 3pt;
            break-after: avoid; page-break-after: avoid; }
+    /* İpucu bandın İÇİNDE tek satırdır: rengi koyu zemin içindir. Satıra sığmayan
+       metin bandın altına, beyaz kâğıda düşer ve okunmaz; uzun not `.sec-note`tur. */
     .sec .hint { float: right; font-weight: normal; font-size: 7.5pt;
                  color: var(--pr-bar-hint); }
+    .sec-note { font-size: 7.5pt; line-height: 1.25; color: var(--pr-ink);
+                margin: 0 0 3pt; break-after: avoid; page-break-after: avoid; }
 
     /* ---- Künye tablosu (etiket / değer) ---- */
     .fields { width: 100%; border-collapse: collapse; line-height: 1.15;

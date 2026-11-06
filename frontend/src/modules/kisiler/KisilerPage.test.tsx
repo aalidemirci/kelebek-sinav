@@ -22,6 +22,7 @@ import type { Personnel, Student, StudentImportReport, StudentListParams } from 
 const okulApiMock = vi.hoisted(() => ({
   getGradeLevels: vi.fn(),
   listStudents: vi.fn(),
+  getStudent: vi.fn(),
   createStudent: vi.fn(),
   updateStudent: vi.fn(),
   deleteStudent: vi.fn(),
@@ -90,7 +91,6 @@ const STUDENT: Student = {
   class_level: 10,
   class_section: "A",
   class_label: "10/A",
-  gender: "",
   status: "ACTIVE",
 };
 
@@ -148,6 +148,7 @@ beforeEach(() => {
     prep_enabled: false,
   });
   okulApiMock.listStudents.mockResolvedValue(page([STUDENT]));
+  okulApiMock.getStudent.mockResolvedValue({ ...STUDENT, gender: "K" });
   okulApiMock.listPersonnel.mockResolvedValue(page([PERSONNEL]));
   iepApiMock.list.mockResolvedValue({
     results: [
@@ -330,6 +331,43 @@ describe("KisilerPage — öğrenci ekleme/düzenleme/silme", () => {
     await user.click(screen.getByRole("button", { name: "Ayşe Yılmaz kaydını düzenle" }));
     const dialog = await screen.findByRole("dialog", { name: "Öğrenciyi düzenle" });
     expect(within(dialog).getByLabelText("Okul no")).toHaveValue("123");
+  });
+
+  it("kart cinsiyeti detay ucundan okur: liste satırında alan yoktur", async () => {
+    okulApiMock.updateStudent.mockResolvedValue(STUDENT);
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("Ayşe Yılmaz");
+
+    await user.click(screen.getByRole("button", { name: "Ayşe Yılmaz kaydını düzenle" }));
+    const dialog = await screen.findByRole("dialog", { name: "Öğrenciyi düzenle" });
+    await waitFor(() => expect(within(dialog).getByLabelText("Cinsiyet")).toHaveValue("K"));
+    expect(okulApiMock.getStudent).toHaveBeenCalledWith(STUDENT.id);
+
+    await user.click(within(dialog).getByRole("button", { name: "Kaydet" }));
+    await waitFor(() =>
+      expect(okulApiMock.updateStudent).toHaveBeenCalledWith(
+        STUDENT.id,
+        expect.objectContaining({ gender: "K" }),
+      ),
+    );
+  });
+
+  it("cinsiyet okunamazsa kayıt alanı göndermez: kayıtlı değer silinmez", async () => {
+    okulApiMock.getStudent.mockRejectedValue(new Error("okunamadı"));
+    okulApiMock.updateStudent.mockResolvedValue(STUDENT);
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("Ayşe Yılmaz");
+
+    await user.click(screen.getByRole("button", { name: "Ayşe Yılmaz kaydını düzenle" }));
+    const dialog = await screen.findByRole("dialog", { name: "Öğrenciyi düzenle" });
+    expect(await within(dialog).findByText(/Cinsiyet bilgisi okunamadı/)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Cinsiyet")).toBeDisabled();
+
+    await user.click(within(dialog).getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(okulApiMock.updateStudent).toHaveBeenCalled());
+    expect(okulApiMock.updateStudent.mock.calls[0][1]).not.toHaveProperty("gender");
   });
 
   it("son sayfadaki tek kayıt silinince önceki sayfaya düşer (boş sayfada kilitlenmez)", async () => {

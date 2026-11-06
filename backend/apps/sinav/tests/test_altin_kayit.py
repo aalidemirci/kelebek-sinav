@@ -1,16 +1,20 @@
 """ALTIN KAYIT — motor çıktısının bit bit regresyon kilidi (20.09.2026).
 
-Kız/erkek ayrışması motoru değiştirmeden ÖNCE alındı: kural KAPALIYKEN
-(varsayılan) dağıtım, bu dosyadaki sabit senaryolarda ve sabit seed'lerde
-BİREBİR aynı yerleşimi üretmeye devam etmelidir. "Aynı seed → aynı dağıtım"
-sözleşmesi (CLAUDE.md §3) yalnız çalıştırmalar arasında değil, SÜRÜMLER
-arasında da geçerlidir: idareci bir oturumu dağıtım numarasıyla yeniden
-üretebildiğini varsayar ve basılmış evrakla karşılaştırır.
+Kural KAPALIYKEN (varsayılan) dağıtım, bu dosyadaki sabit senaryolarda ve sabit
+seed'lerde BİREBİR aynı yerleşimi üretmeye devam etmelidir. "Aynı seed → aynı
+dağıtım" sözleşmesi (CLAUDE.md §3) yalnız çalıştırmalar arasında değil, aynı motor
+sürümünde (`engine.ENGINE_VERSION`) yapılan her dağıtımda geçerlidir: idareci bir
+oturumu dağıtım numarasıyla yeniden üretebildiğini varsayar ve basılmış evrakla
+karşılaştırır. Sürüm değişince aynı numara başka plan verebilir; kaydın sürümü R8'dedir.
+
+Kayıt 06.11.2026'da 2. sürüm için yenilendi (kullanıcı kararı): girdinin kanonik
+sırası ve her dağıtımda açık harman planı değiştirir; önceki koltuk yokken grup deseni
+ve ceza değişmez (`test_sayili_yol.py::test_harman_ayrisma_kapaliyken_ceza_ve_ihlali_degistirmez`).
 
 Bu test kırmızıya dönerse iki olasılık vardır:
   1. motorda istenmeyen bir davranış değişikliği oldu (düzeltin), ya da
-  2. değişiklik BİLİNÇLİ (ör. ceza demetine yeni bileşen) — o zaman kaydı
-     yenilemek AYRI bir karardır ve commit mesajında gerekçesiyle anılır.
+  2. değişiklik BİLİNÇLİ (ör. ceza demetine yeni bileşen) — o zaman `ENGINE_VERSION`
+     artırılır, kaydı yenilemek AYRI bir karardır ve commit mesajında gerekçesiyle anılır.
 Kayıt yenilemek için `_altin_kayit_uret` yardımcısını çalıştırın (aşağıda).
 
 DB GEREKMEZ — motor saf veri üzerinde çalışır.
@@ -114,67 +118,67 @@ def _calistir(ad: str) -> engine.DistributionResult:
     return engine.distribute_butterfly(katilimcilar, salonlar, seed=seed)
 
 
-#: Motor çıktısının 20.09.2026'da (kız/erkek ayrışmasından ÖNCE) donmuş hâli.
+#: Motor çıktısının 2. sürümdeki donmuş hâli (06.11.2026, koşularak üretildi).
 #: Yenilemek AYRI bir karardır — `_altin_kayit_uret()` çıktısını buraya yazın.
 ALTIN_KAYIT: dict[str, list[str]] = {
     "iki_grup_tek_salon": [
-        "1:1/0,0,1#2",
-        "2:1/2,2,1#18",
-        "3:1/2,0,1#6",
-        "4:1/2,1,1#8",
-        "5:1/1,0,0#3",
-        "6:1/0,1,1#12",
-        "7:1/0,2,1#14",
-        "8:1/1,2,0#15",
-        "9:1/0,0,0#1",
-        "10:1/2,2,0#17",
-        "11:1/2,0,0#5",
-        "12:1/2,1,0#7",
+        "1:1/1,2,0#15",
+        "2:1/2,1,1#8",
+        "3:1/0,1,1#12",
+        "4:1/0,2,1#14",
+        "5:1/2,2,1#18",
+        "6:1/0,0,1#2",
+        "7:1/1,0,0#3",
+        "8:1/2,0,1#6",
+        "9:1/2,2,0#17",
+        "10:1/0,0,0#1",
+        "11:1/1,2,1#16",
+        "12:1/2,0,0#5",
         "13:1/1,0,1#4",
         "14:1/0,1,0#11",
         "15:1/0,2,0#13",
-        "16:1/1,2,1#16",
+        "16:1/2,1,0#7",
     ],
     "uc_grup_iki_salon": [
-        "1:1/0,0,0#1",
-        "2:1/1,0,1#4",
-        "3:1/0,1,1#8",
-        "4:1/1,2,0#11",
-        "5:2/1,0,0#3",
-        "6:2/1,1,1#6",
-        "7:1/0,0,1#2",
+        "1:1/0,1,1#8",
+        "2:1/1,2,0#11",
+        "3:1/1,0,1#4",
+        "4:2/1,1,1#6",
+        "5:1/0,0,0#1",
+        "6:2/1,0,0#3",
+        "7:1/0,2,0#9",
         "8:1/1,0,0#3",
-        "9:1/0,2,0#9",
+        "9:2/0,0,1#2",
         "10:1/1,2,1#12",
-        "11:2/0,0,1#2",
+        "11:1/0,0,1#2",
         "12:2/1,1,0#5",
-        "13:1/1,1,1#6",
-        "14:1/0,1,0#7",
+        "13:1/0,1,0#7",
+        "14:2/0,1,1#8",
         "15:1/0,2,1#10",
-        "16:2/0,0,0#1",
-        "17:2/1,0,1#4",
-        "18:2/0,1,1#8",
+        "16:1/1,1,1#6",
+        "17:2/0,0,0#1",
+        "18:2/1,0,1#4",
     ],
     "tek_grup_satranc": [
-        "1:1/0,0,0#1",
-        "2:1/0,2,0#13",
-        "3:1/2,0,0#5",
-        "4:1/2,1,0#7",
-        "5:1/2,2,0#17",
-        "6:1/0,1,0#11",
+        "1:1/0,1,0#11",
+        "2:1/2,0,0#5",
+        "3:1/2,2,0#17",
+        "4:1/0,2,0#13",
+        "5:1/0,0,0#1",
+        "6:1/2,1,0#7",
     ],
     "pinli": [
-        "2:1/0,3,0#15",
-        "3:1/1,0,1#4",
-        "4:1/1,3,1#14",
-        "5:1/0,1,1#8",
-        "6:1/1,2,0#11",
+        "2:1/0,1,1#8",
+        "3:1/0,3,0#15",
+        "4:1/1,2,0#11",
+        "5:1/1,3,1#14",
+        "6:1/1,0,1#4",
         "7:1/0,0,1#2",
-        "8:1/1,0,0#3",
-        "9:1/0,3,1#16",
-        "10:1/1,3,0#13",
-        "11:1/0,2,0#9",
-        "12:1/1,1,1#6",
+        "8:1/1,3,0#13",
+        "9:1/1,1,1#6",
+        "10:1/1,0,0#3",
+        "11:1/0,3,1#16",
+        "12:1/0,2,0#9",
     ],
 }
 
@@ -191,7 +195,7 @@ def _altin_kayit_uret() -> None:  # pragma: no cover — elle çalıştırılır
 
 @pytest.mark.parametrize("ad", sorted(SENARYOLAR))
 def test_dagitim_altin_kayitla_birebir_ayni(ad: str) -> None:
-    """Kural KAPALIYKEN motor çıktısı değişmemelidir (sürümler arası determinizm)."""
+    """Kural KAPALIYKEN motor çıktısı aynı motor sürümünde değişmemelidir."""
     assert _kayit(_calistir(ad)) == ALTIN_KAYIT[ad]
 
 

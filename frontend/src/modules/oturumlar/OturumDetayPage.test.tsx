@@ -387,6 +387,16 @@ describe("OturumDetayPage", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
+  it("DAĞITILDI: 'Yeniden dağıt' diyaloğu oturumun kendi yakınlık önceliğini gösterir", async () => {
+    const user = userEvent.setup();
+    exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED", proximity_mode: "CLOSEST" }));
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Yeniden dağıt" }));
+    const dialog = await screen.findByRole("dialog", { name: "Yeniden dağıtılsın mı?" });
+    expect(within(dialog).getByLabelText("Yakınlık önceliği")).toHaveValue("CLOSEST");
+  });
+
   it("DAĞITILDI: yeniden dağıtım ihlalli dönerse sonuç onayın kabul istediğini söyler", async () => {
     const user = userEvent.setup();
     exam.get.mockResolvedValue(makeSession({ status: "DISTRIBUTED" }));
@@ -402,6 +412,9 @@ describe("OturumDetayPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "Yeniden dağıt" }));
     const dialog = await screen.findByRole("dialog", { name: "Yeniden dağıtılsın mı?" });
+    // Yakınlık önceliği yalnız taslakta değişir: burada kilitli, yolu söylenir.
+    expect(within(dialog).getByLabelText("Yakınlık önceliği")).toBeDisabled();
+    expect(within(dialog).getByText(/oturumu önce taslağa alın/)).toBeVisible();
     await user.click(within(dialog).getByRole("button", { name: "Yeniden dağıt" }));
 
     // Numara boş → gövdede seed yok (backend yeni rastgele numara seçer).

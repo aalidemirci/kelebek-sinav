@@ -35,6 +35,8 @@ import CizelgeAtamaMatrisi from "../okul/CizelgeAtamaMatrisi";
 import {
   MAKS_GUNLUK_DERS_SAATI,
   MESLEKI_TURLER,
+  PROXIMITY_HINTS,
+  PROXIMITY_LABELS,
   SECTION_SPREAD_HINTS,
   SECTION_SPREAD_LABELS,
   SEPARATION_HINTS,
@@ -47,6 +49,7 @@ import type {
   ClassSection,
   GradeLevelOption,
   LevelPrograms,
+  ProximityMode,
   SchoolTerm,
   SchoolType,
   SchoolTypeOption,
@@ -712,6 +715,7 @@ function OkulBilgileriPanel() {
   const [sinavSaatleri, setSinavSaatleri] = useState<number[]>([]);
   const [ayrisma, setAyrisma] = useState<SeparationMode>("NONE");
   const [subeDagilimi, setSubeDagilimi] = useState<SectionSpreadMode>("TOGETHER");
+  const [yakinlik, setYakinlik] = useState<ProximityMode>("STANDARD");
   // Cinsiyeti bilinmeyen öğrenci SAYISI (kimlik değil) — yalnız kural açıkken çekilir.
   const [cinsiyetEksik, setCinsiyetEksik] = useState<number | null>(null);
   const [okulTurleri, setOkulTurleri] = useState<SchoolTypeOption[]>([]);
@@ -738,6 +742,7 @@ function OkulBilgileriPanel() {
         setSinavSaatleri(c.exam_period_nos ?? []);
         setAyrisma(c.default_separation_mode ?? "NONE");
         setSubeDagilimi(c.default_section_spread ?? "TOGETHER");
+        setYakinlik(c.default_proximity_mode ?? "STANDARD");
         setError(null);
       })
       .catch((e: unknown) =>
@@ -800,6 +805,7 @@ function OkulBilgileriPanel() {
         exam_period_nos: sinavSaatleri.filter((no) => no <= gunlukDersSaati),
         default_separation_mode: ayrisma,
         default_section_spread: subeDagilimi,
+        default_proximity_mode: yakinlik,
       });
       snackbar.success("Okul bilgileri kaydedildi. Ders havuzu çizelgeye göre güncellendi.");
     } catch (err) {
@@ -946,6 +952,18 @@ function OkulBilgileriPanel() {
               label: SECTION_SPREAD_LABELS[kip],
             }))}
             helperText={`${SECTION_SPREAD_HINTS[subeDagilimi]} Yeni sınav oturumları bu seçimle açılır; her oturumda ayrıca değiştirilebilir. “Kendi dersliğinde” düzeninde uygulanmaz.`}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <Select
+            label="Yakınlık önceliği"
+            value={yakinlik}
+            onChange={(e) => setYakinlik(e.target.value as ProximityMode)}
+            options={(Object.keys(PROXIMITY_LABELS) as ProximityMode[]).map((kip) => ({
+              value: kip,
+              label: PROXIMITY_LABELS[kip],
+            }))}
+            helperText={`${PROXIMITY_HINTS[yakinlik]} Yeni sınav oturumları bu seçimle açılır; her oturumda ayrıca değiştirilebilir. “Kendi dersliğinde” düzeninde uygulanmaz.`}
           />
         </div>
         <div className="sm:col-span-2">

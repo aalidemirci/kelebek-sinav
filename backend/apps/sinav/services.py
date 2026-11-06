@@ -33,6 +33,7 @@ from apps.okul import selectors as okul_selectors
 from apps.okul.models import (
     ClassSection,
     Personnel,
+    ProximityMode,
     SchoolConfig,
     SectionSpreadMode,
     SeparationMode,
@@ -514,22 +515,26 @@ def create_exam_session(
     proctors_enabled: bool = False,
     separation_mode: str | None = None,
     section_spread: str | None = None,
+    proximity_mode: str | None = None,
 ) -> ExamSession:
     """Yeni TASLAK oturum oluşturur (Adım 1).
 
-    `separation_mode` ve `section_spread` verilmezse OKUL VARSAYILANI uygulanır
-    (K2 kullanıcı kararı; şube dağılımı 25.10.2026'da aynı düzene katıldı):
-    ihtiyacı olan okul ayarı bir kez yapar, her oturumda seçmez.
+    `separation_mode`, `section_spread` ve `proximity_mode` verilmezse OKUL VARSAYILANI
+    uygulanır (K2 kullanıcı kararı; şube dağılımı 25.10.2026'da, yakınlık önceliği
+    06.11.2026'da aynı düzene katıldı): ihtiyacı olan okul ayarı bir kez yapar, her
+    oturumda seçmez.
     """
     cleaned = " ".join((name or "").split())
     if not cleaned:
         raise ValidationError("Oturum adı boş olamaz.")
-    if separation_mode is None or section_spread is None:
+    if separation_mode is None or section_spread is None or proximity_mode is None:
         config = SchoolConfig.load()
         if separation_mode is None:
             separation_mode = config.default_separation_mode
         if section_spread is None:
             section_spread = config.default_section_spread
+        if proximity_mode is None:
+            proximity_mode = config.default_proximity_mode
     session: ExamSession = ExamSession.objects.create(
         name=cleaned,
         exam_date=exam_date,
@@ -541,6 +546,7 @@ def create_exam_session(
         proctors_enabled=proctors_enabled,
         separation_mode=separation_mode,
         section_spread=section_spread,
+        proximity_mode=proximity_mode,
     )
     return session
 
@@ -561,6 +567,7 @@ def update_exam_session(session: ExamSession, **fields: Any) -> ExamSession:
         "proctors_enabled",
         "separation_mode",
         "section_spread",
+        "proximity_mode",
     }
     unknown = set(fields) - allowed - {"term_id"}
     if unknown:
@@ -1078,6 +1085,17 @@ def _session_room_seats(session: ExamSession) -> list[engine.RoomSeats]:
     return [_room_seats_for(row.room, cap=row.capacity_override) for row in rows]
 
 
+def _preview_room_seats(
+    session: ExamSession, room_ids: Iterable[int] | None
+) -> list[engine.RoomSeats]:
+    """Sihirbaz göstergelerinin salonları: seçim verilmezse oturumun kayıtlı salonları."""
+    if room_ids is None:
+        return _session_room_seats(session)
+    secili = sorted({int(rid) for rid in room_ids})
+    # Sıra DB sırası olabilir; histogram sıradan bağımsızdır.
+    return [_room_seats_for(room) for room in ExamRoom.objects.filter(pk__in=secili)]
+
+
 def butterfly_fit_message(fit: engine.ButterflyFit) -> str:
     """Sıra açığının idareci dilindeki karşılığı; açık yoksa boş dizge.
 
@@ -1112,13 +1130,59 @@ def session_butterfly_fit(
     gruplar: dict[str, int] = {}
     for katilimci in resolution.participants:
         gruplar[katilimci.conflict_group] = gruplar.get(katilimci.conflict_group, 0) + 1
-    if room_ids is None:
-        rooms = _session_room_seats(session)
-    else:
-        secili = sorted({int(rid) for rid in room_ids})
-        # Sıra DB sırası olabilir; histogram sıradan bağımsızdır.
-        rooms = [_room_seats_for(room) for room in ExamRoom.objects.filter(pk__in=secili)]
+    rooms = _preview_room_seats(session, room_ids)
     return engine.butterfly_fit(gruplar.values(), engine.desk_sizes(rooms))
+
+
+def session_separation_gap(session: ExamSession, *, room_ids: Iterable[int] | None = None) -> int:
+    """ "Aynı sıraya oturtma" kuralı için seçili salonlarda EKSİK sıra sayısı (sihirbaz).
+
+    Dağıtım ÖNCESİ uyarıdır: bütün sıraları ikili, tam dolu ve jokersiz salonda kız ve erkek
+    sayısı tekse bir sıra karışık kalır, motor bunu çözemez ve ihlal kabulle de geçilmez.
+    Tekli sıra varsa bölüşümü `separation_desk_gap` arar. Yalnız kip "aynı sıra" iken
+    hesaplanır; bilinmeyen cinsiyetli öğrenci joker olduğu için sayıma girmez. Sonuç
+    yalnız eksik SIRA sayısıdır: kız/erkek sayıları bu fonksiyondan çıkmaz, hiçbir kayda
+    (`distribution_params`, evrak) yazılmaz (`test_ayrisma.py` kuralı).
+
+    Yerleştirme kuralları hesaba girer: sabit öğrencinin sırası kendi anahtarına kilitlidir,
+    motorun gördüğü sıra bütçesi budur. Kural bozuksa (hedef salon pasif gibi) burada
+    ret üretilmez, onu dağıtım söyler: önizleme sabit öğrencisiz hesaba düşer.
+    """
+    if effective_separation_mode(session) != SeparationMode.DESK:
+        return 0
+    havuz, _joker = _with_separation_keys(participants.resolve_session(session).participants)
+    salonlar = sorted(_preview_room_seats(session, room_ids), key=lambda room: room.room_id)
+    try:
+        sabitler, salonlar, _uyarilar = _resolve_rule_pins(session, havuz, salonlar)
+    except ValidationError:
+        sabitler = []
+    sabit_kimlikler = {pl.participant.student_id for pl in sabitler}
+    sayilar: dict[str, int] = {}
+    for katilimci in havuz:
+        if katilimci.separation_key and katilimci.student_id not in sabit_kimlikler:
+            sayilar[katilimci.separation_key] = sayilar.get(katilimci.separation_key, 0) + 1
+    koltuklar = engine.occupants_by_room(sabitler)
+    olculer = engine.desk_sizes(salonlar, koltuklar)
+    kilitler = engine.separation_locks(salonlar, koltuklar)
+    anahtarlar = sorted(set(sayilar) | set(kilitler))
+    if len(anahtarlar) != 2:
+        return engine.separation_desk_gap(sayilar.values(), olculer)
+    return engine.separation_desk_gap(
+        [sayilar.get(anahtar, 0) for anahtar in anahtarlar],
+        olculer,
+        (kilitler.get(anahtarlar[0], {}), kilitler.get(anahtarlar[1], {})),
+    )
+
+
+def separation_gap_message(extra_desks: int) -> str:
+    """Eksik sıranın idareci dilindeki karşılığı; eksik yoksa boş dizge (yalnız SAYI söyler)."""
+    if extra_desks <= 0:
+        return ""
+    return (
+        "Kız/erkek ayrışması (“Aynı sıraya oturtma”) seçili salonlarda tam sağlanamaz: kuralın "
+        f"tutması için en az {extra_desks} sıra daha gerekir, yani boş koltuk kalacak biçimde "
+        "salon eklenmelidir. Bu kural ihlali kabulle de onaylanamaz."
+    )
 
 
 def _room_names(room_ids: Iterable[int]) -> dict[int, str]:
@@ -1151,20 +1215,21 @@ def _placed_from(placements: list[engine.Placement]) -> list[validator.PlacedStu
             group_label=group_labels.get(pl.participant.conflict_group, ""),
             student_number=pl.participant.student_number,
             separation_key=pl.participant.separation_key,
-            separation_label=separation_label(pl.participant.separation_key),
         )
         for pl in placements
     ]
 
 
-#: Ayrışma anahtarının İDARECİ DİLİNDEKİ karşılığı. Anahtar denetime, etiket
-#: yalnız METNE girer (motor ve doğrulayıcı anahtarın ne olduğunu bilmez).
-SEPARATION_LABELS = {"K": "kız", "E": "erkek"}
+#: Ayrışma anahtarının karşılığı — YALNIZ "Ayrı salonlar" kapasite reddinde kullanılır:
+#: o metin ekranda kalır, kalıcı değildir ve kişi değil SAYI söyler. Evrağa giden
+#: hiçbir metne (ihlal satırı, kayıtlı uyarı) bu sözcükler yazılmaz.
+SEPARATION_CAPACITY_WORDS = {"K": "kız", "E": "erkek"}
 
-
-def separation_label(key: str) -> str:
-    """ "K" → "kız"; tanınmayan anahtar ham döner (etiket metin içindir)."""
-    return SEPARATION_LABELS.get(key, key)
+#: Cinsiyeti bilinmeyen öğrenci uyarısının sonu. Uyarı dağıtım sonucunda görünür ve
+#: kayıtta kalır, R8'e BASILMAZ (R8'e kuraldan yalnız adı girer): rapor bu sonla ayıklar.
+#: Kalıcı görünürlüğü `distribution_params["separation_unknown"]` sayısı sağlar —
+#: Yerleşim sekmesi onu okur (arayüz kayıtlı uyarı listesini okumaz).
+UNKNOWN_GENDER_WARNING_TAIL = "kuralı onlara uygulanmadı. e-Okul sınıf listesini yeniden aktarın."
 
 
 def effective_separation_mode(session: ExamSession) -> str:
@@ -1188,6 +1253,18 @@ def effective_section_spread(session: ExamSession) -> str:
     if session.layout_mode != LayoutMode.BUTTERFLY:
         return SectionSpreadMode.TOGETHER
     return session.section_spread or SectionSpreadMode.TOGETHER
+
+
+def effective_proximity_mode(session: ExamSession, *, strict: bool) -> str:
+    """Bu dağıtımda GERÇEKTEN uygulanacak yakınlık önceliği (06.11.2026).
+
+    Klasik düzende arama yoktur; katı dağıtımda bütün komşu sıralar zaten yasaktır,
+    ağırlığı daraltmanın anlamı kalmaz (kullanıcı kararı). `strict` dağıtım anında
+    seçildiği için oturum alanından okunmaz, buraya verilir.
+    """
+    if session.layout_mode != LayoutMode.BUTTERFLY or strict:
+        return ProximityMode.STANDARD
+    return session.proximity_mode or ProximityMode.STANDARD
 
 
 def _with_separation_keys(
@@ -1258,7 +1335,8 @@ def _allocate_rooms_by_separation(
     yetmeyen = {k: v for k, v in kalan.items() if v > 0}
     if yetmeyen:
         eksik = "; ".join(
-            f"{separation_label(k)} öğrenciler için {v} koltuk" for k, v in sorted(yetmeyen.items())
+            f"{SEPARATION_CAPACITY_WORDS.get(k, k)} öğrenciler için {v} koltuk"
+            for k, v in sorted(yetmeyen.items())
         )
         raise ValidationError(
             f"Ayrı salon kuralı uygulanamıyor: {eksik} eksik kalıyor. Salon ekleyin ya da "
@@ -1277,13 +1355,15 @@ def _distribute_separate_rooms(
     previous: engine.PrevSeats,
     group_labels: dict[str, str],
     spread_sections: bool = False,
+    narrow_ring: bool = False,
 ) -> engine.DistributionResult:
     """AYRI SALON kipi: her bölüm kendi salonlarında AYRI dağıtılır, sonuç birleşir.
 
     Alt seed'ler ana seed'den TÜRETİLİR (`seed + bölüm sırası`) — "aynı seed →
     aynı dağıtım" sözleşmesi korunur. Jokerler (anahtarı boş) kapasitesi en
     boş bölüme eklenir (K4); tek anahtar varsa kip fiilen devre dışıdır ve
-    dağıtım olağan yolundan geçer. Şube dağılımı her bölümün İÇİNDE uygulanır.
+    dağıtım olağan yolundan geçer. Şube dağılımı ve yakınlık önceliği her bölümün
+    İÇİNDE uygulanır.
     `group_labels` uyarı metnindeki grup anahtarını ders adına çevirir (bu yol
     eskiden etiket geçirmiyor, uyarıda ham anahtar basılıyordu).
     """
@@ -1298,6 +1378,7 @@ def _distribute_separate_rooms(
             previous_seats=previous,
             group_labels=group_labels,
             spread_sections=spread_sections,
+            narrow_ring=narrow_ring,
         )
 
     havuzlar: dict[str, list[participants.Participant]] = {k: [] for k in bolumler}
@@ -1329,6 +1410,7 @@ def _distribute_separate_rooms(
             previous_seats=previous,
             group_labels=group_labels,
             spread_sections=spread_sections,
+            narrow_ring=narrow_ring,
         )
         birlesik.placements.extend(parca.placements)
         birlesik.warnings.extend(parca.warnings)
@@ -1376,6 +1458,8 @@ def distribute_session(
     # Şube dağılımı (25.10.2026): yalnız motorun Faz 0'ını değiştirir; kip DAĞITIM
     # ANINDAKİ değeriyle `distribution_params`a yazılır (R8 adını basar).
     spread = effective_section_spread(session)
+    # Yakınlık önceliği (06.11.2026): aynı düzen; katı dağıtım seçildiyse kayıt da kapalıdır.
+    yakinlik = effective_proximity_mode(session, strict=strict)
 
     if seed is None:
         seed = random.randrange(1, 1_000_000)  # noqa: S311 — kripto değil; dağıtım seed'i
@@ -1403,7 +1487,9 @@ def distribute_session(
                 "kendi şube dersliğinde oturur."
             )
     else:
-        rooms = _session_room_seats(session)
+        # Kimlik sırası: salon seçim sırası plana sızmasın. Motor kendi listesini de dizer;
+        # kural pinleri ("Ön sıra") ve "Ayrı salonlar" bölüşümü motordan önce koşar.
+        rooms = sorted(_session_room_seats(session), key=lambda room: room.room_id)
         if not rooms:
             raise ValidationError("Oturuma salon eklenmemiş; önce salon seçin (Adım 3).")
         # Kural pinleri koltuğa bağlanır; motor onları taşıyamaz.
@@ -1413,6 +1499,7 @@ def distribute_session(
         previous = _previous_seats_map(session, [p.student_id for p in free_pool])
         etiketler = conflict_group_labels({p.conflict_group for p in pool})
         dagit = spread == SectionSpreadMode.SPREAD
+        daralt = yakinlik == ProximityMode.CLOSEST
         try:
             if separation == SeparationMode.ROOM:
                 result = _distribute_separate_rooms(
@@ -1424,6 +1511,7 @@ def distribute_session(
                     previous=previous,
                     group_labels=etiketler,
                     spread_sections=dagit,
+                    narrow_ring=daralt,
                 )
             else:
                 result = engine.distribute_butterfly(
@@ -1435,6 +1523,7 @@ def distribute_session(
                     previous_seats=previous,
                     group_labels=etiketler,
                     spread_sections=dagit,
+                    narrow_ring=daralt,
                 )
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
@@ -1456,7 +1545,7 @@ def distribute_session(
         # K4: joker öğrenci kurala girmez; sessiz kalmaz — sayı KİMLİKSİZDİR.
         result.warnings.append(
             f"{bilinmeyen_cinsiyet} öğrencinin cinsiyet bilgisi yok; kız/erkek ayrışması "
-            "kuralı onlara uygulanmadı. e-Okul sınıf listesini yeniden aktarın."
+            f"{UNKNOWN_GENDER_WARNING_TAIL}"
         )
 
     report = validator.validate_seating(
@@ -1516,12 +1605,19 @@ def distribute_session(
     session.status = ExamSessionStatus.DISTRIBUTED
     session.distribution_params = {
         "seed": result.seed,
+        # Aynı numaranın aynı yerleşimi verdiği birim (R8 basar): motor değişince eski
+        # evrak bu alandan tanınır. Alanı olmayan kayıt eski sürümle yapılmıştır.
+        "engine_version": engine.ENGINE_VERSION,
         "strict": strict,
         "checkerboard": result.checkerboard,
         "layout_mode": session.layout_mode,
         # R8 kuralın ADINI buradan basar; arşiv oturumun kipi canlı ayara bağlı kalmaz.
         "separation_mode": separation,
+        # Kurala girmeyen (cinsiyeti bilinmeyen) öğrenci SAYISI — kimliksiz. Yerleşim
+        # sekmesi gösterir, R8 basmaz.
+        "separation_unknown": bilinmeyen_cinsiyet,
         "section_spread": spread,
+        "proximity_mode": yakinlik,
         "placed": len(result.placements),
         "pinned": len(pinned_ids),
         "rooms_per_section": {
@@ -1744,6 +1840,29 @@ def move_seat(
 _OCCUPANCY_GAP_THRESHOLD = 20.0
 
 
+def _rooms_in_session_order(
+    session: ExamSession, placed_room_ids: Iterable[int]
+) -> list[tuple[ExamRoom, ExamSessionRoom | None]]:
+    """Oturumun salon sırası: ekrandaki salon listeleri bu tek kaynaktan dizilir.
+
+    Oturum salonları kendi sırasıyla gelir. Klasik düzende yerleşim salonları oturum salon
+    listesinde olmayabilir; onlar ad sırasıyla eklenir. Sıralama Python'da: DB (SQLite
+    BINARY) 'Ç/Ğ/İ/Ö/Ş/Ü'yü 'Z'den sonraya atar ve şube dersliklerinin adı Türkçe harf
+    taşır (reports.room_name_sort_key).
+    """
+    rows = list(
+        ExamSessionRoom.objects.filter(session=session)
+        .select_related("room")
+        .order_by("order", "id")
+    )
+    known = {row.room_id for row in rows}
+    extra_ids = [room_id for room_id in placed_room_ids if room_id not in known]
+    extras = sorted(
+        ExamRoom.objects.filter(pk__in=extra_ids), key=lambda r: reports.room_name_sort_key(r.name)
+    )
+    return [(row.room, row) for row in rows] + [(room, None) for room in extras]
+
+
 def room_occupancy(session: ExamSession) -> list[dict[str, Any]]:
     """Salon doluluk özeti (K1): kapasite (override uygulanmış) + yerleşen + yüzde.
 
@@ -1755,33 +1874,12 @@ def room_occupancy(session: ExamSession) -> list[dict[str, Any]]:
         counts[room_id] = counts.get(room_id, 0) + 1
 
     result: list[dict[str, Any]] = []
-    rows = (
-        ExamSessionRoom.objects.filter(session=session)
-        .select_related("room")
-        .order_by("order", "id")
-    )
-    for row in rows:
-        capacity = len(_room_seats_for(row.room, cap=row.capacity_override).seats)
-        placed_count = counts.get(row.room_id, 0)
-        result.append(
-            {
-                "room_id": row.room_id,
-                "room_name": row.room.name,
-                "capacity": capacity,
-                "placed": placed_count,
-                "percent": round(100 * placed_count / capacity, 1) if capacity else 0.0,
-            }
-        )
-    # Klasik düzen: yerleşim salonları oturum salon listesinde olmayabilir.
-    known = {int(o["room_id"]) for o in result}
-    extra_ids = [rid for rid in counts if rid not in known]
-    # Sıralama Python'da: DB (SQLite BINARY) 'Ç/Ğ/İ/Ö/Ş/Ü'yü 'Z'den sonraya atar
-    # ve şube dersliklerinin adı artık Türkçe harf taşır (reports.room_name_sort_key).
-    for room in sorted(
-        ExamRoom.objects.filter(pk__in=extra_ids), key=lambda r: reports.room_name_sort_key(r.name)
-    ):
-        capacity = len(room_seats(room))
-        placed_count = counts[room.pk]
+    for room, row in _rooms_in_session_order(session, counts):
+        if row is not None:
+            capacity = len(_room_seats_for(room, cap=row.capacity_override).seats)
+        else:
+            capacity = len(room_seats(room))
+        placed_count = counts.get(room.pk, 0)
         result.append(
             {
                 "room_id": room.pk,
@@ -1792,6 +1890,83 @@ def room_occupancy(session: ExamSession) -> list[dict[str, Any]]:
             }
         )
     return result
+
+
+def _front_desk_map(desks: Iterable[tuple[int, int]]) -> dict[tuple[int, int], tuple[int, int]]:
+    """Her sıranın önündeki sıra: aynı sütunda plandaki bir önceki sıra (saf fn)."""
+    sutunlar: dict[int, set[int]] = {}
+    for satir, sutun in desks:
+        sutunlar.setdefault(sutun, set()).add(satir)
+    onler: dict[tuple[int, int], tuple[int, int]] = {}
+    for sutun, satirlar in sutunlar.items():
+        sirali = sorted(satirlar)
+        for on, arka in zip(sirali, sirali[1:], strict=False):
+            onler[(arka, sutun)] = (on, sutun)
+    return onler
+
+
+def _front_same_percent(
+    seats: Iterable[tuple[int, int, str]], desks: Iterable[tuple[int, int]] | None = None
+) -> float | None:
+    """Bir salonda önündeki sırada aynı sınava giren biri olan öğrencilerin yüzdesi (saf fn).
+
+    Girdi `(desk_row, desk_col, conflict_group)`. Ön sıra aynı sütunda plandaki bir önceki
+    sıradır (`desks`): plana konmamış boş satır atlanır, yoksa koridor bırakılmış salonda
+    tek sınav bile %0 görünürdü. Planda olup boş kalan sıra ise öndedir, üstünden atlanmaz.
+    Plan verilmezse (silinmiş salon) bir satır öndeki sıra alınır. İlk dolu satırdaki ve
+    sütununun ilk sırasındaki öğrencinin önünde kimse yoktur, paydaya girmez; payda boşsa
+    sonuç `None`.
+    """
+    koltuklar = list(seats)
+    if not koltuklar:
+        return None
+    siralar: dict[tuple[int, int], set[str]] = {}
+    for satir, sutun, grup in koltuklar:
+        siralar.setdefault((satir, sutun), set()).add(grup)
+    ilk_satir = min(satir for satir, _sutun, _grup in koltuklar)
+    onler = None if desks is None else _front_desk_map(desks)
+    arkadakiler = [
+        (grup, (satir - 1, sutun) if onler is None else onler.get((satir, sutun)))
+        for satir, sutun, grup in koltuklar
+        if satir > ilk_satir
+    ]
+    onu_olanlar = [(grup, on) for grup, on in arkadakiler if on is not None]
+    if not onu_olanlar:
+        return None
+    ayni = sum(1 for grup, on in onu_olanlar if grup in siralar.get(on, ()))
+    return round(100 * ayni / len(onu_olanlar), 1)
+
+
+def room_exam_mix(session: ExamSession) -> list[dict[str, Any]]:
+    """Salon başına sınav çeşidi ve önünde aynı sınav olan öğrenci oranı (yalnız ekran).
+
+    Yerleşimin geometrisini anlatır, başka bir şey söylemez: kopya ölçülmedi. Yalnız okur,
+    kayıt yazmaz; evraka ve `distribution_params`a girmez (`room_occupancy` R8'e gittiği
+    için ayrı işlevdir). Öğrenci kimliği taşımaz.
+    """
+    salonlar: dict[int, list[tuple[int, int, str]]] = {}
+    for room_id, satir, sutun, grup in SeatAssignment.objects.filter(session=session).values_list(
+        "room_id", "desk_row", "desk_col", "conflict_group"
+    ):
+        salonlar.setdefault(room_id, []).append((satir, sutun, grup))
+    # Doluluk çipleriyle aynı ekranda durur: iki liste aynı sırada okunur. Sıra listesinde
+    # olmayan salon (silinmiş, klasik düzen) satırını yitirmez, sona düşer.
+    sirali_salonlar = [room for room, _row in _rooms_in_session_order(session, salonlar)]
+    sira = {room.pk: index for index, room in enumerate(sirali_salonlar)}
+    planlar = {
+        room.pk: {(koltuk.desk_row, koltuk.desk_col) for koltuk in room_seats(room)}
+        for room in sirali_salonlar
+    }
+    return [
+        {
+            "room_id": room_id,
+            "exam_count": len({grup for _satir, _sutun, grup in koltuklar}),
+            "front_same_percent": _front_same_percent(koltuklar, planlar.get(room_id)),
+        }
+        for room_id, koltuklar in sorted(
+            salonlar.items(), key=lambda salon: (sira.get(salon[0], len(sira)), salon[0])
+        )
+    ]
 
 
 def _occupancy_gap_warning(occupancy: list[dict[str, Any]]) -> str | None:
@@ -1852,7 +2027,6 @@ def seating_report(session: ExamSession) -> validator.SeatingReport:
                 # SNAPSHOT: arşiv oturumun yeniden doğrulaması canlı öğrenci
                 # verisine (cinsiyet sonradan düzeltilebilir) bağlı kalmaz.
                 separation_key=a.separation_key,
-                separation_label=separation_label(a.separation_key),
             )
         )
     strict = bool(session.distribution_params.get("strict", False))
@@ -2923,6 +3097,7 @@ def _validation_report_context(
     params = dict(session.distribution_params)
     # Çakışma grubu anahtarları ortak yardımcıyla etikete çözülür.
     group_labels = conflict_group_labels(set(report.min_same_group_distance))
+    proximity = str(params.get("proximity_mode") or ProximityMode.STANDARD)
     return reports.build_validation_context(
         is_valid=report.is_valid,
         hard_violations=report.hard_violations,
@@ -2942,6 +3117,8 @@ def _validation_report_context(
             # satırları yalnız kelebek düzeninde basar (anlamsız "0" basılmasın).
             "shuffled": session.layout_mode == LayoutMode.BUTTERFLY,
             "seed": params.get("seed", "—"),
+            # Alanı olmayan eski dağıtımda satır basılmaz (şablon boş değeri atlar).
+            "engine_version": params.get("engine_version") or "",
             "strict": bool(params.get("strict", False)),
             "checkerboard": bool(params.get("checkerboard", False)),
             "placed": params.get("placed", len(rows)),
@@ -2956,15 +3133,27 @@ def _validation_report_context(
             "section_spread_label": SectionSpreadMode(
                 str(params.get("section_spread") or SectionSpreadMode.TOGETHER)
             ).label,
+            # Yakınlık önceliği (06.11.2026): kipin ADI. Anahtarı olmayan eski dağıtım
+            # bütün komşu sıralarla yapılmıştır (kip yokken motorun tek davranışı).
+            "proximity_label": ProximityMode(proximity).label,
+            "proximity_closest": proximity == ProximityMode.CLOSEST,
         },
         group_labels=group_labels,
-        # Motorun sıra başına "kaçınılmaz oldu" satırı basılmaz: ihlalin dağıtım anındaki
+        # Motorun sıra başına çakışma satırı basılmaz: ihlalin dağıtım anındaki
         # kopyasıdır (güncel hâli üstteki listede; elle düzeltmeden sonra bayatlar) ve bu
-        # bölümün başlığı "kural ihlali değildir" der. Kayıttaki uyarı silinmez.
+        # bölümün başlığı "kural ihlali değildir" der. Cinsiyeti bilinmeyen öğrenci uyarısı
+        # da basılmaz: R8'e kız/erkek kuralından yalnız adı girer. Kayıttaki uyarı silinmez;
+        # sayı Yerleşim sekmesinde görünür.
         warnings=[
             str(w)
             for w in params.get("warnings", [])
-            if not str(w).endswith(engine.DESK_CONFLICT_WARNING_TAIL)
+            if not str(w).endswith(
+                (
+                    engine.DESK_CONFLICT_WARNING_TAIL,
+                    engine.LEGACY_DESK_CONFLICT_WARNING_TAIL,
+                    UNKNOWN_GENDER_WARNING_TAIL,
+                )
+            )
         ],
     )
 

@@ -1029,6 +1029,30 @@ def test_imza_tek_bilesenden() -> None:
     assert not ihlaller, ihlaller
 
 
+#: Ölçü: 53 harflik ipucu 7,5 pt'de 194 pt tutuyor (harf başına ~3,7 pt); bant 503 pt, en
+#: uzun başlık ~230 pt. 75 harf bandın içinde kalır, ötesi satıra sığmayabilir.
+_IPUCU_HARF_SINIRI = 75
+_IPUCU_KALIBI = re.compile(r'<span class="hint">(.*?)</span>', re.DOTALL)
+_SABLON_ETIKETI = re.compile(r"\{[{%].*?[%}]\}", re.DOTALL)
+
+
+def test_bant_ipucu_tek_satira_sigar() -> None:
+    """Bölüm bandındaki ipucu tek satırlıktır (06.11.2026 denetim bulgusu).
+
+    Rengi koyu bant içindir. Uzun ipucu sarınca bandın altına, beyaz kâğıda düşüyor ve
+    okunmuyordu; metin PDF'te yine var olduğu için metin arayan testler geçiyordu. Uzun not
+    bandın altında `.sec-note` ile basılır.
+    """
+    ihlaller: list[str] = []
+    for dosya in sorted(_TEMPLATES_DIR.rglob("*.html")):
+        icerik = _YORUM_KALIBI.sub("", dosya.read_text(encoding="utf-8"))
+        for ham in _IPUCU_KALIBI.findall(icerik):
+            metin = " ".join(_SABLON_ETIKETI.sub("", ham).split())
+            if len(metin) > _IPUCU_HARF_SINIRI:
+                ihlaller.append(f"{dosya.name}: {metin[:40]}…")
+    assert ihlaller == []
+
+
 def test_harf_araligi_pdf_metnini_bozmaz() -> None:
     """1 pt ve üstü harf aralığı YASAK — PDF metni harf harf çıkar (01.10.2026).
 

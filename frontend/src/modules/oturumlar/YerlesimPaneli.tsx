@@ -26,8 +26,15 @@ import { SkeletonList } from "../../ui/Skeleton";
 import Tabs, { tabPanelProps } from "../../ui/Tabs";
 import { useSnackbar } from "../../ui/SnackbarProvider";
 import { examRoomApi } from "../salonlar/api";
+import { PROXIMITY_PAIR_NOTE } from "../okul/api";
 import { FURNITURE_LABELS, seatPositionLabel } from "../salonlar/planEdit";
-import type { ExamSession, SeatAssignmentRow, ValidationReport } from "./api";
+import type {
+  ExamSession,
+  RoomExamMixRow,
+  RoomOccupancyRow,
+  SeatAssignmentRow,
+  ValidationReport,
+} from "./api";
 import { examSessionApi, usesDistributionNumber, violationApprovalNote } from "./api";
 
 /** Çakışma grubu → tonal renk sınıfı (M3 token döngüsü — ham renk yok).
@@ -55,11 +62,14 @@ function ReportSummary({
   report,
   groupLabels,
   approvable,
+  closestFirst,
 }: {
   report: ValidationReport;
   groupLabels: Record<string, string>;
   /** Oturum onay bekliyor mu (DAĞITILDI) — cümlenin sonu buna göre kurulur. */
   approvable: boolean;
+  /** Plan "En yakın komşular öncelikli" dağıtıldı mı — dağıtım kaydından okunur. */
+  closestFirst: boolean;
 }) {
   const count = report.hard_violations.length;
   const distances = Object.entries(report.min_same_group_distance);
@@ -91,7 +101,11 @@ function ReportSummary({
           Ayrıntı
         </summary>
         <ul className="mt-1 flex flex-col gap-0.5 pl-4">
-          <li>Yan yana/ön-arka düşen aynı sınav çifti: {report.first_ring_same_group_pairs}</li>
+          <li>
+            Komşu sıralara düşen aynı sınav çifti (yan, ön, arka, çapraz):{" "}
+            {report.first_ring_same_group_pairs}
+          </li>
+          {closestFirst && <li>{`Bu seçimde sayı artabilir. ${PROXIMITY_PAIR_NOTE}`}</li>}
           <li>Yakınlık puanı (düşük iyidir): {formatNumber(report.proximity_score)}</li>
           <li>
             Aynı şubeden, farklı sınava giren komşu çift:{" "}
@@ -112,6 +126,41 @@ function ReportSummary({
         </ul>
       </details>
     </div>
+  );
+}
+
+/**
+ * Salon başına sınav çeşidi: hesap backend'dedir, burada yalnız gösterilir. Evraka basılmaz.
+ * Sayı oturma düzenini anlatır; sonuç vaat eden cümle yazılmaz (ölçülen geometridir).
+ */
+function SalonSinavCesidi({
+  occupancy,
+  mix,
+}: {
+  occupancy: RoomOccupancyRow[];
+  mix: RoomExamMixRow[];
+}) {
+  const adlar = new Map(occupancy.map((o) => [o.room_id, o.room_name]));
+  return (
+    <details className="text-body-small text-on-surface-variant">
+      <summary className="cursor-pointer text-label-medium text-on-surface">
+        Salonlarda sınav çeşidi
+      </summary>
+      <ul className="mt-1 flex flex-col gap-0.5 pl-4">
+        {mix.map((m) => (
+          <li key={m.room_id}>
+            {adlar.get(m.room_id) ?? "Salon"}: {m.exam_count} sınav
+            {m.front_same_percent !== null &&
+              `, önünde aynı sınav olan öğrenci %${formatNumber(m.front_same_percent)}`}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1 pl-4">
+        Oran, önündeki sırada aynı sınava giren biri olan öğrencilerin payıdır; salonun ilk dolu
+        sırası sayılmaz. Önündeki sıra, aynı sütunda plandaki bir önceki sıradır: plana konmamış boş
+        satır atlanır. Yalnız oturma düzenini anlatır.
+      </p>
+    </details>
   );
 }
 
@@ -279,6 +328,9 @@ export default function YerlesimPaneli({ session }: { session: ExamSession }) {
   const usedSeed = usesDistributionNumber(session.layout_mode)
     ? data.distribution_params.seed
     : undefined;
+  // Kurala girmeyen öğrenci SAYISI; dağıtım doğrulama raporuna basılmadığı için burada
+  // görünür. Kimliksizdir, hangi öğrenci olduğu söylenmez.
+  const unknownGender = Number(data.distribution_params.separation_unknown ?? 0);
 
   return (
     <div className="flex flex-col gap-4">
@@ -286,6 +338,7 @@ export default function YerlesimPaneli({ session }: { session: ExamSession }) {
         report={data.report}
         groupLabels={data.conflict_group_labels}
         approvable={swappable}
+        closestFirst={data.distribution_params.proximity_mode === "CLOSEST"}
       />
       {/* Salon doluluk çipleri — kapasite/yerleşen/yüzde (K1 deseni). */}
       {data.occupancy.length > 0 && (
@@ -300,10 +353,19 @@ export default function YerlesimPaneli({ session }: { session: ExamSession }) {
           ))}
         </div>
       )}
+      {usesDistributionNumber(session.layout_mode) && data.exam_mix.length > 0 && (
+        <SalonSinavCesidi occupancy={data.occupancy} mix={data.exam_mix} />
+      )}
       {usedSeed !== undefined && usedSeed !== null && (
         <p className="text-body-small text-on-surface-variant">
           Dağıtım numarası: <span className="font-medium text-on-surface">{String(usedSeed)}</span>{" "}
-          — aynı numarayla dağıtım birebir yeniden üretilir.
+          — aynı numara, aynı girdilerle aynı yerleşimi verir.
+        </p>
+      )}
+      {unknownGender > 0 && (
+        <p className="text-body-small text-on-surface">
+          Bu dağıtımda {unknownGender} öğrencinin cinsiyet bilgisi yoktu; kız/erkek ayrışması kuralı
+          onlara uygulanmadı.
         </p>
       )}
       {swappable && (

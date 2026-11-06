@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from django.db import models
 
-from apps.okul.models import SectionSpreadMode, SeparationMode
+from apps.okul.models import ProximityMode, SectionSpreadMode, SeparationMode
 from shared.crypto import EncryptedCharField
 from shared.models import BaseModel
 
@@ -245,6 +245,14 @@ class ExamSession(BaseModel):
         max_length=10,
         choices=SectionSpreadMode.choices,
         default=SectionSpreadMode.TOGETHER,
+    )
+    # Yakınlık önceliği (06.11.2026): şube dağılımıyla aynı düzen. Etkin değeri
+    # `services.effective_proximity_mode` verir: klasik düzende ve katı dağıtımda kapalıdır.
+    proximity_mode = models.CharField(
+        "yakınlık önceliği",
+        max_length=10,
+        choices=ProximityMode.choices,
+        default=ProximityMode.STANDARD,
     )
     proctors_enabled = models.BooleanField(
         "gözetmen modülü", default=False, help_text="U2 — varsayılan kapalı."
